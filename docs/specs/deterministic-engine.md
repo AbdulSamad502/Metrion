@@ -1,0 +1,776 @@
+# Metrion — Deterministic Engine Specification (Brain 1)
+
+**Status:** Draft for review
+**Prerequisite:** `docs/specs/data-foundation.md` — canonical model, `line_component`, validation layer, confidence levels, report periods
+**Scope:** Net Realized Revenue, Contribution Profit, GST treatment, GST Applicability Lookup, manual corrections, provenance
+
+**This engine contains no LLM.** It is a pure, versioned, deterministic function over the canonical model. Identical inputs must always produce identical outputs. The CFO agent *interprets* these numbers; it never computes them.
+
+---
+
+## 1. Confirmed decisions
+
+Taken as settled. Not reopened in this document.
+
+### 1.1 Revenue
+
+```
+  Gross Order Value
+− Seller-funded discounts
+− Cancellations
+− Customer returns / refunds
+− RTO-related unrecovered revenue
+± Marketplace-funded discount treatment, by who actually bears the cost
+= Net Realized Revenue
+```
+
+| # | Rule |
+|---|---|
+| R1 | Listed selling price and gross order value are never used as revenue. |
+| R2 | Marketplace-funded discounts do **not** reduce seller revenue where the marketplace bears the cost. |
+| R3 | Seller-funded discounts **do** reduce seller revenue. |
+| R4 | Cancelled orders are not realized revenue. |
+| R5 | Returns and refunds reverse or adjust revenue according to **actual marketplace settlement treatment**, not invoice state. |
+| R6 | RTO separates **recovered inventory** from **unrecovered revenue**, and accounts for related logistics charges separately. |
+| R7 | Seller input and correction is supported wherever marketplace data is incomplete. |
+| R8 | Manual inputs are clearly labelled and **never silently overwrite source data**. |
+| R9 | Every metric retains source, calculation basis, and confidence. |
+
+### 1.2 Profit
+
+```
+  Net Realized Revenue
+− COGS
+− Marketplace Fees
+− Shipping / Logistics
+− Advertising Costs
+− Return / RTO Losses
+− Other Allocated Costs
+= Contribution Profit
+```
+
+**Contribution Profit is distinct from accounting net profit.** It excludes overheads, depreciation, salaries, interest, and income tax. Every surface that displays it must label it as such.
+
+### 1.2.0 Components added from the marketplace mapping document
+
+Revised against `docs/Metrion_PnL_and_MTR_Mapping_FINAL.pdf`. These extend the template without altering its shape:
+
+| Component | Treatment |
+|---|---|
+| **Packaging cost** | Promoted to an explicit P&L line. Previously folded into `OtherAllocatedCosts`. Sourced from the seller cost master, per unit. |
+| **Reimbursements** | Marketplace compensation and credits. Distinct bucket — **not** a COGS reduction. |
+| **Adjustments** | Other credits and debits. Preserve the raw description with the amount; never collapse into a generic fee line. |
+| **Customer shipping income** | Customer-paid shipping, where the marketplace reports it as income rather than a deduction. |
+| **Account-level charges** | Amazon `ServiceFee` and some `Adjustment`/`Transfer` rows carry no order id. Allocated per §5.10, never force-joined to a SKU. |
+| **Transfers** | Movement between marketplace accounts. **Neither revenue nor expense.** Excluded from every P&L line. |
+
+**New derived metrics:** `ROAS = ad-attributed sales / ad spend` · `ACOS = ad spend / ad-attributed sales` · `TACOS = ad spend / total sales`. All three require the advertising source, which is separate from settlement on all three marketplaces (C5).
+
+### 1.2.1 Template status — formulas are not final
+
+**This P&L structure is `formula_version = template.v1`.** It is a working first template, not a settled model. It will be revised once the CFO agent is built and validated against real seller data and better-established formulas.
+
+Consequence for implementation: **formulas must not be hardcoded.** See §4.1.
+
+### 1.3 GST
+
+Management-grade decision support. **Not filing-grade software.**
+
+Included: GST-inclusive/exclusive normalisation · IGST / CGST / SGST handling · TCS and TDS visibility · indicative tax summary.
+
+Excluded — and never implied: statutory filing · guaranteed compliance · final ITC eligibility determination.
+
+### 1.4 GST Applicability Lookup
+
+On-demand web research returning likely rate, likely HSN/category, source URL, retrieval date, ambiguity note, and a professional-verification disclaimer. Stored as provisional external knowledge. **Never silently treated as confirmed accounting fact.**
+
+---
+
+## 2. Design decisions requiring review
+
+These are **my recommendations**, not settled decisions. Each is listed again in §14.
+
+| # | Decision | Recommendation | Rationale |
+|---|---|---|---|
+| D1 | Revenue recognition point | Dual-state: **Recognised** at invoice/dispatch, **Realized** at settlement | "Realized" honestly means settled. Recognising at invoice gives timely numbers; the delta between the two *is* the Leak Shield signal. |
+| D2 | Unknown discount bearer | Default to **seller-borne** (reduces revenue), flagged and overridable | Overstating profit causes bad inventory and pricing decisions. Understating is recoverable. |
+| D3 | Costing method | **Weighted average cost per SKU**, effective-dated | FIFO needs lot tracking that upload-only data cannot supply. |
+| D4 | Profit basis | **Tax-exclusive throughout** — revenue ex-GST, fees ex-GST | Output GST is collected on the government's behalf, not earned. Fee GST is usually creditable. |
+| D5 | Fee GST treatment | Separate line: *"GST on fees (potentially creditable)"*, with a toggle to treat it as a cost | Respects §1.3 — we show it without ruling on ITC eligibility. |
+| D6 | TCS / TDS | **Cash-flow items, not P&L items.** Excluded from Contribution Profit | They are prepaid taxes recoverable against the seller's liability, not costs. Sellers routinely misread these as losses. |
+| D7 | Account-level cost allocation | By **net revenue share**, configurable; result always `DERIVED` | Revenue share is the least-wrong default for ads and storage. |
+| D8 | Rounding | Integer paise, half-up; allocations reconciled by **largest-remainder** | Components must sum exactly to their stated total. |
+
+---
+
+## 3. Unverified assumptions
+
+Carried forward or newly introduced. All inherit `PROVISIONAL` confidence.
+
+| # | Assumption | Basis | Risk if wrong |
+|---|---|---|---|
+| A1 | ~~Prices are tax-exclusive~~ | **RESOLVED — and the answer is that it varies.** Not a single basis. **Meesho is explicitly inclusive** (`Listing Price (Incl. taxes)`, `Fixed Fee (Incl. GST)`, `Warehousing fee (incl GST)`, `Return premium (incl GST)`). **Amazon MTR supplies both** (`Invoice Amount` and `Tax Exclusive Gross`). Basis must be declared **per marketplace and per field**, never per source. See §8.1. | Resolved |
+| A2 | `Marketplace Fee Amount` and `Platform Fee` on Amazon are distinct charges | Both ₹50 in row 1 — may be one charge represented twice | **High.** Double-counts directly into profit. |
+| A3 | ~~Meesho three-discount overlap~~ | **Superseded.** Those columns were synthetic. Real Meesho revenue fields are `Listing Price (Incl. taxes)` and `Supplier Listed Price (Incl. GST + Commission)`. | Superseded |
+| A4 | `Item Promotional Discount` (Amazon) is marketplace-funded | Name only | Medium — shifts revenue by the discount amount |
+| A5 | ~~Flipkart discount bearer~~ | **RESOLVED from source data.** The real Sales Report splits `Total Discount` into **`Seller Share`** (seller-funded) and **`Bank Offer Share`** (not seller-funded). Bearer is read, not inferred — D2's fallback is not needed for Flipkart. | Resolved |
+| A6 | ~~Cancellation representation~~ | **RESOLVED for Meesho.** `Reason for Credit Entry` carries real values `DELIVERED`, `CANCELLED`, `RTO_COMPLETE`, `DOOR_STEP_EXCHANGED`. Amazon and Flipkart equivalents still to be confirmed from their real exports. | Partly resolved |
+| A7 | ~~RTO representable~~ | **RESOLVED for Meesho.** `RTO_COMPLETE` in `Reason for Credit Entry`; `Live Order Status` = `RTO` confirmed on a real row. The inventory-recovered / damaged / lost split (§5.7) still requires seller input — no marketplace reports condition of returned goods. | Partly resolved |
+| A8 | Quantity-level fees are per-line, not per-unit | All reference rows have `Quantity = 1` | Medium — mis-scales fees on multi-unit lines |
+| A9 | Settlement rows are per-line and joinable | Reference files are pre-joined | Medium |
+
+---
+
+## 4. Determinism contract
+
+| Rule | Requirement |
+|---|---|
+| **Purity** | No LLM, no network, no randomness inside calculation. **No implicit clock reads** — a calculation that depends on the current date takes `as_of_date` as an explicit parameter (§4.2). Reading the clock inside a calculation is forbidden; receiving a date is not. |
+| **Reproducibility** | `(canonical_data_version, manual_adjustment_set, formula_version, config_version, as_of_date) → identical output`. See §4.2. |
+| **Versioning** | `formula_version` is stamped on every stored result. Formula changes never mutate historical results; they produce a new calculation run. |
+| **Re-runnability** | Results are derived artefacts. They may always be recomputed from canonical data plus adjustments. |
+| **Integer money** | All arithmetic in signed `BIGINT` paise, seller perspective (§data-foundation 1.1). |
+| **No silent defaults** | Any absent input either blocks the metric or produces an explicitly flagged `DERIVED` value. Never a silent zero. |
+
+**A missing input is not zero.** Absent COGS makes Contribution Profit *unavailable*, not equal to Net Revenue.
+
+### 4.1 Formulas are definitions, not code
+
+Per §1.2.1, every metric in §5 is expressed as a **versioned formula definition** — a named composition of canonical components — held in a definition store, not inlined into calculation code.
+
+| Rule | Requirement |
+|---|---|
+| F1 | A metric is a named composition of `component_code` terms, operators, and conditions. No metric's structure is expressed in imperative code. |
+| F2 | Changing a formula creates a **new version**. Definitions are immutable once used to produce a stored result. |
+| F3 | Every `metric_result` records the `formula_version` that produced it. Historical results are never recomputed silently. |
+| F4 | Coefficients, tolerances, allocation bases, bearer mappings, and fee treatments are **configuration**, never constants. |
+| F5 | A formula version may be evaluated against historical data to compare models — without replacing stored results. |
+| F6 | Determinism (§4) is preserved: a definition plus its inputs is still a pure function. |
+
+**Why:** the current structure is a first template. When the CFO agent is built and real formulas are validated, the change must be a new definition version and a re-run — not a code rewrite and a migration.
+
+### 4.2 `as_of_date` — time as an input, never a read
+
+Some figures are inherently relative to a moment: a finding's age, whether a claim window is closing, whether a settlement is overdue. These stay deterministic **provided the moment is an input**.
+
+| Rule | Requirement |
+|---|---|
+| T1 | Any calculation depending on the current date declares `as_of_date` as an explicit parameter. |
+| T2 | The caller supplies it. The engine never calls `now()`, `CURRENT_DATE` or equivalent inside a calculation path. |
+| T3 | `as_of_date` is stamped on the result alongside `formula_version` and `config_version`. |
+| T4 | Reproducibility holds on the extended tuple: `(canonical_data_version, manual_adjustment_set, formula_version, config_version, as_of_date)`. |
+
+This keeps AC2 intact — no calculation path invokes a clock — while making age, window status and overdue detection computable in Brain 1 rather than stranded between brains.
+
+---
+
+## 5. Formulas
+
+Notation: `Σ[code]` sums `line_component.amount` for that `component_code`; `side` is `INVOICE` or `SETTLEMENT`.
+
+### 5.1 Recognition states (D1)
+
+| State | Basis | Available for |
+|---|---|---|
+| `RECOGNISED` | Invoice-side components only | All marketplaces |
+| `REALIZED` | Settlement-side where present, invoice-side otherwise | Flipkart, Meesho |
+| `UNAVAILABLE` | Required settlement data absent for the period in question | Any marketplace where the seller has not uploaded a settlement report |
+
+Every figure is labelled with its state.
+
+**Amazon status (corrected).** `data-foundation.md` §0.6 and §2.3 register `amazon.settlement.v2` as **specified** from Amazon SP-API documentation, so Amazon is **not** categorically excluded from `REALIZED`. What remains open is narrower and is tracked at §11: the settlement **match keys** are unverified, and no real Amazon export has yet validated the adapter. Until those close, Amazon periods report `RECOGNISED` **because the data has not been validated**, not because the report family does not exist.
+
+### 5.2 Gross Order Value
+
+```
+GrossOrderValue(line) = Σ[gross_item_amount]           -- pre-discount, normalised to tax-exclusive per §8.1
+```
+
+### 5.3 Discount attribution (R2, R3, D2)
+
+Every discount component carries a `bearer`:
+
+| `bearer` | Effect on Net Realized Revenue |
+|---|---|
+| `SELLER` | Reduces |
+| `MARKETPLACE` | **No effect.** Disclosed separately. |
+| `UNKNOWN` | Treated as `SELLER`, flagged `DERIVED`, seller-overridable (D2) |
+
+```
+SellerFundedDiscounts(line) =
+    Σ[SELLER_DISCOUNT]
+  + Σ[SHIPPING_DISCOUNT   where bearer = SELLER]
+  + Σ[PLATFORM_DISCOUNT   where bearer = SELLER]     -- misnamed at source; bearer governs
+  + Σ[CASHBACK_DISCOUNT   where bearer = SELLER]
+  + Σ[* where bearer = UNKNOWN]                       -- conservative default
+
+MarketplaceFundedDiscounts(line) = Σ[* where bearer = MARKETPLACE]   -- disclosure only
+```
+
+**Bearer is a property of `(marketplace, component_code)`, resolved from a configuration table** — never hardcoded, and per data-foundation, never inferred. Initial values are assumptions A4/A5.
+
+### 5.4 Revenue reductions
+
+```
+CancellationReversal(line)  = GrossOrderValue  where state = CANCELLED            -- blocked, A6
+ReturnReversal(line)        = refunded_amount  per settlement treatment (R5)
+RTOUnrecoveredRevenue(line) = GrossOrderValue − SellerFundedDiscounts             -- where RTO, never settled (A7)
+```
+
+### 5.5 Net Realized Revenue
+
+```
+NetRealizedRevenue(line) =
+      GrossOrderValue
+    − SellerFundedDiscounts
+    − CancellationReversal
+    − ReturnReversal
+    − RTOUnrecoveredRevenue
+```
+
+Marketplace-funded discounts appear in no term (R2).
+
+### 5.6 Cost components
+
+| Component | Source | Confidence |
+|---|---|---|
+| `COGS` | Seller cost master, weighted average, effective-dated (D3) | `MANUAL` |
+| `MarketplaceFees` | `Σ[FEE where side = settlement, else invoice]`, tax-exclusive | `PROVISIONAL` |
+| `ShippingLogistics` | `Σ[LOGISTICS_FEE, SHIPPING_CHARGE(seller-borne)]` | `PROVISIONAL` |
+| `AdvertisingCosts` | Seller-entered; allocated if account-level (D7) | `MANUAL` / `DERIVED` |
+| `ReturnRTOLosses` | §5.7 | `DERIVED` |
+| `OtherAllocatedCosts` | Seller-entered; allocated (D7) | `MANUAL` / `DERIVED` |
+
+```
+COGS(line) = weighted_average_cost(sku, as_of = document_date) × billable_quantity
+
+billable_quantity = quantity
+                  − returned_qty_with_sellable_inventory_recovered
+                  − rto_qty_with_sellable_inventory_recovered
+```
+
+Recovered sellable inventory does not consume COGS — the goods remain saleable (R6).
+
+### 5.7 Return and RTO losses (R6)
+
+```
+ReturnRTOLosses(line) =
+      COGS_of_unrecovered_or_damaged_units
+    + forward_logistics_incurred_on_failed_delivery
+    + reverse_logistics_charged
+    + non_refunded_fees_retained_by_marketplace
+```
+
+The three RTO outcomes are accounted separately:
+
+| Outcome | Revenue | COGS | Logistics |
+|---|---|---|---|
+| Inventory recovered, sellable | Unrecovered | Not consumed | Forward + reverse charged |
+| Inventory recovered, damaged | Unrecovered | Fully consumed | Forward + reverse charged |
+| Inventory lost in transit | Unrecovered | Fully consumed | Forward charged |
+
+### 5.8 Contribution Profit
+
+```
+ContributionProfit =
+      NetRealizedRevenue
+    − COGS
+    − MarketplaceFees
+    − ShippingLogistics
+    − AdvertisingCosts
+    − ReturnRTOLosses
+    − OtherAllocatedCosts
+```
+
+Reported alongside:
+
+```
+ContributionMargin% = ContributionProfit / NetRealizedRevenue × 100
+```
+
+Undefined — never zero — when `NetRealizedRevenue = 0`.
+
+### 5.9 Tax treatment (D4, D5, D6)
+
+**Excluded from Contribution Profit:**
+
+| Item | Reason |
+|---|---|
+| Output GST (CGST/SGST/IGST/UTGST/Cess) collected | Collected for the government; never seller revenue |
+| TCS | Prepaid tax credited to the seller's account — **not a cost** (D6) |
+| TDS | Same (D6) |
+
+**Shown separately:**
+
+```
+GSTOnFees_PotentiallyCreditable = Σ[line_component.tax_amount where kind = FEE]
+```
+
+Displayed as a distinct line with the §1.3 disclaimer. A seller who cannot claim ITC (e.g. composition scheme) may toggle it into `OtherAllocatedCosts`; the toggle is recorded as a manual input (§7).
+
+TCS and TDS appear in cash-flow and settlement reconciliation views only, where they explain the gap between Contribution Profit and money received.
+
+### 5.10 Allocation (D7)
+
+```
+allocated_cost(line) = pool_amount × ( NetRealizedRevenue(line) / Σ NetRealizedRevenue(pool_scope) )
+```
+
+- Allocation basis is configurable: `NET_REVENUE` (default) · `UNITS` · `ORDERS`.
+- Every allocated figure is `DERIVED` and names its basis on display.
+- Remainders are distributed by **largest remainder** so allocations sum exactly to the pool (D8).
+- Lines with zero or negative net revenue are excluded from a `NET_REVENUE` basis and reported as unallocated.
+
+### 5.11 Rounding (D8)
+
+Half-up at paise. Rounding occurs **once**, at the final presented figure — never on intermediates. Aggregates are computed from unrounded intermediates, then rounded, so displayed components always reconcile to displayed totals.
+
+---
+
+### 5.12 Leak Shield — ownership across the three brains
+
+Leak Shield's *powers* sit with the **CFO agent**. Its *arithmetic* does not.
+
+| Brain | Responsibility |
+|---|---|
+| **Brain 1** (this document) | Reconciliation arithmetic, margin computation, variance against configured tolerance, fee-delta calculation (`data-foundation` §5.4) |
+| **Brain 2** | Anomaly detection, outlier scoring, trend deviation — statistical at V1 |
+| **Brain 3 / CFO agent** | Interpretation, explanation, recommended action, and **prioritisation as judgement** — which finding matters most to this seller and why. **Ranking is not judgement:** ordering by amount, age or window status is arithmetic and is computed deterministically in Brain 1. Brain 3 narrates the computed order and may argue about it; it never produces it. |
+
+CFO never recomputes a figure Brain 1 has produced. It explains it.
+
+**Reconciliation inputs:** transactions, orders, settlements, returns, and — where the seller supplies the data — logistics. Seller-supplied logistics is a manual input (§7) and never overwrites source data.
+
+**Compute-intensity note (not a metering decision):** CFO is the most deterministic agent in the system; its model cost is explanation-only and does not scale with seller data volume. This is a technical characteristic recorded for the future billing specification, which owns the meter. **No metering basis, unit or prohibition is established by this spec.** See `cfo-agent.md` §7.3.3.
+
+---
+
+### 5.13 Estimated competitor margin range (extension for observed inputs)
+
+Added per C17 / B1 of `competitor-intelligence-agent.md`. **CI supplies observations; this engine performs every calculation.**
+
+This is an **estimation** interface, explicitly weaker than §4's determinism contract. Scraped observations are not part of `canonical_data_version`, so a range computed here is reproducible only for a **fixed observation set**, not across re-captures. It is labelled accordingly and never enters a canonical `metric_result`.
+
+```
+estimate_competitor_margin_range(
+  CompetitorObservationSet {
+    marketplace, category,
+    observed_price_paise, visible_discount_paise, mrp_paise,
+    variant_key, source_url, fetched_at, confidence
+  }
+) -> {
+  estimate_ref,                     -- competitor_estimate.id (§9.1)
+  low_paise, high_paise,
+  confidence: DERIVED,              -- never better; monotonic rule applies
+  basis,                            -- human-readable summary
+  assumptions[],                    -- every fee reference used, and every gap
+  fee_reference_version,            -- §5.14
+  formula_version, config_version,
+  observation_ref                   -- source_url + fetched_at
+}
+```
+
+**Rules**
+
+| # | Rule |
+|---|---|
+| 1 | The caller passes **no rates and no fee amounts.** The engine resolves them from §5.14. |
+| 2 | Output is always a **range**, never a point value. A competitor's COGS, fee tier and ad spend are unobservable. |
+| 3 | Where a fee reference is missing, the range **widens** and the gap is named in `assumptions[]`. The figure is never suppressed and never silently defaulted. |
+| 4 | Results are labelled *estimated margin range* everywhere they surface. |
+| 5 | Never written to `metric_result` (§9) — this is an estimate about a third party, not a figure about the seller's business. |
+
+### 5.13.1 Interfaces consumed by agents
+
+Named here so no agent delegates to a capability this spec does not define.
+
+| Interface | Returns | Notes |
+|---|---|---|
+| `compute_metric(metric_code, grain, target, period)` | `metric_result` | The general entry point (§9) |
+| `reconcile(period, marketplace, tolerance_ref)` | `reconciliation_exception[]` + a `metric_result` for each aggregate | Tolerances resolve from configuration, never constants (F4). Model defined in `data-foundation.md` §5 |
+| `landed_cost(manual_adjustment_ref, sku, quantity)` | `metric_result`, `metric_code = LANDED_COST_PER_UNIT` | Unit cost + shipping + duties, per the referenced `supplier.quote`. Consumed by supplier ranking and batch size |
+| `leak_aggregate(period, marketplace, grouping)` | `metric_result`, `metric_code = LEAK_TOTAL` | Sums reconciliation exception amounts. **Agents never sum leak amounts themselves** |
+| `estimate_competitor_margin_range(...)` | `competitor_estimate` | §5.13; carries an `estimate_ref`, never an `engine_result_ref` |
+| `margin_curve(sku, candidate_prices[], period, as_of_date)` | `metric_result[]`, `metric_code = MARGIN_AT_PRICE` | One result per candidate price. Fees resolve from §5.14. Backs the pricing recommendation |
+| `cash_reconciliation(period, marketplace, as_of_date)` | `metric_result[]` — `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE` | Settlement-based; also surfaces TCS/TDS as cash items, never P&L |
+| `rank_findings(exception_ids[], as_of_date, severity_config_ref)` | ordered list + `metric_result` per finding — `FINDING_AGE_DAYS`, `FINDING_SEVERITY` | Deterministic ranking and severity (§5.14.1). Takes `as_of_date` per §4.2 |
+| `funding_readiness_metrics(period_range, as_of_date)` | `metric_result[]` — `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS` | Inputs to the funding-readiness report. Emits no score |
+| `resolve_fee_reference(marketplace, category, fee_type, as_of_date)` | `fee_reference` row or a declared gap | §5.14. A miss is reported, never defaulted to zero |
+
+`metric_code` is extended accordingly: `LANDED_COST_PER_UNIT`, `LEAK_TOTAL`, `LEAK_EXCEPTION_AMOUNT`, `MARGIN_AT_PRICE`, `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE`, `FINDING_AGE_DAYS`, `FINDING_SEVERITY`, `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS`.
+
+**Reconciliation exceptions produce `metric_result` rows** under `metric_code = LEAK_EXCEPTION_AMOUNT`, one per exception. Each amount is therefore citable by `engine_result_ref`, which is what makes `leak_finding.engine_result_ref` satisfiable.
+
+### 5.14 Fee reference store (C18 / B9)
+
+Versioned, backend-managed configuration consumed by this engine. **No agent holds fee rates**, satisfying F4 and readiness 2B.4.
+
+```sql
+fee_reference (
+  id uuid pk,
+  marketplace text not null,
+  category text not null,
+  fee_type text not null,             -- COMMISSION | FIXED | COLLECTION | LOGISTICS | ...
+  rate_pct numeric(7,4),              -- point rate, or
+  rate_low_pct numeric(7,4), rate_high_pct numeric(7,4),   -- range
+  effective_from date not null, effective_to date,
+  source text not null,               -- where the rate came from
+  confidence text not null,
+  version int not null,
+  last_verified_at timestamptz not null
+)
+```
+
+Resolution is by `(marketplace, category, fee_type)` effective at the observation date. A miss is reported as a gap, never defaulted to zero. `fee_reference_version` is stamped on every estimate so a later rate change never silently alters a past result.
+
+### 5.14.1 Severity and ranking configuration (A4)
+
+Severity bands are **configuration, never constants** (F4), resolved by `rank_findings`.
+
+```sql
+severity_config (
+  id uuid pk, tenant_id uuid,            -- null = platform default
+  metric text not null,                  -- AMOUNT_PAISE | AGE_DAYS | WINDOW_DAYS_REMAINING
+  high_threshold bigint, medium_threshold bigint,
+  window_closing_soon_days int not null default 14,
+  ordering_basis text not null,          -- WINDOW_THEN_AMOUNT (default) | AMOUNT_ONLY
+  version int not null, effective_from date not null
+)
+```
+
+`window_status` derives from `claim_window_days` against `as_of_date`: `EXPIRED` when elapsed, `CLOSING_SOON` within `window_closing_soon_days`, else `OPEN`. Where `claim_window_days` is null the status is `UNKNOWN` and ordering falls back to amount.
+
+---
+
+## 6. Grain and periods
+
+Computable at: `line` → `order` → `sku` → `marketplace` → `account`.
+
+Period allocation uses **document date**, not report period (data-foundation §6). A line dated 28 Aug belongs to August regardless of which report delivered it.
+
+Settlement adjustments are attributed to the **original document's period**, not the settlement date — otherwise a return silently improves the month it was processed in. The settlement date is retained for cash-flow views.
+
+---
+
+## 7. Manual inputs and corrections (R7, R8)
+
+### 7.1 Non-destructive rule
+
+Manual values are **never written into canonical tables.** They live in a separate adjustment store and are composed at calculation time.
+
+```
+manual_adjustment (
+  id, tenant_id,
+  target_type,          -- LINE | ORDER | SKU | PERIOD | ACCOUNT | SUPPLIER | SETTLEMENT
+  target_ref,
+  field,                -- e.g. discount_bearer, cogs_per_unit, rto_outcome, ad_spend
+  value             jsonb not null,   -- scalar or structured object; see the field registry below
+  reason,
+  created_by, created_at,
+  supersedes_id,        -- adjustments are append-only; corrections chain
+  status                -- ACTIVE | SUPERSEDED | WITHDRAWN
+)
+```
+
+- **Append-only.** A correction supersedes; it does not update.
+- **Re-ingestion never destroys adjustments.** New parse runs re-attach them by natural key.
+- **Conflict is surfaced, not resolved.** Where source data later contradicts an adjustment, both are shown and the seller decides.
+
+### 7.2 Effect on confidence
+
+Any figure incorporating a manual input is labelled `MANUAL` and names the adjusted fields. Confidence remains monotonic (data-foundation §7.1): a total containing a manual input cannot present as `VERIFIED`.
+
+### 7.2.1 Field registry — this spec owns the key space
+
+`field` values are declared here, not by consuming agents. An agent that needs a new field requests it; it does not invent one. **This registry is the sole authority for the key space** — §7.3 below is an illustrative prose list, not a competing enumeration. **This registry is the sole authority for the key space** — §7.3 below is an illustrative prose list, not a competing enumeration.
+
+| `field` | `target_type` | `value` shape |
+|---|---|---|
+| `cogs_per_unit` | `SKU` | scalar paise |
+| `discount_bearer` | `LINE` | `SELLER \| MARKETPLACE` |
+| `rto_outcome` | `LINE` | `RECOVERED_SELLABLE \| RECOVERED_DAMAGED \| LOST` |
+| `cancellation_flag` | `LINE` | boolean |
+| `fee_gst_treatment` | `ACCOUNT` | `CREDITABLE \| COST` |
+| `return_refund_amount` | `LINE` | scalar paise |
+| `logistics_cost` | `LINE` | scalar paise — **per-line actuals only**, e.g. a known reverse-logistics charge on one order |
+| `expense.advertising` · `expense.packaging` · `expense.storage` · `expense.logistics` · `expense.other` | `PERIOD` \| `ACCOUNT` \| `SKU` | `{amount_paise, gst_amount_paise?, marketplace?}` — **pooled costs**. Precedence: where both a per-line `logistics_cost` and a pooled `expense.logistics` cover the same line, the per-line actual wins and the pool is reduced by it |
+| `batch.budget` | `SKU` \| `ACCOUNT` | `{amount_paise, valid_until?}` — budget ceiling for batch-size estimation (B9) |
+| `settlement.receipt` | `SETTLEMENT` | `{expected_paise?, received_paise, received_date, note?}` |
+| `supplier.quote` | `SUPPLIER` | `{supplier_name, sku?, unit_cost_paise, moq?, lead_time_days?, shipping_paise?, payment_terms?, reliability_note?}` |
+
+Structured values are still **append-only and superseding** — a corrected quote is a new row that supersedes, never an update.
+
+### 7.3 Permitted manual inputs at V1
+
+COGS per SKU · discount bearer override · RTO outcome classification · cancellation flag · advertising spend · **other seller-declared expense pools (packaging, storage, logistics, other)** · **settlement receipt corrections where a report is missing or disputed** · other cost pools · fee-GST treatment toggle · return refund amount where settlement data is absent · **seller-supplied logistics costs** (forward, reverse, RTO legs) where marketplace reports omit them · supplier quote data for CFO ranking (price, MOQ, lead time, shipping, payment terms, reliability notes).
+
+---
+
+## 8. GST module
+
+### 8.1 Inclusive / exclusive normalisation
+
+Every source declares its price basis in adapter configuration. **Never inferred.**
+
+```
+if basis = EXCLUSIVE:  taxable = listed
+if basis = INCLUSIVE:  taxable = listed × 100 / (100 + effective_rate)
+```
+
+Requires a known effective rate. Where the rate is unknown, normalisation fails and the line is flagged — it never guesses a rate.
+
+**Basis is declared per marketplace and per field** (A1, resolved). There is no single basis across sources:
+
+| Source | Basis |
+|---|---|
+| Meesho | **INCLUSIVE** — `Listing Price (Incl. taxes)`, `Fixed Fee (Incl. GST)`, `Warehousing fee (incl GST)`, `Return premium (incl GST)` |
+| Amazon MTR | Supplies **both** — `Invoice Amount` and `Tax Exclusive Gross` |
+| Flipkart | Per-field; declared in the adapter, unverified pending a real export |
+
+Treating all three as `EXCLUSIVE` would systematically **overstate Meesho revenue** by the GST rate. The adapter declares the basis for every money field; the engine never infers it.
+
+### 8.2 Tax head handling
+
+- Intra-state → CGST + SGST (or UTGST); inter-state → IGST. Validated by `V-TAX-001`.
+- Rows failing that rule are quarantined and excluded from aggregates.
+- Cess is carried separately and never merged into GST totals.
+
+### 8.3 Indicative tax summary
+
+Per period and marketplace: output tax by head · GST charged on fees (potentially creditable) · TCS collected · TDS deducted · taxable value by rate slab · count of excluded rows.
+
+Every rendering carries: **"Indicative management summary. Not a GST return. Not filing-grade. Verify with your tax professional."**
+
+### 8.4 GST Applicability Lookup
+
+A **research** feature. Structurally isolated from the calculation engine.
+
+**Input:** product title, and where available HSN/SAC or category.
+
+**Output:**
+
+```
+gst_lookup_result (
+  id, tenant_id, sku,
+  query_text, query_hsn,
+  likely_rate_pct,
+  likely_hsn, likely_category,
+  ambiguity_note,              -- populated when classification is uncertain
+  alternatives,                -- competing classifications, where found
+  source_url,                  -- required
+  source_title,
+  retrieved_at,                -- required
+  status,                      -- PROVISIONAL | SELLER_VERIFIED | REJECTED
+  verified_by, verified_at
+)
+```
+
+**Hard rules**
+
+| # | Rule |
+|---|---|
+| L1 | Result is stored as **externally researched, provisional** knowledge. |
+| L2 | It **never** enters a calculation automatically. Application requires explicit seller acceptance, which creates a labelled manual input (§7). |
+| L3 | `source_url` and `retrieved_at` are mandatory. A result without both is discarded. |
+| L4 | Where classification is uncertain, `ambiguity_note` is populated and alternatives are shown. Confident-sounding single answers are not produced from ambiguous evidence. |
+| L5 | Every display carries: *"Likely classification based on web research. Final GST classification must be verified through official GST guidance or a qualified tax professional."* |
+| L6 | Results are cached with a TTL and **never** applied retroactively to historical periods — GST rates change. |
+| L7 | An LLM may extract and structure the result. It may not originate a rate. Every figure traces to a cited source. |
+
+---
+
+## 9. Provenance and confidence (R9)
+
+Every stored metric carries:
+
+```
+metric_result (
+  id                  uuid pk,  -- the engine result reference; see §9.1
+  metric_code,                  -- NET_REALIZED_REVENUE | CONTRIBUTION_PROFIT | ...
+  grain, target_ref, period,
+  value_paise,
+  recognition_state,            -- RECOGNISED | REALIZED | UNAVAILABLE
+  confidence,                   -- VERIFIED | PROVISIONAL | DERIVED | MANUAL
+  calculation_basis,            -- human-readable formula summary
+  formula_version, config_version,
+  input_refs,                   -- source rows + adjustments used
+  exclusions,                   -- quarantined rows omitted, with counts and rule IDs
+  computed_at
+)
+```
+
+**Confidence is monotonic under aggregation.** A figure can never present as more certain than its weakest input. In V1 nothing exceeds `PROVISIONAL`, because no adapter mapping is confirmed against a real export.
+
+### 9.1 Result reference contracts
+
+Two distinct contracts. Consumers must not conflate them.
+
+| Contract | Identifier | Applies to | Guarantees |
+|---|---|---|---|
+| **`engine_result_ref`** | `metric_result.id` | Every figure computed from the canonical model | Reproducible under §4; carries state, confidence, basis, `formula_version`, `config_version`, `input_refs`, `exclusions` |
+| **`estimate_ref`** | `competitor_estimate.id` | §5.13 estimated competitor ranges only | Reproducible **only for a fixed observation set**; carries `observation_ref`, `fee_reference_version`, assumptions |
+
+```sql
+competitor_estimate (                -- §5.13 output provenance; NOT a metric_result
+  id                    uuid pk,     -- the estimate_ref
+  tenant_id             uuid not null,
+  low_paise bigint not null, high_paise bigint not null,
+  confidence            text not null,      -- DERIVED, never better
+  basis                 text not null,
+  assumptions           jsonb not null,
+  fee_reference_version int not null,
+  observation_ref       jsonb not null,     -- source_url + fetched_at
+  formula_version text not null, config_version text not null,
+  computed_at           timestamptz not null
+)
+```
+
+**Rule.** A consumer displaying a financial figure cites an `engine_result_ref`. A consumer displaying an estimated competitor range cites an `estimate_ref`. Neither substitutes for the other, and §5.13 rule 5 stands — estimates are never written to `metric_result`.
+
+---
+
+## 10. Edge cases
+
+| # | Case | Required behaviour |
+|---|---|---|
+| E1 | Credit note | Negative signed line; reverses the original within the original's period |
+| E2 | Partial return (`returned_qty < quantity`) | Pro-rate revenue, COGS, and fees by returned units |
+| E3 | Replacement order | Not new revenue. Linked via `Replacement Order ID`; COGS of the replacement unit consumed; original revenue retained |
+| E4 | Multi-unit line, partial RTO | Split into recovered / damaged / lost cohorts; each accounted per §5.7 |
+| E5 | Settlement arrives in a later period | Attributed to the original document's period; settlement date retained for cash flow |
+| E6 | Settlement uploaded before the invoice | Held as `ORPHAN_SETTLEMENT`; matched on later ingest; never discarded |
+| E7 | Negative Net Realized Revenue for a period | Reported as negative. Never floored at zero |
+| E8 | `NetRealizedRevenue = 0` | Margin % is `UNDEFINED`, not zero, not error |
+| E9 | Missing COGS for a SKU | Contribution Profit is `UNAVAILABLE` for that line; Net Revenue still reported; seller prompted |
+| E10 | SKU sold on multiple marketplaces | One cost master, per-marketplace P&L, consolidated account view |
+| E11 | SKU cost changes mid-period | Weighted average as of `document_date` (D3) |
+| E12 | Duplicate fee suspected (`V-FEE-002`) | Included once, flagged; both candidates disclosed; seller resolves |
+| E13 | Discount bearer unknown | Seller-borne default, `DERIVED`, overridable (D2) |
+| E14 | Marketplace-funded discount later recovered from the seller | Reclassified on settlement evidence; prior period restated with an audit entry |
+| E15 | Cancelled after dispatch | Revenue reversed; forward logistics retained as a cost |
+| E16 | Quarantined rows in a period | Excluded from totals; count and rule IDs disclosed on every figure |
+| E17 | Zero-quantity row | Rejected by `V-QTY-001` unless a credit note |
+| E18 | Report periods overlap across uploads | Deduplicated by natural key + content hash; never double-counted |
+| E19 | Ad spend entered with zero net revenue in scope | Unallocatable; reported as an unallocated pool, not silently dropped |
+| E20 | Non-INR currency | Rejected by `V-CUR-001` |
+
+---
+
+## 11. Production validation blockers
+
+Extends `data-foundation.md` §9. Specific to this engine.
+
+### Blocking — metric cannot ship
+
+| # | Item | Blocks |
+|---|---|---|
+| C1 | ~~No cancellation representation~~ | **RESOLVED for Meesho** (A6). Open for Amazon and Flipkart until their real exports are inspected. |
+| C2 | **No RTO representation exists in any reference file** (A7) | R6 — RTO revenue/inventory/logistics split is unimplementable |
+| C3 | **Amazon settlement match keys unverified, and no real export validated** (`data-foundation.md` §5.1, §9) — the report family itself is specified (`amazon.settlement.v2`) | `REALIZED` state on Amazon, return treatment per R5, and Amazon leak detection — **pending validation, not categorically unsupported** |
+| C4 | ~~Return refund amounts unobserved~~ | **RESOLVED for Meesho.** `TCS_Sales_Return` carries negative `total_taxable_sale_value` plus a `cancel_return` date, joined on `sub_order_num`. Net value = signed sum across both files — no separate reconciliation step needed. |
+| C5 | **Advertising cost source undefined** | Ad reports have no adapter; only manual entry is currently possible |
+
+### Must be validated — figures will change
+
+| # | Item |
+|---|---|
+| C6 | ~~Tax-inclusive vs exclusive~~ | **RESOLVED** (A1). Basis is now declared per marketplace and per field. Meesho inclusive; Amazon MTR supplies both. |
+| C7 | Amazon `Platform Fee` vs `Marketplace Fee Amount` (A2) — double-count risk straight into profit |
+| C8 | ~~Meesho's three discount fields~~ — **superseded** (A3); those columns were synthetic |
+| C9 | Discount bearer mapping per marketplace and component (A4, A5) |
+| C10 | Per-line vs per-unit fee scaling on multi-quantity lines (A8) |
+| C11 | Settlement join grain (A9) |
+| C12 | Whether marketplace-funded discounts are ever later recovered from the seller (E14) |
+| C13 | Fee refund behaviour on returns — which fees are returned, which are retained |
+
+---
+
+## 12. Acceptance criteria
+
+The engine is accepted when all hold.
+
+| # | Criterion |
+|---|---|
+| AC1 | Identical inputs produce byte-identical outputs across runs and machines. |
+| AC2 | No calculation path invokes an LLM, network call, clock, or RNG. Date-relative figures take `as_of_date` as an explicit input (§4.2). |
+| AC3 | All arithmetic is integer paise. No float appears in any calculation path. |
+| AC4 | Marketplace-funded discounts provably do not reduce Net Realized Revenue (R2). |
+| AC5 | Every returned metric carries state, confidence, calculation basis, formula version, input refs, and exclusions (R9). |
+| AC6 | No manual input mutates a canonical table; source data is byte-identical before and after adjustment (R8). |
+| AC7 | Displayed components reconcile exactly to displayed totals, including allocations (D8). |
+| AC8 | A missing input yields `UNAVAILABLE`, never a silent zero. |
+| AC9 | TCS and TDS never appear in Contribution Profit (D6). |
+| AC10 | Output GST never appears in Net Realized Revenue (D4). |
+| AC11 | Quarantined rows are excluded from totals and disclosed with counts and rule IDs. |
+| AC12 | Amazon figures report `RECOGNISED`, never `REALIZED`, **while settlement match keys are unverified and no real export has validated the adapter** — not because the report family is absent (§5.1). |
+| AC13 | A GST lookup result never alters a calculation without an explicit, recorded seller acceptance (L2). |
+| AC14 | Every GST lookup result carries `source_url` and `retrieved_at`, or is discarded (L3). |
+| AC15 | Confidence is monotonic: no aggregate exceeds its weakest input. |
+| AC16 | Re-ingesting a file preserves all manual adjustments. |
+| AC17 | A formula version change produces a new calculation run; historical results are unchanged. |
+
+---
+
+## 13. Test scenarios
+
+| # | Scenario | Expected |
+|---|---|---|
+| T1 | Clean prepaid sale, no discount | `NetRealizedRevenue = taxable value`; GST excluded |
+| T2 | Seller-funded discount ₹500 | Revenue reduced by ₹500 |
+| T3 | Marketplace-funded discount ₹500 | Revenue **unchanged**; ₹500 disclosed separately (AC4) |
+| T4 | Discount with `bearer = UNKNOWN` | Treated as seller-borne, `DERIVED`, override available (D2) |
+| T5 | Seller overrides T4 to `MARKETPLACE` | Revenue increases by the discount; source row unchanged; adjustment recorded (AC6) |
+| T6 | Full return, refund settled | Revenue reversed in the **original** period; COGS released if inventory sellable |
+| T7 | Partial return, 2 of 5 units | Revenue, COGS, and fees pro-rated by 2/5 (E2) |
+| T8 | RTO, inventory recovered sellable | Revenue unrecovered; COGS **not** consumed; forward + reverse logistics charged (§5.7) |
+| T9 | RTO, inventory damaged | Revenue unrecovered; COGS fully consumed; both logistics legs charged |
+| T10 | Cancellation before dispatch | No revenue; no COGS; no logistics |
+| T11 | Cancellation after dispatch | Revenue reversed; forward logistics retained (E15) |
+| T12 | SKU with no COGS record | Contribution Profit `UNAVAILABLE`; Net Revenue still reported (E9, AC8) |
+| T13 | SKU cost changed mid-period | Each line uses weighted average at its `document_date` (E11) |
+| T14 | Account-level ad spend ₹10,000 across 3 SKUs | Allocated by net revenue share; parts sum exactly to ₹10,000 (AC7) |
+| T15 | Ad spend with zero net revenue in scope | Reported unallocated, not dropped (E19) |
+| T16 | Interstate row charging CGST+SGST | Quarantined by `V-TAX-001`; excluded; disclosed (AC11) |
+| T17 | Amazon `Platform Fee` = `Marketplace Fee` = ₹50 | Counted once; both disclosed; flagged `V-FEE-002` (E12) |
+| T18 | Amazon period request | Returns `RECOGNISED`; never `REALIZED` (AC12) |
+| T19 | Meesho line, `Settlement Commission` > `Commission Fee` | Delta surfaced as a leak candidate; profit uses settlement side |
+| T20 | Settlement arrives one period later | Attributed to original period; settlement date retained (E5) |
+| T21 | Returns exceed sales in a period | Negative Net Realized Revenue reported as negative (E7) |
+| T22 | `NetRealizedRevenue = 0` | Margin `UNDEFINED` (E8) |
+| T23 | Same file uploaded twice | Deduplicated; totals unchanged (E18) |
+| T24 | Re-ingest after adapter upgrade | Adjustments preserved and re-attached (AC16) |
+| T25 | GST lookup returns 18% for a product | Stored `PROVISIONAL`; calculations unchanged until accepted (AC13) |
+| T26 | GST lookup with ambiguous classification | `ambiguity_note` populated; alternatives shown; no single confident rate (L4) |
+| T27 | GST lookup with no source URL | Discarded (AC14) |
+| T28 | Formula version bump | New calculation run; prior results byte-identical (AC17) |
+| T29 | Composition-scheme seller toggles fee GST to cost | Moves to `OtherAllocatedCosts`; recorded as manual input (D5) |
+| T30 | Multi-quantity line, per-line vs per-unit fee | Behaviour matches declared adapter config; mismatch flagged (A8) |
+
+---
+
+## 14. Decisions requiring your review
+
+### Design recommendations awaiting approval
+
+| # | Decision | My recommendation |
+|---|---|---|
+| D1 | Revenue recognition point | Dual-state: `RECOGNISED` at invoice, `REALIZED` at settlement. Amazon stays `RECOGNISED` until its settlement match keys are verified against a real export (§5.1). |
+| D2 | Unknown discount bearer | Default seller-borne (conservative), flagged, overridable. |
+| D3 | Costing method | Weighted average per SKU, effective-dated. FIFO is not supportable from upload-only data. |
+| D4 | Profit basis | Tax-exclusive throughout. |
+| D5 | GST on fees | Separate "potentially creditable" line, with a toggle for sellers who cannot claim ITC. |
+| D6 | TCS / TDS | Excluded from Contribution Profit; shown in cash-flow views only. |
+| D7 | Allocation basis | Net revenue share by default; configurable. |
+| D8 | Rounding | Integer paise, half-up, largest-remainder reconciliation. |
+
+### Matters needing your attention
+
+1. **A1 is resolved, and the answer was "it varies."** Basis is now declared per marketplace and per field (§8.1): Meesho inclusive, Amazon MTR supplying both. The residual risk is narrower — Flipkart's per-field basis remains unverified pending a real export.
+
+2. **R4 and R6 cannot be implemented today.** No reference file represents cancellations (C1) or RTO (C2). Both rules are fully specified and will work once real data shows how those states are encoded — but neither can ship on synthetic data.
+
+3. **Advertising cost has no data source** (C5). V1 supports manual entry only. A marketplace ad-report adapter is not in scope and would need its own specification.
+
+4. **D6 is a judgement worth confirming explicitly.** Excluding TCS/TDS from profit is correct accounting, but sellers frequently *experience* them as losses because they reduce the money that arrives. The engine treats them as cash-flow items; the CFO agent will need to explain that difference clearly, or the numbers will look wrong to users who are used to reading their settlement statements.
+
+**Awaiting your approval on D1–D8 before proceeding to the next specification.**
