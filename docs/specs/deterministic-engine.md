@@ -390,8 +390,9 @@ Named here so no agent delegates to a capability this spec does not define.
 | `reconcile(period, marketplace, tolerance_ref)` | `reconciliation_exception[]` + a `metric_result` for each aggregate | Tolerances resolve from configuration, never constants (F4). Model defined in `data-foundation.md` §5 |
 | `landed_cost(manual_adjustment_ref, sku, quantity)` | `metric_result`, `metric_code = LANDED_COST_PER_UNIT` | Unit cost + shipping + duties, per the referenced `supplier.quote`. Consumed by supplier ranking and batch size |
 | `leak_aggregate(period, marketplace, grouping)` | `metric_result`, `metric_code = LEAK_TOTAL` | Sums reconciliation exception amounts. **Agents never sum leak amounts themselves** |
-| `estimate_competitor_margin_range(...)` | `competitor_estimate` | §5.13; carries an `estimate_ref`, never an `engine_result_ref` |
-| `margin_curve(sku, candidate_prices[], period, as_of_date)` | `metric_result[]`, `metric_code = MARGIN_AT_PRICE` | One result per candidate price. Fees resolve from §5.14. Backs the pricing recommendation |
+| `estimate_competitor_margin_range(...)` | `competitor_estimate` | §5.13; carries an `estimate_ref`, never an `engine_result_ref`. **CI-exclusive** — no other agent surface reads or writes `competitor_estimate` |
+| `estimate_product_feasibility(...)` | `product_feasibility_estimate` | §5.13.2; carries its own `estimate_ref`. **PI-exclusive** — distinct table from `competitor_estimate`, never used for a seller's own SKU (use `margin_curve` instead) |
+| `margin_curve(sku, candidate_prices[], period, as_of_date)` | `metric_result[]`, `metric_code = MARGIN_AT_PRICE` | **CFO-exclusive** — requires an owned `sku` with COGS history. One result per candidate price. Fees resolve from §5.14. Backs the pricing recommendation. Never callable for a product the seller does not yet own — see §5.13.2 for that case |
 | `cash_reconciliation(period, marketplace, as_of_date)` | `metric_result[]` — `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE` | Settlement-based; also surfaces TCS/TDS as cash items, never P&L |
 | `rank_findings(exception_ids[], as_of_date, severity_config_ref)` | ordered list + `metric_result` per finding — `FINDING_AGE_DAYS`, `FINDING_SEVERITY` | Deterministic ranking and severity (§5.14.1). Takes `as_of_date` per §4.2 |
 | `funding_readiness_metrics(period_range, as_of_date)` | `metric_result[]` — `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS` | Inputs to the funding-readiness report. Emits no score |
@@ -400,6 +401,56 @@ Named here so no agent delegates to a capability this spec does not define.
 `metric_code` is extended accordingly: `LANDED_COST_PER_UNIT`, `LEAK_TOTAL`, `LEAK_EXCEPTION_AMOUNT`, `MARGIN_AT_PRICE`, `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE`, `FINDING_AGE_DAYS`, `FINDING_SEVERITY`, `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS`.
 
 **Reconciliation exceptions produce `metric_result` rows** under `metric_code = LEAK_EXCEPTION_AMOUNT`, one per exception. Each amount is therefore citable by `engine_result_ref`, which is what makes `leak_finding.engine_result_ref` satisfiable.
+
+### 5.13.2 Prospective product feasibility estimate (PI candidates)
+
+For a product a seller does **not yet own** — a discovered candidate with no seller `sku`, no owned COGS history, and no `metric_result` lineage — feasibility is estimation, on the same footing as §5.13's competitor estimate, and for the same reason: the inputs are observed or assumed, not canonical. **`margin_curve` is reserved for the seller's own SKU** (`cfo-agent.md` §6.7) and must never be used for a candidate the seller has not committed to buying.
+
+```
+estimate_product_feasibility(
+  ProspectiveObservationSet {
+    marketplace, category,
+    candidate_prices[],
+    stated_cogs_paise,                -- OPTIONAL. Only ever a value the seller stated, sourced from a
+                                       -- `supplier.quote` manual_adjustment. Never derived, estimated,
+                                       -- or supplied by PI itself — see `product-intelligence-agent.md` §6.7.
+    budget_paise, as_of_date,
+    source_url, fetched_at, confidence         -- always DERIVED at this boundary, same rule as §5.13
+  }
+) -> {
+  estimate_ref,                     -- product_feasibility_estimate.id — NEVER an engine_result_ref
+  feasible_price_range_low_paise, feasible_price_range_high_paise,
+  cogs_basis,                       -- STATED (seller quote used) | UNKNOWN (no quote — see rule 6 below)
+  assumptions[],                    -- every fee reference used, and every gap, including a missing COGS
+  fee_reference_version,
+  formula_version, config_version,
+  observation_ref
+}
+```
+
+**Rules**, identical in spirit to §5.13, plus one addition for the no-quote case:
+
+1. Output is always a range, never a point value.
+2. A missing fee reference widens the range and names the gap rather than suppressing the figure or defaulting to zero.
+3. The result is never written to `metric_result`.
+4. Every rendering is labelled an estimate.
+5. **The caller supplies `stated_cogs_paise` or omits it — the engine never asks PI to estimate a cost, and PI never does.** The only legitimate source of a real cost figure is a seller-declared `supplier.quote`.
+6. **Where `stated_cogs_paise` is absent, `cogs_basis = UNKNOWN`** and the range reflects **price and fee spread only, explicitly stating that no cost basis was available** — this is not the same claim as a margin estimate, and every rendering must carry that distinction so it is never mistaken for one.
+
+**This is a distinct surface from `competitor_estimate` (§5.13).** A prospective-product feasibility estimate and a competitor margin estimate answer different questions and must not share a table or a reference type — an agent that needs one must not reach for the other. `landed_cost` (§5.13.1) may still be called directly where a seller has an actual `supplier.quote` for the candidate; this interface is for the general case where no quote exists yet.
+
+```sql
+product_feasibility_estimate (
+  id uuid pk, tenant_id uuid not null,
+  low_paise bigint not null, high_paise bigint not null,
+  confidence text not null,               -- DERIVED, never better
+  basis text not null, assumptions jsonb not null,
+  fee_reference_version int not null,
+  observation_ref jsonb not null,
+  formula_version text not null, config_version text not null,
+  computed_at timestamptz not null
+)
+```
 
 ### 5.14 Fee reference store (C18 / B9)
 
@@ -608,11 +659,13 @@ Two distinct contracts. Consumers must not conflate them.
 | Contract | Identifier | Applies to | Guarantees |
 |---|---|---|---|
 | **`engine_result_ref`** | `metric_result.id` | Every figure computed from the canonical model | Reproducible under §4; carries state, confidence, basis, `formula_version`, `config_version`, `input_refs`, `exclusions` |
-| **`estimate_ref`** | `competitor_estimate.id` | §5.13 estimated competitor ranges only | Reproducible **only for a fixed observation set**; carries `observation_ref`, `fee_reference_version`, assumptions |
+| **`estimate_ref`** | **A family, not one table** — `competitor_estimate.id` (§5.13, CI-exclusive) or `product_feasibility_estimate.id` (§5.13.2, PI-exclusive) | Any estimation surface built on observed, non-canonical inputs | Reproducible **only for a fixed observation set**; carries `observation_ref`, `fee_reference_version`, assumptions |
+
+**`estimate_ref` is scoped to the interface that produced it, not a single global table.** A consumer must know which interface it called (`estimate_competitor_margin_range` vs `estimate_product_feasibility`) to know which table an `estimate_ref` UUID resolves against — the two id spaces are never merged, never cross-referenced, and a UUID from one is never valid against the other. Each new estimation surface added to this engine defines its own dedicated table (never reuses an existing one) and is listed here.
 
 ```sql
-competitor_estimate (                -- §5.13 output provenance; NOT a metric_result
-  id                    uuid pk,     -- the estimate_ref
+competitor_estimate (                -- §5.13 output provenance; NOT a metric_result. CI-exclusive.
+  id                    uuid pk,     -- an estimate_ref, scoped to THIS table only
   tenant_id             uuid not null,
   low_paise bigint not null, high_paise bigint not null,
   confidence            text not null,      -- DERIVED, never better
@@ -625,7 +678,9 @@ competitor_estimate (                -- §5.13 output provenance; NOT a metric_r
 )
 ```
 
-**Rule.** A consumer displaying a financial figure cites an `engine_result_ref`. A consumer displaying an estimated competitor range cites an `estimate_ref`. Neither substitutes for the other, and §5.13 rule 5 stands — estimates are never written to `metric_result`.
+`product_feasibility_estimate` (§5.13.2, PI-exclusive) is the second table in this family — same shape, same rules, structurally separate, defined in full at §5.13.2.
+
+**Rule.** A consumer displaying a financial figure cites an `engine_result_ref`. A consumer displaying any estimate cites the `estimate_ref` from the specific table its interface produced, and states which table. No `estimate_ref` ever substitutes for an `engine_result_ref`, and §5.13 rule 5 stands for every table in the family — estimates are never written to `metric_result`.
 
 ---
 
