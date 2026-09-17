@@ -23,7 +23,7 @@
 
 | # | Decision | Recommendation | Rationale |
 |---|---|---|---|
-| D1 | **Turn correlation.** A single turn can produce several `agent_run` rows (one CEO row plus N parallel Brain-1 rows, or one CEO row plus one named-agent row), but `agent_run` has no field grouping them as one turn — only a shared `investigation_id`. | Recommend `ceo-agent-orchestration.md` add a nullable `parent_run_id` on `agent_run`, pointing at the CEO's own turn-level row. Until that lands, fall back to grouping by `investigation_id` + overlapping `started_at`/`finished_at` against the CEO anchor row — a fragile heuristic, not a substitute. | Without a real key, two turns issued close together in the same investigation cannot be reliably told apart. This is a genuine cross-spec gap, not a frontend detail. |
+| D1 | **Turn correlation.** A single turn can produce several `agent_run` rows (one CEO row plus N parallel Brain-1 rows, or one CEO row plus one named-agent row). **Resolved:** `ceo-agent-orchestration.md` §5/§6.8 now carries a nullable `parent_run_id` on `agent_run`, null on the CEO's own turn-level row and set to that row's `id` on every row it fans out to. A turn's group is exactly `{anchor_run_id} ∪ {rows where parent_run_id = anchor_run_id}` — no heuristic needed. | Was: recommend adding `parent_run_id`; fall back to `investigation_id` + overlapping timestamps until it lands. Now: build every `FlowTurn` from `parent_run_id` directly. | Without a real key, two turns issued close together in the same investigation could not be reliably told apart. `parent_run_id` closes that gap; the timestamp-overlap heuristic is no longer needed for any row written after this lands. |
 | D2 | Live-update transport | Short-interval poll (1–2s) of the turn's `agent_run` rows while any is non-terminal; stop polling once all reach a terminal `status`. Push (WebSocket/SSE) is a future upgrade, not required for V1. | Matches the low request volume of a single open flow view; avoids standing up push infrastructure before it's needed. |
 | D3 | Node visual states | QUEUED (pending) / RUNNING (in progress) / COMPLETE / PARTIAL / FAILED / DENIED, mapped directly from `agent_run.status` | One-to-one mapping keeps the diagram an honest mirror of the audit row, never an interpretation of it. |
 | D4 | Historical drawer entry point | A small affordance on each individual CEO-composed message, not a separate global history screen | Keeps "how did it get this answer" scoped to the answer the user is actually looking at. |
@@ -36,7 +36,7 @@
 | # | Assumption | Risk if wrong |
 |---|---|---|
 | A1 | `agent_run` rows update with low enough latency for 1–2s polling to feel live | Low — worst case is a slightly stale node state, not incorrect data |
-| A2 | The D1 fallback heuristic correctly groups rows for the common case (one active turn per investigation at a time) | Medium — concurrent turns in the same investigation could mis-group until `parent_run_id` exists |
+| A2 | Every `agent_run` row a viewer needs to group was written after `parent_run_id` landed; the timestamp-overlap heuristic (D1) still applies to any older row written before the migration | Low for new turns (grouping is exact via `parent_run_id`) — Medium only for historical rows predating the column, which fall back to the heuristic |
 | A3 | Most users open the flow view for trust/verification, not as a primary reading surface | Low — justifies C1's hidden-by-default default; wrong only affects discoverability, not correctness |
 
 ---
@@ -63,14 +63,14 @@ FlowNode {
 }
 
 FlowTurn {
-  anchor_run_id,               -- the CEO agent_run row for this turn
+  anchor_run_id,               -- the CEO agent_run row for this turn (parent_run_id IS NULL)
   investigation_id,
   nodes: FlowNode[],           -- CEO node + fan-out node(s) + synthesis, per C2
-  resolved_via_parent_run_id: bool   -- false while D1's fallback heuristic is in use
+  resolved_via_parent_run_id: bool   -- true when built from parent_run_id; false only for legacy rows predating the column, grouped via D1's timestamp heuristic
 }
 ```
 
-`resolved_via_parent_run_id` exists so the UI (and QA) can tell a reliably-grouped turn from a heuristically-guessed one — it is never hidden from tooling, even though it need not be shown to the end user.
+A turn is assembled by selecting the anchor row (`agent_id = CEO`, `parent_run_id IS NULL`, matching `investigation_id`) and every `agent_run` row with `parent_run_id = anchor_run_id`; that full set becomes `nodes`. `resolved_via_parent_run_id` exists so the UI (and QA) can tell a reliably-grouped turn from a heuristically-guessed one — it is never hidden from tooling, even though it need not be shown to the end user.
 
 ---
 
@@ -120,7 +120,7 @@ Direct-path `agent_run` rows never appear in this surface. There is no toggle, f
 | E1 | Flow opened while the turn is still running | Live partial state shown; non-terminal nodes visibly pending/in-progress (§6.4) |
 | E2 | Turn denied before any child run was issued | Diagram shows the CEO node alone, marked DENIED; no fan-out drawn (§6.2) |
 | E3 | Bundle partially fails | Failed branch shown FAILED; other branches and synthesis shown per their real status, never blanket-failed (§6.5) |
-| E4 | D1's fallback heuristic cannot confidently group rows (e.g. two turns overlap in time) | Diagram shows "flow unavailable for this turn" rather than guessing and risking a wrong diagram |
+| E4 | A legacy turn predates `parent_run_id` and D1's timestamp heuristic cannot confidently group its rows (e.g. two turns overlap in time) | Diagram shows "flow unavailable for this turn" rather than guessing and risking a wrong diagram — does not occur for any turn grouped via `parent_run_id` |
 | E5 | Historical drawer opened on a turn whose messages have since been folded into `investigation.summary` | Drawer still renders correctly — it reads `agent_run` directly, independent of summary compression |
 
 ---
@@ -129,7 +129,7 @@ Direct-path `agent_run` rows never appear in this surface. There is no toggle, f
 
 | # | Item | Blocks |
 |---|---|---|
-| V1 | `parent_run_id` (D1) does not exist yet in `ceo-agent-orchestration.md`'s data model | Reliable turn grouping; V1 ships on the fallback heuristic only |
+| V1 | **Resolved** — `parent_run_id` (D1) now exists on `agent_run` (`ceo-agent-orchestration.md` §5/§6.8). Remaining work is implementation only: the write path must actually set it on every fan-out row, and the read path must query by it. | Was: reliable turn grouping; no longer blocks this spec's logic |
 | V2 | Live-update transport (D2) unimplemented | §6.4 |
 | V3 | `ceo-agent-orchestration.md`'s bundle catalog (its V2) is incomplete, and no visual/motion design exists yet | Neither blocks this spec's own logic — this spec defines structure and state, not diagram content coverage or pixels |
 
@@ -161,7 +161,7 @@ Direct-path `agent_run` rows never appear in this surface. There is no toggle, f
 | T4 | Turn denied for missing entitlement | Diagram shows CEO node only, DENIED, with the entitlement reason shown (AC4) |
 | T5 | One of three parallel branches fails | Diagram shows 2 COMPLETE + 1 FAILED + synthesis COMPLETE (AC5) |
 | T6 | User opens historical drawer on a 2-week-old answer | Same diagram renders correctly from `agent_run`, unaffected by summary compression (E5) |
-| T7 | Two turns overlap in the same investigation, no `parent_run_id` yet | UI shows "flow unavailable" rather than a merged/incorrect diagram (E4) |
+| T7 | Two legacy turns overlap in the same investigation, rows predate `parent_run_id` | UI shows "flow unavailable" rather than a merged/incorrect diagram (E4) |
 | T8 | Turn completes while flow view is open | Live nodes update in place without reload; polling stops at terminal state (AC6) |
 
 ---
@@ -170,7 +170,6 @@ Direct-path `agent_run` rows never appear in this surface. There is no toggle, f
 
 | # | Question | Impact |
 |---|---|---|
-| Q1 | **`parent_run_id` addition (D1)** — does `ceo-agent-orchestration.md` accept this amendment, or is a different correlation mechanism preferred? | 🔴 Blocks reliable turn grouping beyond the fallback heuristic |
 | Q2 | Poll vs. push (D2) — is WebSocket/SSE infrastructure planned soon enough to design directly against it instead of polling? | §6.4, future rework cost |
 ### Resolved — do not re-flag
 
@@ -180,3 +179,4 @@ Direct-path `agent_run` rows never appear in this surface. There is no toggle, f
 | R2 | Diagram shape | **Branching pattern** — CEO node, fan-out to parallel reads or one delegation, synthesis node (C2). |
 | R3 | Post-answer explainability surface | **Historical drawer**, reusing the live-view component, opened per past message (C3). |
 | R4 | Whether this spec owns any backend data or LLM work | **No** — pure read/render layer over `ceo-agent-orchestration.md`'s `agent_run` (C4, C5). |
+| R5 | `parent_run_id` addition (was Q1) | **Accepted** — `ceo-agent-orchestration.md` §5/§6.8 now carries nullable `parent_run_id` on `agent_run`, null on the CEO turn-level row, set to that row's `id` on every fan-out row. Turn grouping is exact for any row written after this lands (D1). |

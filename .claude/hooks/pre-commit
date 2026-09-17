@@ -1,0 +1,65 @@
+#!/usr/bin/env sh
+# Metrion pre-commit hook — enforces CLAUDE.md's hard rule:
+#   "Any calculation that touches money lives in the deterministic engine
+#    (Brain 1) — Python and SQL, unit-tested, no LLM in the path."
+#
+# Blocks the commit if any staged .py file under the engine directory
+# imports a known LLM/AI provider library. The engine must never call an
+# LLM, directly or through a provider SDK — not even the local Ollama
+# client (CLAUDE.md requires it stay behind a provider abstraction, and
+# that abstraction has no business inside the engine at all).
+#
+# Activated via: git config core.hooksPath .claude/hooks
+# (local git config only — each clone must run this once; see
+# docs/planning/mechanical-setup-log.md)
+
+set -eu
+
+ENGINE_DIR="packages/calc-engine"
+
+# Known LLM/AI provider SDK import patterns (Python). Deliberately an
+# explicit allowlist-style pattern, not a generic "ai"/"llm" keyword
+# match, to avoid false positives on legitimate statistical code.
+PROVIDER_PATTERN='^[[:space:]]*(import|from)[[:space:]]+(openai|anthropic|langchain[a-zA-Z_]*|llama_index|cohere|mistralai|google\.generativeai|ollama|transformers|vertexai)\b'
+
+staged_files=$(git diff --cached --name-only --diff-filter=ACM -- "$ENGINE_DIR" || true)
+
+if [ -z "$staged_files" ]; then
+  exit 0
+fi
+
+violation_log=$(mktemp)
+trap 'rm -f "$violation_log"' EXIT
+
+echo "$staged_files" | while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in
+    *.py) ;;
+    *) continue ;;
+  esac
+  matches=$(git show ":$f" | grep -nE "$PROVIDER_PATTERN" || true)
+  if [ -n "$matches" ]; then
+    {
+      echo "--- $f ---"
+      echo "$matches"
+    } >> "$violation_log"
+  fi
+done
+
+if [ -s "$violation_log" ]; then
+  echo ""
+  echo "COMMIT BLOCKED — LLM/AI provider import found inside $ENGINE_DIR/"
+  echo ""
+  cat "$violation_log"
+  echo ""
+  echo "CLAUDE.md's hard rule: money math lives in the deterministic engine —"
+  echo "Python and SQL, unit-tested, no LLM in the path. The engine may never"
+  echo "import an LLM/AI provider library, including the local Ollama client."
+  echo ""
+  echo "Move this logic out of $ENGINE_DIR/, or if this is a genuine false"
+  echo "positive, adjust PROVIDER_PATTERN in .claude/hooks/pre-commit."
+  echo ""
+  exit 1
+fi
+
+exit 0

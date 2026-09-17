@@ -61,7 +61,6 @@ and the permission grid: `docs/specs/auth.md` (§1.4, §7.3).
 | `docs/planning/phase-1-readiness-review.md` | **Decisions of record.** Locked decisions, superseded plan items, and every open `[B]`/`[P]`/`[D]` ambiguity. |
 | `docs/planning/metrion-master-plan.pdf` | Original plan. Substantially superseded — check the readiness review before trusting anything in it. |
 | `docs/design/design_status.md` | Branding, colors, typography and UI are **not final**. Keep them configurable; never couple business logic to them. |
-| `.claude/agents/spec-reviewer.md` | Reviews drafted specs against locked decisions. Run it after writing a spec, before coding. |
 
 **Before implementing any feature, read its spec in `docs/specs/` first. If a spec doesn't
 exist, write one before coding.** Never infer a feature's behaviour from the code, the

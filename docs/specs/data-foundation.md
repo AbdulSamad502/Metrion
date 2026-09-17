@@ -75,6 +75,14 @@ report_file (
 -- One parse attempt. New adapter version => new run; old runs retained.
 ingestion_run (
   id                uuid pk,
+  tenant_id         uuid not null,          -- CONFIRMED amendment (Category C, data-foundation
+                                             -- package): denormalised from report_file.tenant_id
+                                             -- at write time. auth.md §7.3's RLS policy needs
+                                             -- tenant_id directly on every tenant-owned table;
+                                             -- without it here, isolation would depend on a
+                                             -- join-based policy against report_file instead of
+                                             -- the standard direct-column pattern every other
+                                             -- tenant table in this repo already uses.
   report_file_id    uuid not null,
   adapter_id        text not null,          -- e.g. "meesho.tcs_sales.v1"
   adapter_version   text not null,
@@ -100,7 +108,18 @@ sales_line (
   marketplace_item_id  text,               -- ASIN / FSN / (Meesho: none observed)
   item_title           text,
   hsn_sac              text,
-  quantity             int not null,
+  quantity             int,               -- CONFIRMED amendment (Category C, data-foundation
+                                           -- package): relaxed from `not null`. No adapter in
+                                           -- §2.3's registry has a spec-confirmed literal
+                                           -- header for this column (unlike order_ref/line_ref/
+                                           -- marketplace_item_id, which this file's own comment
+                                           -- above names per marketplace) — a NOT NULL
+                                           -- constraint would force every real row to either
+                                           -- invent a guessed header or fail to insert. Null
+                                           -- here means "not yet mapped," not "zero units";
+                                           -- calc-engine's billable_quantity() already treats a
+                                           -- missing quantity-dependent input as Unavailable,
+                                           -- never a silent zero.
   -- money (paise, signed)
   gross_item_amount    bigint,
   taxable_amount       bigint,
@@ -340,6 +359,34 @@ Every rule below is derived from a defect actually present in the reference file
 
 Each run produces a **Data Quality Report**: counts by severity, per-rule breakdown, quarantined row list with source row numbers, and the resulting confidence level for the period.
 
+### 4.4 `validation_finding` — CONFIRMED (Category C, data-foundation package)
+
+§1.2's entity tree names a `validation_finding` table but no schema was ever defined for it —
+a real gap, since §4.3's Data Quality Report cannot be assembled from prose alone. This is the
+one row-per-finding table that §4.2's rule table and §4.3's report are both describing:
+
+```sql
+validation_finding (
+  id                 uuid pk,
+  tenant_id          uuid not null,
+  ingestion_run_id   uuid not null,
+  sales_line_id      uuid,              -- null for a run-level finding (e.g. V-PER-001, which
+                                         -- checks the whole report period, not one row)
+  rule_id            text not null,     -- e.g. 'V-TAX-001', from §4.2's table
+  severity           text not null,     -- ERROR | WARNING | INFO (§4.1)
+  message            text not null,
+  source_row_number  int,
+  created_at         timestamptz not null default now()
+)
+```
+
+An `ERROR`-severity finding does not delete or omit its `sales_line` row — §3's raw-file
+preservation and full-traceability rules apply to quarantined rows exactly as to accepted
+ones. Exclusion from financial aggregates (§4.1's stated ERROR effect) is enforced downstream,
+at calculation time, by joining `validation_finding` on `sales_line_id` — this is precisely
+what `deterministic-engine.md`'s `CanonicalLine.quarantine_rule_ids` field already exists to
+carry.
+
 ---
 
 ## 5. Settlement reconciliation model
@@ -401,6 +448,10 @@ Per the planning doc: fee percentages are never hardcoded. All tolerances and la
 ```sql
 report_period (
   id               uuid pk,
+  tenant_id        uuid not null,          -- CONFIRMED amendment (Category C, data-foundation
+                                            -- package) — same reasoning as ingestion_run above:
+                                            -- denormalised from report_file.tenant_id, required
+                                            -- for auth.md §7.3's direct-column RLS policy.
   report_file_id   uuid not null,
   period_start     date not null,
   period_end       date not null,

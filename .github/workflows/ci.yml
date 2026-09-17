@@ -1,0 +1,90 @@
+name: CI
+
+# Runs pytest, the no-float lint, and a migration round-trip for both
+# packages/calc-engine and packages/data-foundation, against a real Postgres —
+# the same standard already applied manually throughout this project (Category
+# B/C checkpoints), now automated.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: metrion
+          POSTGRES_PASSWORD: metrion_dev_password
+          POSTGRES_DB: metrion
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U metrion"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Service containers start before checkout, so docker/postgres-init/*.sql
+      # can't run as Postgres init scripts here — applied explicitly below instead.
+      DATABASE_URL: postgresql+psycopg://metrion_migrate:metrion_migrate_dev_password@localhost:5432/metrion
+      DATABASE_URL_APP: postgresql+psycopg://metrion_app:metrion_app_dev_password@localhost:5432/metrion
+      PGPASSWORD: metrion_dev_password
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -U metrion && break
+            sleep 1
+          done
+
+      - name: Bootstrap extensions and roles (docker/postgres-init/*.sql)
+        run: |
+          psql -h localhost -U metrion -d metrion -f docker/postgres-init/01-enable-pgvector.sql
+          psql -h localhost -U metrion -d metrion -f docker/postgres-init/02-roles.sql
+
+      - name: Install calc-engine
+        run: pip install -e "packages/calc-engine[dev]"
+
+      - name: Install data-foundation
+        run: pip install -e "packages/data-foundation[dev]"
+
+      - name: calc-engine — no-float lint
+        run: python packages/calc-engine/scripts/lint_no_float.py
+
+      - name: data-foundation — no-float lint
+        run: python packages/data-foundation/scripts/lint_no_float.py
+
+      - name: calc-engine — migrate (upgrade, downgrade, re-upgrade)
+        working-directory: packages/calc-engine
+        run: |
+          python -m alembic upgrade head
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+
+      - name: data-foundation — migrate (upgrade, downgrade, re-upgrade)
+        working-directory: packages/data-foundation
+        run: |
+          python -m alembic upgrade head
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+
+      - name: calc-engine — pytest (unit + integration)
+        working-directory: packages/calc-engine
+        run: python -m pytest tests/ -v
+
+      - name: data-foundation — pytest (unit + integration)
+        working-directory: packages/data-foundation
+        run: python -m pytest tests/ -v

@@ -105,7 +105,7 @@ Classification: **[B]** Blocking · **[P]** Important but can be provisional · 
 | 2.2 | ~~GST depth~~ | **RESOLVED** — management-grade; `deterministic-engine.md` §1.3, §8 |
 | 2.3 | **Fee-schedule source** — **reclassified.** Historical margin uses fees actually charged in the reports, so this does *not* block the engine. Required only for forward-looking figures: pricing recommendations, feasibility checker, public calculator | **[P]** |
 | 2.4 | ~~Tenant isolation mechanism~~ | **RESOLVED** — `auth.md` §1.4, §7.3: row-level `tenant_id` + Postgres RLS with `FORCE`, `SET LOCAL` context |
-| 2.5 | Repo layout — monorepo with `packages/calc-engine` recommended, unconfirmed | **[P]** |
+| 2.5 | ~~Repo layout~~ | **RESOLVED** — monorepo: `packages/calc-engine` (deterministic engine, Brain 1), `backend/` (FastAPI), `frontend/` (Next.js App Router). Enforced by the pre-commit hook at `.claude/hooks/pre-commit` (`core.hooksPath` must be set locally — see `docs/planning/mechanical-setup-log.md`). |
 | 2.6 | ~~Agent topology~~ | **RESOLVED** — star confirmed; CEO brokers all agent-to-agent routing (§1 Agent architecture) |
 | 2.7 | Fast-path vs AI-path router mechanism | **[P]** |
 | 2.8 | Expense and cash-flow input path — manual entry, statement upload, or settlement-derived only | **[P]** |

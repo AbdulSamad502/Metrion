@@ -162,6 +162,24 @@ Some figures are inherently relative to a moment: a finding's age, whether a cla
 
 This keeps AC2 intact — no calculation path invokes a clock — while making age, window status and overdue detection computable in Brain 1 rather than stranded between brains.
 
+### 4.3 `canonical_data_version` — derivation
+
+Referenced by the reproducibility tuple in §4 but not itself defined anywhere in
+`data-foundation.md`. **It is derived, never stored upstream:**
+
+```
+canonical_data_version = sha256(
+  sorted(ingestion_run.id for every ingestion_run in scope),
+  sorted(f"{adapter_id}:{adapter_version}" for every adapter involved),
+  sorted(manual_adjustment.id for every ACTIVE adjustment in scope)
+)
+```
+
+Computed at `compute_metric()` time from whatever is actually in scope for that calculation,
+sorted before hashing so the result does not depend on database row order (required for AC1).
+Stamped on the `metric_result` as an opaque text value — it is a fingerprint of the inputs,
+not a foreign key, and `data-foundation.md` should not be assumed to expose a matching field.
+
 ---
 
 ## 5. Formulas
@@ -209,6 +227,29 @@ MarketplaceFundedDiscounts(line) = Σ[* where bearer = MARKETPLACE]   -- disclos
 
 **Bearer is a property of `(marketplace, component_code)`, resolved from a configuration table** — never hardcoded, and per data-foundation, never inferred. Initial values are assumptions A4/A5.
 
+That configuration table is `discount_bearer_config`:
+
+```sql
+discount_bearer_config (
+  id uuid pk, tenant_id uuid,            -- null = platform default
+  marketplace text not null,
+  component_code text not null,
+  bearer text not null,                  -- SELLER | MARKETPLACE | UNKNOWN
+  source text not null,                  -- where the mapping came from
+  confidence text not null,
+  effective_from date not null,
+  version int not null,
+  unique (tenant_id, marketplace, component_code, effective_from)
+)
+```
+
+Resolution order: a tenant-specific row, if any, overrides the platform default for the same
+`(marketplace, component_code)` as of the observation date; where no row exists at all,
+`bearer = UNKNOWN` and D2's fallback applies. This is engine-owned configuration — it does
+not require a `bearer` column on `line_component` (`data-foundation.md` §1.4 has none;
+Flipkart's `Seller Share`/`Bank Offer Share` are already bearer-split at the source and never
+consult this table at all, per A5).
+
 ### 5.4 Revenue reductions
 
 ```
@@ -241,15 +282,38 @@ Marketplace-funded discounts appear in no term (R2).
 | `ReturnRTOLosses` | §5.7 | `DERIVED` |
 | `OtherAllocatedCosts` | Seller-entered; allocated (D7) | `MANUAL` / `DERIVED` |
 
+**Absent `expense.advertising` — CONFIRMED (Category E).** Unlike `COGS` (a cost every sold
+unit definitely incurred, whether or not its value is known — absence is `UNAVAILABLE`),
+advertising spend is opt-in seller-declared data: a seller who ran no ads for a scope simply
+never enters an adjustment for it. No `expense.advertising` adjustment covering a
+SKU/period/account therefore resolves to `AdvertisingCosts = 0` for that scope, not
+`UNAVAILABLE` — the same treatment already given to a line with no `DISCOUNT` component
+present. This does not extend to `COGS`, which remains `UNAVAILABLE` when absent.
+
 ```
 COGS(line) = weighted_average_cost(sku, as_of = document_date) × billable_quantity
 
 billable_quantity = quantity
-                  − returned_qty_with_sellable_inventory_recovered
-                  − rto_qty_with_sellable_inventory_recovered
+                  − returned_qty_all_outcomes
+                  − rto_qty_all_outcomes
 ```
 
-Recovered sellable inventory does not consume COGS — the goods remain saleable (R6).
+**Corrected from an earlier draft that excluded only sellable-recovered quantity.** Standard
+inventory accounting reverses `COGS` for a returned/RTO'd unit regardless of outcome —
+recovered-sellable inventory reverses it to zero (R6: the goods remain saleable, no cost
+consumed); damaged or lost inventory is *also* removed from ordinary `COGS` and its cost moved
+wholesale into `ReturnRTOLosses` (§5.7) as a distinct, visible loss line, never left inside
+blanket `COGS`. `billable_quantity` therefore excludes **every** returned/RTO'd unit
+regardless of its outcome — never only the recovered-sellable portion — so a unit's cost lands
+in exactly one place: nowhere (recovered) or `ReturnRTOLosses` (damaged/lost), never both. The
+earlier wording, if implemented literally, would have double-counted a damaged/lost unit's
+cost into both `COGS` and `ReturnRTOLosses` simultaneously.
+
+**Logistics components on a return/RTO line belong to `ReturnRTOLosses` (§5.7), never to
+`ShippingLogistics`.** A `LOGISTICS_FEE`/`SHIPPING_CHARGE` component on a line whose
+`return_status`/`rto_outcome` is non-null is excluded from `ShippingLogistics` and counted
+only in §5.7's forward/reverse logistics terms — otherwise the same charge would be summed
+into both components.
 
 ### 5.7 Return and RTO losses (R6)
 
@@ -342,6 +406,48 @@ CFO never recomputes a figure Brain 1 has produced. It explains it.
 **Reconciliation inputs:** transactions, orders, settlements, returns, and — where the seller supplies the data — logistics. Seller-supplied logistics is a manual input (§7) and never overwrites source data.
 
 **Compute-intensity note (not a metering decision):** CFO is the most deterministic agent in the system; its model cost is explanation-only and does not scale with seller data volume. This is a technical characteristic recorded for the future billing specification, which owns the meter. **No metering basis, unit or prohibition is established by this spec.** See `cfo-agent.md` §7.3.3.
+
+### 5.12.1 Reconciliation tolerance configuration — CONFIRMED (Category C)
+
+`data-foundation.md` §5.5 requires variance tolerance, settlement lag and grace period to be
+**configuration, never hardcoded** (F4), but defines neither their schema nor how a
+paise-tolerance and a basis-points-tolerance combine when both are configured for the same
+`(marketplace, component_code)`. Both are resolved here, since this engine owns every
+configuration table F4 requires (mirrors `discount_bearer_config`, §5.3).
+
+**Confirmed decision — tolerance combination:** a variance is `MATCHED_WITHIN_TOLERANCE` if it
+satisfies **either** the paise tolerance **or** the basis-points tolerance (computed against
+the invoice-side amount) — not both. This is the more lenient of the two, deliberately: it
+absorbs small flat-paise rounding noise on large lines and small percentage noise on small
+lines without a seller-visible false-positive leak on either end. A variance failing both is
+`VARIANCE_EXCEEDS_TOLERANCE`.
+
+```sql
+reconciliation_tolerance_config (
+  id uuid pk, tenant_id uuid,            -- null = platform default
+  marketplace text not null,
+  component_code text not null,          -- or '*' for a marketplace-wide default
+  tolerance_paise bigint not null,
+  tolerance_bps int not null,            -- basis points of the invoice-side amount
+  settlement_lag_days int not null,      -- WITHIN_LAG vs BEYOND_LAG threshold
+  grace_period_days int not null,        -- additional buffer before BEYOND_LAG is reported as a leak
+  effective_from date not null,
+  version int not null,
+  unique (tenant_id, marketplace, component_code, effective_from)
+)
+```
+
+Resolution order mirrors `discount_bearer_config` (§5.3): a tenant-specific row overrides the
+platform default for the same `(marketplace, component_code)`; where neither a specific nor a
+`'*'` row exists, tolerance resolution fails and the line's reconciliation outcome is
+`UNAVAILABLE` — never a silently-assumed zero tolerance (which would over-report leaks) or an
+silently-assumed infinite tolerance (which would hide them).
+
+**Settlement lag / grace period semantics — CONFIRMED:** an unsettled invoice line is
+`UNSETTLED_WITHIN_LAG` while `days_since(document_date, as_of_date) <= settlement_lag_days`,
+becomes `UNSETTLED_BEYOND_LAG` once that threshold is crossed, but is only surfaced as a
+reportable leak exception once `days_since(...) > settlement_lag_days + grace_period_days` —
+the grace period is a reporting buffer on top of the lag threshold, not a second lag.
 
 ---
 
@@ -491,6 +597,17 @@ severity_config (
 
 `window_status` derives from `claim_window_days` against `as_of_date`: `EXPIRED` when elapsed, `CLOSING_SOON` within `window_closing_soon_days`, else `OPEN`. Where `claim_window_days` is null the status is `UNKNOWN` and ordering falls back to amount.
 
+**Severity combination — CONFIRMED (Category C).** A single finding can have up to three
+applicable `severity_config` rows (one per `metric`), each producing its own `HIGH | MEDIUM |
+LOW` band from that metric's `high_threshold`/`medium_threshold` against the finding's value
+for that metric — a metric is skipped, not defaulted, when the finding has no value for it
+(e.g. `WINDOW_DAYS_REMAINING` on a finding with no claim window). **`FINDING_SEVERITY` is the
+most severe band among whichever metrics actually applied** — the same "worst input wins"
+principle `combine_confidence` already applies to confidence (data-foundation.md §7.1),
+applied here to urgency instead of certainty. A finding with zero applicable metrics (no
+config row matches and no metric has data) reports `FINDING_SEVERITY = UNAVAILABLE`, never a
+default `LOW`.
+
 ---
 
 ## 6. Grain and periods
@@ -498,6 +615,14 @@ severity_config (
 Computable at: `line` → `order` → `sku` → `marketplace` → `account`.
 
 Period allocation uses **document date**, not report period (data-foundation §6). A line dated 28 Aug belongs to August regardless of which report delivered it.
+
+**`document_date` resolves to `sales_line.invoice_date`**, falling back to `dispatch_date`
+then `order_date` when no invoice exists yet for that line (e.g. a cancellation before
+invoicing). `data-foundation.md` does not use the literal name `document_date` — this is the
+engine's mapping onto that spec's actual columns, isolated to a single `resolve_document_date()`
+function. **Confirmed decision.** Reasoning: for seller business-period reporting, a cancelled
+pre-invoice order should remain attributable to the period the order occurred in, not
+disappear from reporting.
 
 Settlement adjustments are attributed to the **original document's period**, not the settlement date — otherwise a return silently improves the month it was processed in. The settlement date is retained for cash-flow views.
 
@@ -537,7 +662,7 @@ Any figure incorporating a manual input is labelled `MANUAL` and names the adjus
 
 | `field` | `target_type` | `value` shape |
 |---|---|---|
-| `cogs_per_unit` | `SKU` | scalar paise |
+| `cogs_per_unit` | `SKU` | `{amount_paise, effective_from?}` — `effective_from` defaults to the adjustment's `created_at` when omitted. Required so D3's weighted-average-cost-as-of-`document_date` is actually computable (T13); a bare scalar paise value (the pre-amendment shape) is still accepted and treated as `effective_from = created_at` |
 | `discount_bearer` | `LINE` | `SELLER \| MARKETPLACE` |
 | `rto_outcome` | `LINE` | `RECOVERED_SELLABLE \| RECOVERED_DAMAGED \| LOST` |
 | `cancellation_flag` | `LINE` | boolean |
@@ -585,6 +710,36 @@ Treating all three as `EXCLUSIVE` would systematically **overstate Meesho revenu
 - Intra-state → CGST + SGST (or UTGST); inter-state → IGST. Validated by `V-TAX-001`.
 - Rows failing that rule are quarantined and excluded from aggregates.
 - Cess is carried separately and never merged into GST totals.
+
+### 8.2.1 GST rate plausibility reference (`V-TAX-003`)
+
+`data-foundation.md`'s `V-TAX-003` ("effective GST rate within plausible slab set", WARNING
+severity) implies a slab reference without defining one. This engine owns that reference:
+
+```sql
+gst_slab_reference (
+  id uuid pk,
+  rate_pct numeric(7,4) not null,
+  label text not null,              -- e.g. "18% standard rate"
+  source_url text not null,
+  source_title text,
+  retrieved_at timestamptz not null,
+  effective_from date not null,
+  effective_to date,
+  version int not null,
+  confidence text not null default 'PROVISIONAL'
+)
+```
+
+Platform-owned, no `tenant_id`, read-only to the application. Seeded from official CBIC / GST
+Council published rate tables, one row per slab, each row citing its own `source_url` and
+`retrieved_at`. **This is not a claim of a complete or universal GST slab set, and it is not
+GST classification or tax advice** — it exists solely to back `V-TAX-003`'s plausibility
+check. An observed `rate_pct` with no matching row produces a WARNING, never an ERROR: the
+row is still included in aggregates, flagged for review, never treated as invalid and never
+excluded. This reference is never applied retroactively to a row that predates its
+`effective_from`, and it never substitutes for the GST Applicability Lookup (§8.4) or the
+professional-verification disclaimer (§8.3).
 
 ### 8.3 Indicative tax summary
 
@@ -737,6 +892,7 @@ Extends `data-foundation.md` §9. Specific to this engine.
 | C11 | Settlement join grain (A9) |
 | C12 | Whether marketplace-funded discounts are ever later recovered from the seller (E14) |
 | C13 | Fee refund behaviour on returns — which fees are returned, which are retained |
+| C14 | **`cash_reconciliation` (§5.13.1) has no defined formula for `CASH_EXPECTED`/`CASH_RECEIVED`** — every other §5 metric states its formula explicitly; this one names only its inputs and outputs. Blocks implementing `cash_reconciliation` at all until the formula is confirmed (deferred, Category C) |
 
 ---
 

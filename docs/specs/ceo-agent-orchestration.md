@@ -16,7 +16,7 @@
 | C3 | **AI-path control flow is single-shot, never a multi-turn tool loop (Q67).** For every conversational turn: CEO classifies intent **once**, issues the needed reads **in parallel**, then makes **exactly one** LLM call to compose the answer. CEO never runs a sequential chain of LLM→tool→LLM→tool. This is the "hybrid path" the planning document specifies and explicitly contrasts with the "bad architecture" of chained LLM round-trips. | planning doc p.10; OP10 |
 | C4 | **Agent delegation is one call per turn.** Where intent requires a named agent (PI/CI/CFO/CMO) rather than a bare Brain 1 read, CEO selects **exactly one** registered action from that agent's own interface (`pi.discover`, `ci.capture_run`, `cfo.reconcile`, `cmo.generate_title`, etc.) and invokes it once. No agent conducts a back-and-forth with CEO mid-run; each returns one structured report (C1's star topology; every agent spec's §6.9/§9 "Output to CEO"). | this spec; §6.4 |
 | C5 | **Investigations are the top-level conversational unit (Q27).** Not a flat chat log. Each investigation holds a rolling window of recent messages plus a compressed summary of everything older — the summary, never the full history, is what reaches the LLM context. | Q27=B, this session's decision record |
-| C6 | **No automatic investigation-splitting (Q28).** A new investigation is created **only** by an explicit user action. CEO never infers "this is a fresh topic" and silently forks context. | Q28, confirmed |
+| C6 | **No automatic investigation-splitting (Q28).** A new investigation is created **only** by an explicit user action. CEO never infers "this is a fresh topic" and silently forks context. **One named exception:** a verified WhatsApp message with no `ACTIVE` investigation for its tenant is itself the explicit action (`whatsapp-integration.md` C7, §6.7) — see §6.7 below. No other surface gets an implicit-creation path. | Q28, confirmed; WhatsApp exception resolves Q6 |
 | C7 | **`agent_run` is the single audit and flow-visualization artifact for every agent invocation**, direct or conversational. This is the concrete table every agent spec's "Audit: Yes" column writes to — it did not exist before this spec. | resolves `competitor-intelligence-agent.md` Q9 |
 | C8 | **CEO's own routing decision is advisory, never authoritative.** Selecting an agent action does not grant access to it. The target action's own six-step chain (`auth.md` §7.1) runs regardless of how the request arrived, and can still deny it. | `auth.md` §7.1; C4 |
 | C9 | **CEO holds no financial formula, no fee rate, and no agent-specific business logic.** Everything numeric in a CEO answer is copied from a Brain 1 result or a named agent's structured report. | Brain-boundary rule, all specs |
@@ -81,6 +81,7 @@ agent_run (                               -- C7: the single audit + flow-visuali
   trigger_type text not null,             -- DIRECT | CONVERSATIONAL
   trigger_ref text not null,              -- e.g. "pi.discover", "cfo.reconcile", "ceo.chat_turn", "brain1.compute_metric"
   investigation_id uuid,                  -- set only for CONVERSATIONAL
+  parent_run_id uuid references agent_run(id),  -- null for the CEO's own turn-level row; set to that row's id on every sub-agent/Brain-1 run it fans out to (agent-flow-visualization.md D1)
   requested_by uuid not null,
   permission_check text not null,         -- PASS | DENIED, and which key failed if denied
   entitlement_check text not null,        -- PASS | DENIED
@@ -134,16 +135,20 @@ Once reads or the agent's structured report return, CEO makes **exactly one** LL
 - A message is appended to the investigation's `investigation_message` list.
 - The LLM context for a turn is: the summary (if one exists) **plus** messages since `summary_covers_through` — never the full raw history (C5).
 - `investigation.summary` is regenerated per D2's cadence; regeneration folds newly-covered messages in and advances `summary_covers_through`. Regeneration is itself one bounded LLM call, not part of the per-turn classify/synthesize calls in §6.3–6.5.
-- A new `investigation` row is created **only** when the user explicitly starts one (C6) — a "New Investigation" action in the UI. CEO never creates one on its own inference.
+- A new `investigation` row is created **only** when the user explicitly starts one (C6) — a "New Investigation" action in the UI, **or** the one named WhatsApp exception in §6.7. Both paths write the identical row shape through the identical creation logic; there is no separate WhatsApp investigation type or schema. CEO never creates one on its own inference beyond these two named triggers.
 
 ### 6.7 WhatsApp-originated turns
 
-A verified WhatsApp message resolves to exactly one tenant (`auth.md` W6) and, once it does, is routed through **the same §6.3–6.5 pipeline as any other conversational message** — one classification, one execution shape, one synthesis call. Nothing about the pipeline itself is WhatsApp-specific.
+A verified WhatsApp message resolves to exactly one tenant, and to exactly one member (`whatsapp_binding.bound_by`, always the tenant's OWNER in V1 — `whatsapp-integration.md` C8/§6.7) and, once it does, is routed through **the same §6.3–6.5 pipeline as any other conversational message** — one classification, one execution shape, one synthesis call. Nothing about the pipeline itself is WhatsApp-specific.
 
-**One genuine gap this spec does not silently resolve:** C6 requires a new investigation only from an explicit user action, but WhatsApp has no "New Investigation" button. `competitor-intelligence-agent.md` §6.9 and `cfo-agent.md` (in its own WhatsApp deferral) both already flagged pieces of this — whether a WhatsApp confirmation opens an investigation — and left it pending, correctly, because it is this spec's question to answer, not theirs. It remains open here as Q6 rather than guessed.
+**Resolved — Q6 (investigation creation on first WhatsApp contact).** `competitor-intelligence-agent.md` §6.9 and `cfo-agent.md` (in its own WhatsApp deferral) both flagged this as pending, correctly, because it was this spec's question to answer, not theirs. `whatsapp-integration.md` C7/§6.5 resolves it: **if a verified destination's inbound message (confirm, decline, or free text) has no `ACTIVE` investigation for its tenant, exactly one is created and the message is appended to it before the reply is otherwise processed.** This is the sole exception to C6's "explicit user action only" rule in the whole system — justified because WhatsApp has no "New Investigation" button, so the inbound message *is* the explicit action. It uses the identical `investigation` creation path defined in §6.6 (same row shape, same `created_by` semantics — `created_by` is the resolved `bound_by` member) — no WhatsApp-specific investigation variant exists. It never fires for an in-app message, and it never fires a second time once an `ACTIVE` investigation already exists for the tenant (§6.7 T13).
+
+No WhatsApp-specific exception to any *other* rule in this spec is needed: classification, execution, synthesis, summary regeneration, and RLS scoping all behave identically to a web-originated turn once the investigation exists.
 
 ### 6.8 `agent_run` logging and flow visualization (C7)
 Every invocation — direct or conversational, successful or denied — writes one `agent_run` row at start and updates it to a terminal `status` at completion. This is what a flow-visualization surface ("Agents at Work") reads from: agent, trigger, status, timing, and — for conversational runs — the `investigation_id` that requested it. A denied run (`status = DENIED`) is logged with the same fidelity as a completed one; the audit trail must show what was *attempted*, not only what succeeded.
+
+CEO's own turn-level row is written first, with `parent_run_id = NULL`. Every row that turn fans out to — each Brain 1 bundle call, or the one delegated named-agent call (§6.4) — is written with `parent_run_id` set to that CEO row's `id`. This is the reliable grouping key `agent-flow-visualization.md` D1 needed; that spec's diagram is built by selecting the CEO anchor row plus every row where `parent_run_id = anchor_run_id`, not by inferring the group from `investigation_id` and overlapping timestamps.
 
 ---
 
@@ -182,8 +187,8 @@ Every invocation — direct or conversational, successful or denied — writes o
 | E7 | CEO's own cap exhausted | Denied before classification; the sub-agent's own entitlement is never even checked (§8 rule 3) |
 | E8 | A direct-path action is invoked while the member also has an open investigation | Both are logged as separate `agent_run` rows; a direct action never appears inside `investigation_message` unless the user is also discussing it conversationally |
 | E9 | An agent's structured report cannot be summarised in one LLM call (very large PI report) | CEO composes a summary-of-the-report plus a pointer to the full structured data, never a truncated silent drop |
-| E10 | Inbound WhatsApp message, no open investigation exists | **Undecided** — pending Q6. Not resolved by inventing a default here |
-| E11 | Inbound WhatsApp message, an investigation is already open | Routes into that investigation's pipeline (§6.7) — this part is decided; only the no-open-investigation case is pending |
+| E10 | Inbound WhatsApp message, no open investigation exists | One `investigation` row is created and the message appended before the reply is otherwise processed (§6.7, resolved via `whatsapp-integration.md` C7) |
+| E11 | Inbound WhatsApp message, an investigation is already open | Routes into that investigation's pipeline (§6.7) — no new row created |
 
 ---
 
@@ -209,7 +214,7 @@ Every invocation — direct or conversational, successful or denied — writes o
 | AC5 | CEO delegates to at most one named agent action per turn. |
 | AC6 | Every number in a CEO answer traces to an `engine_result_ref`, an `estimate_ref`, or a field on a named agent's structured report. |
 | AC7 | A target action's six-step authorization chain always runs, regardless of how CEO arrived at selecting it. |
-| AC8 | A new investigation is never created without an explicit user action. |
+| AC8 | A new investigation is never created without an explicit user action — a "New Investigation" click, or the one named WhatsApp first-contact exception (§6.7). |
 | AC9 | LLM context for any turn never contains the full raw message history — only the summary plus messages since `summary_covers_through`. |
 | AC10 | Every agent invocation, direct or conversational, produces exactly one `agent_run` row. |
 | AC11 | A denied run is logged with the same fields as a completed one. |
@@ -233,6 +238,7 @@ Every invocation — direct or conversational, successful or denied — writes o
 | T11 | Direct path and conversational request both occur for the same tenant | Two separate `agent_run` rows, correctly attributed (E8) |
 | T12 | Cross-tenant investigation id requested | `404` |
 | T13 | WhatsApp confirmation with an investigation already open for the tenant | Routed into it via §6.3–6.5, same as a chat message (E11) |
+| T13b | Inbound WhatsApp message, no `ACTIVE` investigation exists for the tenant | Exactly one `investigation` row created, `created_by = bound_by`; message appended; then routed via §6.3–6.5 (AC8, E10) |
 | T14 | Profit question matching no named bundle | Falls back to one `compute_metric` call; still one classification, one synthesis (D3) |
 
 ---
@@ -246,7 +252,6 @@ Every invocation — direct or conversational, successful or denied — writes o
 | Q3 | **Intent-classification model and prompt strategy** on local Ollama models — accuracy at the hardware ceiling is unmeasured (A1, V1). | §6.3 |
 | Q4 | **CEO's own metering unit** (D5) — one run per turn regardless of sub-agent use — is a recommendation, not yet confirmed by the entitlement spec. | Entitlement spec |
 | Q5 | **Summary regeneration model** — same model as classification/synthesis, or a cheaper one, given it is a bounded, well-defined task? | §6.6, cost |
-| Q6 | **WhatsApp turn with no open investigation.** C6 requires an explicit "New Investigation" action, but WhatsApp has no such button. Does the first inbound message on a verified destination implicitly open one (a narrow, named exception to C6), or must the seller start one in-app first? Left genuinely undecided — see §6.7, E10. | 🔴 Blocks WhatsApp conversational flow |
 
 ### Resolved — do not re-flag
 
@@ -258,3 +263,4 @@ Every invocation — direct or conversational, successful or denied — writes o
 | R4 | Conversation/memory model (Q27) | **Investigations** are the top-level unit; recent messages plus a compressed rolling summary feed the LLM context within one (C5). |
 | R5 | Investigation creation trigger (Q28) | **Explicit user action only.** No automatic topic-change detection (C6). |
 | R6 | Audit artifact for agent invocations | **`agent_run`**, defined here, resolving the gap each agent spec left open (C7). |
+| R7 | WhatsApp turn with no open investigation (was Q6) | **Resolved** — the first inbound message on a verified destination with no `ACTIVE` investigation implicitly opens exactly one, the sole named exception to C6 (§6.7, `whatsapp-integration.md` C7). |

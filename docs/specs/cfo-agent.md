@@ -2,7 +2,7 @@
 
 **Status:** Draft for review
 **Prerequisites:** `deterministic-engine.md` (the single canonical source of all margin and P&L math) · `data-foundation.md` (canonical model, reconciliation outcomes, provenance) · `auth.md` (permissions, entitlement)
-**Related, not yet written:** entitlement spec · `whatsapp-integration.md`
+**Related:** entitlement spec (not yet written) · `whatsapp-integration.md` (defines the `MARGIN_RISK` alert type this agent owns — see its §6.3; CFO itself holds no WhatsApp-specific logic)
 
 **CFO interprets. Brain 1 calculates.** Every figure this agent presents — margin, profit, fee, tax, variance, leak amount — is produced by `deterministic-engine.md`. It decides *what to ask the engine*, and explains *what the answer means*.
 

@@ -1,8 +1,7 @@
 # Metrion — Competitor Intelligence Agent (CI) Specification
 
 **Status:** Draft for review
-**Prerequisites:** `deterministic-engine.md` (all margin math) · `data-foundation.md` (provenance, confidence) · `auth.md` (permissions)
-**Pending dependency:** `whatsapp-integration.md` — **does not exist yet.** CI decides **no** WhatsApp behaviour; §6.9 records only already-locked facts and defers everything else to that spec.
+**Prerequisites:** `deterministic-engine.md` (all margin math) · `data-foundation.md` (provenance, confidence) · `auth.md` (permissions) · `whatsapp-integration.md` (WhatsApp identity, invoke/revoke, and investigation-creation mechanics — CI decides none of this itself; §6.9 records only what that spec resolves)
 
 **The arithmetic boundary (B8).** CI may compute **deltas over its own observed facts** — a price change between two snapshots it captured. CI may **never** compute anything financial: no margin, fee, profit, tax or cost figure. All of those originate in Brain 1. CI normalises observations into a provenance-tagged input object, passes it to Brain 1, and reads the result back unchanged. CI holds no financial formula.
 
@@ -317,20 +316,22 @@ Derivation is local-only, on the same terms as §6.5. Where the seller wants *ge
 
 Revisit after DPDP and legal review (`auth.md` Q9).
 
-### 6.9 WhatsApp — ⚠️ pending `whatsapp-integration.md`
+### 6.9 WhatsApp
 
-That spec does not exist. **CI decides no WhatsApp behaviour.** Only the already-locked high-level facts apply:
+`whatsapp-integration.md` now exists and owns every WhatsApp decision. **CI still decides no WhatsApp behaviour of its own** — this section only restates what that spec resolves, plus what remains genuinely open there.
 
-| Locked fact | Source |
+| Fact | Source |
 |---|---|
 | One WhatsApp Business destination per tenant | `auth.md` W1 |
 | Explicit verification and opt-in required | `auth.md` W4, W5 |
-| Inbound messages resolve to the verified tenant | `auth.md` W6 |
-| Partner permissions cannot be bypassed through WhatsApp | `auth.md` W11 |
+| Inbound messages resolve to the verified tenant, and to exactly one member (`bound_by`, always the OWNER in V1) | `auth.md` W6; `whatsapp-integration.md` C8/§6.7 |
+| Partner permissions cannot be bypassed through WhatsApp | `auth.md` W11; `whatsapp-integration.md` §6.7 (holds trivially — no partner identity is ever resolved through the channel) |
+| A `CONFIRM` reply to a `PRICE_CHANGE` alert re-enters CI's own full authorization chain (`auth.md` §7.1) — WhatsApp confirmation supplies intent, not authorization | `whatsapp-integration.md` §6.4, §8.2 |
+| A `WHATSAPP_CONFIRM`-triggered run with no `ACTIVE` investigation for the tenant implicitly opens one before the run's result is processed | `whatsapp-integration.md` C7/§6.5; `ceo-agent-orchestration.md` §6.7 |
 
-**Deliberately not decided here** (M8/M9/M10 reverted): credit and cap treatment for WhatsApp-triggered runs · whether an inbound confirmation opens an Investigation · behaviour at cap mid-thread · alert channel when a seller declines WhatsApp · what happens when a WhatsApp-confirmed run completes. All belong to `whatsapp-integration.md` and readiness 2.12, 2.16, 2A.7.
+**Still deliberately not decided here** (M8/M9/M10 reverted, narrowed to what `whatsapp-integration.md` itself leaves open): credit and cap treatment for WhatsApp-triggered runs · behaviour at cap mid-thread · alert channel when a seller declines WhatsApp · what happens when a WhatsApp-confirmed run completes. All belong to `whatsapp-integration.md` and readiness 2.12, 2.16, 2A.7 — see its own §13 Q3 for the billing-cap piece.
 
-A `WHATSAPP_CONFIRM` trigger is recognised by §6.2 and enforced by §6.4; everything beyond that is pending.
+A `WHATSAPP_CONFIRM` trigger is recognised by §6.2 and enforced by §6.4; everything in the "still not decided" list above is pending in `whatsapp-integration.md` itself, not a CI gap.
 
 ---
 
@@ -366,7 +367,7 @@ A `WHATSAPP_CONFIRM` trigger is recognised by §6.2 and enforced by §6.4; every
 | E12 | Marketplace changes page structure | `PARSE_FAILED`; no fabricated values; adapter flagged for revision |
 | E13 | Review count zero | `insight_state = UNAVAILABLE` with `degraded_reason`; never zero-filled |
 | E14 | Seller asks for competitor's exact margin | Refused as unknowable; estimated band returned with its basis (C10) |
-| E15 | Partner lacks `agent.ci` | `403` — parity across direct, CEO and WhatsApp paths (§6.4) |
+| E15 | Partner lacks `agent.ci` | `403` — parity between the direct and CEO paths (§6.4). WhatsApp is not a third comparable path here: it never resolves to a Partner identity at all in V1 (always `bound_by`, the OWNER — `whatsapp-integration.md` C8/§6.7), so this denial cannot occur over WhatsApp; it isn't that WhatsApp grants Partners something the other paths deny |
 | E16 | Local processing unavailable | `insight_state = DEGRADED` from structured metadata; `degraded_reason` recorded. Raw text is **never** sent to a hosted provider as a fallback (C15, §6.5) |
 | E17 | Exception raised mid-derivation while raw text is in memory | Trace is scrubbed; no review body reaches logs or APM (§6.5) |
 | E18 | Snapshot passes the retention horizon | Purged per policy; derived insights and referenced provenance retained per §6.8 |
@@ -382,8 +383,7 @@ A `WHATSAPP_CONFIRM` trigger is recognised by §6.2 and enforced by §6.4; every
 | V1 | Real page structure per marketplace — field presence and stability (A1, A3) | Every adapter |
 | V2 | Anti-bot behaviour under realistic volume | Feasibility of on-demand fetching at all |
 | V3 | Populating the Brain 1 fee reference store per marketplace and category (A4, `deterministic-engine.md` §5.14) | The estimated range's usefulness |
-| V4 | `whatsapp-integration.md` does not exist | Everything deferred in §6.9 |
-| V5 | `auth.md` Q1 — whose permissions apply on a shared WhatsApp destination | WhatsApp-triggered runs |
+| V4 | Items `whatsapp-integration.md` itself still leaves open (credit/cap treatment, mid-thread cap behaviour, decline-alert channel, post-completion messaging) | The residual items in §6.9, not the whole WhatsApp path |
 | V6 | Legal review of on-demand fetching before launch | Launch, not build |
 | V7 | Variant-key derivation per marketplace (A5) | Delta correctness on multi-variant listings |
 | V8 | Local derivation quality on target hardware (Q7) — sentiment and theme extraction at volume on 4GB VRAM | §6.5, §6.6 |
@@ -457,7 +457,7 @@ A `WHATSAPP_CONFIRM` trigger is recognised by §6.2 and enforced by §6.4; every
 
 | # | Question | Impact |
 |---|---|---|
-| Q1 | **`whatsapp-integration.md` does not exist.** §6.9 records only locked facts; all WhatsApp behaviour is pending there (readiness 2.12, 2.16, 2A.7). | 🔴 Blocks WhatsApp path |
+| Q1 | **Residual WhatsApp items** `whatsapp-integration.md` itself leaves open (credit/cap treatment, mid-thread cap behaviour, decline-alert channel, post-completion messaging) — see its §13 Q3 and this spec's §6.9. | Narrower than before; no longer blocks the whole WhatsApp path (identity, invoke/revoke, and investigation-creation are resolved) |
 | Q2 | **Brain 1 entitlement treatment (M13).** OP9 says shared services carry their own caps, but no key or meter exists for Brain 1. CI calls it on every run. | Entitlement spec |
 | Q3 | **Paid-tier CI values** (25 URLs, 100 runs/month) are provisional and unlocked; readiness 3.3 defers final tiers (M7). | Entitlement spec |
 | Q4 | **Default threshold value.** Is ±5% right for Indian marketplaces, where festive repricing is routine? | Product |
@@ -479,3 +479,4 @@ A `WHATSAPP_CONFIRM` trigger is recognised by §6.2 and enforced by §6.4; every
 | R5 | Snapshot retention | C19, §6.8 — configurable, default 90 days; revisit after DPDP |
 | R6 | Competitor listing copy | C16, §6.6 — expression; derived attributes only |
 | R7 | Arithmetic boundary | Front matter + AC1 — observed-fact deltas permitted; all financial arithmetic in Brain 1 |
+| R8 | WhatsApp identity, invoke/revoke, and investigation-creation (was Q1) | `whatsapp-integration.md` now exists and resolves all three: identity via `bound_by` (§6.9, `whatsapp-integration.md` C8), `WHATSAPP_CONFIRM` re-entering CI's own §7.1 chain (§6.9), and implicit investigation creation on first contact (§6.9, `ceo-agent-orchestration.md` §6.7). Only billing-cap interaction and post-completion messaging remain open — narrowed into the new Q1. |

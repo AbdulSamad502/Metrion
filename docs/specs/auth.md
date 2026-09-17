@@ -2,7 +2,7 @@
 
 **Status:** Draft for review
 **Prerequisite:** `docs/specs/data-foundation.md` — `tenant_id` appears on every tenant-owned table
-**Related:** `docs/specs/deterministic-engine.md` · `whatsapp-integration.md` (not yet written) · entitlement spec (not yet written)
+**Related:** `docs/specs/deterministic-engine.md` · `whatsapp-integration.md` (identity resolution, invoke/revoke, investigation-creation — see W10, §7.5, R3) · entitlement spec (not yet written)
 
 **Security is a first-class requirement of this document, not a later hardening pass.** Metrion stores sellers' financial records. A cross-tenant leak is existential, so isolation is enforced at the database boundary and never by application code alone.
 
@@ -72,7 +72,7 @@ Settled. Not reopened here.
 | W7 | A number already bound to a tenant **cannot** be claimed by another. |
 | W8 | Rebinding requires explicit disconnection, authorization, and fresh verification. |
 | W9 | Tenant identity is **never** resolved from an unverified phone number alone. |
-| W10 | WhatsApp operates under the tenant's entitlement and permission rules. The team leader controls whether it is enabled and which capabilities are reachable through it. **This states the principle only.** Cap arithmetic on WhatsApp, whether an inbound question opens an Investigation, and behaviour at cap mid-thread all remain open (readiness review 2A.7) and are specified in `whatsapp-integration.md`. |
+| W10 | WhatsApp operates under the tenant's entitlement and permission rules. The team leader controls whether it is enabled and which capabilities are reachable through it. **This states the principle only.** Whether an inbound question opens an Investigation is **resolved** — see `whatsapp-integration.md` C7/§6.5 and `ceo-agent-orchestration.md` R7: yes, implicitly, when none is `ACTIVE`. Cap arithmetic on WhatsApp and behaviour at cap mid-thread remain open (readiness review 2A.7) and are specified in `whatsapp-integration.md`. |
 | W11 | Partners cannot bypass assigned permissions via WhatsApp. |
 
 ---
@@ -530,7 +530,7 @@ Every security-relevant event is written to `auth_audit`: sign-in, email verific
 | T17 | Attempt to create a second OWNER | Database constraint rejects (AC10) |
 | T18 | Bind a WhatsApp number already verified elsewhere | Rejected; the other tenant is not disclosed (E16) |
 | T19 | Inbound WhatsApp from an unverified number | Dropped and logged (AC12) |
-| T20 | Partner without `agent.cfo` asks a CFO question via WhatsApp | Denied; parity with the web path (AC13) |
+| T20 | A WhatsApp-originated request (`CONFIRM` reply or session free text) is processed | Resolves to exactly `bound_by`'s (the OWNER's) real `membership.permissions` and re-enters the unmodified §7.1 chain — no separate WhatsApp trust level, no capability beyond that member's own grid (AC13, `whatsapp-integration.md` C8/§6.7) |
 | T21 | Owner disables WhatsApp | Inbound and outbound stop; binding retained (E18) |
 | T22 | Clerk webhook with an invalid signature | Rejected and logged (AC16) |
 | T23 | Duplicate webhook delivered twice | Idempotent; no duplicate membership (E13) |
@@ -548,7 +548,6 @@ Recorded rather than invented.
 
 | # | Question | Impact |
 |---|---|---|
-| **Q1** | **Whose permissions apply to an inbound WhatsApp message?** W2 permits the destination to be a shared team number, while W11 requires partner permissions to be enforced. If several members message one shared destination, the *sender* must resolve to a member — which needs per-member phone verification that W3 appears to exclude. If instead the destination is the leader's own number, only the leader can use the channel at all. **The two readings produce different products.** | 🔴 Blocks `whatsapp-integration.md` |
 | **Q2** | **Partner invitation mechanism** — Clerk's native organization invitations, or Metrion-issued invites? Determines whether permissions are assigned at invitation time or only after acceptance. | Medium |
 | **Q3** | **Sole-owner departure or deletion** (E22) — ownership transfer, tenant suspension, or tenant deletion? Currently undefined and data-bearing. | Medium |
 | **Q4** | **Maximum partners per tenant.** Unbounded team size against per-tenant caps has direct pricing consequences. | Entitlement spec |
@@ -567,6 +566,7 @@ Recorded so later specs and reviews do not reopen them.
 |---|---|---|
 | R1 | **Who may alter figures that move Contribution Profit** | **Resolved.** `financials.adjust` (§5.2): OWNER holds it by default; PARTNER only by explicit OWNER grant; deny-by-default. Covers **every field in the `deterministic-engine.md` §7.2.1 registry** (the authoritative key space), `manual_adjustment` creation generally, and OP1 agent-initiated data-request responses. **Not an open question.** |
 | R2 | **Whether `agent.*` keys imply direct agent endpoints** | **Resolved (amended).** They do not imply *general* agent endpoints — there is no "call agent X" route and nothing open-ended bypasses CEO. They do permit **enumerated direct execution paths**: specific, non-conversational, pre-registered actions a member selects explicitly, requiring the target agent's key alone (§5.2). CEO remains the sole conversational interface and sole router. Supersedes the earlier absolutist wording, which conflicted with the locked fast-path decision (readiness §1, Interface) and with `competitor-intelligence-agent.md` C20. |
+| R3 | **Whose permissions apply to an inbound WhatsApp message (was Q1)** | **Resolved by `whatsapp-integration.md` C8/§6.7.** The two readings Q1 posed were a false choice: W2's "dedicated WhatsApp Business number for the team" option does not require per-member phone verification, because `whatsapp_binding` never resolves an inbound sender to an individual member at all — it resolves to `bound_by`, the single member who bound the channel. Since binding is OWNER-restricted (§7.5), `bound_by` is always the tenant's OWNER in V1. Every WhatsApp-originated request re-enters the unmodified §7.1 chain against that member's real permissions. W11 ("partners cannot bypass assigned permissions via WhatsApp") holds trivially in V1 because no partner identity is ever attributed to a WhatsApp request to begin with. **Residual gap, not reopened here:** a partner with physical access to a shared-device binding can still send messages attributed to the OWNER — accepted as a named V1 trust boundary, tracked in `whatsapp-integration.md` §13 Q4, not this spec's open question. |
 
 ---
 

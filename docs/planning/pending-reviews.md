@@ -1,0 +1,6 @@
+- [ ] docs/specs/ceo-agent-orchestration.md
+- [ ] docs/specs/cfo-agent.md
+- [ ] docs/specs/competitor-intelligence-agent.md
+- [ ] docs/specs/product-intelligence-agent.md
+- [ ] docs/specs/slim-cmo-agent.md
+- [ ] docs/specs/whatsapp-integration.md
