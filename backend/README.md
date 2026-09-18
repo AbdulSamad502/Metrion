@@ -12,5 +12,37 @@ money calculation; never reimplements it.
 (`docs/specs/whatsapp-integration.md` §5) — see `migrations/README.md`. Tenant isolation
 (RLS) for these tables is verified in `tests/integration/test_rls_isolation.py`.
 
-The FastAPI application code itself (routes, Clerk integration, the six-step auth chain) is
-Phase 3 Step 3 and not yet implemented.
+**Phase 3 Step 3 (auth):** `src/backend/` implements the rest of `auth.md` — Clerk JWT
+verification (`auth/clerk_verify.py` -> `auth/context.py`'s `require_auth()`, the six-step
+chain from §7.1), the business-name onboarding endpoint (§6.2), Clerk webhook sync (D6,
+`webhooks/clerk.py`), and the permission grid (§5.2, `auth/permissions.py`).
+
+### Running locally
+
+```bash
+cp .env.example .env   # fill in CLERK_SECRET_KEY (copy from frontend/.env.local),
+                        # CLERK_WEBHOOK_SECRET, FRONTEND_ORIGIN
+pip install -e .[dev]
+uvicorn backend.main:app --reload --app-dir src --port 8000
+```
+
+### Webhook (local dev)
+
+Clerk needs a public URL to deliver webhooks to. Use the Clerk CLI's own relay:
+
+```bash
+clerk webhooks token                     # generate a stable relay token once
+clerk webhooks listen --token "<that token>" --forward-to http://localhost:8000/webhooks/clerk
+```
+
+The command prints the relay URL to register — put it in Clerk Dashboard -> Webhooks ->
+your endpoint, subscribed to `user.*`, `organization.*`, `organizationMembership.*`, and
+copy its **Signing Secret** into `.env`'s `CLERK_WEBHOOK_SECRET`.
+
+### Tests
+
+```bash
+export DATABASE_URL=postgresql+psycopg://metrion_migrate:metrion_migrate_dev_password@localhost:5432/metrion
+export DATABASE_URL_APP=postgresql+psycopg://metrion_app:metrion_app_dev_password@localhost:5432/metrion
+pytest tests
+```

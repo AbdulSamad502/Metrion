@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="var(--bg-base)"></rect><text x="100" y="112" font-family="sans-serif" font-size="64" font-weight="700" fill="var(--accent)" text-anchor="middle">M</text></svg></template>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&display=swap" rel="stylesheet">
+<style>
+:root{
+/* backgrounds */
+--bg-base:#0A0B0A;
+--bg-panel:#0D0B08;
+--bg-card:rgba(32,36,30,0.30);
+--bg-card-elevated:rgba(32,36,30,0.40);
+--bg-popover:#14150F;
+/* borders / overlays */
+--border-subtle:rgba(255,255,255,0.06);
+--border-default:rgba(255,255,255,0.11);
+--border-hover:rgba(255,255,255,0.14);
+--fill-hover:rgba(255,255,255,0.05);
+/* accent (brand green) */
+--accent:#3ECF74;
+--accent-hover:#5BDD8B;
+--accent-on-fill:#062010;
+--accent-border-subtle:rgba(62,207,116,0.15);
+--accent-border-default:rgba(62,207,116,0.22);
+--accent-border-strong:rgba(62,207,116,0.35);
+--accent-fill-subtle:rgba(62,207,116,0.08);
+--accent-fill-default:rgba(62,207,116,0.12);
+--accent-deep-1:#1F8A4C;
+--accent-deep-2:#1C3D28;
+--accent-deep-3:#0B140E;
+/* warning / negative */
+--warning:#E7AC42;
+--warning-border:rgba(231,172,66,0.18);
+--warning-fill:rgba(231,172,66,0.05);
+--negative:#F16B61;
+--negative-fill:rgba(241,107,97,0.12);
+/* categorical chart color */
+--categorical-4:#5BA8FF;
+/* text tiers */
+--text-1:#F7FAF6; --text-2:#F2F4F0; --text-3:#DADFD6; --text-4:#C7CDC2;
+--text-5:#8A9188; --text-6:#7A8177; --text-7:#6B7268; --text-8:#5E655B;
+/* supplementary one-off tokens (distinct decorative/status colors, kept separate to avoid any visual shift) */
+--text-hero:#FAFCF8;
+--text-bright:#EAFBF0;
+--text-mint:#7EE3A2;
+--text-inactive:#9CA39A;
+--text-accent-muted:#5E9970;
+--text-tagline:var(--accent);
+--text-group-label:#4E534B;
+--divider-dot:#3A3F38;
+--link-hover:#6FE39B;
+--bg-header:rgba(24,27,23,0.26);
+--bg-sidebar:rgba(24,27,23,0.28);
+--bg-input:rgba(18,20,17,0.26);
+--bg-card-locked:rgba(20,22,18,0.25);
+--overlay-scrim:rgba(10,11,10,0.96);
+--connector-inactive:rgba(140,148,138,0.22);
+--shadow-elevated:rgba(0,0,0,0.35);
+--shadow-floating:rgba(0,0,0,0.4);
+--shadow-popover:rgba(0,0,0,0.45);
+}
+*{box-sizing:border-box}
+body{margin:0;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--border-default);border-radius:6px}
+::-webkit-scrollbar-track{background:transparent}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--link-hover)}
+@keyframes mtFadeUp{from{opacity:0;transform:translateY(6px);filter:blur(4px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
+@keyframes mtDrawLine{from{stroke-dashoffset:900}to{stroke-dashoffset:0}}
+@keyframes mtFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes mtDot{0%,80%,100%{opacity:0.25}40%{opacity:1}}
+@keyframes mtReveal{0%{filter:blur(6px);opacity:0.2;color:var(--text-7)}55%{filter:blur(2px);opacity:0.75}100%{filter:blur(0);opacity:1;color:var(--rc,currentColor)}}
+@keyframes mtCeoPulse{0%,100%{box-shadow:0 0 22px var(--accent-border-subtle)}50%{box-shadow:0 0 34px var(--accent-border-strong)}}
+@keyframes mtChartSpin{0%{opacity:0;transform:rotate(-14deg) scale(0.8)}60%{opacity:1}100%{opacity:1;transform:rotate(0deg) scale(1)}}
+@property --sweep{syntax:'<angle>';inherits:false;initial-value:360deg}
+@keyframes mtDonutSweep{from{--sweep:360deg}to{--sweep:0deg}}
+@keyframes mtSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){*{animation-duration:0.001ms !important;animation-iteration-count:1 !important;transition-duration:0.001ms !important;filter:none !important}}
+</style>
+</helmet>
+
+<div style="position:fixed;inset:0;pointer-events:none;z-index:50;opacity:0.05;mix-blend-mode:overlay;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E&quot;)"></div>
+<div style="display:flex;min-height:100vh;background:var(--bg-base);color:var(--text-2);font-family:'Inter',sans-serif">
+
+<div style="{{ sidebarStyle }}">
+  <div style="display:flex;align-items:center;gap:9px;padding:22px 20px 18px 20px">
+    <img src="assets/metrion-mark.png" alt="Metrion" style="width:60px;height:auto;flex-shrink:0"></img>
+    <div style="{{ navLabelStyle }};overflow:hidden">
+      <div style="font-family:'Inter',sans-serif;font-size:17px;font-weight:700;color:var(--text-1);white-space:nowrap;line-height:1.1">Metrion</div>
+      <div style="font-size:8.5px;font-weight:600;letter-spacing:0.11em;color:var(--text-tagline);white-space:nowrap;margin-top:2px">ENGINE OF GROWTH</div>
+    </div>
+  </div>
+
+  <div id="navList" style="flex:1;overflow-y:auto;padding:6px 12px 12px 12px;display:flex;flex-direction:column;gap:2px;position:relative">
+    <div id="navIndicator" style="position:absolute;left:12px;right:12px;top:0;height:36px;background:var(--accent-fill-default);border-radius:12px;transition:transform 0.28s cubic-bezier(.16,1,.3,1);pointer-events:none;z-index:0"></div>
+    <div style="{{ groupLabelStyle }}">Profit Intelligence</div>
+    <div id="nav-overview" onClick="{{ handlers.goOverview }}" style="{{ navOverviewStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="2" y="2" width="7" height="7" rx="1.5"></rect><rect x="11" y="2" width="7" height="7" rx="1.5"></rect><rect x="2" y="11" width="7" height="7" rx="1.5"></rect><rect x="11" y="11" width="7" height="7" rx="1.5"></rect></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap">Overview</span>
+    </div>
+    <div id="nav-ceo" onClick="{{ handlers.goCeo }}" style="{{ navCeoStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="10" cy="4" r="1.8"></circle><circle cx="4" cy="14" r="1.8"></circle><circle cx="16" cy="14" r="1.8"></circle><circle cx="10" cy="17.3" r="1.5" fill="currentColor" stroke="none"></circle><line x1="10" y1="5.8" x2="6" y2="12.4"></line><line x1="10" y1="5.8" x2="14" y2="12.4"></line><line x1="6" y1="14" x2="10" y2="16.3"></line><line x1="14" y1="14" x2="10" y2="16.3"></line></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap">CEO Hub</span>
+    </div>
+
+    <div style="{{ groupLabelStyle }}">Analysis</div>
+    <div id="nav-products" onClick="{{ handlers.goProducts }}" style="{{ navProductsStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M10 2 L17 5.5 V14.5 L10 18 L3 14.5 V5.5 Z"></path><path d="M3 5.5 L10 9 L17 5.5"></path><line x1="10" y1="9" x2="10" y2="18"></line></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap">Products</span>
+    </div>
+    <div id="nav-competitors" onClick="{{ handlers.goCompetitors }}" style="{{ navCompetitorsStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="10" cy="10" r="7"></circle><circle cx="10" cy="10" r="3.8"></circle><circle cx="10" cy="10" r="0.9" fill="currentColor" stroke="none"></circle></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap">Competitors</span>
+    </div>
+
+    <div style="{{ groupLabelStyle }}">Operations</div>
+    <div id="nav-orders" onClick="{{ handlers.goOrders }}" style="{{ navOrdersStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M3 4 H5 L7 13 H15 L17 6 H6"></path><circle cx="8" cy="17" r="1.3" fill="currentColor" stroke="none"></circle><circle cx="14" cy="17" r="1.3" fill="currentColor" stroke="none"></circle></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap;flex:1">Orders</span>
+      <span style="{{ soonStyle }}">Soon</span>
+    </div>
+    <div id="nav-customers" onClick="{{ handlers.goCustomers }}" style="{{ navCustomersStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="7.5" cy="6.5" r="2.6"></circle><path d="M2.5 16 C2.5 12.5 5 11 7.5 11 C10 11 12.5 12.5 12.5 16"></path><circle cx="14.5" cy="7.5" r="2.1"></circle><path d="M13 11.2 C15.5 11.4 17.5 12.8 17.5 16"></path></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap;flex:1">Customers</span>
+      <span style="{{ soonStyle }}">Soon</span>
+    </div>
+    <div id="nav-finance" onClick="{{ handlers.goFinance }}" style="{{ navFinanceStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="2" y="5" width="16" height="11" rx="2"></rect><path d="M2 8 H18"></path><circle cx="14" cy="12" r="1.3" fill="currentColor" stroke="none"></circle></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap">Finance</span>
+    </div>
+    <div id="nav-marketing" onClick="{{ handlers.goMarketing }}" style="{{ navMarketingStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M2 9 H6 L13 4 V16 L6 11 H2 Z"></path><path d="M6 11 L7 16"></path></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap;flex:1">Marketing</span>
+    </div>
+    <div id="nav-reports" onClick="{{ handlers.goReports }}" style="{{ navReportsStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="3" y1="17" x2="17" y2="17"></line><rect x="4" y="10" width="3" height="7"></rect><rect x="8.5" y="6" width="3" height="11"></rect><rect x="13" y="12" width="3" height="5"></rect></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap;flex:1">Reports</span>
+      <span style="{{ soonStyle }}">Soon</span>
+    </div>
+
+    <div style="flex:1"></div>
+    <div style="height:1px;background:var(--border-subtle);margin:4px 10px 8px 10px"></div>
+    <div id="nav-agents" onClick="{{ handlers.goAgents }}" style="{{ navAgentsStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="4" y="6" width="12" height="10" rx="2.5"></rect><circle cx="7.6" cy="11" r="1.15" fill="currentColor" stroke="none"></circle><circle cx="12.4" cy="11" r="1.15" fill="currentColor" stroke="none"></circle><line x1="10" y1="6" x2="10" y2="3.2"></line><circle cx="10" cy="2.4" r="1" fill="currentColor" stroke="none"></circle></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap;flex:1">Agents</span>
+    </div>
+    <div id="nav-cart" onClick="{{ handlers.goCart }}" style="{{ navCartStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="7" cy="17" r="1.3" fill="currentColor" stroke="none"></circle><circle cx="14" cy="17" r="1.3" fill="currentColor" stroke="none"></circle><path d="M2 3 H4 L6.5 13 H15.5 L17.5 6 H5.5"></path></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap;flex:1">Agent Cart</span>
+    </div>
+    <div id="nav-settings" onClick="{{ handlers.goSettings }}" style="{{ navSettingsStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="10" cy="10" r="6.2"></circle><circle cx="10" cy="10" r="2" fill="currentColor" stroke="none"></circle><line x1="10" y1="1.8" x2="10" y2="3.6"></line><line x1="10" y1="16.4" x2="10" y2="18.2"></line><line x1="1.8" y1="10" x2="3.6" y2="10"></line><line x1="16.4" y1="10" x2="18.2" y2="10"></line></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap;flex:1">Settings</span>
+    </div>
+    <div id="nav-notifications" onClick="{{ handlers.goNotifications }}" style="{{ navNotificationsStyle }}" style-hover="background:var(--fill-hover)">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M10 2.5 C7 2.5 5.5 4.8 5.5 8 V11 L4 13.5 H16 L14.5 11 V8 C14.5 4.8 13 2.5 10 2.5 Z"></path><path d="M8.2 15.5 C8.2 16.6 9 17.5 10 17.5 C11 17.5 11.8 16.6 11.8 15.5"></path></svg>
+      <span style="{{ navLabelStyle }};white-space:nowrap;flex:1">Notifications</span>
+      <sc-if value="{{ hasUnreadNotifications }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ navLabelStyle }};width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></div>
+      </sc-if>
+    </div>
+  </div>
+
+  <div style="padding:14px;border-top:1px solid var(--border-subtle);display:flex;align-items:center;gap:9px">
+    <div style="width:30px;height:30px;border-radius:14px;background:var(--accent-border-subtle);color:var(--accent);display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;flex-shrink:0">RS</div>
+    <div style="{{ navLabelStyle }};overflow:hidden">
+      <div style="font-size:12.5px;font-weight:600;color:var(--text-2);white-space:nowrap">Rohit Sharma</div>
+      <div style="font-size:11px;color:var(--text-7);white-space:nowrap">CEO · Zyquora Store</div>
+    </div>
+  </div>
+</div>
+
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;height:100vh;overflow:hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 32px;background:var(--bg-header);backdrop-filter:blur(34px) saturate(195%);-webkit-backdrop-filter:blur(34px) saturate(195%);box-shadow:inset 0 -1px 0 var(--fill-hover);border-bottom:1px solid var(--border-subtle);flex-shrink:0;position:sticky;top:0;z-index:10">
+    <div style="min-width:0">
+      <div style="font-family:'Inter',sans-serif;font-size:24px;font-weight:700;color:var(--text-1);letter-spacing:-0.01em">{{ pageTitle }}</div>
+      <div style="font-size:13px;color:var(--text-5);margin-top:3px">{{ pageSubtitle }}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--border-default);border-radius:14px;font-size:12.5px;color:var(--text-4);white-space:nowrap">
+        <span>May 10 – May 16, 2025</span>
+        <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5 L10 12.5 L15 7.5"></path></svg>
+      </div>
+      <div onClick="{{ handlers.goNotifications }}" style="position:relative;width:34px;height:34px;border:1px solid var(--border-default);border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;transition:border-color 0.15s ease" style-hover="border-color:var(--accent-border-strong)">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-4)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 C7 2.5 5.5 4.8 5.5 8 V11 L4 13.5 H16 L14.5 11 V8 C14.5 4.8 13 2.5 10 2.5 Z"></path><path d="M8.2 15.5 C8.2 16.6 9 17.5 10 17.5 C11 17.5 11.8 16.6 11.8 15.5"></path></svg>
+        <sc-if value="{{ hasUnreadNotifications }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--accent);border:1.5px solid var(--bg-base)"></div>
+        </sc-if>
+      </div>
+      <div onClick="{{ handlers.goAsk }}" style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--accent);color:var(--accent-on-fill);border-radius:14px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background 0.15s ease,transform 0.1s ease" style-hover="background:var(--accent-hover)" style-active="transform:scale(0.96)">Ask Metrion</div>
+    </div>
+  </div>
+
+  <div id="mainScroll" style="flex:1;overflow-y:auto;padding:28px 32px 48px 32px">
+
+    <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+      <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:14px;animation:mtFadeUp 0.4s ease-out both">
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card-elevated);backdrop-filter:blur(22px) saturate(150%);-webkit-backdrop-filter:blur(22px) saturate(150%);box-shadow:inset 0 1px 0 var(--border-subtle);border:1px solid var(--accent-border-default);border-radius:12px;padding:24px 26px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:11.5px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-mint);white-space:nowrap">Net Profit</span>
+              <span title="Directly observed from your marketplace data" style="font-size:9.5px;font-weight:700;letter-spacing:0.03em;color:var(--text-8);background:var(--border-subtle);padding:2px 6px;border-radius:6px;text-transform:none;cursor:default">Measured</span>
+            </div>
+            <svg width="120" height="34" viewBox="0 0 120 34"><polyline points="{{ netProfitSpark }}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke-dasharray:260;animation:mtDrawLine 0.9s ease-out both"></polyline></svg>
+          </div>
+          <div style="font-family:'Inter',sans-serif;font-size:46px;font-weight:700;color:var(--text-hero);margin-top:8px;letter-spacing:-0.01em;--rc:var(--text-hero);animation:mtReveal 0.65s cubic-bezier(0.16,1,0.3,1) 0.1s both">{{ netProfit.value }}</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13.5px;flex-wrap:wrap">
+            <span style="color:var(--accent);font-weight:700;white-space:nowrap">↑ {{ netProfit.change }}</span>
+            <span style="color:var(--text-7);white-space:nowrap">{{ netProfit.note }}</span>
+            <span style="color:var(--divider-dot)">·</span>
+            <span style="color:var(--text-4);white-space:nowrap">Margin {{ margin.value }}</span>
+            <span style="color:var(--accent);font-weight:600;white-space:nowrap">({{ margin.change }})</span>
+          </div>
+        </div>
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;justify-content:center;gap:14px">
+          <div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-6)">Revenue &amp; Spend</div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><span style="font-size:12.5px;color:var(--text-4);white-space:nowrap">Revenue</span><span style="font-family:'Inter',sans-serif;font-size:16px;font-weight:700;color:var(--text-2);white-space:nowrap">{{ revenue.value }}</span></div>
+            <div style="font-size:11.5px;color:var(--accent);font-weight:600;margin-top:2px;white-space:nowrap">↑ {{ revenue.change }} {{ revenue.note }}</div>
+          </div>
+          <div style="height:1px;background:var(--border-subtle)"></div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><span style="font-size:12.5px;color:var(--text-4);white-space:nowrap">Ad Spend</span><span style="font-family:'Inter',sans-serif;font-size:16px;font-weight:700;color:var(--text-2);white-space:nowrap">{{ adSpend.value }}</span></div>
+            <div style="font-size:11.5px;color:var(--accent);font-weight:600;margin-top:2px;white-space:nowrap">↓ {{ adSpend.change }} {{ adSpend.note }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:var(--warning-fill);border:1px solid var(--warning-border);border-left:3px solid var(--warning);border-radius:16px;padding:22px 26px;margin-top:14px;animation:mtFadeUp 0.4s ease-out 0.05s both">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--warning);white-space:nowrap">What Matters Now</div>
+          <svg width="30" height="8" viewBox="0 0 30 8" style="flex-shrink:0"><path d="M1 5 Q6 1 11 5 T21 5 T29 3" stroke="var(--warning)" stroke-width="1.4" fill="none" stroke-linecap="round" opacity="0.6"></path></svg>
+        </div>
+        <div style="font-family:'Inter',sans-serif;font-size:20px;font-weight:600;color:var(--text-1);margin-top:9px;max-width:700px;line-height:1.45">{{ whatMattersNow.headline }}</div>
+        <div style="display:flex;align-items:flex-end;gap:24px;margin-top:14px;flex-wrap:wrap">
+          <div style="flex-shrink:0">
+            <div style="font-family:'Inter',sans-serif;font-size:24px;font-weight:700;color:var(--warning);white-space:nowrap;--rc:var(--warning);animation:mtReveal 0.6s cubic-bezier(0.16,1,0.3,1) 0.2s both">{{ whatMattersNow.impact }}</div>
+            <div style="font-size:11.5px;color:var(--text-5);margin-top:2px;white-space:nowrap">Impact this week (est.)</div>
+          </div>
+          <div style="border-left:1px solid var(--border-default);padding-left:18px;min-width:0">
+            <div style="font-size:11px;color:var(--text-6);text-transform:uppercase;letter-spacing:0.05em">Why</div>
+            <div style="font-size:13px;color:var(--text-3);margin-top:3px">{{ whatMattersNow.driver }}</div>
+          </div>
+          <div style="border-left:1px solid var(--border-default);padding-left:18px;min-width:0">
+            <div style="font-size:11px;color:var(--text-6);text-transform:uppercase;letter-spacing:0.05em">Recommendation</div>
+            <div style="font-size:13px;color:var(--text-3);margin-top:3px">{{ whatMattersNow.evidence }}</div>
+          </div>
+          <a href="#" onClick="{{ handlers.reviewSkus }}" style="font-size:12.5px;font-weight:700;margin-left:auto;flex-shrink:0;white-space:nowrap">{{ whatMattersNow.cta }} →</a>
+        </div>
+      </div>
+
+      <div style="margin-top:22px;animation:mtFadeUp 0.4s ease-out 0.1s both">
+        <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">Profit Drivers</div>
+        <div style="font-size:12px;color:var(--text-6);margin-top:2px;margin-bottom:10px">What moved profit this week, ranked by impact</div>
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:6px 22px">
+          <sc-for list="{{ profitDrivers }}" as="w" hint-placeholder-count="4">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:13px 0;border-bottom:1px solid var(--border-subtle)">
+              <span style="font-size:13px;color:var(--text-3)">{{ w.label }}</span>
+              <span style="{{ w.style }};font-family:'Inter',sans-serif;font-size:15px;font-weight:700;white-space:nowrap">{{ w.value }}</span>
+            </div>
+          </sc-for>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0">
+            <span style="font-size:13px;font-weight:700;color:var(--text-2)">Net impact on profit</span>
+            <span style="font-family:'Inter',sans-serif;font-size:16px;font-weight:700;color:var(--accent)">{{ netEffect }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px;animation:mtFadeUp 0.4s ease-out 0.15s both">
+        <div>
+          <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">Profit Leaks</div>
+          <div style="font-size:12px;color:var(--text-6);margin-top:2px;margin-bottom:10px">Where money is slipping away</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ profitLeaks }}" as="leak" hint-placeholder-count="2">
+              <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-left:2.5px solid var(--negative);border-radius:10px;padding:16px 18px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+                  <div style="font-size:13.5px;font-weight:600;color:var(--text-2)">{{ leak.title }}</div>
+                  <div style="font-size:16px;font-weight:700;color:var(--negative);font-family:'Inter',sans-serif;white-space:nowrap;--rc:var(--negative);animation:mtReveal 0.55s cubic-bezier(0.16,1,0.3,1) 0.1s both">{{ leak.impact }}</div>
+                </div>
+                <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-subtle);display:flex;flex-direction:column;gap:6px">
+                  <div style="font-size:12px;color:var(--text-3)"><span style="color:var(--text-6);text-transform:uppercase;letter-spacing:0.04em;font-size:10.5px;font-weight:600">Driver&nbsp;&nbsp;</span>{{ leak.driver }}</div>
+                  <div style="font-size:12px;color:var(--text-3)"><span style="color:var(--text-6);text-transform:uppercase;letter-spacing:0.04em;font-size:10.5px;font-weight:600">Evidence&nbsp;&nbsp;</span>{{ leak.evidence }}</div>
+                </div>
+                <a href="#" onClick="{{ handlers.reviewSkus }}" style="display:inline-block;margin-top:12px;font-size:12px;font-weight:700">{{ leak.cta }} →</a>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">Profit Opportunities</div>
+          <div style="font-size:12px;color:var(--text-6);margin-top:2px;margin-bottom:10px">Where more profit is available</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ opportunities }}" as="opp" hint-placeholder-count="2">
+              <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-left:2.5px solid var(--accent);border-radius:10px;padding:16px 18px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+                  <div style="font-size:13.5px;font-weight:600;color:var(--text-2)">{{ opp.title }}</div>
+                  <div style="font-size:16px;font-weight:700;color:var(--accent);font-family:'Inter',sans-serif;white-space:nowrap;--rc:var(--accent);animation:mtReveal 0.55s cubic-bezier(0.16,1,0.3,1) 0.15s both">{{ opp.impact }}</div>
+                </div>
+                <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-subtle);display:flex;flex-direction:column;gap:6px">
+                  <div style="font-size:12px;color:var(--text-3)"><span style="color:var(--text-6);text-transform:uppercase;letter-spacing:0.04em;font-size:10.5px;font-weight:600">Affected&nbsp;&nbsp;</span>{{ opp.affected }}</div>
+                  <div style="font-size:12px;color:var(--text-3)"><span style="color:var(--text-6);text-transform:uppercase;letter-spacing:0.04em;font-size:10.5px;font-weight:600">Evidence&nbsp;&nbsp;</span>{{ opp.evidence }}</div>
+                </div>
+                <a href="#" onClick="{{ handlers.reviewPricing }}" style="display:inline-block;margin-top:12px;font-size:12px;font-weight:700;color:var(--accent)">{{ opp.cta }} →</a>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:var(--accent-fill-subtle);border:1px solid var(--accent-border-default);border-left:3px solid var(--accent);border-radius:16px;padding:18px 24px;margin-top:16px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;animation:mtFadeUp 0.4s ease-out 0.2s both">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);white-space:nowrap">Next Decision</div>
+            <svg width="30" height="8" viewBox="0 0 30 8" style="flex-shrink:0"><path d="M1 5 Q6 1 11 5 T21 5 T29 3" stroke="var(--accent)" stroke-width="1.4" fill="none" stroke-linecap="round" opacity="0.6"></path></svg>
+          </div>
+          <div style="font-family:'Inter',sans-serif;font-size:17px;font-weight:600;color:var(--text-1);margin-top:8px;line-height:1.45">{{ nextDecision.headline }}</div>
+        </div>
+        <div>
+          <div style="font-family:'Inter',sans-serif;font-size:20px;font-weight:700;color:var(--accent);--rc:var(--accent);animation:mtReveal 0.6s cubic-bezier(0.16,1,0.3,1) 0.15s both">{{ nextDecision.impact }}</div>
+          <div style="font-size:11px;color:var(--text-5)">Potential monthly impact</div>
+        </div>
+        <a href="#" onClick="{{ handlers.reviewSkus }}" style="margin-left:auto;padding:9px 16px;background:var(--accent);color:var(--accent-on-fill);border-radius:12px;font-size:12.5px;font-weight:700;white-space:nowrap;transition:background 0.15s ease,transform 0.1s ease" style-hover="background:var(--accent-hover)" style-active="transform:scale(0.96)">{{ nextDecision.cta }}</a>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-top:22px;animation:mtFadeUp 0.4s ease-out 0.25s both">
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">Profit Trend</div>
+              <div style="font-size:11.5px;color:var(--text-6);margin-top:1px">Net profit, day by day</div>
+            </div>
+            <div style="font-size:12px;color:var(--text-6)">This Week</div>
+          </div>
+          <div style="display:flex;margin-top:16px;position:relative">
+            <div style="display:flex;flex-direction:column;justify-content:space-between;padding-bottom:22px;font-size:11px;color:var(--text-7);padding-right:8px">
+              <span>₹8L</span><span>₹4L</span><span>₹0</span>
+            </div>
+            <div style="flex:1;position:relative;min-width:0">
+              <div style="position:absolute;top:0;right:0;background:var(--bg-input);backdrop-filter:blur(26px) saturate(185%);-webkit-backdrop-filter:blur(26px) saturate(185%);border:1px solid var(--accent-border-strong);border-radius:10px;padding:6px 10px;text-align:right">
+                <div style="font-size:14px;font-weight:700;color:var(--text-2);font-family:'Inter',sans-serif">₹6,24,000</div>
+                <div style="font-size:10.5px;color:var(--text-7)">May 16, 2025</div>
+              </div>
+              <svg width="100%" height="200" viewBox="0 0 640 200" preserveAspectRatio="none">
+                <path data-chart-anim="1" d="M0,104.5 L106.7,100 L213.3,77.5 L320,95.5 L426.7,70.75 L533.3,84.25 L640,49.6 L640,200 L0,200 Z" fill="var(--accent-fill-subtle)" stroke="none" style="opacity:0;animation:mtFadeIn 0.5s ease-out 0.7s both;animation-play-state:paused"></path>
+                <polyline data-chart-anim="1" points="0,104.5 106.7,100 213.3,77.5 320,95.5 426.7,70.75 533.3,84.25 640,49.6" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke-dasharray:900;animation:mtDrawLine 0.9s ease-out both;animation-play-state:paused"></polyline>
+              </svg>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-7);margin-top:8px">
+                <sc-for list="{{ xLabels }}" as="lbl" hint-placeholder-count="7"><span>{{ lbl }}</span></sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+          <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">Revenue Mix</div>
+          <div style="font-size:11.5px;color:var(--text-6);margin-top:1px">Where sales come from</div>
+          <div style="display:flex;flex-direction:column;align-items:center;margin-top:14px">
+            <div style="width:130px;height:130px;border-radius:50%;position:relative">
+              <div style="position:absolute;inset:0;border-radius:50%;background:{{ marketplaceDonut }}"></div>
+              <div data-chart-anim="1" style="position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,var(--overlay-scrim) 0deg,var(--overlay-scrim) var(--sweep),transparent var(--sweep));animation:mtDonutSweep 1.1s cubic-bezier(.4,0,.2,1) both;animation-play-state:paused;pointer-events:none"></div>
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+              <div style="width:84px;height:84px;border-radius:50%;background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);display:flex;flex-direction:column;align-items:center;justify-content:center">
+                <div style="font-size:10px;color:var(--text-6)">Total</div>
+                <div style="font-family:'Inter',sans-serif;font-size:14px;font-weight:700;color:var(--text-2)">₹24.85L</div>
+              </div>
+            </div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+            <sc-for list="{{ marketplaceShare }}" as="m" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:8px;font-size:12.5px">
+                <div style="width:8px;height:8px;border-radius:50%;background:{{ m.color }};flex-shrink:0"></div>
+                <span style="color:var(--text-4);flex:1">{{ m.name }}</span>
+                <span style="color:var(--text-5);font-weight:600">{{ m.pct }}%</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-top:16px;animation:mtFadeUp 0.4s ease-out 0.3s both">
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">Most Profitable Products</div>
+            <a href="#" onClick="{{ handlers.goProducts }}" style="font-size:12px;font-weight:600">View all →</a>
+          </div>
+          <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <tbody>
+            <sc-for list="{{ topProductsOverview }}" as="p" hint-placeholder-count="3">
+              <tr style="border-top:1px solid var(--border-subtle)" style-hover="background:var(--fill-hover)">
+                <td style="padding:11px 6px;color:var(--text-2);font-weight:500">{{ p.name }}</td>
+                <td style="padding:11px 6px;color:var(--text-5);text-align:right;white-space:nowrap">{{ p.margin }} margin</td>
+                <td style="padding:11px 6px;color:var(--accent);font-weight:600;text-align:right;font-family:'Inter',sans-serif;white-space:nowrap">{{ p.potential }} <span title="Estimated by Metrion, not a directly measured figure" style="color:var(--text-8);font-weight:500;font-size:10.5px;cursor:default">est.</span></td>
+              </tr>
+            </sc-for>
+            </tbody>
+          </table>
+          </div>
+        </div>
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+          <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">Operational Metrics</div>
+          <div style="font-size:11.5px;color:var(--text-6);margin-top:1px;margin-bottom:14px">For reference — not primary drivers of profit</div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <sc-for list="{{ secondaryStats }}" as="stat" hint-placeholder-count="4">
+              <div style="display:flex;justify-content:space-between;align-items:baseline">
+                <span style="font-size:12px;color:var(--text-5)">{{ stat.label }}</span>
+                <span style="display:flex;align-items:baseline;gap:7px"><span style="font-family:'Inter',sans-serif;font-size:13.5px;font-weight:600;color:var(--text-4)">{{ stat.value }}</span><span style="font-size:11px;font-weight:600;color:var(--text-accent-muted)">{{ stat.change }}</span></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isCeo }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:16px;animation:mtFadeUp 0.35s ease-out both">
+      <div id="mtAskPanel" style="display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:start">
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0">
+          <div onClick="{{ handlers.newInvestigation }}" style="display:flex;align-items:center;gap:7px;padding:9px 10px;border:1px dashed var(--accent-border-strong);border-radius:10px;color:var(--accent);font-size:12.5px;font-weight:700;cursor:pointer;margin-bottom:8px;transition:background 0.15s ease" style-hover="background:var(--accent-fill-subtle)">
+            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="3" x2="10" y2="17"></line><line x1="3" y1="10" x2="17" y2="10"></line></svg>
+            New investigation
+          </div>
+          <div style="font-size:10.5px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-group-label);padding:6px 10px 4px 10px">Investigations</div>
+          <sc-for list="{{ investigations }}" as="inv" hint-placeholder-count="3">
+            <div onClick="{{ handlers.selectInvestigation }}" data-inv-id="{{ inv.id }}" style="{{ inv.rowStyle }}" style-hover="background:var(--fill-hover)">
+              <div style="font-size:12.5px;font-weight:600;color:{{ inv.titleColor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ inv.title }}</div>
+              <div style="font-size:10.5px;color:var(--text-8);margin-top:2px">{{ inv.time }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:24px">
+          <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">{{ activeInvestigationTitle }}</div>
+          <div style="font-size:12.5px;color:var(--text-5);margin-top:3px">Ask a question, get an answer backed by impact, evidence and a recommendation.</div>
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <input type="text" onInput="{{ handlers.onAskInput }}" placeholder="Ask anything about your business — pricing, margins, competitors, campaigns..." style="flex:1;background:var(--bg-input);backdrop-filter:blur(26px) saturate(185%);-webkit-backdrop-filter:blur(26px) saturate(185%);border:1px solid var(--border-hover);border-radius:14px;padding:13px 16px;color:var(--text-2);font-size:13.5px;font-family:'Inter',sans-serif;outline:none;transition:border-color 0.15s ease" style-focus="border-color:var(--accent-border-strong)"></input>
+            <div onClick="{{ handlers.askDefault }}" style="width:44px;height:44px;background:var(--accent);border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;transition:background 0.15s ease,transform 0.1s ease" style-hover="background:var(--accent-hover)" style-active="transform:scale(0.94)">
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--accent-on-fill)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="10" x2="16" y2="10"></line><path d="M11 5 L16 10 L11 15"></path></svg>
+            </div>
+          </div>
+          <sc-if value="{{ hasNoMessages }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+              <sc-for list="{{ askSuggestions }}" as="q" hint-placeholder-count="4">
+                <div onClick="{{ handlers.askQuestion }}" data-q="{{ q }}" style="padding:7px 13px;border:1px solid var(--border-default);border-radius:20px;font-size:12px;color:var(--text-4);cursor:pointer;transition:border-color 0.15s ease,color 0.15s ease" style-hover="border-color:var(--accent-border-strong);color:var(--accent)">{{ q }}</div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-subtle)">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-6)">Agents for this investigation</div>
+            <div style="font-size:11px;color:var(--text-8);margin-top:2px">CEO Agent suggests which specialists to use — tap to override.</div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+              <sc-for list="{{ agentChips }}" as="ac" hint-placeholder-count="4">
+                <div onClick="{{ handlers.toggleAttach }}" data-agent-id="{{ ac.id }}" style="{{ ac.chipStyle }}">
+                  <div style="{{ ac.dotStyle }}"></div>
+                  <span style="white-space:nowrap">{{ ac.name }}</span>
+                  <sc-if value="{{ ac.locked }}" hint-placeholder-val="{{ false }}">
+                    <a href="#" onClick="{{ handlers.unlockFromChip }}" style="font-size:10.5px;font-weight:700;color:var(--warning);margin-left:2px">Unlock</a>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
+            <sc-for list="{{ chatMessages }}" as="msg" hint-placeholder-count="0">
+              <sc-if value="{{ msg.isUser }}" hint-placeholder-val="{{ false }}">
+                <div style="align-self:flex-end;max-width:70%;background:var(--accent-fill-default);border-radius:16px 10px 2px 10px;padding:10px 14px;font-size:13px;color:var(--text-bright);animation:mtFadeUp 0.3s ease-out both">{{ msg.text }}</div>
+              </sc-if>
+              <sc-if value="{{ msg.isAnswer }}" hint-placeholder-val="{{ false }}">
+                <div style="padding-top:16px;border-top:1px solid var(--border-subtle);animation:mtFadeUp 0.35s ease-out both">
+                  <div style="display:flex;gap:12px;align-items:flex-start">
+                    <div style="width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 30% 25%,var(--accent-hover),var(--accent-deep-1));display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px">
+                      <img src="assets/metrion-mark.png" alt="" style="width:15px;height:auto"></img>
+                    </div>
+                    <div style="min-width:0">
+                      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span style="{{ msg.speedTagStyle }}">{{ msg.speedTag }}</span>
+                        <sc-if value="{{ msg.recallFrom }}" hint-placeholder-val="{{ false }}">
+                          <span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--text-inactive);background:var(--fill-hover);padding:3px 8px;border-radius:8px">
+                            <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10 A6 6 0 1 1 6.5 14.5"></path><path d="M4 6 V10 H8"></path></svg>
+                            recalling from {{ msg.recallFrom }}
+                          </span>
+                        </sc-if>
+                      </div>
+                      <div style="font-size:15px;font-weight:600;color:var(--text-1);line-height:1.6;margin-top:6px">{{ msg.headline }}</div>
+                    </div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-top:16px;margin-left:40px">
+                    <div>
+                      <div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-6)">Impact</div>
+                      <div style="font-family:'Inter',sans-serif;font-size:17px;font-weight:700;color:{{ msg.impactColor }};margin-top:4px;white-space:nowrap;--rc:{{ msg.impactColor }};animation:mtReveal 0.55s cubic-bezier(0.16,1,0.3,1) both">{{ msg.impact }}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-6)">Driver</div>
+                      <div style="font-size:12.5px;color:var(--text-3);margin-top:4px;line-height:1.4">{{ msg.driver }}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-6)">Evidence</div>
+                      <div style="font-size:12.5px;color:var(--text-3);margin-top:4px;line-height:1.4">{{ msg.evidence }}</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle);margin-left:40px">
+                    <div style="font-size:12.5px;color:var(--text-3);line-height:1.6"><span style="color:var(--accent);font-weight:700">Recommendation&nbsp;</span>{{ msg.recommendation }}</div>
+                    <a href="#" onClick="{{ handlers.reviewSkus }}" style="margin-left:auto;flex-shrink:0;font-size:12.5px;font-weight:700;white-space:nowrap;transition:color 0.15s ease">Review →</a>
+                  </div>
+                </div>
+              </sc-if>
+            </sc-for>
+
+            <sc-if value="{{ isThinking }}" hint-placeholder-val="{{ false }}">
+              <div style="padding-top:16px;border-top:1px solid var(--border-subtle);animation:mtFadeIn 0.25s ease-out both">
+                <div style="font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);margin-bottom:10px">CEO Agent reasoning</div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <sc-for list="{{ reasoningSteps }}" as="step" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;{{ step.textStyle }}">
+                      <sc-if value="{{ step.done }}" hint-placeholder-val="{{ false }}">
+                        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="10" cy="10" r="8"></circle><path d="M6.3 10.2 L8.8 12.7 L13.7 7.3"></path></svg>
+                      </sc-if>
+                      <sc-if value="{{ step.active }}" hint-placeholder-val="{{ false }}">
+                        <div style="width:14px;height:14px;border-radius:50%;border:2px solid var(--accent-border-default);border-top-color:var(--accent);flex-shrink:0;animation:mtSpin 0.7s linear infinite"></div>
+                      </sc-if>
+                      <sc-if value="{{ step.pending }}" hint-placeholder-val="{{ false }}">
+                        <div style="width:14px;height:14px;border-radius:50%;border:2px solid var(--border-default);flex-shrink:0"></div>
+                      </sc-if>
+                      {{ step.label }}
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+
+      <div data-reveal="1" style="min-width:0;opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:radial-gradient(ellipse 620px 320px at 50% 30%,var(--accent-fill-subtle),transparent),var(--bg-panel);border:1px solid var(--accent-border-subtle);border-radius:20px;padding:28px 26px 30px 26px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text-2)">Agent Orchestration</div>
+            <div style="font-size:11.5px;color:var(--text-6);margin-top:2px">Specialists attached to this investigation feed the CEO Agent, which synthesizes one recommendation</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;background:var(--accent-fill-default);color:var(--accent);font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0">
+            <div style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></div>
+            {{ connectedCount }} inputs connected
+          </div>
+        </div>
+
+        <div id="mtOrchWrap" style="position:relative;margin-top:26px">
+          <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible">
+            <sc-for list="{{ orchestratorLines }}" as="ln" hint-placeholder-count="4">
+              <path d="{{ ln.path }}" stroke="{{ ln.strokeColor }}" stroke-width="1.3" fill="none"></path>
+            </sc-for>
+            <sc-for list="{{ orchestratorLines }}" as="ln2" hint-placeholder-count="4">
+              <circle r="2.4" fill="var(--accent)" style="{{ ln2.particleDisplay }}">
+                <animateMotion dur="{{ ln2.dur }}" repeatCount="indefinite" begin="{{ ln2.delay }}" path="{{ ln2.path }}"></animateMotion>
+                <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.85;1" dur="{{ ln2.dur }}" begin="{{ ln2.delay }}" repeatCount="indefinite"></animate>
+              </circle>
+            </sc-for>
+            <path d="{{ outputLine.path }}" stroke="var(--accent-border-strong)" stroke-width="1.3" fill="none"></path>
+          </svg>
+
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;position:relative;z-index:1">
+            <sc-for list="{{ subAgents }}" as="node" hint-placeholder-count="4">
+              <div id="mtNode{{ $index }}" style="{{ node.cardStyle }}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                  <div style="display:flex;gap:10px;min-width:0">
+                    <div style="{{ node.iconBoxStyle }}">
+                      <sc-if value="{{ node.isProduct }}" hint-placeholder-val="{{ false }}">
+                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 L17 5.5 V14.5 L10 18 L3 14.5 V5.5 Z"></path><path d="M3 5.5 L10 9 L17 5.5"></path><line x1="10" y1="9" x2="10" y2="18"></line></svg>
+                      </sc-if>
+                      <sc-if value="{{ node.isCompetitor }}" hint-placeholder-val="{{ false }}">
+                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"></circle><circle cx="10" cy="10" r="3.8"></circle><circle cx="10" cy="10" r="0.9" fill="currentColor" stroke="none"></circle></svg>
+                      </sc-if>
+                      <sc-if value="{{ node.isCfo }}" hint-placeholder-val="{{ false }}">
+                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="16" height="11" rx="2"></rect><path d="M2 8 H18"></path><circle cx="14" cy="12" r="1.3" fill="currentColor" stroke="none"></circle></svg>
+                      </sc-if>
+                      <sc-if value="{{ node.isCmo }}" hint-placeholder-val="{{ false }}">
+                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9 H6 L13 4 V16 L6 11 H2 Z"></path><path d="M6 11 L7 16"></path></svg>
+                      </sc-if>
+                    </div>
+                    <div style="min-width:0">
+                      <div style="font-size:12.5px;font-weight:700;color:var(--text-2);line-height:1.3">{{ node.name }}</div>
+                      <div style="font-size:10.5px;color:var(--text-6);margin-top:2px;line-height:1.3">{{ node.specialty }}</div>
+                    </div>
+                  </div>
+                  <div onClick="{{ handlers.toggleMenu }}" data-agent-id="{{ node.id }}" style="cursor:pointer;color:var(--text-7);padding:2px 5px;border-radius:6px;flex-shrink:0;font-size:14px;line-height:1;transition:background 0.15s ease" style-hover="background:var(--border-subtle);color:var(--text-4)">⋯</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:5px;margin-top:12px">
+                  <sc-if value="{{ node.locked }}" hint-placeholder-val="{{ false }}">
+                    <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="4.5" y="9" width="11" height="8" rx="1.5"></rect><path d="M6.5 9 V6.5 C6.5 4.3 8 3 10 3 C12 3 13.5 4.3 13.5 6.5 V9"></path></svg>
+                  </sc-if>
+                  <sc-if value="{{ node.notLocked }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ node.dotStyle }}"></div>
+                  </sc-if>
+                  <span style="font-size:10.5px;font-weight:600;color:{{ node.statusTextColor }}">{{ node.statusLabel }}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:5px;margin-top:11px">
+                  <sc-for list="{{ node.bullets }}" as="b" hint-placeholder-count="2">
+                    <div style="display:flex;gap:6px;font-size:11px;color:var(--text-4);line-height:1.4"><span style="color:var(--accent);flex-shrink:0">—</span><span>{{ b }}</span></div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:11px;padding-top:9px;border-top:1px solid var(--border-subtle)">
+                  <span style="font-size:9.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--text-8)">{{ node.insightLabel }}</span>
+                  <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="var(--text-8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="3" y1="10" x2="16" y2="10"></line><path d="M11 5 L16 10 L11 15"></path></svg>
+                </div>
+
+                <sc-if value="{{ node.menuOpen }}" hint-placeholder-val="{{ false }}">
+                  <div style="position:absolute;top:36px;right:10px;background:var(--bg-popover);border:1px solid var(--border-default);border-radius:10px;padding:4px;z-index:5;box-shadow:0 10px 24px var(--shadow-popover);min-width:170px">
+                    <div onClick="{{ handlers.menuAction }}" data-agent-id="{{ node.id }}" style="padding:8px 10px;font-size:12px;font-weight:600;white-space:nowrap;border-radius:7px;cursor:pointer;color:var(--text-bright);transition:background 0.15s ease" style-hover="background:var(--border-subtle)">{{ node.menuActionLabel }}</div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;justify-content:center;margin-top:34px;position:relative;z-index:1">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+              <div id="mtCeoWrap" style="padding:6px;border-radius:20px;border:1px solid var(--accent-border-subtle)">
+                <div id="mtCeoIcon" style="width:60px;height:60px;border-radius:16px;background:radial-gradient(circle at 30% 25%,var(--accent-deep-2),var(--accent-deep-3));border:1px solid var(--accent-border-strong);display:flex;align-items:center;justify-content:center;box-shadow:0 0 18px var(--accent-border-subtle);animation:mtCeoPulse 2.6s ease-in-out infinite">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="12" r="4.2"></circle><circle cx="12" cy="12" r="0.9" fill="var(--accent)" stroke="none"></circle><line x1="12" y1="1.5" x2="12" y2="4.3"></line><line x1="12" y1="19.7" x2="12" y2="22.5"></line></svg>
+                </div>
+              </div>
+              <div style="text-align:center">
+                <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:700;color:var(--text-1)">CEO Agent</div>
+                <div style="font-size:9.5px;font-weight:700;letter-spacing:0.08em;color:var(--text-accent-muted);margin-top:2px">FINAL DECISION LOGIC · ACTIVE</div>
+                <div style="font-size:10px;color:var(--text-7);margin-top:6px;max-width:240px;line-height:1.4">Synthesizes {{ connectedCount }} attached specialist{{ connectedPlural }} into one weekly recommendation</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:center;margin-top:30px;position:relative;z-index:1">
+            <div id="mtOutputNode" style="display:flex;align-items:center;gap:14px;padding:14px 16px 14px 20px;border-radius:14px;background:var(--bg-card);backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);border:1px solid var(--accent-border-default);box-shadow:inset 0 1px 0 var(--border-subtle)">
+              <div style="width:38px;height:38px;border-radius:10px;background:var(--accent-fill-default);border:1px solid var(--accent-border-strong);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="15" height="12" rx="2.5"></rect><path d="M2.5 8 H17.5"></path><path d="M6.3 11.3 L8.6 13.6 L13.7 8.5"></path></svg>
+              </div>
+              <div>
+                <div style="font-size:12.5px;font-weight:700;color:var(--text-2)">Recommendation Output</div>
+                <div style="font-size:10.5px;color:var(--text-6);margin-top:1px">1 recommendation ready for review</div>
+              </div>
+              <div style="width:32px;height:32px;border-radius:50%;background:var(--accent-fill-default);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:8px">
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="10" x2="16" y2="10"></line><path d="M11 5 L16 10 L11 15"></path></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px">
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--accent-border-default);border-radius:12px;padding:20px 22px;text-align:center">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-6)">Business Health Score</div>
+          <div style="font-family:'Inter',sans-serif;font-size:44px;font-weight:700;color:var(--accent);margin-top:8px">{{ healthScore.value }}</div>
+          <div style="font-size:11.5px;color:var(--text-5);margin-top:2px">out of 100 · {{ healthScore.label }}</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px;text-align:left">
+            <sc-for list="{{ healthScore.factors }}" as="f" hint-placeholder-count="3">
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">
+                <span style="color:var(--text-4)">{{ f.label }}</span>
+                <span style="color:var(--accent);font-weight:700">{{ f.value }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+          <div style="font-size:14px;font-weight:700;color:var(--text-2);margin-bottom:12px">Recent CEO Decisions</div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <sc-for list="{{ decisions }}" as="d" hint-placeholder-count="3">
+              <div style="padding-bottom:12px;border-bottom:1px solid var(--border-subtle);transition:background 0.15s ease" style-hover="background:var(--fill-hover)">
+                <div style="font-size:13px;color:var(--text-3);line-height:1.45">{{ d.title }}</div>
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:6px">
+                  <div style="font-size:11px;color:var(--text-8)">{{ d.time }}</div>
+                  <div style="font-size:12.5px;font-weight:700;color:var(--accent);white-space:nowrap;font-family:'Inter',sans-serif">{{ d.impact }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isProducts }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid;grid-template-columns:minmax(0,1.7fr) minmax(240px,1fr);gap:16px;animation:mtFadeUp 0.35s ease-out both">
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div style="display:flex;gap:8px">
+              <div onClick="{{ handlers.setFilterAll }}" style="{{ allTabStyle }}" style-active="transform:scale(0.97)">All ({{ allCount }})</div>
+              <div onClick="{{ handlers.setFilterHigh }}" style="{{ highTabStyle }}" style-active="transform:scale(0.97)">High potential ({{ highCount }})</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--border-default);border-radius:12px;font-size:12px;color:var(--text-7);flex-shrink:0">
+              <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="8" cy="8" r="5.5"></circle><line x1="12.2" y1="12.2" x2="17" y2="17"></line></svg>
+              <span style="white-space:nowrap">Search products…</span>
+            </div>
+          </div>
+          <div style="overflow-x:auto;margin-top:16px">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:520px">
+            <thead><tr style="text-align:left"><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6)">Product</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6);text-align:right">Margin</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6)">Signal</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6);text-align:right">Potential / mo (est.)</th><th style="padding:0 6px 10px"></th></tr></thead>
+            <tbody>
+            <sc-for list="{{ filteredProducts }}" as="p" hint-placeholder-count="5">
+              <tr style="border-top:1px solid var(--border-subtle);transition:background 0.15s ease;{{ p.rowAnim }}" style-hover="background:var(--fill-hover)">
+                <td style="padding:12px 6px;color:var(--text-2);font-weight:500">{{ p.name }}</td>
+                <td style="padding:12px 6px;color:var(--text-4);text-align:right;font-weight:600">{{ p.margin }}</td>
+                <td style="padding:12px 6px">
+                  <div style="display:flex;flex-wrap:wrap;gap:5px">
+                    <span style="padding:3px 8px;border-radius:8px;font-size:11px;font-weight:600;white-space:nowrap;background:{{ p.demandBg }};color:{{ p.demandColor }}">{{ p.demand }} demand</span>
+                    <span style="padding:3px 8px;border-radius:8px;font-size:11px;font-weight:600;white-space:nowrap;background:{{ p.competitionBg }};color:{{ p.competitionColor }}">{{ p.competition }} competition</span>
+                  </div>
+                </td>
+                <td style="padding:12px 6px;color:var(--accent);font-weight:700;text-align:right;font-family:'Inter',sans-serif;white-space:nowrap">{{ p.potential }}</td>
+                <td style="padding:12px 6px;text-align:right"><a href="#" onClick="{{ handlers.viewProduct }}" data-name="{{ p.name }}" style="font-size:12px;font-weight:700;white-space:nowrap">View</a></td>
+              </tr>
+            </sc-for>
+            </tbody>
+          </table>
+          </div>
+        </div>
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card-elevated);backdrop-filter:blur(22px) saturate(150%);-webkit-backdrop-filter:blur(22px) saturate(150%);box-shadow:inset 0 1px 0 var(--border-subtle);border:1px solid var(--accent-border-default);border-radius:12px;padding:20px 22px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--accent)">Top Opportunity</div>
+          <div style="font-size:15px;font-weight:700;color:var(--text-2);margin-top:8px">{{ topOpportunity.name }}</div>
+          <div style="display:flex;gap:16px;margin-top:10px">
+            <div><div style="font-size:11px;color:var(--text-6);white-space:nowrap">Potential</div><div style="font-size:15px;font-weight:700;color:var(--accent);font-family:'Inter',sans-serif;white-space:nowrap">{{ topOpportunity.potential }}</div></div>
+            <div><div style="font-size:11px;color:var(--text-6)">Signal</div><div style="font-size:15px;font-weight:700;color:var(--text-2);font-family:'Inter',sans-serif">{{ topOpportunity.signal }}</div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px;margin-top:14px">
+            <sc-for list="{{ topOpportunity.points }}" as="pt" hint-placeholder-count="3">
+              <div style="display:flex;gap:8px;font-size:12.5px;color:var(--text-4);line-height:1.5"><span style="color:var(--accent);flex-shrink:0">—</span><span>{{ pt }}</span></div>
+            </sc-for>
+          </div>
+          <a href="#" style="display:block;margin-top:16px;padding:10px;border:1px solid var(--accent-border-strong);color:var(--accent);text-align:center;border-radius:12px;font-size:12.5px;font-weight:700">Review pricing</a>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isCompetitors }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid;grid-template-columns:minmax(0,1.7fr) minmax(240px,1fr);gap:16px;animation:mtFadeUp 0.35s ease-out both">
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+          <div style="font-size:16.5px;font-weight:700;color:var(--text-2);margin-bottom:14px">Competitor Landscape</div>
+          <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:520px">
+            <thead><tr style="text-align:left"><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6)">Competitor</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6);text-align:right">Active Offers</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6)">Price Range</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6);text-align:right">Market Share</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6)">Activity</th></tr></thead>
+            <tbody>
+            <sc-for list="{{ competitors }}" as="c" hint-placeholder-count="5">
+              <tr style="border-top:1px solid var(--border-subtle);transition:background 0.15s ease;{{ c.rowAnim }}" style-hover="background:var(--fill-hover)">
+                <td style="padding:12px 6px;color:var(--text-2);font-weight:500">{{ c.name }}</td>
+                <td style="padding:12px 6px;color:var(--text-4);text-align:right">{{ c.offers }}</td>
+                <td style="padding:12px 6px;color:var(--text-4)">{{ c.priceRange }}</td>
+                <td style="padding:12px 6px;color:var(--text-4);text-align:right">{{ c.share }}</td>
+                <td style="padding:12px 6px"><span style="padding:3px 9px;border-radius:8px;font-size:11.5px;font-weight:600;background:{{ c.activityBg }};color:{{ c.activityColor }}">{{ c.activity }}</span></td>
+              </tr>
+            </sc-for>
+            </tbody>
+          </table>
+          </div>
+          <div style="font-size:11px;color:var(--text-8);margin-top:14px">Based on seller-supplied competitor data, refreshed weekly.</div>
+        </div>
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+          <div style="font-size:16.5px;font-weight:700;color:var(--text-2);margin-bottom:14px">Market Insights</div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <sc-for list="{{ marketInsights }}" as="i" hint-placeholder-count="4">
+              <div style="display:flex;gap:10px">
+                <div style="width:6px;height:6px;border-radius:50%;background:var(--warning);margin-top:6px;flex-shrink:0"></div>
+                <div style="min-width:0">
+                  <div style="font-size:12.5px;color:var(--text-3);line-height:1.45">{{ i.text }}</div>
+                  <div style="font-size:11px;color:var(--text-8);margin-top:3px">{{ i.time }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <a href="#" style="display:block;margin-top:16px;font-size:12.5px;font-weight:600">View full analysis →</a>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isAgents }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mtFadeUp 0.35s ease-out both">
+      <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">All Agents</div>
+          <a href="#" onClick="{{ handlers.goCart }}" style="font-size:12px;font-weight:600;color:var(--accent)">Unlock more agents →</a>
+        </div>
+        <div style="font-size:12px;color:var(--text-6);margin-bottom:12px">Status, last activity and performance for each agent on your account</div>
+        <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:600px">
+          <thead><tr style="text-align:left"><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6)">Agent</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6)">Status</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6)">Last Run</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6);text-align:right">Performance</th><th style="padding:0 6px 10px"></th></tr></thead>
+          <tbody>
+          <sc-for list="{{ allAgents }}" as="a" hint-placeholder-count="5">
+            <tr style="border-top:1px solid var(--border-subtle)" style-hover="background:var(--fill-hover)">
+              <td style="padding:12px 6px;color:var(--text-2);font-weight:500">
+                <div>{{ a.name }}</div>
+                <div style="font-size:11px;color:var(--text-6);margin-top:2px">{{ a.specialty }}</div>
+              </td>
+              <td style="padding:12px 6px">
+                <span style="padding:3px 9px;border-radius:8px;font-size:11.5px;font-weight:600;background:{{ a.statusBg }};color:{{ a.statusColor }}">{{ a.statusLabel }}</span>
+              </td>
+              <td style="padding:12px 6px;color:var(--text-5)">{{ a.lastRun }}</td>
+              <td style="padding:12px 6px;text-align:right;color:var(--text-4);font-weight:600">{{ a.performance }}%</td>
+              <td style="padding:12px 6px;text-align:right">
+                <sc-if value="{{ a.locked }}" hint-placeholder-val="{{ false }}">
+                  <a href="#" onClick="{{ handlers.goCart }}" style="font-size:12px;font-weight:700;color:var(--warning)">Unlock</a>
+                </sc-if>
+                <sc-if value="{{ a.unlocked }}" hint-placeholder-val="{{ false }}">
+                  <div onClick="{{ handlers.toggleAgent }}" data-agent-id="{{ a.id }}" style="{{ a.toggleStyle }}">{{ a.toggleLabel }}</div>
+                </sc-if>
+              </td>
+            </tr>
+          </sc-for>
+          </tbody>
+        </table>
+        </div>
+      </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isMarketing }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mtFadeUp 0.35s ease-out both;display:flex;flex-direction:column;gap:14px">
+        <sc-for list="{{ marketingCards }}" as="m" hint-placeholder-count="3">
+          <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+              <div>
+                <div style="font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-accent-muted)">{{ m.product }}</div>
+                <div style="font-size:15px;font-weight:700;color:var(--text-2);margin-top:6px">{{ m.suggestedTitle }}</div>
+              </div>
+              <span style="{{ m.statusStyle }}">{{ m.statusLabel }}</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px">
+              <sc-for list="{{ m.keywords }}" as="kw" hint-placeholder-count="4">
+                <span style="padding:4px 10px;border-radius:14px;font-size:11.5px;color:var(--text-4);background:var(--border-subtle)">{{ kw }}</span>
+              </sc-for>
+            </div>
+            <ul style="margin:12px 0 0 0;padding-left:18px;display:flex;flex-direction:column;gap:5px">
+              <sc-for list="{{ m.bullets }}" as="b" hint-placeholder-count="3">
+                <li style="font-size:12.5px;color:var(--text-3);line-height:1.5">{{ b }}</li>
+              </sc-for>
+            </ul>
+            <div style="display:flex;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle)">
+              <div onClick="{{ handlers.approveListing }}" data-idx="{{ $index }}" style="padding:8px 16px;background:var(--accent);color:var(--accent-on-fill);border-radius:12px;font-size:12.5px;font-weight:700;cursor:pointer;transition:background 0.15s ease,transform 0.1s ease" style-hover="background:var(--accent-hover)" style-active="transform:scale(0.96)">Approve</div>
+              <div onClick="{{ handlers.regenerateListing }}" data-idx="{{ $index }}" style="padding:8px 16px;border:1px solid var(--border-hover);color:var(--text-4);border-radius:12px;font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color 0.15s ease,color 0.15s ease" style-hover="border-color:var(--accent-border-strong);color:var(--accent)">Regenerate</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isCart }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mtFadeUp 0.35s ease-out both">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+          <sc-for list="{{ allAgents }}" as="a" hint-placeholder-count="5">
+            <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid {{ a.cartBorder }};border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div style="font-size:14.5px;font-weight:700;color:var(--text-2)">{{ a.name }}</div>
+                <span style="{{ a.statusStyle }}">{{ a.statusLabel }}</span>
+              </div>
+              <div style="font-size:12px;color:var(--text-5);line-height:1.4;flex:1">{{ a.specialty }}</div>
+              <div style="font-family:'Inter',sans-serif;font-size:16px;font-weight:700;color:{{ a.priceColor }}">{{ a.priceLabel }}</div>
+              <sc-if value="{{ a.unlocked }}" hint-placeholder-val="{{ false }}">
+                <div style="text-align:center;padding:8px;border-radius:12px;font-size:12.5px;font-weight:700;color:var(--text-accent-muted);background:var(--accent-fill-subtle)">Active in workspace</div>
+              </sc-if>
+              <sc-if value="{{ a.inCart }}" hint-placeholder-val="{{ false }}">
+                <div style="text-align:center;padding:8px;border-radius:12px;font-size:12.5px;font-weight:700;color:var(--accent-on-fill);background:var(--accent)">Added to cart</div>
+              </sc-if>
+              <sc-if value="{{ a.purchasable }}" hint-placeholder-val="{{ false }}">
+                <div onClick="{{ handlers.addToCart }}" data-agent-id="{{ a.id }}" style="text-align:center;padding:8px;border:1px solid var(--accent-border-strong);color:var(--accent);border-radius:12px;font-size:12.5px;font-weight:700;cursor:pointer;transition:background 0.15s ease" style-hover="background:var(--accent-fill-subtle)">Add to cart</div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ hasCartItems }}" hint-placeholder-val="{{ false }}">
+          <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card-elevated);backdrop-filter:blur(22px) saturate(150%);-webkit-backdrop-filter:blur(22px) saturate(150%);box-shadow:inset 0 1px 0 var(--border-subtle);border:1px solid var(--accent-border-default);border-radius:12px;padding:18px 22px;margin-top:16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+            <div style="min-width:0">
+              <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--accent)">Cart</div>
+              <div style="font-size:13px;color:var(--text-3);margin-top:4px">{{ cartSummaryText }}</div>
+            </div>
+            <div style="margin-left:auto;text-align:right">
+              <div style="font-size:11px;color:var(--text-6)">Total</div>
+              <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:700;color:var(--text-2)">{{ cartTotal }}</div>
+            </div>
+            <div onClick="{{ handlers.checkout }}" style="padding:10px 18px;background:var(--accent);color:var(--accent-on-fill);border-radius:12px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background 0.15s ease,transform 0.1s ease" style-hover="background:var(--accent-hover)" style-active="transform:scale(0.96)">Checkout</div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isNotifications }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mtFadeUp 0.35s ease-out both">
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <sc-for list="{{ notifTabs }}" as="t" hint-placeholder-count="4">
+            <div onClick="{{ handlers.setNotifFilter }}" data-filter="{{ t.id }}" style="{{ t.style }}">{{ t.label }}</div>
+          </sc-for>
+        </div>
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:8px 22px">
+          <sc-for list="{{ filteredNotifications }}" as="n" hint-placeholder-count="5">
+            <div onClick="{{ handlers.markNotificationRead }}" data-notif-id="{{ n.id }}" style="{{ n.rowStyle }}" style-hover="background:var(--fill-hover)">
+              <div style="display:flex;align-items:flex-start;gap:10px">
+                <div style="{{ n.dotStyle }}"></div>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="{{ n.typeStyle }}">{{ n.typeLabel }}</span>
+                    <span style="font-size:11px;color:var(--text-8)">{{ n.time }}</span>
+                  </div>
+                  <div style="font-size:13px;color:{{ n.textColor }};line-height:1.5;margin-top:6px">{{ n.message }}</div>
+                </div>
+                <sc-if value="{{ n.hasImpact }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:12.5px;font-weight:700;color:{{ n.impactColor }};white-space:nowrap;font-family:'Inter',sans-serif;flex-shrink:0">{{ n.impact }}</div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+      <div style="animation:mtFadeUp 0.35s ease-out both">
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <sc-for list="{{ settingsTabs }}" as="t" hint-placeholder-count="3">
+            <div onClick="{{ handlers.setSettingsTab }}" data-tab="{{ t.id }}" style="{{ t.style }}">{{ t.label }}</div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ isSettingsBusiness }}" hint-placeholder-val="{{ true }}">
+          <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:22px 24px;max-width:560px">
+            <div style="font-size:15px;font-weight:700;color:var(--text-2);margin-bottom:14px">Business Details</div>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <sc-for list="{{ businessFields }}" as="bf" hint-placeholder-count="4">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--border-subtle)">
+                  <span style="font-size:12.5px;color:var(--text-5)">{{ bf.label }}</span>
+                  <span style="font-size:13px;color:var(--text-2);font-weight:600">{{ bf.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isSettingsMarketplaces }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:10px;max-width:560px">
+            <sc-for list="{{ marketplaceIntegrations }}" as="mp" hint-placeholder-count="3">
+              <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;gap:14px">
+                <div>
+                  <div style="font-size:13.5px;font-weight:600;color:var(--text-2)">{{ mp.name }}</div>
+                  <div style="font-size:11.5px;color:var(--text-6);margin-top:2px">{{ mp.status }}</div>
+                </div>
+                <div onClick="{{ handlers.toggleMarketplace }}" data-mp="{{ mp.id }}" style="{{ mp.buttonStyle }}">{{ mp.buttonLabel }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isSettingsWhatsapp }}" hint-placeholder-val="{{ false }}">
+          <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:22px 24px;max-width:560px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-size:15px;font-weight:700;color:var(--text-2)">WhatsApp</div>
+                <div style="font-size:12px;color:var(--text-5);margin-top:3px">{{ whatsapp.status }}</div>
+              </div>
+              <div onClick="{{ handlers.toggleWhatsapp }}" style="{{ whatsapp.buttonStyle }}">{{ whatsapp.buttonLabel }}</div>
+            </div>
+            <div style="height:1px;background:var(--border-subtle);margin:16px 0"></div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6);margin-bottom:10px">Notification Preferences</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ whatsappPrefs }}" as="wp" hint-placeholder-count="3">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <span style="font-size:12.5px;color:var(--text-4)">{{ wp.label }}</span>
+                  <div onClick="{{ handlers.toggleWhatsappPref }}" data-pref="{{ wp.id }}" style="{{ wp.toggleStyle }}"><div style="{{ wp.knobStyle }}"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isFinance }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;animation:mtFadeUp 0.35s ease-out both">
+        <sc-for list="{{ financeStats }}" as="fs" hint-placeholder-count="4">
+          <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:18px 20px;transition:border-color 0.15s ease,transform 0.15s ease" style-hover="border-color:var(--accent-border-default);transform:translateY(-2px)">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-6);white-space:nowrap">{{ fs.label }}</div>
+            <div style="font-family:'Inter',sans-serif;font-size:23px;font-weight:700;color:var(--text-2);margin-top:8px;white-space:nowrap;{{ fs.revealStyle }}">{{ fs.value }}</div>
+            <div style="font-size:11.5px;font-weight:600;margin-top:5px;white-space:nowrap;color:{{ fs.changeColor }}">{{ fs.change }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-top:16px;animation:mtFadeUp 0.35s ease-out 0.05s both">
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+          <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">Profit Trend</div>
+          <div style="font-size:11.5px;color:var(--text-6);margin-top:1px">Net profit, day by day</div>
+          <div style="margin-top:16px">
+            <svg width="100%" height="180" viewBox="0 0 640 180" preserveAspectRatio="none">
+              <path data-chart-anim="1" d="M0,94.5 L106.7,90 L213.3,67.5 L320,85.5 L426.7,60.75 L533.3,74.25 L640,39.6 L640,180 L0,180 Z" fill="var(--accent-fill-subtle)" stroke="none" style="opacity:0;animation:mtFadeIn 0.5s ease-out 0.7s both;animation-play-state:paused"></path>
+              <polyline data-chart-anim="1" points="0,94.5 106.7,90 213.3,67.5 320,85.5 426.7,60.75 533.3,74.25 640,39.6" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke-dasharray:900;animation:mtDrawLine 0.9s ease-out both;animation-play-state:paused"></polyline>
+            </svg>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-7);margin-top:6px">
+              <sc-for list="{{ xLabels }}" as="lbl2" hint-placeholder-count="7"><span>{{ lbl2 }}</span></sc-for>
+            </div>
+          </div>
+        </div>
+        <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px">
+          <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">Expense Breakdown</div>
+          <div style="font-size:11.5px;color:var(--text-6);margin-top:1px">Where costs go</div>
+          <div style="display:flex;flex-direction:column;align-items:center;margin-top:14px">
+            <div style="width:130px;height:130px;border-radius:50%;position:relative">
+              <div style="position:absolute;inset:0;border-radius:50%;background:{{ expenseDonut }}"></div>
+              <div data-chart-anim="1" style="position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,var(--overlay-scrim) 0deg,var(--overlay-scrim) var(--sweep),transparent var(--sweep));animation:mtDonutSweep 1.1s cubic-bezier(.4,0,.2,1) both;animation-play-state:paused;pointer-events:none"></div>
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+              <div style="width:84px;height:84px;border-radius:50%;background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);display:flex;flex-direction:column;align-items:center;justify-content:center">
+                <div style="font-size:10px;color:var(--text-6)">Total</div>
+                <div style="font-family:'Inter',sans-serif;font-size:14px;font-weight:700;color:var(--text-2)">₹18.6L</div>
+              </div>
+            </div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+            <sc-for list="{{ expenseBreakdown }}" as="e" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:8px;font-size:12.5px">
+                <div style="width:8px;height:8px;border-radius:50%;background:{{ e.color }};flex-shrink:0"></div>
+                <span style="color:var(--text-4);flex:1">{{ e.name }}</span>
+                <span style="color:var(--text-5);font-weight:600">{{ e.pct }}%</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div data-reveal="1" style="opacity:0;transform:translateY(24px) scale(0.96);transition:opacity 0.6s cubic-bezier(.16,1,.3,1),transform 0.6s cubic-bezier(.16,1,.3,1);background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--border-default);border-radius:12px;padding:20px 22px;margin-top:16px;animation:mtFadeUp 0.35s ease-out 0.1s both">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:16.5px;font-weight:700;color:var(--text-2)">Pricing Recommendations</div>
+          <a href="#" onClick="{{ handlers.reviewPricing }}" style="font-size:12px;font-weight:600">Apply all →</a>
+        </div>
+        <div style="font-size:11.5px;color:var(--text-6);margin-bottom:12px">Suggested selling price, batch size and supplier per SKU</div>
+        <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:560px">
+          <thead><tr style="text-align:left"><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6)">Product</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6);text-align:right">Suggested Price</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6);text-align:right">Batch Size</th><th style="padding:0 6px 10px;font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-6)">Top Supplier</th></tr></thead>
+          <tbody>
+          <sc-for list="{{ pricingRecs }}" as="r" hint-placeholder-count="4">
+            <tr style="border-top:1px solid var(--border-subtle)" style-hover="background:var(--fill-hover)">
+              <td style="padding:12px 6px;color:var(--text-2);font-weight:500">{{ r.name }}</td>
+              <td style="padding:12px 6px;color:var(--accent);font-weight:700;text-align:right;font-family:'Inter',sans-serif">{{ r.price }}</td>
+              <td style="padding:12px 6px;color:var(--text-4);text-align:right">{{ r.batch }}</td>
+              <td style="padding:12px 6px;color:var(--text-4)">{{ r.supplier }}</td>
+            </tr>
+          </sc-for>
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isPlaceholder }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:100px 20px;border:1px dashed var(--border-default);border-radius:18px;animation:mtFadeUp 0.4s ease-out both">
+        <div style="width:48px;height:48px;border-radius:16px;background:var(--accent-fill-default);display:flex;align-items:center;justify-content:center">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"></circle><line x1="10" y1="6.5" x2="10" y2="10.5"></line><circle cx="10" cy="13.3" r="0.6" fill="var(--accent)" stroke="none"></circle></svg>
+        </div>
+        <div style="font-size:16px;font-weight:700;color:var(--text-2);margin-top:16px">{{ placeholderLabel }} is being redesigned next</div>
+        <div style="font-size:13px;color:var(--text-6);margin-top:6px;max-width:340px">This workspace keeps its current functionality — a polished pass is coming in the next round.</div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+
+<sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;bottom:26px;right:26px;background:var(--bg-card);backdrop-filter:blur(34px) saturate(190%);-webkit-backdrop-filter:blur(34px) saturate(190%);box-shadow:inset 0 1px 0 var(--border-default);border:1px solid var(--accent-border-strong);border-radius:12px;padding:12px 18px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px var(--shadow-floating);animation:mtFadeUp 0.25s cubic-bezier(0.16,1,0.3,1) both;z-index:100">
+    <div style="width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></div>
+    <span style="font-size:12.5px;color:var(--text-3);white-space:nowrap">{{ toast }}</span>
+  </div>
+</sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;defaultScreen&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;overview&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;options&quot;: [&quot;overview&quot;, &quot;ceo&quot;, &quot;products&quot;, &quot;competitors&quot;, &quot;agents&quot;], &quot;section&quot;: &quot;Behavior&quot;},
+  &quot;sidebarCollapsed&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Behavior&quot;}
+}">
+class Component extends DCLogic {
+  state = {
+    activeScreen: 'overview', placeholderLabel: '', productFilter: 'all', askState: 'idle', thinkingStep: 0, answerFor: null, netProfitAnim: 0, toast: null, navIndex: 0,
+    investigations: [], activeInvestigationId: null,
+    agentStatus: { ceo: true, product: true, competitor: true, cfo: true, cmo: false },
+    unlockedAgents: { ceo: true, product: true, competitor: false, cfo: false, cmo: false },
+    attachedAgents: { product: true, competitor: true, cfo: true, cmo: true },
+    openMenu: null,
+    cartItems: [], marketingApproved: {},
+    marketplaceStatus: { amazon: true, flipkart: true, meesho: false },
+    whatsappConnected: true, whatsappPrefs: { daily: true, alerts: true, weekly: false },
+    settingsTab: 'business', notifFilter: 'all', notificationsRead: {}
+  };
+
+  formatINR(n) {
+    n = Math.round(n);
+    let s = String(n);
+    let last3 = s.slice(-3), other = s.slice(0, -3);
+    if (other !== '') { other = other.replace(/\B(?=(\d{2})+(?!\d))/g, ','); return '₹' + other + ',' + last3; }
+    return '₹' + last3;
+  }
+
+  showToast(msg) {
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this.setState({ toast: msg });
+    this._toastTimer = setTimeout(() => this.setState({ toast: null }), 2400);
+  }
+
+  reviewCta(msg) {
+    this.showToast(msg);
+    this.go('products');
+  }
+  thinkingLabels = ['Analyzing your business data…', 'Checking profitability…', 'Preparing recommendation…'];
+  reasoningStepSets = {
+    'Should I lower price on SKU-8821?': ['Checking cost and margin history for SKU-8821…', 'Comparing against target margin…', 'Preparing recommendation…'],
+    'How do I increase margin this month?': ['Scanning Profit Leaks and Opportunities…', 'Checking competitor pricing context…', 'Ranking levers by impact…']
+  };
+  answers = {
+    'Which channel is most profitable?': { fast: true, headline: 'Amazon is your most profitable channel, contributing the highest margin at scale.', impact: '28.4% margin', impactColor: 'var(--accent)', driver: 'Amazon carries 42% of revenue at your strongest average margin.', evidence: 'Marketplace mix and margin by channel, this week.', recommendation: 'Consider shifting incremental ad budget toward Amazon-listed SKUs.' },
+    'Should I lower price on SKU-8821?': { fast: false, recallFrom: 'Investigation 2', headline: 'Lowering price on SKU-8821 is not currently recommended — margin is already below target.', impact: '-₹2,100/mo est.', impactColor: 'var(--negative)', driver: 'Current margin on this SKU is already 6 pts below your target.', evidence: 'Cost, current price and target margin for SKU-8821.', recommendation: 'Review cost structure before adjusting price on this SKU.' },
+    'Find profitable products under ₹500': { fast: true, headline: '3 products under ₹500 currently clear your target margin.', impact: '3 SKUs', impactColor: 'var(--accent)', driver: 'Digital Kitchen Scale and 2 others combine high margin with low price.', evidence: 'Price, cost and margin across your catalog under ₹500.', recommendation: 'Review these SKUs for increased ad allocation.' },
+    'How do I increase margin this month?': { fast: false, headline: 'Two levers stand out: marketplace fees and one underpriced product.', impact: '+₹2.0L/mo potential', impactColor: 'var(--accent)', driver: 'Marketplace fees rose 8.4%; Portable Mini Blender is priced below market.', evidence: 'Profit Leaks and Profit Opportunities for this period.', recommendation: 'Review the affected SKUs, then review pricing on the Blender.' }
+  };
+  defaultAnswer = { fast: true, headline: 'Profit is up 15.3% this week, driven by revenue growth across channels.', impact: '+₹6,24,000', impactColor: 'var(--accent)', driver: 'Revenue grew across all channels; marketplace fees partly offset the gain.', evidence: 'Profit Drivers breakdown for this week.', recommendation: 'Review the 6 SKUs behind the marketplace-fee increase.' };
+
+  investigationTitle(q) { if (q === '__default__') return 'What matters most right now'; return q.length > 34 ? q.slice(0, 34) + '…' : q; }
+
+  patchInvestigation(id, updater) {
+    this.setState({ investigations: this.state.investigations.map((i) => i.id === id ? updater(i) : i) });
+  }
+
+  ensureInvestigation(q) {
+    let activeId = this.state.activeInvestigationId;
+    let inv = this.state.investigations.find((i) => i.id === activeId);
+    if (inv) return activeId;
+    const id = (this._nextInvId = (this._nextInvId || this.state.investigations.length) + 1);
+    inv = { id, title: this.investigationTitle(q), time: 'Just now', messages: [] };
+    this.setState({ investigations: [inv].concat(this.state.investigations), activeInvestigationId: id });
+    return id;
+  }
+
+  speedTagStyle(fast) {
+    return fast
+      ? 'font-size:10.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-accent-muted);background:var(--accent-fill-default);padding:3px 8px;border-radius:8px'
+      : 'font-size:10.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--warning);background:var(--warning-fill);padding:3px 8px;border-radius:8px';
+  }
+  stepTextStyle(s) { return s.done ? 'color:var(--text-3)' : s.active ? 'color:var(--text-2);font-weight:600' : 'color:var(--text-8)'; }
+  buildSteps(raw, upTo) {
+    return raw.map((label, idx) => ({ label, done: idx < upTo, active: idx === upTo, pending: idx > upTo })).map((s) => Object.assign({}, s, { textStyle: this.stepTextStyle(s) }));
+  }
+
+  newInvestigation() { this.setState({ activeInvestigationId: null, askState: 'idle', attachedAgents: { product: true, competitor: true, cfo: true, cmo: true } }); }
+  selectInvestigation(e) { this.setState({ activeInvestigationId: parseInt(e.currentTarget.getAttribute('data-inv-id'), 10), askState: 'idle' }); }
+
+  suggestAttachment(q) {
+    const marketingRe = /listing|keyword|campaign|marketing|seo|ad copy|ads\b/i;
+    return marketingRe.test(q)
+      ? { product: false, competitor: false, cfo: false, cmo: true }
+      : { product: true, competitor: true, cfo: true, cmo: false };
+  }
+  onAskInput(e) {
+    const v = e.target.value;
+    this.setState({ attachedAgents: v.trim() ? this.suggestAttachment(v) : { product: true, competitor: true, cfo: true, cmo: true } });
+  }
+  toggleAttach(id) {
+    if (!this.state.unlockedAgents[id]) return;
+    this.setState({ attachedAgents: Object.assign({}, this.state.attachedAgents, { [id]: !this.state.attachedAgents[id] }) });
+  }
+  toggleMenu(id) { this.setState({ openMenu: this.state.openMenu === id ? null : id }); }
+  menuAction(id) {
+    if (!this.state.unlockedAgents[id]) { this.setState({ openMenu: null }); this.go('cart'); return; }
+    this.toggleAttach(id);
+    this.setState({ openMenu: null });
+  }
+
+  askQuestion(q) {
+    if (this._thinkTimer) clearTimeout(this._thinkTimer);
+    if (q !== '__default__') this.setState({ attachedAgents: this.suggestAttachment(q) });
+    const invId = this.ensureInvestigation(q);
+    const userMsg = { isUser: true, text: q === '__default__' ? 'What matters most right now?' : q };
+    this.patchInvestigation(invId, (inv) => Object.assign({}, inv, { messages: inv.messages.concat([userMsg]) }));
+    const a = this.answers[q] || this.defaultAnswer;
+    if (a.fast) {
+      this.setState({ askState: 'answered' });
+      this.patchInvestigation(invId, (inv) => Object.assign({}, inv, { messages: inv.messages.concat([Object.assign({ isAnswer: true, speedTag: 'Instant answer', speedTagStyle: this.speedTagStyle(true) }, a)]) }));
+      return;
+    }
+    const raw = this.reasoningStepSets[q] || this.thinkingLabels;
+    this.setState({ askState: 'thinking', reasoningSteps: this.buildSteps(raw, 0) });
+    const runStep = (i) => {
+      this._thinkTimer = setTimeout(() => {
+        if (i < raw.length - 1) { this.setState({ reasoningSteps: this.buildSteps(raw, i + 1) }); runStep(i + 1); }
+        else {
+          this.setState({ askState: 'answered' });
+          this.patchInvestigation(invId, (inv) => Object.assign({}, inv, { messages: inv.messages.concat([Object.assign({ isAnswer: true, speedTag: 'Reasoned answer', speedTagStyle: this.speedTagStyle(false) }, a)]) }));
+        }
+      }, 420);
+    };
+    runStep(0);
+  }
+
+  toggleAgent(id) {
+    const agentStatus = Object.assign({}, this.state.agentStatus, { [id]: !this.state.agentStatus[id] });
+    this.setState({ agentStatus });
+  }
+  addToCart(id) { if (this.state.cartItems.indexOf(id) < 0) this.setState({ cartItems: this.state.cartItems.concat([id]) }); }
+  checkout() {
+    const unlockedAgents = Object.assign({}, this.state.unlockedAgents);
+    const agentStatus = Object.assign({}, this.state.agentStatus);
+    this.state.cartItems.forEach((id) => { unlockedAgents[id] = true; agentStatus[id] = true; });
+    this.setState({ unlockedAgents, agentStatus, cartItems: [] });
+    this.showToast('Agents unlocked');
+  }
+  toggleMarketplace(id) { this.setState({ marketplaceStatus: Object.assign({}, this.state.marketplaceStatus, { [id]: !this.state.marketplaceStatus[id] }) }); }
+  toggleWhatsappPref(id) { this.setState({ whatsappPrefs: Object.assign({}, this.state.whatsappPrefs, { [id]: !this.state.whatsappPrefs[id] }) }); }
+  agentStatusStyle(active) { return active ? { c: 'var(--accent)', bg: 'var(--accent-fill-default)', label: 'Active' } : { c: 'var(--text-inactive)', bg: 'var(--border-subtle)', label: 'Paused' }; }
+
+  componentDidMount() {
+    if (this.props.defaultScreen && this.props.defaultScreen !== this.state.activeScreen) {
+      this.setState({ activeScreen: this.props.defaultScreen });
+    }
+    const target = 624000, start = performance.now(), dur = 900;
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - t, 3);
+      this.setState({ netProfitAnim: target * eased });
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) {
+      this.setState({ netProfitAnim: target });
+    } else {
+      requestAnimationFrame(tick);
+    }
+    this._reduced = reduced;
+    this.setupScrollReveal();
+    setTimeout(() => this.measureOrchestrator(), 60);
+    window.addEventListener('resize', () => this.measureOrchestrator());
+    this._onKey = (e) => this.onArrowKey(e);
+    window.addEventListener('keydown', this._onKey);
+    setTimeout(() => this.updateNavIndicator(), 60);
+  }
+
+  componentDidUpdate() {
+    this.setupScrollReveal();
+    this.updateNavIndicator();
+    if (this.state.activeScreen === 'ceo' && !this.state._measured) {
+      setTimeout(() => this.measureOrchestrator(), 60);
+    }
+  }
+
+  measureOrchestrator() {
+    const wrap = document.getElementById('mtOrchWrap');
+    const ceo = document.getElementById('mtCeoWrap');
+    if (!wrap || !ceo) return;
+    const wrapRect = wrap.getBoundingClientRect();
+    const ceoRect = ceo.getBoundingClientRect();
+    const tx = ceoRect.left + ceoRect.width / 2 - wrapRect.left;
+    const ty = ceoRect.top - wrapRect.top;
+    const timing = [{ dur: '2.6s', delay: '0s' }, { dur: '2.3s', delay: '0.5s' }, { dur: '2.3s', delay: '1s' }, { dur: '2.6s', delay: '1.5s' }];
+    const lines = [];
+    for (let i = 0; i < 4; i++) {
+      const node = document.getElementById('mtNode' + i);
+      if (!node) return;
+      const r = node.getBoundingClientRect();
+      const x1 = r.left + r.width / 2 - wrapRect.left;
+      const y1 = r.bottom - wrapRect.top;
+      const ymid = (y1 + ty) / 2;
+      lines.push({ path: 'M' + x1 + ',' + y1 + ' C' + x1 + ',' + ymid + ' ' + tx + ',' + ymid + ' ' + tx + ',' + ty, dur: timing[i].dur, delay: timing[i].delay });
+    }
+    const outputNode = document.getElementById('mtOutputNode');
+    let outputLine = { path: '' };
+    if (outputNode) {
+      const or = outputNode.getBoundingClientRect();
+      const ox = or.left + or.width / 2 - wrapRect.left;
+      const oy1 = ceoRect.bottom - wrapRect.top;
+      const oy2 = or.top - wrapRect.top;
+      outputLine = { path: 'M' + tx + ',' + oy1 + ' L' + tx + ',' + oy2 };
+    }
+    this.setState({ measuredLines: lines, measuredOutputLine: outputLine, _measured: true });
+  }
+
+  setupScrollReveal() {
+    if (!this._revealObserver) {
+      this._revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const el = entry.target;
+            el.style.transitionDelay = (Math.random() * 0.08) + 's';
+            el.style.opacity = '1';
+            el.style.transform = 'translateY(0) scale(1)';
+            el.querySelectorAll('[data-chart-anim="1"]').forEach((c) => { c.style.animationPlayState = 'running'; });
+            this._revealObserver.unobserve(el);
+          }
+        });
+      }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+    }
+    const nodes = document.querySelectorAll('[data-reveal="1"]');
+    nodes.forEach((el) => {
+      if (this._reduced) { el.style.opacity = '1'; el.style.transform = 'none'; el.querySelectorAll('[data-chart-anim="1"]').forEach((c) => { c.style.animationPlayState = 'running'; }); }
+      else { this._revealObserver.observe(el); }
+      this.wireCardInteraction(el);
+    });
+  }
+
+  wireCardInteraction(el) {
+    if (el.dataset.mtWired) return;
+    el.dataset.mtWired = '1';
+    const baseBg = el.style.background || '';
+    const baseShadow = el.style.boxShadow || '';
+    const baseBorder = el.style.borderColor || '';
+    if (!el.style.position) el.style.position = 'relative';
+    el.addEventListener('mousemove', (e) => {
+      const r = el.getBoundingClientRect();
+      const x = ((e.clientX - r.left) / r.width * 100).toFixed(1);
+      const y = ((e.clientY - r.top) / r.height * 100).toFixed(1);
+      el.style.background = 'radial-gradient(circle 260px at ' + x + '% ' + y + '%, var(--accent-fill-subtle), transparent 65%)' + (baseBg ? ', ' + baseBg : '');
+    });
+    el.addEventListener('mouseenter', () => {
+      el.style.borderColor = 'var(--accent-border-strong)';
+      el.style.boxShadow = (baseShadow ? baseShadow + ',' : '') + '0 10px 26px var(--shadow-elevated)';
+    });
+    el.addEventListener('mouseleave', () => {
+      el.style.background = baseBg;
+      el.style.borderColor = baseBorder;
+      el.style.boxShadow = baseShadow;
+    });
+  }
+
+  navOrder = ['overview', 'ceo', 'products', 'competitors', 'orders', 'customers', 'finance', 'marketing', 'reports', 'agents', 'cart', 'settings', 'notifications'];
+
+  scrollToAsk() {
+    const panel = document.getElementById('mtAskPanel');
+    const scroller = document.getElementById('mainScroll');
+    if (!panel || !scroller) return;
+    scroller.scrollTo({ top: Math.max(panel.offsetTop - 16, 0), behavior: 'smooth' });
+    const input = panel.querySelector('input[type="text"]');
+    if (input) setTimeout(() => input.focus(), 350);
+  }
+
+  go(screen) {
+    const idx = this.navOrder.indexOf(screen);
+    this.setState({ activeScreen: screen, navIndex: idx >= 0 ? idx : this.state.navIndex });
+  }
+  goPlaceholder(label) {
+    const map = { Orders: 'orders', Customers: 'customers', Reports: 'reports' };
+    const idx = this.navOrder.indexOf(map[label]);
+    this.setState({ activeScreen: 'placeholder', placeholderLabel: label, navIndex: idx >= 0 ? idx : this.state.navIndex });
+  }
+
+  onArrowKey(e) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    e.preventDefault();
+    let idx = this.state.navIndex;
+    idx = e.key === 'ArrowDown' ? Math.min(idx + 1, this.navOrder.length - 1) : Math.max(idx - 1, 0);
+    const key = this.navOrder[idx];
+    const map = { orders: 'Orders', customers: 'Customers', reports: 'Reports' };
+    if (map[key]) this.goPlaceholder(map[key]);
+    else this.go(key);
+  }
+
+  updateNavIndicator() {
+    const list = document.getElementById('navList');
+    const indicator = document.getElementById('navIndicator');
+    const active = document.getElementById('nav-' + this.navOrder[this.state.navIndex]);
+    if (!list || !indicator || !active) return;
+    const listRect = list.getBoundingClientRect();
+    const r = active.getBoundingClientRect();
+    indicator.style.transform = 'translateY(' + (r.top - listRect.top + list.scrollTop) + 'px)';
+    indicator.style.height = r.height + 'px';
+  }
+
+  buildConic(list) {
+    let acc = 0;
+    const parts = list.map((it) => { const start = acc; acc += it.pct; return it.color + ' ' + start + '% ' + acc + '%'; });
+    return 'conic-gradient(' + parts.join(',') + ')';
+  }
+
+  demandStyle(level) {
+    if (level === 'High') return { c: 'var(--accent)', bg: 'var(--accent-fill-default)' };
+    if (level === 'Medium') return { c: 'var(--warning)', bg: 'var(--warning-border)' };
+    return { c: 'var(--text-inactive)', bg: 'var(--border-subtle)' };
+  }
+  riskStyle(level) {
+    if (level === 'High') return { c: 'var(--negative)', bg: 'var(--negative-fill)' };
+    if (level === 'Medium') return { c: 'var(--warning)', bg: 'var(--warning-border)' };
+    return { c: 'var(--accent)', bg: 'var(--accent-fill-default)' };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const collapsed = !!this.props.sidebarCollapsed;
+    const activeNavStyle = 'display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;cursor:pointer;background:transparent;color:var(--text-bright);position:relative;z-index:1;transition:color 0.15s ease';
+    const inactiveNavStyle = 'display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;cursor:pointer;background:transparent;color:var(--text-inactive);position:relative;z-index:1;transition:background 0.15s ease,color 0.15s ease';
+    const navStyle = (id) => s.activeScreen === id ? activeNavStyle : inactiveNavStyle;
+
+    const products = [
+      { name: 'Portable Wireless Speaker', demand: 'High', competition: 'Medium', margin: '32%', potential: '₹8.1L / month', highPotential: true },
+      { name: 'Fitness Resistance Band Set', demand: 'High', competition: 'Low', margin: '38%', potential: '₹6.1L / month', highPotential: true },
+      { name: 'Car Vacuum Cleaner', demand: 'Medium', competition: 'Medium', margin: '30%', potential: '₹6.3L / month', highPotential: true },
+      { name: 'Digital Kitchen Scale', demand: 'High', competition: 'Low', margin: '35%', potential: '₹5.1L / month', highPotential: false },
+      { name: 'Phone Tripod Stand', demand: 'High', competition: 'High', margin: '25%', potential: '₹4.7L / month', highPotential: false }
+    ].map((p, i) => {
+      const d = this.demandStyle(p.demand), c = this.riskStyle(p.competition);
+      return Object.assign({}, p, { demandColor: d.c, demandBg: d.bg, competitionColor: c.c, competitionBg: c.bg, rowAnim: 'animation:mtFadeUp 0.4s cubic-bezier(0.16,1,0.3,1) ' + (i * 0.06) + 's both' });
+    });
+    const filteredProducts = s.productFilter === 'high' ? products.filter((p) => p.highPotential) : products;
+
+    const competitors = [
+      { name: 'Boat Lifestyle', offers: 12, priceRange: '₹999 – ₹4,999', share: '28%', activity: 'High' },
+      { name: 'Zebronics', offers: 9, priceRange: '₹699 – ₹2,999', share: '18%', activity: 'Medium' },
+      { name: 'Portronics', offers: 7, priceRange: '₹499 – ₹2,499', share: '12%', activity: 'Medium' },
+      { name: 'Realme TechLife', offers: 6, priceRange: '₹799 – ₹3,499', share: '10%', activity: 'Low' },
+      { name: 'Others', offers: 24, priceRange: 'Various', share: '32%', activity: 'Medium' }
+    ].map((c, i) => { const r = this.riskStyle(c.activity); return Object.assign({}, c, { activityColor: r.c, activityBg: r.bg, rowAnim: 'animation:mtFadeUp 0.4s cubic-bezier(0.16,1,0.3,1) ' + (i * 0.06) + 's both' }); });
+
+    const marketplaceShare = [
+      { name: 'Amazon', pct: 42, color: 'var(--accent)' },
+      { name: 'Flipkart', pct: 28, color: 'var(--categorical-4)' },
+      { name: 'Website', pct: 18, color: 'var(--warning)' },
+      { name: 'Others', pct: 12, color: 'var(--text-7)' }
+    ];
+
+    const tabActive = 'padding:7px 14px;border-radius:12px;font-size:12.5px;font-weight:700;cursor:pointer;background:var(--accent);color:var(--accent-on-fill);transition:background 0.15s ease,transform 0.1s ease';
+    const tabInactive = 'padding:7px 14px;border-radius:12px;font-size:12.5px;font-weight:600;cursor:pointer;background:transparent;color:var(--text-inactive);border:1px solid var(--border-default);transition:background 0.15s ease,color 0.15s ease,transform 0.1s ease';
+
+    const screenMeta = {
+      overview: ['Overview', "Profit, drivers, leaks and opportunities for Zyquora Store."],
+      ceo: ['CEO Hub', 'Ask a question, choose which specialists contribute, and see how the CEO Agent synthesizes one recommendation.'],
+      products: ['Products Intelligence', 'Which products make money, and which have room to improve.'],
+      competitors: ['Competitor Intelligence', 'Analyzes seller-provided competitor pricing to help you position with confidence.'],
+      agents: ['Agents Management', "Status, activity and performance for every agent on your account."],
+      finance: ['Finance', 'Profit, margin, expenses and cash — in one financial workspace.'],
+      marketing: ['Marketing', 'SEO listing titles, keywords and descriptions from the CMO Agent.'],
+      cart: ['Agent Cart', 'Unlock additional specialized agents for your workspace.'],
+      settings: ['Settings', 'Business details, marketplace integrations and notifications.'],
+      placeholder: [s.placeholderLabel, 'This workspace is coming up in a future pass.'],
+      notifications: ['Notifications', 'Alerts, agent recommendations and CEO decisions across your workspace.']
+    };
+    const meta = screenMeta[s.activeScreen] || screenMeta.overview;
+
+    const activeInv = s.investigations.find((i) => i.id === s.activeInvestigationId);
+    const activeChatMessages = activeInv ? activeInv.messages : [];
+    const activeInvestigationTitle = activeInv ? activeInv.title : 'New Investigation';
+    const investigationsView = s.investigations.map((inv) => {
+      const active = inv.id === s.activeInvestigationId;
+      return {
+        id: inv.id, title: inv.title, time: inv.time,
+        rowStyle: 'padding:9px 10px;border-radius:10px;cursor:pointer;transition:background 0.15s ease;background:' + (active ? 'var(--accent-fill-default)' : 'transparent') + ';border-left:2px solid ' + (active ? 'var(--accent)' : 'transparent'),
+        titleColor: active ? 'var(--text-bright)' : 'var(--text-4)'
+      };
+    });
+
+    const subAgentsBase = [
+      { id: 'product', name: 'Product Intelligence', specialty: 'Pricing & demand gaps', finding: 'Found underpriced SKU: Mini Blender', insightLabel: 'Product insights',
+        bullets: ['Underpriced SKU found: Portable Mini Blender (+₹1.82L/mo)', 'High demand, low competition on this SKU', '3 products under ₹500 clear target margin'] },
+      { id: 'competitor', name: 'Competitor Intelligence', specialty: 'Seller-provided pricing context', finding: 'Boat Lifestyle undercut 3 SKUs', insightLabel: 'Market insights',
+        bullets: ['Boat Lifestyle undercut price on 3 SKUs', '12 active offers tracked, ₹999–₹4,999 range', 'New entrant detected in budget segment'] },
+      { id: 'cfo', name: 'CFO Agent', specialty: 'Margins, fees & cash flow', finding: 'Amazon fees rose 8.4% this week', insightLabel: 'Finance insights',
+        bullets: ['Amazon referral fees rose 8.4% this week (-₹18,420/mo)', '6 SKUs account for 72% of the increase', 'Net profit up 15.3% this week'] },
+      { id: 'cmo', name: 'CMO', specialty: 'Listings & keyword optimization', finding: '3 listings ready for review', insightLabel: 'Marketing insights',
+        bullets: ['9 days of ROAS below 1.2x on Flipkart ads', '3 listings ready for review', 'Keyword gaps found across top SKUs'] }
+    ];
+    const subAgents = subAgentsBase.map((a) => {
+      const unlocked = !!s.unlockedAgents[a.id];
+      const attached = unlocked && s.attachedAgents[a.id] !== false;
+      const menuOpen = s.openMenu === a.id;
+      let dotColor, statusTextColor, statusLabel, border, bg, glow, textOpacity;
+      if (!unlocked) { dotColor = 'var(--warning)'; statusTextColor = 'var(--warning)'; statusLabel = 'Locked'; border = 'var(--border-subtle)'; bg = 'var(--bg-card-locked)'; glow = ''; textOpacity = 0.55; }
+      else if (attached) { dotColor = 'var(--accent)'; statusTextColor = 'var(--text-accent-muted)'; statusLabel = 'Connected'; border = 'var(--accent-border-default)'; bg = 'var(--bg-card)'; glow = ',0 0 16px var(--accent-fill-subtle)'; textOpacity = 1; }
+      else { dotColor = 'var(--text-7)'; statusTextColor = 'var(--text-inactive)'; statusLabel = 'Detached'; border = 'var(--border-default)'; bg = 'var(--bg-card)'; glow = ''; textOpacity = 0.5; }
+      return Object.assign({}, a, {
+        unlocked, attached, menuOpen, locked: !unlocked, notLocked: unlocked,
+        isProduct: a.id === 'product', isCompetitor: a.id === 'competitor', isCfo: a.id === 'cfo', isCmo: a.id === 'cmo',
+        statusColor: dotColor, statusTextColor, statusLabel,
+        nodeOpacity: textOpacity,
+        cardStyle: 'position:relative;padding:16px;border-radius:14px;background:' + bg + ';backdrop-filter:blur(30px) saturate(180%);-webkit-backdrop-filter:blur(30px) saturate(180%);box-shadow:inset 0 1px 0 var(--border-subtle)' + glow + ';border:1px solid ' + border + ';opacity:' + textOpacity + ';transition:opacity 0.2s ease,border-color 0.2s ease;display:flex;flex-direction:column',
+        iconBoxStyle: 'width:38px;height:38px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:' + (attached ? 'var(--accent-fill-default)' : 'var(--fill-hover)') + ';border:1px solid ' + (attached ? 'var(--accent-border-strong)' : 'var(--border-default)') + ';color:' + (attached ? 'var(--accent)' : (unlocked ? 'var(--text-inactive)' : 'var(--text-7)')),
+        dotStyle: 'width:7px;height:7px;border-radius:50%;flex-shrink:0;background:' + dotColor,
+        menuActionLabel: !unlocked ? 'Unlock this agent' : (attached ? 'Detach from this investigation' : 'Attach to this investigation')
+      });
+    });
+    const connectedCount = subAgents.filter((a) => a.attached).length;
+    const agentChipMeta = { product: 'Product Intelligence', competitor: 'Competitor Intelligence', cfo: 'CFO Agent', cmo: 'CMO' };
+    const agentChips = subAgents.map((a) => {
+      const locked = !a.unlocked;
+      const c = locked ? { border: 'var(--warning-border)', bg: 'var(--warning-fill)', color: 'var(--text-7)', dot: 'var(--text-7)' }
+        : a.attached ? { border: 'var(--accent-border-strong)', bg: 'var(--accent-fill-subtle)', color: 'var(--text-bright)', dot: 'var(--accent)' }
+        : { border: 'var(--border-default)', bg: 'transparent', color: 'var(--text-7)', dot: 'var(--text-7)' };
+      return {
+        id: a.id, name: agentChipMeta[a.id], locked, attached: a.attached,
+        chipStyle: 'display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:' + (locked ? 'default' : 'pointer') + ';transition:border-color 0.15s ease,background 0.15s ease;border:1px solid ' + c.border + ';background:' + c.bg + ';color:' + c.color,
+        dotStyle: 'width:6px;height:6px;border-radius:50%;flex-shrink:0;background:' + c.dot
+      };
+    });
+
+    const healthScore = { value: 82, label: 'Healthy', factors: [{ label: 'Profit trend', value: '+15.3%' }, { label: 'Margin stability', value: 'Stable' }, { label: 'Competitive risk', value: 'Low' }] };
+
+    const allAgentsBase = [
+      { id: 'ceo', name: 'CEO Agent', specialty: 'Final decision synthesis', lastRun: '2m ago', performance: 96, priceLabel: 'Free' },
+      { id: 'product', name: 'Product Intelligence', specialty: 'Pricing & demand gaps', lastRun: '10m ago', performance: 91, priceLabel: 'Free' },
+      { id: 'competitor', name: 'Competitor Intelligence', specialty: 'Seller-provided pricing context', lastRun: '25m ago', performance: 88, priceLabel: '₹999/mo' },
+      { id: 'cfo', name: 'CFO Agent', specialty: 'Margins, fees & cash flow', lastRun: '5m ago', performance: 94, priceLabel: '₹1,499/mo' },
+      { id: 'cmo', name: 'CMO', specialty: 'Listings & keyword optimization', lastRun: '2h ago', performance: 82, priceLabel: '₹799/mo' }
+    ];
+    const allAgents = allAgentsBase.map((a) => {
+      const unlocked = !!s.unlockedAgents[a.id];
+      const active = !!s.agentStatus[a.id];
+      const st = this.agentStatusStyle(active);
+      const inCart = s.cartItems.indexOf(a.id) >= 0;
+      return Object.assign({}, a, {
+        unlocked, locked: !unlocked,
+        statusLabel: unlocked ? st.label : 'Locked',
+        statusColor: unlocked ? st.c : 'var(--warning)',
+        statusBg: unlocked ? st.bg : 'var(--warning-border)',
+        toggleLabel: active ? 'Pause' : 'Connect',
+        toggleStyle: 'display:inline-block;padding:5px 12px;border-radius:9px;font-size:11.5px;font-weight:700;cursor:pointer;' + (active ? 'border:1px solid var(--border-hover);color:var(--text-4)' : 'background:var(--accent);color:var(--accent-on-fill)'),
+        purchasable: !unlocked && !inCart, inCart: !unlocked && inCart,
+        cartBorder: unlocked ? 'var(--accent-border-default)' : 'var(--border-default)',
+        priceColor: unlocked ? 'var(--text-accent-muted)' : 'var(--text-2)',
+        statusStyle: 'font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:8px;white-space:nowrap;background:' + (unlocked ? st.bg : 'var(--warning-border)') + ';color:' + (unlocked ? st.c : 'var(--warning)')
+      });
+    });
+
+    const cartAgentPrices = { competitor: 999, cfo: 1499, cmo: 799 };
+    const cartTotalNum = s.cartItems.reduce((sum, id) => sum + (cartAgentPrices[id] || 0), 0);
+
+    const marketingCards = products.slice(0, 3).map((p, i) => {
+      const approved = !!s.marketingApproved[i];
+      return {
+        product: p.name,
+        suggestedTitle: p.name + ' — Premium Quality, Fast Shipping, Best Value 2025',
+        keywords: ['best ' + p.name.toLowerCase(), p.name.toLowerCase() + ' india', 'buy ' + p.name.toLowerCase() + ' online'],
+        bullets: ['Highlights premium build quality and durability', 'Calls out fast dispatch and reliable delivery', 'Positions price as best value in category'],
+        statusLabel: approved ? 'Approved' : 'Needs review',
+        statusStyle: 'font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:8px;white-space:nowrap;' + (approved ? 'background:var(--accent-fill-default);color:var(--accent)' : 'background:var(--warning-border);color:var(--warning)')
+      };
+    });
+
+    const settingsTabActive = 'padding:7px 14px;border-radius:12px;font-size:12.5px;font-weight:700;cursor:pointer;background:var(--accent);color:var(--accent-on-fill);transition:background 0.15s ease';
+    const settingsTabInactive = 'padding:7px 14px;border-radius:12px;font-size:12.5px;font-weight:600;cursor:pointer;background:transparent;color:var(--text-inactive);border:1px solid var(--border-default);transition:background 0.15s ease,color 0.15s ease';
+    const settingsTabs = [{ id: 'business', label: 'Business Details' }, { id: 'marketplaces', label: 'Marketplace Integrations' }, { id: 'whatsapp', label: 'WhatsApp' }]
+      .map((t) => Object.assign({}, t, { style: s.settingsTab === t.id ? settingsTabActive : settingsTabInactive }));
+
+    const notifTypeMeta = {
+      whatsapp: { label: 'WhatsApp', bg: 'var(--border-subtle)', color: 'var(--text-4)' },
+      recommendation: { label: 'Agent recommendation', bg: 'var(--warning-border)', color: 'var(--warning)' },
+      decision: { label: 'CEO decision', bg: 'var(--accent-fill-default)', color: 'var(--accent)' },
+      system: { label: 'System', bg: 'var(--fill-hover)', color: 'var(--text-inactive)' }
+    };
+    const notificationsBase = [
+      { id: 'n1', type: 'decision', message: 'Pricing opportunity approved: Portable Mini Blender', time: '2h ago', impact: '+₹1.2L / mo potential', impactColor: 'var(--accent)', unread: true },
+      { id: 'n2', type: 'recommendation', message: 'CFO Agent flagged a rise in Amazon referral fees', time: '3h ago', impact: '-₹18,420 / mo', impactColor: 'var(--negative)', unread: true },
+      { id: 'n3', type: 'whatsapp', message: 'Daily profit summary sent to your WhatsApp', time: '5h ago', unread: false },
+      { id: 'n4', type: 'recommendation', message: 'Product Intelligence found an underpriced SKU: Portable Mini Blender', time: '1d ago', impact: '+₹1.82L / mo', impactColor: 'var(--accent)', unread: false },
+      { id: 'n5', type: 'decision', message: 'Approved marketing copy update for 3 listings', time: '1d ago', unread: false },
+      { id: 'n6', type: 'system', message: 'Weekly report generated for May 10 \u2013 16', time: '2d ago', unread: false },
+      { id: 'n7', type: 'whatsapp', message: 'Profit leak alert: return rate spike on SKU-2291', time: '2d ago', impact: '-₹9,150 / mo', impactColor: 'var(--negative)', unread: false },
+      { id: 'n8', type: 'recommendation', message: 'Competitor Intelligence: Boat Lifestyle undercut price on 3 SKUs', time: '3d ago', impact: 'Review', impactColor: 'var(--warning)', unread: false }
+    ];
+    const notifications = notificationsBase.map((n) => {
+      const unread = n.unread && !s.notificationsRead[n.id];
+      const tm = notifTypeMeta[n.type];
+      return Object.assign({}, n, {
+        unread,
+        typeLabel: tm.label,
+        typeStyle: 'font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:8px;white-space:nowrap;background:' + tm.bg + ';color:' + tm.color,
+        textColor: unread ? 'var(--text-1)' : 'var(--text-4)',
+        hasImpact: !!n.impact,
+        dotStyle: 'width:6px;height:6px;border-radius:50%;margin-top:6px;flex-shrink:0;background:' + (unread ? 'var(--accent)' : 'transparent'),
+        rowStyle: 'display:flex;padding:14px 0;border-bottom:1px solid var(--border-subtle);cursor:pointer;transition:background 0.15s ease;' + (unread ? 'border-left:2px solid var(--accent);padding-left:10px;margin-left:-12px' : 'border-left:2px solid transparent;padding-left:10px;margin-left:-12px')
+      });
+    });
+    const hasUnreadNotifications = notifications.some((n) => n.unread);
+    const notifFilterMap = { whatsapp: 'whatsapp', recommendations: 'recommendation', decisions: 'decision' };
+    const filteredNotifications = s.notifFilter === 'all' ? notifications : notifications.filter((n) => n.type === notifFilterMap[s.notifFilter]);
+    const notifTabs = [{ id: 'all', label: 'All' }, { id: 'whatsapp', label: 'WhatsApp' }, { id: 'recommendations', label: 'Recommendations' }, { id: 'decisions', label: 'Decisions' }]
+      .map((t) => Object.assign({}, t, { style: s.notifFilter === t.id ? settingsTabActive : settingsTabInactive }));
+
+    const mpMeta = [{ id: 'amazon', name: 'Amazon' }, { id: 'flipkart', name: 'Flipkart' }, { id: 'meesho', name: 'Meesho' }];
+    const marketplaceIntegrations = mpMeta.map((mp) => {
+      const connected = !!s.marketplaceStatus[mp.id];
+      return Object.assign({}, mp, {
+        status: connected ? 'Connected' : 'Not connected',
+        buttonLabel: connected ? 'Disconnect' : 'Connect',
+        buttonStyle: 'padding:7px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;' + (connected ? 'border:1px solid var(--border-hover);color:var(--text-4)' : 'background:var(--accent);color:var(--accent-on-fill)')
+      });
+    });
+
+    const whatsappPrefs = [{ id: 'daily', label: 'Daily profit summary' }, { id: 'alerts', label: 'Profit leak alerts' }, { id: 'weekly', label: 'Weekly report' }].map((p) => {
+      const on = !!s.whatsappPrefs[p.id];
+      return Object.assign({}, p, {
+        toggleStyle: 'width:34px;height:20px;border-radius:10px;cursor:pointer;padding:2px;transition:background 0.15s ease;' + (on ? 'background:var(--accent)' : 'background:var(--border-default)'),
+        knobStyle: 'width:16px;height:16px;border-radius:50%;background:var(--bg-base);transition:transform 0.15s ease;transform:translateX(' + (on ? '14px' : '0') + ')'
+      });
+    });
+
+    const agentActivity = [
+      { agent: 'Inventory', action: 'Flagged 3 SKUs at risk of stockout', time: '10m ago' },
+      { agent: 'Marketing', action: 'Flagged underperforming Flipkart campaign for review', time: '25m ago' },
+      { agent: 'Finance', action: 'Reconciled Amazon settlement for May 10–16', time: '45m ago' },
+      { agent: 'Product', action: 'Detected pricing gap on Portable Mini Blender', time: '1h ago' },
+      { agent: 'Competitor', action: 'New entrant detected in budget segment', time: '2h ago' }
+    ];
+
+    return {
+      sidebarStyle: 'width:' + (collapsed ? '76px' : '248px') + ';flex-shrink:0;display:flex;flex-direction:column;height:100vh;background:var(--bg-sidebar);backdrop-filter:blur(34px) saturate(195%);-webkit-backdrop-filter:blur(24px) saturate(160%);box-shadow:inset -1px 0 0 var(--fill-hover);border-right:1px solid var(--border-subtle);transition:width 0.15s ease',
+      navLabelStyle: collapsed ? 'display:none' : 'display:block',
+      groupLabelStyle: (collapsed ? 'display:none;' : 'display:block;') + 'font-size:10.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-group-label);padding:14px 10px 6px 10px',
+      soonStyle: (collapsed ? 'display:none;' : 'display:inline-block;') + 'font-size:9.5px;font-weight:700;letter-spacing:0.03em;color:var(--text-8);background:var(--border-subtle);padding:2px 6px;border-radius:4px',
+
+      navOverviewStyle: navStyle('overview'), navCeoStyle: navStyle('ceo'),
+      navAgentsStyle: navStyle('agents'), navCartStyle: navStyle('cart'), navProductsStyle: navStyle('products'), navCompetitorsStyle: navStyle('competitors'),
+      navOrdersStyle: navStyle('orders'), navCustomersStyle: navStyle('customers'), navFinanceStyle: navStyle('finance'),
+      navMarketingStyle: navStyle('marketing'), navReportsStyle: navStyle('reports'), navSettingsStyle: navStyle('settings'), navNotificationsStyle: navStyle('notifications'),
+
+      handlers: {
+        goOverview: () => this.go('overview'),
+        goAsk: () => {
+          const wasCeo = this.state.activeScreen === 'ceo';
+          this.go('ceo');
+          if (!wasCeo) { this.setState({ _measured: false }); setTimeout(() => this.measureOrchestrator(), 80); }
+          setTimeout(() => this.scrollToAsk(), wasCeo ? 0 : 100);
+        },
+        goCeo: () => { this.go('ceo'); this.setState({ _measured: false }); setTimeout(() => this.measureOrchestrator(), 80); },
+        goProducts: () => this.go('products'),
+        goCompetitors: () => this.go('competitors'),
+        goAgents: () => this.go('agents'),
+        goCart: () => this.go('cart'),
+        goOrders: () => this.goPlaceholder('Orders'),
+        goCustomers: () => this.goPlaceholder('Customers'),
+        goFinance: () => this.go('finance'),
+        goMarketing: () => this.go('marketing'),
+        goReports: () => this.goPlaceholder('Reports'),
+        goSettings: () => this.go('settings'),
+        goNotifications: () => this.go('notifications'),
+        setNotifFilter: (e) => this.setState({ notifFilter: e.currentTarget.getAttribute('data-filter') }),
+        markNotificationRead: (e) => { const id = e.currentTarget.getAttribute('data-notif-id'); this.setState({ notificationsRead: Object.assign({}, this.state.notificationsRead, { [id]: true }) }); },
+        setFilterAll: () => this.setState({ productFilter: 'all' }),
+        setFilterHigh: () => this.setState({ productFilter: 'high' }),
+        reviewSkus: () => this.reviewCta('Opening the 6 affected SKUs…'),
+        reviewPricing: () => this.reviewCta('Opening pricing review…'),
+        reviewCampaigns: () => this.reviewCta('Opening campaign review…'),
+        viewProduct: (e) => this.showToast('Opening details for ' + e.currentTarget.getAttribute('data-name') + '…'),
+        askQuestion: (e) => this.askQuestion(e.currentTarget.getAttribute('data-q')),
+        onAskInput: (e) => this.onAskInput(e),
+        toggleAttach: (e) => this.toggleAttach(e.currentTarget.getAttribute('data-agent-id')),
+        unlockFromChip: (e) => { e.preventDefault(); e.stopPropagation(); this.go('cart'); },
+        toggleMenu: (e) => { e.stopPropagation(); this.toggleMenu(e.currentTarget.getAttribute('data-agent-id')); },
+        menuAction: (e) => { e.stopPropagation(); this.menuAction(e.currentTarget.getAttribute('data-agent-id')); },
+        askDefault: () => this.askQuestion('__default__'),
+        newInvestigation: () => this.newInvestigation(),
+        selectInvestigation: (e) => this.selectInvestigation(e),
+        toggleAgent: (e) => this.toggleAgent(e.currentTarget.getAttribute('data-agent-id')),
+        addToCart: (e) => this.addToCart(e.currentTarget.getAttribute('data-agent-id')),
+        checkout: () => this.checkout(),
+        approveListing: (e) => { const idx = parseInt(e.currentTarget.getAttribute('data-idx'), 10); this.setState({ marketingApproved: Object.assign({}, this.state.marketingApproved, { [idx]: true }) }); this.showToast('Listing approved'); },
+        regenerateListing: (e) => { const idx = parseInt(e.currentTarget.getAttribute('data-idx'), 10); this.setState({ marketingApproved: Object.assign({}, this.state.marketingApproved, { [idx]: false }) }); this.showToast('Regenerating listing…'); },
+        setSettingsTab: (e) => this.setState({ settingsTab: e.currentTarget.getAttribute('data-tab') }),
+        toggleMarketplace: (e) => this.toggleMarketplace(e.currentTarget.getAttribute('data-mp')),
+        toggleWhatsapp: () => this.setState({ whatsappConnected: !this.state.whatsappConnected }),
+        toggleWhatsappPref: (e) => this.toggleWhatsappPref(e.currentTarget.getAttribute('data-pref'))
+      },
+
+      isOverview: s.activeScreen === 'overview',
+      isCeo: s.activeScreen === 'ceo',
+      isProducts: s.activeScreen === 'products',
+      isCompetitors: s.activeScreen === 'competitors',
+      isAgents: s.activeScreen === 'agents',
+      isFinance: s.activeScreen === 'finance',
+      isMarketing: s.activeScreen === 'marketing',
+      isCart: s.activeScreen === 'cart',
+      isSettings: s.activeScreen === 'settings',
+      isNotifications: s.activeScreen === 'notifications',
+      isPlaceholder: s.activeScreen === 'placeholder',
+      placeholderLabel: s.placeholderLabel,
+      pageTitle: meta[0], pageSubtitle: meta[1],
+
+      isThinking: s.askState === 'thinking',
+      reasoningSteps: s.reasoningSteps || [],
+      chatMessages: activeChatMessages,
+      hasNoMessages: !activeChatMessages.length,
+      investigations: investigationsView,
+      activeInvestigationTitle: activeInvestigationTitle,
+      agentChips: agentChips,
+      connectedCount: connectedCount,
+      connectedPlural: connectedCount === 1 ? '' : 's',
+      outputLine: s.measuredOutputLine || { path: '' },
+      orchestratorLines: (s.measuredLines || [
+        { path: 'M55,50 C55,95 200,95 320,118', dur: '2.6s', delay: '0s' },
+        { path: 'M220,50 C220,90 270,95 320,118', dur: '2.3s', delay: '0.5s' },
+        { path: 'M420,50 C420,90 370,95 320,118', dur: '2.3s', delay: '1s' },
+        { path: 'M585,50 C585,95 440,95 320,118', dur: '2.6s', delay: '1.5s' }
+      ]).map((ln, i) => Object.assign({}, ln, {
+        strokeColor: (subAgents[i] && subAgents[i].attached) ? 'var(--accent-border-strong)' : 'var(--connector-inactive)',
+        particleDisplay: (subAgents[i] && subAgents[i].attached) ? '' : 'display:none'
+      })),
+
+      whatMattersNow: {
+        headline: 'Profit is up 15.3% this week — but marketplace fees are quietly offsetting part of the gain.',
+        impact: '-₹18,420 / mo',
+        driver: 'Amazon referral fees rose 8.4%. 6 SKUs account for 72% of the increase.',
+        evidence: 'Review the 6 affected SKUs.',
+        cta: 'Review SKUs'
+      },
+
+      netProfit: { value: this.formatINR(s.netProfitAnim), change: '15.3%', note: 'vs last month' },
+      toast: s.toast,
+      hasToast: !!s.toast,
+      revenue: { value: '₹24,85,430', change: '18.6%', note: 'vs last 7 days' },
+      margin: { value: '28.4%', change: '+2.6 pts', note: 'vs last month' },
+      adSpend: { value: '₹3,12,000', change: '5.2%', note: 'vs last month' },
+      netProfitSpark: '0,30 24,25 48,28 72,16 96,20 120,4',
+      secondaryStats: [
+        { label: 'Orders', value: '1,248', change: '+12.4%' },
+        { label: 'Customers', value: '3,215', change: '+8.7%' },
+        { label: 'AOV', value: '₹1,992', change: '+15.3%' },
+        { label: 'Cash in Hand', value: '₹12.65L', change: '+3.1%' }
+      ],
+      profitLeaks: [
+        { title: 'Marketplace Fees', impact: '-₹18,420 / mo', driver: 'Amazon referral fees rose 8.4% this week.', evidence: '6 SKUs account for 72% of the increase.', cta: 'Review SKUs' },
+        { title: 'Return & Refund Costs', impact: '-₹9,150 / mo', driver: 'Return rate increased on Flipkart orders.', evidence: 'Packaging defects flagged on 3 SKUs.', cta: 'Review SKUs' }
+      ],
+      opportunities: [
+        { title: 'Price Optimization', impact: '+₹1.82L / mo', affected: 'Portable Mini Blender is priced below market.', evidence: 'High demand, low competition on this SKU.', cta: 'Review pricing' },
+        { title: 'Ad Spend Reallocation', impact: '+₹51,000 / mo', affected: '9 days of ROAS below 1.2x on Flipkart ads.', evidence: 'Budget could shift to higher-performing campaigns.', cta: 'Review campaigns' }
+      ],
+      xLabels: ['May 10', 'May 11', 'May 12', 'May 13', 'May 14', 'May 15', 'May 16'],
+      marketplaceDonut: this.buildConic(marketplaceShare),
+      marketplaceShare: marketplaceShare,
+      topProductsOverview: products.slice(0, 3),
+      profitDrivers: [
+        { label: 'Revenue growth across all channels', value: '+₹52,000', style: 'color:var(--accent)' },
+        { label: 'Amazon fee increase', value: '-₹18,420', style: 'color:var(--negative)' },
+        { label: 'Lower return rate on Website orders', value: '+₹9,800', style: 'color:var(--accent)' },
+        { label: 'Increased ad spend on Flipkart', value: '-₹4,200', style: 'color:var(--negative)' }
+      ],
+      netEffect: '+₹39,180',
+      nextDecision: {
+        headline: 'Review the 6 SKUs driving the marketplace-fee increase.',
+        impact: '₹18,420 / mo',
+        cta: 'Review SKUs'
+      },
+      agentActivity: agentActivity,
+
+      askSuggestions: ['Which channel is most profitable?', 'Should I lower price on SKU-8821?', 'Find profitable products under ₹500', 'How do I increase margin this month?'],
+      decisions: [
+        { title: 'Pricing opportunity ready for review: Portable Mini Blender', impact: '+₹1.2L / mo potential', time: '2h ago' },
+        { title: 'Product launch opportunity: Fitness Resistance Band Set', impact: '+₹6.1L / mo projected', time: '6h ago' },
+        { title: 'Ad spend reallocation opportunity: Flipkart campaign', impact: '+₹51,000 / mo potential', time: '1d ago' }
+      ],
+      agentNetwork: ['Product', 'Competitor', 'CFO', 'CMO', 'CEO'],
+
+      allCount: products.length, highCount: products.filter((p) => p.highPotential).length,
+      allTabStyle: s.productFilter === 'all' ? tabActive : tabInactive,
+      highTabStyle: s.productFilter === 'high' ? tabActive : tabInactive,
+      filteredProducts: filteredProducts,
+      topOpportunity: {
+        name: 'Fitness Resistance Band Set', potential: '₹6.1L / month', signal: 'High demand',
+        points: ['High search demand, low competitor saturation', 'Your margin (38%) already beats category average (24%)', 'Recommended: increase ad allocation by ₹15,000/month']
+      },
+
+      competitors: competitors,
+      marketInsights: [
+        { text: 'Average prices dropped 4.2% across top 5 competitors in the last 7 days.', time: '2h ago' },
+        { text: 'Demand for wireless audio accessories is up 16% this month.', time: '5h ago' },
+        { text: 'A new competitor entered the budget wireless segment.', time: '1d ago' },
+        { text: 'Boat Lifestyle launched 3 SKUs undercutting your price by 9%.', time: '1d ago' }
+      ],
+
+      intelligenceAreas: [
+        { name: 'Product', initial: 'P', desc: 'Pricing and demand gaps' },
+        { name: 'Competitor', initial: 'C', desc: 'Seller-provided pricing context' },
+        { name: 'Finance', initial: 'F', desc: 'Margins, fees and cash flow' },
+        { name: 'Marketing', initial: 'M', desc: 'Spend and campaign profitability' }
+      ],
+      financeStats: [
+        { label: 'Net Profit', value: '₹6,24,000', change: '↑ 15.3% vs last month', changeColor: 'var(--accent)' },
+        { label: 'Gross Margin', value: '28.4%', change: '↑ 2.6 pts vs last month', changeColor: 'var(--accent)' },
+        { label: 'Total Expenses', value: '₹18,61,430', change: '↑ 4.1% vs last month', changeColor: 'var(--negative)' },
+        { label: 'Cash in Hand', value: '₹12,65,000', change: '↑ 3.1% vs last month', changeColor: 'var(--accent)' }
+      ].map((fs, i) => Object.assign({}, fs, { revealStyle: '--rc:' + fs.changeColor + ';animation:mtReveal 0.6s cubic-bezier(0.16,1,0.3,1) ' + (i * 0.09) + 's both' })),
+      expenseDonut: this.buildConic([{ pct: 38, color: 'var(--accent)' }, { pct: 26, color: 'var(--categorical-4)' }, { pct: 22, color: 'var(--warning)' }, { pct: 14, color: 'var(--text-7)' }]),
+      expenseBreakdown: [
+        { name: 'Marketplace fees', pct: 38, color: 'var(--accent)' },
+        { name: 'Advertising', pct: 26, color: 'var(--categorical-4)' },
+        { name: 'Shipping & fulfillment', pct: 22, color: 'var(--warning)' },
+        { name: 'Other operating costs', pct: 14, color: 'var(--text-7)' }
+      ],
+      specializedInsights: [
+        { area: 'Finance', insight: 'Amazon referral fees rose 8.4% this week', impact: '-₹18,420/mo', impactColor: 'var(--negative)', evidence: '6 SKUs account for 72% of the increase.' },
+        { area: 'Product', insight: 'Portable Mini Blender is priced below market', impact: '+₹1.82L/mo', impactColor: 'var(--accent)', evidence: 'High demand, low competition on this SKU.' },
+        { area: 'Marketing', insight: '9 days of ROAS below 1.2x on Flipkart ads', impact: '+₹51,000/mo', impactColor: 'var(--accent)', evidence: 'Budget could shift to higher-performing campaigns.' },
+        { area: 'Competitor', insight: 'Boat Lifestyle undercut price on 3 SKUs', impact: 'Review', impactColor: 'var(--warning)', evidence: 'Based on seller-provided competitor data, refreshed weekly.' }
+      ],
+
+      subAgents: subAgents,
+      healthScore: healthScore,
+      allAgents: allAgents,
+      pricingRecs: [
+        { name: 'Portable Mini Blender', price: '₹1,349', batch: '250 units', supplier: 'Vertex Traders (4.8★)' },
+        { name: 'Fitness Resistance Band Set', price: '₹899', batch: '400 units', supplier: 'Nimbus Exports (4.7★)' },
+        { name: 'Digital Kitchen Scale', price: '₹549', batch: '300 units', supplier: 'Kalyan Industries (4.6★)' },
+        { name: 'Portable Wireless Speaker', price: '₹1,899', batch: '180 units', supplier: 'Orbit Manufacturing (4.5★)' }
+      ],
+      marketingCards: marketingCards,
+      settingsTabs: settingsTabs,
+      notifTabs: notifTabs,
+      filteredNotifications: filteredNotifications,
+      hasUnreadNotifications: hasUnreadNotifications,
+      isSettingsBusiness: s.settingsTab === 'business',
+      isSettingsMarketplaces: s.settingsTab === 'marketplaces',
+      isSettingsWhatsapp: s.settingsTab === 'whatsapp',
+      businessFields: [
+        { label: 'Business name', value: 'Zyquora Store' },
+        { label: 'Business type', value: 'Private Limited' },
+        { label: 'Currency', value: 'INR (₹)' },
+        { label: 'Timezone', value: 'Asia/Kolkata (GMT+5:30)' }
+      ],
+      marketplaceIntegrations: marketplaceIntegrations,
+      whatsapp: { status: s.whatsappConnected ? 'Connected · +91 98XXX XXXXX' : 'Not connected', buttonLabel: s.whatsappConnected ? 'Disconnect' : 'Connect', buttonStyle: 'padding:7px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;' + (s.whatsappConnected ? 'border:1px solid var(--border-hover);color:var(--text-4)' : 'background:var(--accent);color:var(--accent-on-fill)') },
+      whatsappPrefs: whatsappPrefs,
+      hasCartItems: s.cartItems.length > 0,
+      cartSummaryText: s.cartItems.length + ' agent' + (s.cartItems.length === 1 ? '' : 's') + ' selected',
+      cartTotal: '₹' + cartTotalNum.toLocaleString('en-IN') + '/mo'
+    };
+  }
+}
+
+</script>
+</body>
+</html>

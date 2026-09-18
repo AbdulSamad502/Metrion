@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+/* Metrion design tokens — docs/design/frontend-design/Metrion App.dc.html.
+   Authoritative visual reference for now (confirmed 2026-09-17). Kept as CSS custom
+   properties, not hardcoded into components, so a future rebrand only touches this file. */
+:root {
+  --bg-base: #0A0B0A;
+  --bg-panel: #0D0B08;
+  --bg-card: rgba(32, 36, 30, 0.30);
+  --bg-card-elevated: rgba(32, 36, 30, 0.40);
+  --bg-popover: #14150F;
+  --bg-input: rgba(18, 20, 17, 0.26);
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.11);
+  --border-hover: rgba(255, 255, 255, 0.14);
+  --fill-hover: rgba(255, 255, 255, 0.05);
+
+  --accent: #3ECF74;
+  --accent-hover: #5BDD8B;
+  --accent-on-fill: #062010;
+  --accent-border-subtle: rgba(62, 207, 116, 0.15);
+  --accent-border-default: rgba(62, 207, 116, 0.22);
+  --accent-border-strong: rgba(62, 207, 116, 0.35);
+  --accent-fill-subtle: rgba(62, 207, 116, 0.08);
+  --accent-fill-default: rgba(62, 207, 116, 0.12);
+
+  --warning: #E7AC42;
+  --warning-fill: rgba(231, 172, 66, 0.05);
+  --negative: #F16B61;
+
+  --text-1: #F7FAF6;
+  --text-2: #F2F4F0;
+  --text-3: #DADFD6;
+  --text-4: #C7CDC2;
+  --text-5: #8A9188;
+  --text-6: #7A8177;
+  --text-7: #6B7268;
+  --text-8: #5E655B;
+  --text-hero: #FAFCF8;
+  --text-tagline: var(--accent);
+
+  --background: var(--bg-base);
+  --foreground: var(--text-2);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Inter", var(--font-sans), sans-serif;
+}
