@@ -7,8 +7,8 @@ type NavItem = { label: string; href?: string; soon?: boolean };
 type NavGroup = { label: string; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
-  { label: "Profit Intelligence", items: [{ label: "Overview", href: "/dashboard" }, { label: "CEO Hub" }] },
-  { label: "Analysis", items: [{ label: "Products" }, { label: "Competitors" }] },
+  { label: "Profit Intelligence", items: [{ label: "Overview", href: "/dashboard" }, { label: "CEO Hub", href: "/dashboard/ceo-hub" }] },
+  { label: "Analysis", items: [{ label: "Products" }, { label: "Competitors", href: "/dashboard/ceo-hub" }] },
   {
     label: "Operations",
     items: [
@@ -39,7 +39,7 @@ export function Sidebar({
 }: {
   userName: string;
   roleLabel: string;
-  active: "Overview" | "Settings";
+  active: "Overview" | "Settings" | "CEO Hub";
 }) {
   const { signOut } = useClerk();
   const initials = userName

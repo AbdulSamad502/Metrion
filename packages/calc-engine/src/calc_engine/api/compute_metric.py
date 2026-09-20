@@ -11,14 +11,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import ROUND_HALF_UP, Decimal
+from fractions import Fraction
 from typing import Any, Sequence
 from uuid import UUID, uuid4
 
 from calc_engine.formulas.component_sum import BearerResolver
 from calc_engine.formulas.contribution_profit import contribution_profit
 from calc_engine.formulas.net_realized_revenue import net_realized_revenue
+from calc_engine.formulas.price_positioning import (
+    CompetitorPrice,
+    RepricingStance,
+    compute_position_gaps,
+    compute_repricing_scenario as _compute_repricing_scenario,
+)
 from calc_engine.types import (
     CanonicalLine,
+    Confidence,
     Paise,
     RecognitionState,
     Unavailable,
@@ -195,4 +204,134 @@ def compute_contribution_profit(
         computed_at=computed_at,
         is_available=True,
         manual_adjustment_set=manual_adjustment_set,
+    )
+
+
+def _format_pct(gap_pct: Fraction) -> str:
+    """Single presentation-time rounding of an otherwise-unrounded Fraction (§5.15 rule 5).
+    `metric_result` has no dedicated percentage column (it's a money-grained table), so this
+    is recorded in `calculation_basis` for audit/traceability rather than as a queryable
+    typed field — a real, acknowledged limitation, not an oversight. A future metric needing
+    a queryable percentage should add a proper column via its own migration rather than
+    reusing this text-encoding trick."""
+    decimal_value = Decimal(gap_pct.numerator) / Decimal(gap_pct.denominator)
+    return str(decimal_value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def compute_price_positioning(
+    *,
+    seller_price_paise: Paise | Unavailable,
+    seller_price_confidence: Confidence,
+    competitor_prices: Sequence[CompetitorPrice],
+    computed_at: datetime,
+    as_of_date: date | None = None,
+) -> list[MetricResult]:
+    """deterministic-engine.md §5.15. Returns one MetricResult per PositionGap reference
+    (AVERAGE, MIN, MAX) — rule 1 explicitly calls for "one or more metric_result rows", not a
+    single aggregate row. Reproducible for a fixed input tuple; NOT part of
+    canonical_data_version (rule 7) since competitor prices are not canonical seller data —
+    a fresh CI snapshot produces a new result, never a correction of the old one.
+    """
+    gaps = compute_position_gaps(seller_price_paise, seller_price_confidence, competitor_prices)
+
+    if isinstance(gaps, Unavailable):
+        return [
+            MetricResult(
+                id=uuid4(),
+                metric_code="PRICE_POSITIONING",
+                value_paise=None,
+                recognition_state=RecognitionState.UNAVAILABLE,
+                confidence="DERIVED",
+                calculation_basis="PricePositioning (§5.15) — UNAVAILABLE, see unavailable_reason",
+                formula_version="PRICE_POSITIONING.v1",
+                canonical_data_version="non-canonical",
+                as_of_date=as_of_date,
+                input_refs=(),
+                exclusions=(),
+                computed_at=computed_at,
+                is_available=False,
+                unavailable_reason=gaps.reason,
+            )
+        ]
+
+    results: list[MetricResult] = []
+    for gap in gaps:
+        results.append(
+            MetricResult(
+                id=uuid4(),
+                metric_code="PRICE_POSITIONING",
+                value_paise=gap.gap_paise.value,
+                recognition_state=RecognitionState.RECOGNISED,
+                confidence=gap.confidence.value,
+                calculation_basis=(
+                    f"PricePositioning vs {gap.reference.value} "
+                    f"(reference_price_paise={gap.reference_price_paise.value}, "
+                    f"gap_pct={_format_pct(gap.gap_pct)}%) — deterministic-engine.md §5.15"
+                ),
+                formula_version="PRICE_POSITIONING.v1",
+                canonical_data_version="non-canonical",
+                as_of_date=as_of_date,
+                input_refs=tuple(cp.source_ref for cp in competitor_prices),
+                exclusions=(),
+                computed_at=computed_at,
+                is_available=True,
+            )
+        )
+    return results
+
+
+def compute_repricing_scenario(
+    *,
+    seller_price_paise: Paise | Unavailable,
+    seller_price_confidence: Confidence,
+    competitor_prices: Sequence[CompetitorPrice],
+    stance: RepricingStance,
+    stance_param: Fraction | Paise | None,
+    computed_at: datetime,
+    as_of_date: date | None = None,
+) -> MetricResult:
+    """deterministic-engine.md §5.15. Explicitly not margin-aware (rule 2) — no COGS, no fee
+    reference, no profitability implication. A suggested price here may be unprofitable;
+    that's margin_curve's (§5.13.1) determination to make, never this function's.
+    """
+    result = _compute_repricing_scenario(
+        seller_price_paise, seller_price_confidence, competitor_prices, stance, stance_param
+    )
+
+    if isinstance(result, Unavailable):
+        return MetricResult(
+            id=uuid4(),
+            metric_code="REPRICING_SCENARIO",
+            value_paise=None,
+            recognition_state=RecognitionState.UNAVAILABLE,
+            confidence="DERIVED",
+            calculation_basis="RepricingScenario (§5.15) — UNAVAILABLE, see unavailable_reason",
+            formula_version="REPRICING_SCENARIO.v1",
+            canonical_data_version="non-canonical",
+            as_of_date=as_of_date,
+            input_refs=(),
+            exclusions=(),
+            computed_at=computed_at,
+            is_available=False,
+            unavailable_reason=result.reason,
+        )
+
+    return MetricResult(
+        id=uuid4(),
+        metric_code="REPRICING_SCENARIO",
+        value_paise=result.suggested_price_paise.value,
+        recognition_state=RecognitionState.RECOGNISED,
+        confidence=result.confidence.value,
+        calculation_basis=(
+            f"RepricingScenario stance={stance.value} "
+            f"(gap_paise={result.gap_paise.value}, gap_pct={_format_pct(result.gap_pct)}%) "
+            "— not margin-aware, no COGS/fees — deterministic-engine.md §5.15"
+        ),
+        formula_version="REPRICING_SCENARIO.v1",
+        canonical_data_version="non-canonical",
+        as_of_date=as_of_date,
+        input_refs=tuple(cp.source_ref for cp in competitor_prices),
+        exclusions=(),
+        computed_at=computed_at,
+        is_available=True,
     )

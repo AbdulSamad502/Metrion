@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.v1 import onboarding, ping, session
+from backend.api.v1 import ceo_hub, ci, onboarding, ping, session
 from backend.config import clerk_jwt_key, clerk_secret_key, clerk_webhook_secret, frontend_origin
 from backend.webhooks import clerk as clerk_webhooks
 
@@ -48,6 +48,8 @@ def create_app() -> FastAPI:
     app.include_router(onboarding.router)
     app.include_router(ping.router)
     app.include_router(clerk_webhooks.router)
+    app.include_router(ci.router)
+    app.include_router(ceo_hub.router)
 
     return app
 

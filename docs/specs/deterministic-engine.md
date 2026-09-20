@@ -503,8 +503,10 @@ Named here so no agent delegates to a capability this spec does not define.
 | `rank_findings(exception_ids[], as_of_date, severity_config_ref)` | ordered list + `metric_result` per finding — `FINDING_AGE_DAYS`, `FINDING_SEVERITY` | Deterministic ranking and severity (§5.14.1). Takes `as_of_date` per §4.2 |
 | `funding_readiness_metrics(period_range, as_of_date)` | `metric_result[]` — `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS` | Inputs to the funding-readiness report. Emits no score |
 | `resolve_fee_reference(marketplace, category, fee_type, as_of_date)` | `fee_reference` row or a declared gap | §5.14. A miss is reported, never defaulted to zero |
+| `compute_price_positioning(sku, seller_price_paise, competitor_prices[], as_of_date)` | `metric_result[]`, `metric_code = PRICE_POSITIONING` | §5.15. Pure price-fact comparison — no COGS, no fee resolution. Competitor prices enter `DERIVED` per the CI boundary |
+| `compute_repricing_scenario(sku, seller_price_paise, competitor_prices[], stance, stance_param, as_of_date)` | `metric_result[]`, `metric_code = REPRICING_SCENARIO` | §5.15. Pure price arithmetic — explicitly not margin-aware; distinct from `margin_curve` |
 
-`metric_code` is extended accordingly: `LANDED_COST_PER_UNIT`, `LEAK_TOTAL`, `LEAK_EXCEPTION_AMOUNT`, `MARGIN_AT_PRICE`, `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE`, `FINDING_AGE_DAYS`, `FINDING_SEVERITY`, `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS`.
+`metric_code` is extended accordingly: `LANDED_COST_PER_UNIT`, `LEAK_TOTAL`, `LEAK_EXCEPTION_AMOUNT`, `MARGIN_AT_PRICE`, `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE`, `FINDING_AGE_DAYS`, `FINDING_SEVERITY`, `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS`, `PRICE_POSITIONING`, `REPRICING_SCENARIO`.
 
 **Reconciliation exceptions produce `metric_result` rows** under `metric_code = LEAK_EXCEPTION_AMOUNT`, one per exception. Each amount is therefore citable by `engine_result_ref`, which is what makes `leak_finding.engine_result_ref` satisfiable.
 
@@ -607,6 +609,80 @@ principle `combine_confidence` already applies to confidence (data-foundation.md
 applied here to urgency instead of certainty. A finding with zero applicable metrics (no
 config row matches and no metric has data) reports `FINDING_SEVERITY = UNAVAILABLE`, never a
 default `LOW`.
+
+---
+
+### 5.15 Price positioning and repricing scenario (NEW — real, not deferred)
+
+Two small, purely arithmetic functions comparing a seller's own price against competitor
+prices supplied by CI. **Both persist through the existing generic `metric_result` table
+(§9) under a new `metric_code` each — neither requires a new table**, on the same footing as
+`margin_curve` or `cash_reconciliation` (§5.13.1).
+
+**Inputs, and why neither is inferred.** `seller_price_paise` is an **explicit input the
+caller supplies** — there is no live "current listed price" lookup anywhere in this engine or
+`packages/calc-engine` (verified by grep: no such function exists), so this is a fact handed
+in by the caller (typically CFO, sourced from the seller directly), never derived from
+historical sales data. `competitor_prices[]` is supplied by CI and **enters as `DERIVED`**,
+per the confidence-boundary rule CI's own spec now states at `competitor-intelligence-agent.md`
+§5.1/§5.2 ("a CI-sourced figure can never present as `VERIFIED` or `PROVISIONAL`; it always
+enters DOWNSTREAM calculations as `DERIVED`") — this engine treats an incoming competitor
+price exactly the way CI's spec says it must leave CI, and this document does not restate or
+loosen that rule.
+
+**Boundary against the estimated-margin-range feature.** Neither function performs, requires,
+or references any COGS or fee resolution, and **neither is the same feature as the deferred
+estimated-margin-range interface** (`competitor-intelligence-agent.md` C17, §5.2, §6.7 —
+implemented here at §5.13 `estimate_competitor_margin_range`). That feature answers "what is
+this competitor's margin, roughly" and requires the fee reference store (§5.14). These
+functions answer "what is the price gap, and what would a repriced number look like" and
+require neither COGS nor fees. A caller needing margin implications of a price move still
+calls `margin_curve` (§5.13.1) for the seller's own SKU; these functions never substitute for
+that and never claim to.
+
+```
+compute_price_positioning(
+  sku, seller_price_paise, seller_price_confidence,   -- caller-supplied fact; confidence per data-foundation §7.1
+  competitor_prices: [{ value_paise, confidence, source_ref }],   -- from CI; confidence always DERIVED at this boundary
+  as_of_date
+) -> metric_result[]   -- metric_code = PRICE_POSITIONING
+```
+
+| Rule | Requirement |
+|---|---|
+| 1 | Output is one or more `metric_result` rows: gap vs. **average**, vs. **min**, and vs. **max** of the supplied `competitor_prices[]`, each as both `gap_paise` (signed, seller minus competitor reference) and `gap_pct`. |
+| 2 | `UNAVAILABLE` — never a fabricated gap — when `competitor_prices[]` is empty, or when `seller_price_paise` is missing. A missing input is not zero (§4). |
+| 3 | Confidence follows the existing monotonic rule (data-foundation §7.1, `combine_confidence`): the result's confidence is the least certain of `seller_price_confidence` and every competitor price's confidence. Because a competitor price always arrives `DERIVED`, no `PRICE_POSITIONING` result can ever present as `VERIFIED` or `PROVISIONAL`. |
+| 4 | Requires **no COGS and no fee resolution** — purely a comparison of price facts. |
+| 5 | Integer paise throughout (§4); `gap_pct` computed from unrounded paise, rounded once at presentation (§5.11). |
+| 6 | `as_of_date` is stamped on the result per §4.2 — this is a point-in-time comparison, not a trend. |
+| 7 | Reproducible for a fixed `(seller_price_paise, competitor_prices[], as_of_date)` tuple — like §5.13's estimates, **not** part of `canonical_data_version`, since competitor prices are not canonical seller data. Re-running with a newer CI snapshot is a new result, not a correction of the old one. |
+
+```
+compute_repricing_scenario(
+  sku, seller_price_paise, seller_price_confidence,
+  competitor_prices: [{ value_paise, confidence, source_ref }],
+  stance,           -- MATCH_LOWEST | BEAT_LOWEST_BY_PCT | BEAT_LOWEST_BY_PAISE | MATCH_AVERAGE | MATCH_HIGHEST
+  stance_param,     -- required for BEAT_LOWEST_BY_PCT / BEAT_LOWEST_BY_PAISE; null otherwise
+  as_of_date
+) -> metric_result[]   -- metric_code = REPRICING_SCENARIO
+```
+
+| Rule | Requirement |
+|---|---|
+| 1 | Output is a single suggested `value_paise` per invocation — the price implied by `stance` against the supplied `competitor_prices[]` — plus the resulting `gap_paise`/`gap_pct` versus the current `seller_price_paise`, using the same arithmetic as `compute_price_positioning`. |
+| 2 | **Explicitly not margin-aware.** No COGS, no fee reference, no profit or contribution-margin implication is computed, checked, or implied by this function. A suggested price here may be unprofitable — that determination is `margin_curve`'s job (§5.13.1), not this one's, and this function never claims otherwise. |
+| 3 | `UNAVAILABLE` when `competitor_prices[]` is empty, or `stance` requires a `stance_param` that is missing. |
+| 4 | Confidence: same monotonic combination as rule 3 above — a suggested price computed from a `DERIVED` competitor input is itself never better than `DERIVED`. |
+| 5 | Integer paise throughout; rounding per §5.11. |
+| 6 | Reproducible for a fixed input tuple, on the same non-canonical footing as `compute_price_positioning` above. |
+
+**`metric_code` is extended accordingly:** `PRICE_POSITIONING`, `REPRICING_SCENARIO` — added to
+the list in §5.13.1. Both cite a standard `engine_result_ref` (`metric_result.id`, §9.1) like
+every other metric in this section; **neither is an estimate** in the §9.1 `estimate_ref`
+sense, because neither requires the fee reference store or any assumption-widening — they are
+exact arithmetic over whatever price facts were supplied, `UNAVAILABLE` when those facts are
+absent, never a range with named assumptions.
 
 ---
 

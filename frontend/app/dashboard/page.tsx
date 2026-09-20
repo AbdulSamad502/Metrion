@@ -1,8 +1,12 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Topbar } from "@/components/dashboard/Topbar";
 import { useAppSession } from "@/lib/useAppSession";
+import { ApiError, apiFetch, type AgentStatus, type CiSummary } from "@/lib/api";
 
 /** The post-auth landing screen (auth.md exit bar + the provided design reference).
  * Static for now, per scope: this proves a signed-in, onboarded user lands somewhere
@@ -32,10 +36,93 @@ export default function DashboardPage() {
       <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar title="Overview" subtitle="Profit, drivers, leaks and opportunities" />
         <div className="flex-1 overflow-y-auto px-8 py-7">
-          <OverviewContent />
+          <AgentStatusAndCiSummary />
+          <div className="mt-4">
+            <OverviewContent />
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/** Step 4 — minimal, functional Agent Status + CI activity summary for the main dashboard.
+ * Deliberately undecorated (no charts, no animation) per scope; navigation into the CEO
+ * Hub / CI research flow lives here rather than a separate standalone page. */
+function AgentStatusAndCiSummary() {
+  const { getToken } = useAuth();
+  const [agents, setAgents] = useState<AgentStatus[] | null>(null);
+  const [summary, setSummary] = useState<CiSummary | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await getToken();
+        const [a, s] = await Promise.all([
+          apiFetch<AgentStatus[]>("/api/v1/ceo-hub/agents", token),
+          apiFetch<CiSummary>("/api/v1/ci/summary", token),
+        ]);
+        setAgents(a);
+        setSummary(s);
+      } catch (e) {
+        setLoadError(e instanceof ApiError ? e.message : "Could not reach the backend");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <Card style={{ padding: "16px 20px" }}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--text-6)" }}>
+            Agents
+          </span>
+          {loadError ? (
+            <span className="text-[12.5px]" style={{ color: "var(--negative)" }}>{loadError}</span>
+          ) : !agents ? (
+            <span className="text-[12.5px]" style={{ color: "var(--text-6)" }}>Loading…</span>
+          ) : (
+            agents.map((a) => (
+              <span key={a.id} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px]" style={{ border: "1px solid var(--border-default)" }}>
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: a.status === "CONNECTED" ? "var(--accent)" : "var(--text-7)" }} />
+                <span style={{ color: "var(--text-3)" }}>{a.name}</span>
+              </span>
+            ))
+          )}
+        </div>
+        <Link href="/dashboard/ceo-hub" className="whitespace-nowrap text-[12.5px] font-bold" style={{ color: "var(--accent)" }}>
+          Open CEO Hub →
+        </Link>
+      </div>
+      {summary && (
+        <div className="mt-3 flex flex-wrap gap-5 text-[12.5px]" style={{ color: "var(--text-4)" }}>
+          <span>
+            <strong style={{ color: "var(--text-2)" }}>{summary.trackedCompetitors}</strong> competitors tracked
+          </span>
+          <span>
+            Last research:{" "}
+            <strong style={{ color: "var(--text-2)" }}>
+              {summary.lastResearchAt ? new Date(summary.lastResearchAt).toLocaleString() : "never"}
+            </strong>
+          </span>
+          <span>
+            <strong style={{ color: "var(--text-2)" }}>{summary.recentPriceEvents7d}</strong> price changes (7d)
+          </span>
+          {summary.pendingManualEntry > 0 && (
+            <span style={{ color: "var(--negative)" }}>
+              <strong>{summary.pendingManualEntry}</strong> competitor(s) need manual entry
+            </span>
+          )}
+          {summary.staleCompetitors > 0 && (
+            <span style={{ color: "var(--negative)" }}>
+              <strong>{summary.staleCompetitors}</strong> competitor(s) stale (&gt;7 days)
+            </span>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 

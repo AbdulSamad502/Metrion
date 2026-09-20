@@ -42,3 +42,11 @@ def clerk_jwt_key() -> str:
 @lru_cache
 def frontend_origin() -> str:
     return os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
+
+
+@lru_cache
+def ci_evidence_storage_dir() -> str:
+    """Local-disk storage for seller-uploaded evidence screenshots (Step 4, functional-only
+    — not a secret, so a default is fine here unlike everything else in this file). Real
+    object storage (S3-equivalent) is a later concern; this just needs to work for now."""
+    return os.environ.get("CI_EVIDENCE_DIR", "./data/ci-evidence")

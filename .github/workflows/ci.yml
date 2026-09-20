@@ -61,6 +61,9 @@ jobs:
       - name: Install data-foundation
         run: pip install -e "packages/data-foundation[dev]"
 
+      - name: Install competitor-intelligence
+        run: pip install -e "packages/competitor-intelligence[dev]"
+
       - name: calc-engine — no-float lint
         run: python packages/calc-engine/scripts/lint_no_float.py
 
@@ -81,10 +84,21 @@ jobs:
           python -m alembic downgrade base
           python -m alembic upgrade head
 
+      - name: competitor-intelligence — migrate (upgrade, downgrade, re-upgrade)
+        working-directory: packages/competitor-intelligence
+        run: |
+          python -m alembic upgrade head
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+
       - name: calc-engine — pytest (unit + integration)
         working-directory: packages/calc-engine
         run: python -m pytest tests/ -v
 
       - name: data-foundation — pytest (unit + integration)
         working-directory: packages/data-foundation
+        run: python -m pytest tests/ -v
+
+      - name: competitor-intelligence — pytest (unit + integration)
+        working-directory: packages/competitor-intelligence
         run: python -m pytest tests/ -v
