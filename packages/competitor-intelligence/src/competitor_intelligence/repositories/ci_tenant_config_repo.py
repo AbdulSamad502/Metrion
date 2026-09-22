@@ -9,6 +9,7 @@ from uuid import UUID
 
 from sqlalchemy import text
 
+from competitor_intelligence.discovery.budget import DiscoveryBudget
 from competitor_intelligence.repositories.tenant_context import tenant_scope
 
 # D2/C19 — the spec's own column defaults, used only when no row exists yet for this tenant.
@@ -17,6 +18,18 @@ DEFAULT_SNAPSHOT_RETENTION_DAYS = 90
 DEFAULT_ALERT_ON_AVAILABILITY_CHANGE = True
 DEFAULT_STALENESS_REMINDER_DAYS = 14
 DEFAULT_DIGEST_FREQUENCY = "WEEKLY"
+# §6.16.3 / deterministic-engine.md §5.15.1 rule 1 — the engine's own floor of 3 is enforced
+# in calc_engine.formulas.price_band, not here; this default only governs the no-row-yet case.
+DEFAULT_MIN_COMPETITORS_FOR_PRICE_BAND = 3
+
+
+def get_min_competitors_for_price_band(tenant_id: UUID) -> int:
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text("SELECT min_competitors_for_price_band FROM ci_tenant_config WHERE tenant_id = :tenant_id"),
+            {"tenant_id": str(tenant_id)},
+        ).first()
+        return row[0] if row else DEFAULT_MIN_COMPETITORS_FOR_PRICE_BAND
 
 
 def get_price_threshold_pct(tenant_id: UUID) -> Decimal:
@@ -65,3 +78,47 @@ def get_alert_on_availability_change(tenant_id: UUID) -> bool:
             {"tenant_id": str(tenant_id)},
         ).first()
         return row[0] if row else DEFAULT_ALERT_ON_AVAILABILITY_CHANGE
+
+
+def get_discovery_enabled(tenant_id: UUID) -> bool:
+    """§6.11 rule 1 / D11 — checked BEFORE any query is composed or sent, never as a
+    post-hoc filter on results (AC17)."""
+    from competitor_intelligence.discovery.budget import DEFAULT_DISCOVERY_ENABLED
+
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text("SELECT discovery_enabled FROM ci_tenant_config WHERE tenant_id = :tenant_id"),
+            {"tenant_id": str(tenant_id)},
+        ).first()
+        return row[0] if row else DEFAULT_DISCOVERY_ENABLED
+
+
+def get_discovery_budget(tenant_id: UUID) -> DiscoveryBudget:
+    """§6.12.1 — the seven locked budget knobs, per-tenant, defaulted per the spec's own
+    values (`discovery.budget`'s DEFAULT_* constants) when no `ci_tenant_config` row exists
+    yet for this tenant. Every discovery/cache/budget-enforcement call site takes the
+    resulting `DiscoveryBudget` value object; none hardcodes a limit."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT max_discovery_queries_per_run, max_raw_candidates,
+                       max_analyzed_candidates, max_recommended_candidates,
+                       max_followup_searches_per_candidate, discovery_run_timeout_seconds,
+                       search_cache_ttl_hours
+                FROM ci_tenant_config WHERE tenant_id = :tenant_id
+                """
+            ),
+            {"tenant_id": str(tenant_id)},
+        ).mappings().first()
+    if row is None:
+        return DiscoveryBudget()
+    return DiscoveryBudget(
+        max_discovery_queries_per_run=row["max_discovery_queries_per_run"],
+        max_raw_candidates=row["max_raw_candidates"],
+        max_analyzed_candidates=row["max_analyzed_candidates"],
+        max_recommended_candidates=row["max_recommended_candidates"],
+        max_followup_searches_per_candidate=row["max_followup_searches_per_candidate"],
+        discovery_run_timeout_seconds=row["discovery_run_timeout_seconds"],
+        search_cache_ttl_hours=row["search_cache_ttl_hours"],
+    )

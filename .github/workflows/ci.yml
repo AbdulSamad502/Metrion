@@ -102,3 +102,31 @@ jobs:
       - name: competitor-intelligence — pytest (unit + integration)
         working-directory: packages/competitor-intelligence
         run: python -m pytest tests/ -v
+
+      # backend depends on competitor-intelligence at import time (api/v1/ci.py,
+      # ceo_hub.py, agents/ceo_hub.py) but does not declare it in pyproject.toml — see the
+      # comment there for why a relative `file:` dependency doesn't work in this monorepo.
+      # competitor-intelligence is already installed above; this only adds backend itself.
+      - name: Install backend
+        run: pip install -e "backend[dev]"
+
+      - name: backend — migrate (upgrade, downgrade, re-upgrade)
+        working-directory: backend
+        run: |
+          python -m alembic upgrade head
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+
+      - name: backend — pytest (unit + integration)
+        working-directory: backend
+        env:
+          # No real Clerk project exists in CI — every backend test either stubs
+          # get_clerk_client() directly or never exercises a live Clerk call at all
+          # (resolve_auth_context() tests pass claims in directly). These three only need
+          # to be non-empty strings so backend.main.create_app() doesn't fail at import
+          # time (backend/config.py's _required() checks presence, not validity).
+          CLERK_SECRET_KEY: sk_test_ci_placeholder
+          CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
+          CLERK_JWT_KEY: "-----BEGIN PUBLIC KEY-----\nCIPLACEHOLDER\n-----END PUBLIC KEY-----"
+          FRONTEND_ORIGIN: http://localhost:3000
+        run: python -m pytest tests/ -v

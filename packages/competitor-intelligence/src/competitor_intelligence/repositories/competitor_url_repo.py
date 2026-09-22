@@ -30,8 +30,8 @@ def create_url(
 ) -> UUID:
     if not is_allowed_host(url):
         raise ValueError(
-            f"'{url}' is not on the trusted-domain allowlist (amazon.in, flipkart.com, "
-            "meesho.com) — refused (C4)."
+            f"'{url}' is not on the trusted-domain allowlist (amazon.in/amzn.in, "
+            "flipkart.com/fkrt.co, meesho.com) — refused (C4/D7)."
         )
     with tenant_scope(tenant_id) as conn:
         row = conn.execute(
@@ -77,6 +77,39 @@ def get_by_ids(tenant_id: UUID, url_ids: list[UUID]) -> list[dict[str, Any]]:
             {"tenant_id": str(tenant_id), "url_ids": [str(u) for u in url_ids]},
         ).mappings()
         return [dict(r) for r in rows]
+
+
+def list_active_by_linked_sku(tenant_id: UUID, linked_sku: str) -> list[dict[str, Any]]:
+    """Checkpoint 6 — every ACTIVE tracked competitor scoped to one seller product, the
+    grouping `landscape/price_band.py` and the comparison module need. Only returns rows
+    whose `linked_sku` was actually set at accept-time (discovery_run.py's
+    `accept_candidate`) or manual intake — a competitor_url with no linkage recorded is
+    correctly excluded here, never guessed into a product it wasn't tracked against."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT id, marketplace, url, label, linked_sku, status, tags
+                FROM competitor_url
+                WHERE tenant_id = :tenant_id AND linked_sku = :linked_sku AND status = 'ACTIVE'
+                """
+            ),
+            {"tenant_id": str(tenant_id), "linked_sku": linked_sku},
+        ).mappings()
+        return [dict(r) for r in rows]
+
+
+def count_active(tenant_id: UUID) -> int:
+    """Real, already-queryable per-tenant usage — the number an entitlement cap would
+    compare against once one is locked (auth.md: "entitlement spec (not yet written)").
+    This function makes no claim about what any cap should be."""
+    with tenant_scope(tenant_id) as conn:
+        return int(
+            conn.execute(
+                text("SELECT count(*) FROM competitor_url WHERE tenant_id = :tenant_id AND status = 'ACTIVE'"),
+                {"tenant_id": str(tenant_id)},
+            ).scalar_one()
+        )
 
 
 def set_tags(tenant_id: UUID, url_id: UUID, tags: list[str]) -> None:

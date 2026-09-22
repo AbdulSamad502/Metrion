@@ -6,3 +6,6 @@ __pycache__/
 .pytest_cache/
 .hypothesis/
 *.egg-info/
+
+# Local runtime data (uploaded evidence screenshots, etc.) — never committed
+backend/data/

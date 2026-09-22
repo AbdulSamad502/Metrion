@@ -77,13 +77,15 @@ def list_events(tenant_id: UUID, competitor_url_id: UUID, *, limit: int = 50) ->
 
 def list_recent_for_tenant(tenant_id: UUID, *, since: datetime) -> list[dict[str, Any]]:
     """Tenant-wide price events since a timestamp — the digest's raw input (deterministic
-    "what changed" aggregation, `digest/build_weekly_digest.py`)."""
+    "what changed" aggregation, `digest/build_weekly_digest.py`) and Layer 1 alerts'
+    (`alerts/layer1.py`, §6.17) raw input. Includes `from_snapshot_id`/`to_snapshot_id` so a
+    Layer 1 alert can cite the actual before/after price, not just the delta."""
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(
             text(
                 """
-                SELECT id, competitor_url_id, delta_paise, delta_pct, direction, availability_change,
-                       threshold_breached, alert_eligible, created_at
+                SELECT id, competitor_url_id, from_snapshot_id, to_snapshot_id, delta_paise, delta_pct,
+                       direction, availability_change, threshold_breached, alert_eligible, created_at
                 FROM competitor_price_event
                 WHERE tenant_id = :tenant_id AND created_at >= :since
                 ORDER BY created_at DESC

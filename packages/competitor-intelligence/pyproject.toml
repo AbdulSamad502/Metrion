@@ -8,6 +8,14 @@ dependencies = [
     "alembic>=1.13",
     "psycopg[binary]>=3.1",
     "httpx>=0.27",
+    # NOTE: `data-foundation` (packages/data-foundation) is a real runtime dependency —
+    # `seller_product/derive.py` imports `data_foundation.repositories.tenant_context`
+    # directly to read `sales_line` (competitor-intelligence-agent.md §5.5.1) — but it is
+    # deliberately NOT listed here, for the same reason backend/pyproject.toml documents for
+    # not listing `competitor-intelligence`: a relative `file:` specifier resolves against
+    # the *installer's* cwd, not this file's directory, and this monorepo has no
+    # workspace-aware build tool yet. See `.github/workflows/ci.yml` (installs data-foundation
+    # before competitor-intelligence) and `backend/README.md`'s install order.
 ]
 
 [project.optional-dependencies]

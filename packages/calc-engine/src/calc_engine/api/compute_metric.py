@@ -19,6 +19,10 @@ from uuid import UUID, uuid4
 from calc_engine.formulas.component_sum import BearerResolver
 from calc_engine.formulas.contribution_profit import contribution_profit
 from calc_engine.formulas.net_realized_revenue import net_realized_revenue
+from calc_engine.formulas.price_band import (
+    ENGINE_MIN_COMPETITORS_FOR_PRICE_BAND,
+    compute_price_band as _compute_price_band,
+)
 from calc_engine.formulas.price_positioning import (
     CompetitorPrice,
     RepricingStance,
@@ -335,3 +339,101 @@ def compute_repricing_scenario(
         computed_at=computed_at,
         is_available=True,
     )
+
+
+def compute_price_band(
+    *,
+    product_ref: str,
+    category: str | None,
+    competitor_prices: Sequence[CompetitorPrice],
+    computed_at: datetime,
+    min_competitors: int = ENGINE_MIN_COMPETITORS_FOR_PRICE_BAND,
+    as_of_date: date | None = None,
+) -> list[MetricResult]:
+    """deterministic-engine.md §5.15.1. Returns one MetricResult per rule-7 output row
+    (Q1/Q3/IQR/fences/typical range, plus one per supplied price carrying its outlier flag)
+    — never a single aggregate row. `product_ref`/`category` are scoping context recorded in
+    `calculation_basis`; they never touch the arithmetic (see price_band.py's own docstring).
+    Reproducible for a fixed input tuple; NOT part of canonical_data_version (rule 11) —
+    identical reasoning to compute_price_positioning/compute_repricing_scenario.
+    """
+    scope = f"product_ref={product_ref}, category={category or 'UNKNOWN'}"
+    band = _compute_price_band(competitor_prices, min_competitors=min_competitors)
+
+    if isinstance(band, Unavailable):
+        return [
+            MetricResult(
+                id=uuid4(),
+                metric_code="PRICE_BAND",
+                value_paise=None,
+                recognition_state=RecognitionState.UNAVAILABLE,
+                confidence="DERIVED",
+                calculation_basis=f"PriceBand ({scope}) — UNAVAILABLE, see unavailable_reason — deterministic-engine.md §5.15.1",
+                formula_version="PRICE_BAND.v1",
+                canonical_data_version="non-canonical",
+                as_of_date=as_of_date,
+                input_refs=(),
+                exclusions=(),
+                computed_at=computed_at,
+                is_available=False,
+                unavailable_reason=band.reason,
+            )
+        ]
+
+    input_refs = tuple(cp.source_ref for cp in competitor_prices)
+    results: list[MetricResult] = []
+
+    def _row(label: str, value: "Paise") -> None:
+        results.append(
+            MetricResult(
+                id=uuid4(),
+                metric_code="PRICE_BAND",
+                value_paise=value.value,
+                recognition_state=RecognitionState.RECOGNISED,
+                confidence=band.confidence.value,
+                calculation_basis=f"PriceBand {label} ({scope}) — deterministic-engine.md §5.15.1",
+                formula_version="PRICE_BAND.v1",
+                canonical_data_version="non-canonical",
+                as_of_date=as_of_date,
+                input_refs=input_refs,
+                exclusions=(),
+                computed_at=computed_at,
+                is_available=True,
+            )
+        )
+
+    _row("Q1", band.q1_paise)
+    _row("Q3", band.q3_paise)
+    _row("IQR", band.iqr_paise)
+    _row("LOWER_FENCE", band.lower_fence_paise)
+    _row("UPPER_FENCE", band.upper_fence_paise)
+    # Rule 7: TYPICAL_LOW/HIGH are absent, not fabricated, in the extreme edge case where
+    # every supplied price was an outlier (see price_band.py's PriceBand docstring).
+    if band.typical_low_paise is not None:
+        _row("TYPICAL_LOW", band.typical_low_paise)
+    if band.typical_high_paise is not None:
+        _row("TYPICAL_HIGH", band.typical_high_paise)
+
+    for point in band.points:
+        results.append(
+            MetricResult(
+                id=uuid4(),
+                metric_code="PRICE_BAND",
+                value_paise=point.price.value_paise.value,
+                recognition_state=RecognitionState.RECOGNISED,
+                confidence=point.price.confidence.value,
+                calculation_basis=(
+                    f"PriceBand PRICE_POINT ({scope}, source_ref={point.price.source_ref}, "
+                    f"is_outlier={point.is_outlier}) — deterministic-engine.md §5.15.1"
+                ),
+                formula_version="PRICE_BAND.v1",
+                canonical_data_version="non-canonical",
+                as_of_date=as_of_date,
+                input_refs=(point.price.source_ref,),
+                exclusions=(),
+                computed_at=computed_at,
+                is_available=True,
+            )
+        )
+
+    return results

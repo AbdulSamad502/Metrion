@@ -22,9 +22,20 @@ chain from §7.1), the business-name onboarding endpoint (§6.2), Clerk webhook 
 ```bash
 cp .env.example .env   # fill in CLERK_SECRET_KEY (copy from frontend/.env.local),
                         # CLERK_WEBHOOK_SECRET, FRONTEND_ORIGIN
+pip install -e ../packages/competitor-intelligence   # required — see note below
 pip install -e .[dev]
 uvicorn backend.main:app --reload --app-dir src --port 8000
 ```
+
+**Why the extra install line:** `backend` imports `competitor_intelligence` directly
+(`api/v1/ci.py`, `api/v1/ceo_hub.py`, `agents/ceo_hub.py`) but does not declare it in
+`pyproject.toml` — a relative `file:` dependency specifier was tried and reverted because
+pip resolves it against the *current working directory at install time*, not against this
+file's own directory, making it silently break depending on where `pip install` is run from
+(see the comment in `pyproject.toml`). Until this monorepo adopts a workspace-aware tool
+(uv/hatch workspaces), install `competitor-intelligence` explicitly first, exactly as
+`.github/workflows/ci.yml` already does for calc-engine/data-foundation/competitor-intelligence
+relative to each other.
 
 ### Webhook (local dev)
 

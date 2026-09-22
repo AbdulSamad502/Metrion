@@ -50,3 +50,27 @@ def ci_evidence_storage_dir() -> str:
     — not a secret, so a default is fine here unlike everything else in this file). Real
     object storage (S3-equivalent) is a later concern; this just needs to work for now."""
     return os.environ.get("CI_EVIDENCE_DIR", "./data/ci-evidence")
+
+
+@lru_cache
+def ollama_host() -> str:
+    """C15 (local-only derivation): always a local address, never a hosted provider — not a
+    secret, so a default is fine. `OLLAMA_HOST` overrides for a non-default local port."""
+    return os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+
+
+@lru_cache
+def ci_vision_model() -> str:
+    """The Ollama model used for listing-screenshot field extraction (`evidence/
+    vision_extractor.py`). No model choice is locked by the spec (§1a item 4 / Q7 remains
+    open) — this is a configurable default, not a spec decision, so an operator can swap
+    models without a code change."""
+    return os.environ.get("CI_VISION_MODEL", "llava")
+
+
+@lru_cache
+def ci_review_vision_model() -> str:
+    """The Ollama model used for reviews-tab screenshot classification (`review_insight/
+    ollama_extractor.py`). Defaults to the same model as listing extraction — both are
+    vision-classification tasks; an operator may point them at different models via env."""
+    return os.environ.get("CI_REVIEW_VISION_MODEL", ci_vision_model())

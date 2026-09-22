@@ -77,7 +77,7 @@ def get_by_id(tenant_id: UUID, snapshot_id: UUID) -> dict[str, Any] | None:
                 """
                 SELECT id, competitor_url_id, ci_capture_run_id, research_session_id, source_url,
                        variant_key, captured_at, capture_status, listed_price_paise,
-                       visible_discount_paise, availability
+                       visible_discount_paise, availability, rating, rating_count
                 FROM competitor_snapshot
                 WHERE tenant_id = :tenant_id AND id = :id
                 """
@@ -151,6 +151,35 @@ def list_snapshots(tenant_id: UUID, competitor_url_id: UUID, *, limit: int = 50)
             {"tenant_id": str(tenant_id), "competitor_url_id": str(competitor_url_id), "limit": limit},
         ).mappings()
         return [dict(r) for r in rows]
+
+
+def latest_usable_snapshot(tenant_id: UUID, competitor_url_id: UUID) -> dict[str, Any] | None:
+    """Checkpoint 6 — the first COMPLETE/PARTIAL snapshot (newest first) that carries a
+    resolved `listed_price_paise`, for one competitor. Mirrors the same skip-
+    PENDING_MANUAL_ENTRY, never-fabricate-a-price rule `backend/api/v1/ci.py`'s price-scenario
+    endpoint already applies (Checkpoint 1) — factored into this package so
+    `landscape/price_band.py` and `landscape/comparison.py` share one implementation instead
+    of each re-deriving it. Includes rating/availability/observed_category/title/description/
+    bullets for comparison's use, not just price."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT id, captured_at, capture_status, confidence, title, description, bullets,
+                       observed_category, listed_price_paise, visible_discount_paise, rating,
+                       rating_count, availability, variant_key, source_url
+                FROM competitor_snapshot
+                WHERE tenant_id = :tenant_id AND competitor_url_id = :competitor_url_id
+                ORDER BY captured_at DESC
+                LIMIT 20
+                """
+            ),
+            {"tenant_id": str(tenant_id), "competitor_url_id": str(competitor_url_id)},
+        ).mappings().all()
+    for row in rows:
+        if row["capture_status"] in ("COMPLETE", "PARTIAL") and row["listed_price_paise"] is not None:
+            return dict(row)
+    return None
 
 
 def latest_comparable_snapshot(

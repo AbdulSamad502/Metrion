@@ -18,11 +18,13 @@ from competitor_intelligence.delta.compute import compute_price_delta, should_em
 from competitor_intelligence.evidence.extraction import ExtractionFailed, ExtractionResult, VisionExtractor
 from competitor_intelligence.evidence.merge import MergedField, apply_manual_entries, merge_extractions
 from competitor_intelligence.evidence.snapshot import SnapshotDraft, build_snapshot_draft
+from competitor_intelligence.listing_insight.derive import derive_listing_insight
 from competitor_intelligence.repositories import (
     agent_run_repo,
     ci_capture_run_repo,
     ci_tenant_config_repo,
     competitor_evidence_repo,
+    competitor_listing_insight_repo,
     competitor_price_event_repo,
     competitor_snapshot_field_repo,
     competitor_snapshot_repo,
@@ -153,6 +155,7 @@ def submit_research_session(
         tenant_id, competitor_url_id=competitor_url_id, ci_capture_run_id=ci_run_id, draft=draft
     )
     competitor_snapshot_field_repo.replace_fields(tenant_id, snapshot_id, merged)
+    _derive_and_persist_listing_insight(tenant_id, snapshot_id=snapshot_id, draft=draft)
 
     price_event_id = _detect_and_record_price_change(
         tenant_id,
@@ -246,6 +249,34 @@ def _detect_and_record_price_change(
         to_snapshot_id=current_snapshot_id,
         ci_capture_run_id=ci_run_id,
         delta=delta,
+    )
+
+
+def _derive_and_persist_listing_insight(tenant_id: UUID, *, snapshot_id: UUID, draft: SnapshotDraft) -> None:
+    """§6.6 — only attempted when this research session actually submitted listing-copy
+    evidence (C16 carve-out); a price/availability-only submission has nothing to derive
+    and produces no `competitor_listing_insight` row at all (not an UNAVAILABLE one — there
+    was no attempt, which is a different thing from an attempt that found nothing)."""
+    if draft.title is None and draft.description is None and draft.bullets is None:
+        return
+
+    other_theme_sets: list[frozenset[str]] = []
+    if draft.observed_category:
+        rows = competitor_snapshot_repo.get_by_id(tenant_id, snapshot_id)
+        competitor_url_id = rows["competitor_url_id"] if rows else None
+        if competitor_url_id is not None:
+            other_theme_sets = competitor_listing_insight_repo.keyword_themes_for_category(
+                tenant_id, observed_category=draft.observed_category, exclude_competitor_url_id=competitor_url_id
+            )
+
+    insight_draft = derive_listing_insight(
+        title=draft.title,
+        description=draft.description,
+        bullets=draft.bullets,
+        other_competitor_theme_sets=other_theme_sets,
+    )
+    competitor_listing_insight_repo.insert_insight(
+        tenant_id, snapshot_id=snapshot_id, source_url=draft.source_url, fetched_at=draft.captured_at, draft=insight_draft
     )
 
 

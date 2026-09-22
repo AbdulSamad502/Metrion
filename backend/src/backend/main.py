@@ -28,7 +28,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=[frontend_origin()],
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "svix-id", "svix-timestamp", "svix-signature"],
     )
 

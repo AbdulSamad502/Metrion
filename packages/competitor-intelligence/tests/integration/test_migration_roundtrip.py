@@ -31,6 +31,11 @@ _CI_TABLE_NAMES = (
     "competitor_listing_insight",
     "ci_tenant_config",
     "competitor_price_event",
+    "ci_search_query",
+    "ci_search_result",
+    "ci_discovery_run",
+    "ci_candidate",
+    "ci_candidate_relevance",
 )
 
 

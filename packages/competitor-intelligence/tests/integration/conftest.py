@@ -29,6 +29,11 @@ pytestmark = pytest.mark.skipif(
 # anything, since every test uses a fresh random tenant_id (two_tenants) and asserts only
 # against rows it reads back by their own returned id.
 _CI_TABLES: tuple[str, ...] = (
+    "ci_candidate_relevance",
+    "ci_candidate",
+    "ci_discovery_run",
+    "ci_search_result",
+    "ci_search_query",
     "competitor_snapshot_field",
     "competitor_price_event",
     "ci_digest_subscription",
@@ -39,6 +44,7 @@ _CI_TABLES: tuple[str, ...] = (
     "competitor_snapshot",
     "ci_capture_run",
     "competitor_url",
+    "seller_product_profile",
 )
 
 

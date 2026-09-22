@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from competitor_intelligence.repositories import competitor_price_event_repo, competitor_url_repo
@@ -38,7 +39,7 @@ def build_digest(tenant_id: UUID, *, since: datetime, until: datetime) -> Digest
     events = competitor_price_event_repo.list_recent_for_tenant(tenant_id, since=since)
     events = [e for e in events if e["created_at"] <= until]
 
-    by_url: dict[UUID, list[dict]] = {}
+    by_url: dict[UUID, list[dict[str, Any]]] = {}
     for event in events:
         by_url.setdefault(event["competitor_url_id"], []).append(event)
 

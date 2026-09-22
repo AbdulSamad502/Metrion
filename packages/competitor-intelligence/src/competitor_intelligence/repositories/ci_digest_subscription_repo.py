@@ -7,7 +7,7 @@ persists the preference.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -42,7 +42,7 @@ def upsert_subscription(
                 "enabled": enabled,
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def get_subscription(tenant_id: UUID, member_id: UUID) -> dict[str, Any] | None:

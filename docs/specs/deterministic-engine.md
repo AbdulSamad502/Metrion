@@ -505,8 +505,9 @@ Named here so no agent delegates to a capability this spec does not define.
 | `resolve_fee_reference(marketplace, category, fee_type, as_of_date)` | `fee_reference` row or a declared gap | §5.14. A miss is reported, never defaulted to zero |
 | `compute_price_positioning(sku, seller_price_paise, competitor_prices[], as_of_date)` | `metric_result[]`, `metric_code = PRICE_POSITIONING` | §5.15. Pure price-fact comparison — no COGS, no fee resolution. Competitor prices enter `DERIVED` per the CI boundary |
 | `compute_repricing_scenario(sku, seller_price_paise, competitor_prices[], stance, stance_param, as_of_date)` | `metric_result[]`, `metric_code = REPRICING_SCENARIO` | §5.15. Pure price arithmetic — explicitly not margin-aware; distinct from `margin_curve` |
+| `compute_price_band(product_ref, category, competitor_prices[], as_of_date)` | `metric_result[]`, `metric_code = PRICE_BAND` | §5.15.1. Quartile/IQR distribution over CI-supplied competitor prices. Requires **at least 3** prices, else `UNAVAILABLE` with a named reason. Competitor prices enter `DERIVED` per the CI boundary |
 
-`metric_code` is extended accordingly: `LANDED_COST_PER_UNIT`, `LEAK_TOTAL`, `LEAK_EXCEPTION_AMOUNT`, `MARGIN_AT_PRICE`, `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE`, `FINDING_AGE_DAYS`, `FINDING_SEVERITY`, `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS`, `PRICE_POSITIONING`, `REPRICING_SCENARIO`.
+`metric_code` is extended accordingly: `LANDED_COST_PER_UNIT`, `LEAK_TOTAL`, `LEAK_EXCEPTION_AMOUNT`, `MARGIN_AT_PRICE`, `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE`, `FINDING_AGE_DAYS`, `FINDING_SEVERITY`, `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS`, `PRICE_POSITIONING`, `REPRICING_SCENARIO`, `PRICE_BAND`.
 
 **Reconciliation exceptions produce `metric_result` rows** under `metric_code = LEAK_EXCEPTION_AMOUNT`, one per exception. Each amount is therefore citable by `engine_result_ref`, which is what makes `leak_finding.engine_result_ref` satisfiable.
 
@@ -683,6 +684,51 @@ every other metric in this section; **neither is an estimate** in the §9.1 `est
 sense, because neither requires the fee reference store or any assumption-widening — they are
 exact arithmetic over whatever price facts were supplied, `UNAVAILABLE` when those facts are
 absent, never a range with named assumptions.
+
+### 5.15.1 Price band and outliers — `compute_price_band` (NEW — the approved amendment resolving `competitor-intelligence-agent.md` D10/Q14, both now closed there)
+
+A third function on the same footing as §5.15's two: the **percentile distribution of a set of
+competitor prices for one seller product or category**, with quartile fences and outlier flags.
+
+**Why it lives here and not in CI — LOCKED (2026-09-21).** The formula is not margin-aware, but
+every operand is a signed-`BIGINT` paise money value, and the project's hard rule puts all money
+arithmetic in this engine. `competitor-intelligence-agent.md` §6.16.3 records the *formula's
+product intent* (when a band may be shown, how outliers are rendered) and **contains no
+implementation of the arithmetic**; this section is the authority for the arithmetic itself. CI's
+role is exactly the role it already plays for `compute_price_positioning` and
+`compute_repricing_scenario`: **supply the tenant's tracked competitor prices as `DERIVED` inputs
+and render the returned `metric_result` rows unchanged, citing the returned `engine_result_ref`.**
+CI never computes a quartile, an IQR, a fence or an outlier flag.
+
+```
+compute_price_band(
+  product_ref,      -- the seller's product/category identifier the band is being computed for
+                    -- (CI passes SellerProduct.product_id, competitor-intelligence-agent.md §5.5)
+  category,         -- the category the band is scoped to; may be UNKNOWN, in which case the band
+                    -- is scoped to product_ref alone and the result states that scope
+  competitor_prices: [{ value_paise, confidence, source_ref }],   -- from CI; always DERIVED at this boundary
+  as_of_date
+) -> metric_result[]   -- metric_code = PRICE_BAND
+```
+
+| Rule | Requirement |
+|---|---|
+| 1 | **Minimum 3 competitor prices.** With fewer than 3 supplied prices the function returns `UNAVAILABLE` with an explicit reason (`INSUFFICIENT_COMPETITOR_PRICES`, naming the count supplied and the minimum required) — **never a band computed from 1 or 2 points**. This is the engine-side counterpart of CI's "raw comparison only, no band" language (`competitor-intelligence-agent.md` §6.16.3, E28). The minimum is a caller-supplied configuration value (CI passes `ci_tenant_config.min_competitors_for_price_band`) with an engine floor of 3 that configuration may raise but never lower. |
+| 2 | **Percentile method — locked:** linear interpolation between closest ranks, i.e. the method used by NumPy's default `percentile` and by SQL `PERCENTILE_CONT`. Chosen for cross-language/cross-database identity of results; no other percentile convention (nearest-rank, exclusive, Tukey hinges) is permitted. |
+| 3 | **Quartiles:** `Q1` = 25th percentile and `Q3` = 75th percentile of the supplied prices under rule 2. |
+| 4 | **IQR:** `IQR = Q3 − Q1`. **Fences:** `lower_fence = Q1 − 1.5 × IQR`, `upper_fence = Q3 + 1.5 × IQR`. |
+| 5 | **Outlier rule:** a price is an outlier when `price < lower_fence` **or** `price > upper_fence`. |
+| 6 | **Outliers participate in the quartile calculation.** `Q1`/`Q3`/`IQR`/fences are computed from the **full** supplied set, never from a pre-filtered one. Outliers are excluded **only** from the "typical range" headline figures (rule 7's `PRICE_BAND_TYPICAL_LOW`/`_HIGH`) and are still returned, flagged, in the full distribution so the caller can display them. The engine never silently drops a supplied price. |
+| 7 | **Output** is one or more `metric_result` rows under `metric_code = PRICE_BAND`: `PRICE_BAND_Q1`, `PRICE_BAND_Q3`, `PRICE_BAND_IQR`, `PRICE_BAND_LOWER_FENCE`, `PRICE_BAND_UPPER_FENCE`, `PRICE_BAND_TYPICAL_LOW` and `PRICE_BAND_TYPICAL_HIGH` (min/max of the non-outlier prices), plus one row per supplied price carrying its `is_outlier` flag and its `source_ref`. Every row cites a standard `engine_result_ref` (`metric_result.id`, §9.1) — **this is not an estimate**, it requires no fee reference and no assumption-widening. |
+| 8 | **Integer paise throughout (§4). No float appears anywhere, including in the percentile interpolation** — the interpolation is computed in integer arithmetic and rounded once per §5.11. |
+| 9 | Confidence follows the monotonic rule (data-foundation §7.1, `combine_confidence`): the least certain supplied price governs. Because a competitor price always arrives `DERIVED`, **no `PRICE_BAND` result can ever present as `VERIFIED` or `PROVISIONAL`.** |
+| 10 | `as_of_date` is stamped per §4.2 — a band is a point-in-time distribution, never a trend. |
+| 11 | Reproducible for a fixed `(product_ref, category, competitor_prices[], as_of_date)` tuple and, like §5.15's two functions, **not part of `canonical_data_version`** — competitor prices are not canonical seller data. Re-running against a newer CI snapshot is a **new** result, not a correction of the old one. |
+| 12 | **Not margin-aware.** No COGS, no fee resolution, no profit implication — identical boundary to §5.15. A seller-facing margin implication of a band position is `margin_curve`'s job (§5.13.1), never this function's. |
+
+**Cross-reference.** `competitor-intelligence-agent.md` §6.16.3 (product rules, minimum-competitor
+gate, outlier display) and §1a/C-decisions reference this section as the home of the arithmetic.
+Neither spec restates the other: **product/display rules there, arithmetic here.**
 
 ---
 
@@ -995,6 +1041,7 @@ The engine is accepted when all hold.
 | AC15 | Confidence is monotonic: no aggregate exceeds its weakest input. |
 | AC16 | Re-ingesting a file preserves all manual adjustments. |
 | AC17 | A formula version change produces a new calculation run; historical results are unchanged. |
+| AC18 | **NEW.** `compute_price_band` (§5.15.1) returns `UNAVAILABLE` with a named reason below 3 supplied competitor prices; computes `Q1`/`Q3` by linear-interpolation percentile only; computes fences from the **full** supplied set including outliers; excludes outliers **only** from the typical-range headline while still returning them flagged; uses integer paise throughout including the interpolation; and never returns better than `DERIVED`. **No percentile, IQR, fence or outlier arithmetic exists outside this engine** — in particular not in `packages/competitor-intelligence` (`competitor-intelligence-agent.md` §6.16.3, AC28). |
 
 ---
 
@@ -1032,6 +1079,10 @@ The engine is accepted when all hold.
 | T28 | Formula version bump | New calculation run; prior results byte-identical (AC17) |
 | T29 | Composition-scheme seller toggles fee GST to cost | Moves to `OtherAllocatedCosts`; recorded as manual input (D5) |
 | T30 | Multi-quantity line, per-line vs per-unit fee | Behaviour matches declared adapter config; mismatch flagged (A8) |
+| T31 | `compute_price_band` with 2 competitor prices | `UNAVAILABLE`, reason `INSUFFICIENT_COMPETITOR_PRICES` naming 2 supplied / 3 required; **no band values returned** (AC18, §5.15.1 rule 1) |
+| T32 | `compute_price_band` with prices `[85000, 90000, 95000, 105000, 400000]` paise | `Q1`/`Q3` by linear interpolation over **all five** values; `IQR = Q3 − Q1`; fences at `Q1 − 1.5×IQR` / `Q3 + 1.5×IQR`; `400000` returned flagged `is_outlier = true`; `PRICE_BAND_TYPICAL_LOW/HIGH` = `85000`/`105000`, excluding the outlier only from the headline (AC18, rules 5–7) |
+| T33 | `compute_price_band` run twice on an identical input tuple | Byte-identical `metric_result` rows; integer paise throughout with no float in the interpolation; result not part of `canonical_data_version` (AC1, AC3, AC18, rules 8 and 11) |
+| T34 | `compute_price_band` where every supplied price is `DERIVED` (the only case CI can produce) | Result confidence is `DERIVED`; never `VERIFIED` or `PROVISIONAL` (AC15, rule 9) |
 
 ---
 
