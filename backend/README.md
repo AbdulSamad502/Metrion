@@ -37,6 +37,24 @@ file's own directory, making it silently break depending on where `pip install` 
 `.github/workflows/ci.yml` already does for calc-engine/data-foundation/competitor-intelligence
 relative to each other.
 
+### Vision extraction (Ollama)
+
+Screenshot evidence upload (`evidence/vision_extractor.py`) reads a competitor listing's
+price/availability/title off an uploaded image via a local Ollama model. This needs Ollama
+installed and running, with a vision-capable model pulled:
+
+```bash
+ollama serve                      # if not already running as a background service
+ollama pull qwen2.5vl-manual      # or any other vision-capable model you prefer
+```
+
+Then set `OLLAMA_HOST`/`CI_VISION_MODEL`/`CI_REVIEW_VISION_MODEL` in `.env` to match
+whatever you actually pulled — see `.env.example`'s comments. **The code-level defaults
+assume a model name (`llava`) that may not exist on your machine**; if you skip this and the
+env vars aren't set, screenshot uploads fail with an Ollama "model not found" error that
+doesn't obviously point back to a missing env var. No model choice is locked by the CI spec
+(§1a item 4 / Q7 remains open) — pick whatever vision model you have.
+
 ### Webhook (local dev)
 
 Clerk needs a public URL to deliver webhooks to. Use the Clerk CLI's own relay:

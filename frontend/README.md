@@ -23,5 +23,6 @@ The full app shell (sidebar, Overview, CEO Hub, etc.) is deliberately out of sco
 each page's backend exists — see `docs/design/frontend-design/README.md` for what's
 designed but not yet wired to real data.
 
-Run with `npm run dev` (needs `.env.local` — see `clerk init`'s output — and the backend
-running on `NEXT_PUBLIC_API_BASE_URL`, default `http://localhost:8000`).
+Run with `npm run dev` (needs `.env.local` — copy `.env.local.example` and fill in your own
+Clerk keys — and the backend running on `NEXT_PUBLIC_API_BASE_URL`, default
+`http://localhost:8000`).

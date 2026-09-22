@@ -1,0 +1,12 @@
+# Normalize line endings to LF in the repo regardless of a contributor's local git config
+# (core.autocrlf) or OS — avoids spurious whole-file diffs and inconsistent line endings
+# between Windows/Mac/Linux contributors on the same team.
+* text=auto eol=lf
+
+# Binary/generated — never touch line endings.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
