@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy.exc import DBAPIError
 
 from calc_engine.repositories.manual_adjustment_repo import (
+    active_adjustments_by_field,
     active_adjustments_for_target,
     insert_adjustment,
 )
@@ -105,3 +106,77 @@ def test_correction_is_a_new_row_with_supersedes_id_not_an_update(two_tenants):
     rows_by_id = {str(r[0]): r[1] for r in rows}
     assert rows_by_id[str(original_id)] is None
     assert str(rows_by_id[str(corrected_id)]) == str(original_id)
+
+
+def test_active_adjustments_by_field_exact_field(two_tenants):
+    tenant_a, _ = two_tenants
+    insert_adjustment(
+        tenant_a,
+        target_type="PERIOD",
+        target_ref="2026-09",
+        field="expense.packaging",
+        value={"amount_paise": 5_000},
+        created_by=uuid.uuid4(),
+        created_at=datetime.now(timezone.utc),
+    )
+    insert_adjustment(
+        tenant_a,
+        target_type="PERIOD",
+        target_ref="2026-09",
+        field="expense.advertising",
+        value={"amount_paise": 9_000},
+        created_by=uuid.uuid4(),
+        created_at=datetime.now(timezone.utc),
+    )
+    rows = active_adjustments_by_field(tenant_a, field="expense.packaging")
+    assert len(rows) == 1
+    assert rows[0]["value"]["amount_paise"] == 5_000
+
+
+def test_active_adjustments_by_field_prefix_matches_every_expense_category(two_tenants):
+    tenant_a, _ = two_tenants
+    for field, amount in (("expense.packaging", 5_000), ("expense.advertising", 9_000), ("expense.other", 1_000)):
+        insert_adjustment(
+            tenant_a,
+            target_type="PERIOD",
+            target_ref="2026-09",
+            field=field,
+            value={"amount_paise": amount},
+            created_by=uuid.uuid4(),
+            created_at=datetime.now(timezone.utc),
+        )
+    # a non-expense field must NOT be swept up by the "expense." prefix
+    insert_adjustment(
+        tenant_a,
+        target_type="SKU",
+        target_ref="SKU-1",
+        field="cogs_per_unit",
+        value=8000,
+        created_by=uuid.uuid4(),
+        created_at=datetime.now(timezone.utc),
+    )
+    rows = active_adjustments_by_field(tenant_a, field_prefix="expense.")
+    assert {r["field"] for r in rows} == {"expense.packaging", "expense.advertising", "expense.other"}
+
+
+def test_active_adjustments_by_field_is_tenant_scoped(two_tenants):
+    tenant_a, tenant_b = two_tenants
+    insert_adjustment(
+        tenant_a,
+        target_type="PERIOD",
+        target_ref="2026-09",
+        field="expense.packaging",
+        value={"amount_paise": 5_000},
+        created_by=uuid.uuid4(),
+        created_at=datetime.now(timezone.utc),
+    )
+    rows = active_adjustments_by_field(tenant_b, field_prefix="expense.")
+    assert rows == []
+
+
+def test_active_adjustments_by_field_requires_exactly_one_of_field_or_prefix(two_tenants):
+    tenant_a, _ = two_tenants
+    with pytest.raises(ValueError):
+        active_adjustments_by_field(tenant_a)
+    with pytest.raises(ValueError):
+        active_adjustments_by_field(tenant_a, field="expense.packaging", field_prefix="expense.")

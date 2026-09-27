@@ -4,12 +4,17 @@ DDL for the tables data-foundation.md defines: `report_file`, `ingestion_run`, `
 `line_component`, `report_period`, `validation_finding` (the last is a Category C amendment —
 see `docs/specs/data-foundation.md` §4.4).
 
-**Scope.** This migration covers sales-side ingestion only. `settlement_line`,
-`reconciliation_run`/`reconciliation_match`/`reconciliation_exception`, and
-`sales_document`/`settlement_document` are named in data-foundation.md §1.2's entity tree but
-have no schema defined anywhere in that spec — they are not created here, and
-`line_component.settlement_line_id` is left as a bare UUID column (no FK) until
-`settlement_line` exists.
+**Scope.** `20260917_0001` covers sales-side ingestion (`report_file`, `ingestion_run`,
+`sales_line`, `line_component`, `report_period`, `validation_finding`).  `20260924_0002` adds
+`settlement_line` (data-foundation.md §5.6, CONFIRMED Phase C/C1) and closes the FK gap left
+on `line_component.settlement_line_id` (now a real FK to `settlement_line(id)`, mirroring
+`sales_line_id`'s FK exactly). `reconciliation_run`/`reconciliation_match`/
+`reconciliation_exception` and `sales_document`/`settlement_document` are still named in
+data-foundation.md §1.2's entity tree but have no schema defined anywhere in that spec — they
+are not created here. Per data-foundation.md §5.7 (CONFIRMED, Phase C/C2),
+`reconciliation_run`/`reconciliation_match`/`reconciliation_exception` are calc-engine-owned
+(computed OUTPUT of `reconcile()`, not raw ingested data-foundation facts) and will never be
+created by this package.
 
 **Wired to Alembic**, same pattern as `packages/calc-engine/migrations/`: `env.py` reads
 `DATABASE_URL` from the environment, connects as `metrion_migrate`. Because this package

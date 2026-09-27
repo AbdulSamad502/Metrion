@@ -7,6 +7,10 @@ dependencies = [
     "sqlalchemy>=2.0",
     "alembic>=1.13",
     "psycopg[binary]>=3.1",
+    # HttpxGstFetcher (gst_lookup/fetcher.py, §8.4.1) — the only real network dependency in
+    # this package, imported lazily inside the one function that uses it (mirroring
+    # competitor-intelligence's own fetcher.py), same as httpx there.
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]

@@ -10,12 +10,17 @@ from datetime import date
 import pytest
 
 from calc_engine.formulas.leak import (
+    Collision,
+    NoCandidate,
     ReconciliationOutcome,
+    SingleMatch,
     classify_settlement_lag,
     classify_variance,
+    is_duplicate_settlement,
     is_within_tolerance,
     leak_aggregate,
     leak_amount,
+    resolve_match_candidates,
     resolve_tolerance_or_unavailable,
     should_report_unsettled_as_leak,
 )
@@ -100,3 +105,170 @@ def test_resolve_tolerance_or_unavailable_present_row():
     row = {"tolerance_paise": 50, "tolerance_bps": 10, "settlement_lag_days": 14, "grace_period_days": 5}
     result = resolve_tolerance_or_unavailable(row)
     assert result == (Paise(50), 10)
+
+
+# --- resolve_match_candidates (§5.2 C3 collision handling) ---------------------------------
+
+
+def test_resolve_match_candidates_zero_is_no_candidate():
+    result = resolve_match_candidates([])
+    assert isinstance(result, NoCandidate)
+
+
+def test_resolve_match_candidates_one_is_single_match():
+    candidate = {"sales_line_id": "abc", "order_ref": "SUB1"}
+    result = resolve_match_candidates([candidate])
+    assert isinstance(result, SingleMatch)
+    assert result.candidate == candidate
+
+
+def test_resolve_match_candidates_two_or_more_is_collision():
+    candidate_a = {"sales_line_id": "abc", "order_ref": "SUB1"}
+    candidate_b = {"sales_line_id": "def", "order_ref": "SUB1"}
+    result = resolve_match_candidates([candidate_a, candidate_b])
+    assert isinstance(result, Collision)
+    assert result.candidates == (candidate_a, candidate_b)
+
+
+def test_resolve_match_candidates_three_candidates_is_still_a_single_collision():
+    candidates = [
+        {"sales_line_id": "a"},
+        {"sales_line_id": "b"},
+        {"sales_line_id": "c"},
+    ]
+    result = resolve_match_candidates(candidates)
+    assert isinstance(result, Collision)
+    assert len(result.candidates) == 3
+
+
+# --- is_duplicate_settlement (§5.2 C4 duplicate detection) ---------------------------------
+
+
+def test_is_duplicate_settlement_all_three_match():
+    candidate = {
+        "order_ref": "SUB1",
+        "line_ref": None,
+        "gross_settlement_amount": 6_500,
+        "settlement_date": date(2026, 9, 10),
+    }
+    already_processed = [
+        {
+            "order_ref": "SUB1",
+            "line_ref": None,
+            "gross_settlement_amount": 6_500,
+            "settlement_date": date(2026, 9, 10),
+        }
+    ]
+    assert is_duplicate_settlement(candidate, already_processed) is True
+
+
+def test_is_duplicate_settlement_different_amount_is_not_a_duplicate():
+    candidate = {
+        "order_ref": "SUB1",
+        "line_ref": None,
+        "gross_settlement_amount": 6_500,
+        "settlement_date": date(2026, 9, 10),
+    }
+    already_processed = [
+        {
+            "order_ref": "SUB1",
+            "line_ref": None,
+            "gross_settlement_amount": 7_000,
+            "settlement_date": date(2026, 9, 10),
+        }
+    ]
+    assert is_duplicate_settlement(candidate, already_processed) is False
+
+
+def test_is_duplicate_settlement_different_date_is_not_a_duplicate():
+    # A genuine second, distinct charge on a different date must never be flagged (§5.2).
+    candidate = {
+        "order_ref": "SUB1",
+        "line_ref": None,
+        "gross_settlement_amount": 6_500,
+        "settlement_date": date(2026, 9, 10),
+    }
+    already_processed = [
+        {
+            "order_ref": "SUB1",
+            "line_ref": None,
+            "gross_settlement_amount": 6_500,
+            "settlement_date": date(2026, 10, 1),
+        }
+    ]
+    assert is_duplicate_settlement(candidate, already_processed) is False
+
+
+def test_is_duplicate_settlement_different_join_key_is_not_a_duplicate():
+    candidate = {
+        "order_ref": "SUB1",
+        "line_ref": None,
+        "gross_settlement_amount": 6_500,
+        "settlement_date": date(2026, 9, 10),
+    }
+    already_processed = [
+        {
+            "order_ref": "SUB2",
+            "line_ref": None,
+            "gross_settlement_amount": 6_500,
+            "settlement_date": date(2026, 9, 10),
+        }
+    ]
+    assert is_duplicate_settlement(candidate, already_processed) is False
+
+
+def test_is_duplicate_settlement_empty_history_is_not_a_duplicate():
+    candidate = {
+        "order_ref": "SUB1",
+        "line_ref": None,
+        "gross_settlement_amount": 6_500,
+        "settlement_date": date(2026, 9, 10),
+    }
+    assert is_duplicate_settlement(candidate, []) is False
+
+
+# --- is_duplicate_settlement None-amount hardening (data-foundation.md §5.1.5 point 4,
+# deterministic-engine.md §5.2 amendment) -----------------------------------------------------
+
+
+def test_is_duplicate_settlement_none_amount_never_a_duplicate_even_with_same_key_and_date():
+    """The bug this closes: unmodified, `None == None` compares equal in Python, so two Amazon
+    rows sharing the same order_ref/settlement_date (both with a None gross_settlement_amount,
+    since amazon.settlement.v2 never populates it) would wrongly be flagged
+    DUPLICATE_SETTLEMENT. An unavailable amount is never "the same amount" as another
+    unavailable amount — this must return False, not True."""
+    candidate = {
+        "order_ref": "AMZ-ORDER-1",
+        "line_ref": None,
+        "gross_settlement_amount": None,
+        "settlement_date": date(2026, 9, 10),
+    }
+    already_processed = [
+        {
+            "order_ref": "AMZ-ORDER-1",
+            "line_ref": None,
+            "gross_settlement_amount": None,
+            "settlement_date": date(2026, 9, 10),
+        }
+    ]
+    assert is_duplicate_settlement(candidate, already_processed) is False
+
+
+def test_is_duplicate_settlement_real_equal_amount_still_correctly_a_duplicate():
+    """Regression protection: the None-amount guard must not break the real, genuinely-equal-
+    amount case it doesn't apply to (Flipkart/Meesho, whose gross_settlement_amount is real)."""
+    candidate = {
+        "order_ref": "FK-ORDER-1",
+        "line_ref": None,
+        "gross_settlement_amount": 6_500,
+        "settlement_date": date(2026, 9, 10),
+    }
+    already_processed = [
+        {
+            "order_ref": "FK-ORDER-1",
+            "line_ref": None,
+            "gross_settlement_amount": 6_500,
+            "settlement_date": date(2026, 9, 10),
+        }
+    ]
+    assert is_duplicate_settlement(candidate, already_processed) is True

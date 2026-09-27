@@ -10,7 +10,15 @@ from sqlalchemy import inspect, text
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 
-_TABLES = {"report_file", "ingestion_run", "sales_line", "line_component", "report_period", "validation_finding"}
+_TABLES = {
+    "report_file",
+    "ingestion_run",
+    "sales_line",
+    "line_component",
+    "settlement_line",
+    "report_period",
+    "validation_finding",
+}
 
 
 def _alembic_config() -> Config:
@@ -37,3 +45,14 @@ def test_downgrade_then_upgrade_restores_all_tables_and_rls(migrate_engine):
             )
         ).fetchall()
     assert {r[0] for r in forced} == _TABLES
+
+
+def test_line_component_settlement_line_id_fk_exists(migrate_engine):
+    """§5.6/§1.4: the FK deferred by 20260917_0001 ("FK omitted: settlement_line has no
+    schema yet") must be closed by 20260924_0002, mirroring sales_line_id's real FK."""
+    inspector = inspect(migrate_engine)
+    fks = inspector.get_foreign_keys("line_component")
+    settlement_fk = next((fk for fk in fks if fk["constrained_columns"] == ["settlement_line_id"]), None)
+    assert settlement_fk is not None, "line_component.settlement_line_id has no FK"
+    assert settlement_fk["referred_table"] == "settlement_line"
+    assert settlement_fk["referred_columns"] == ["id"]

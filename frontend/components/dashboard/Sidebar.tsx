@@ -14,7 +14,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Orders", soon: true },
       { label: "Customers", soon: true },
-      { label: "Finance" },
+      { label: "CFO", href: "/dashboard/cfo" },
       { label: "Marketing" },
       { label: "Reports", soon: true },
     ],
@@ -39,7 +39,7 @@ export function Sidebar({
 }: {
   userName: string;
   roleLabel: string;
-  active: "Overview" | "Settings" | "CEO Hub";
+  active: "Overview" | "Settings" | "CEO Hub" | "CFO";
 }) {
   const { signOut } = useClerk();
   const initials = userName

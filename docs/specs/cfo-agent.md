@@ -18,7 +18,7 @@
 | C2 | **Leak Shield is a capability inside CFO**, not a separate agent. The V1 agent count stays at four plus CEO. | readiness §1 — Leak Shield ownership |
 | C3 | **Leak Shield scope:** reconciliation of orders, settlements, returns and logistics (logistics where the seller supplies the data); anomaly detection; recoverable-money identification. | readiness §1 — Leak Shield ownership; planning doc p.8 |
 | C4 | **GST is management-grade decision support only.** Not filing-grade. No statutory filing, no guaranteed compliance, no final ITC determination. | `deterministic-engine.md` §1.3 |
-| C5 | **GST rate source is layered** — observed from the seller's own reports first, then the curated HSN knowledge base, then the GST Applicability Lookup (provisional, cited). Sellers are never asked to upload rate schedules. | OP13 |
+| C5 | **GST rate source is layered** — observed from the seller's own reports first, then the curated HSN knowledge base (`hsn_gst_reference`, `deterministic-engine.md` §8.2.2), then the GST Applicability Lookup (provisional, cited). Sellers are never asked to upload rate schedules. | OP13 |
 | C6 | **GST Applicability Lookup is a shared service**, callable directly. Results never enter a calculation without explicit seller acceptance. | OP7, OP9; `deterministic-engine.md` §8.4 |
 | C7 | **Recommend-only.** CFO proposes prices and actions; it never writes to a marketplace and never files a claim. | readiness §1 — Write-back (recommend-only) |
 | C8 | **Expense and cash-flow inputs arrive by manual entry, report upload, or an agent-initiated data request.** Where CFO lacks data it asks the seller rather than assuming. | OP1 |
@@ -135,20 +135,41 @@ agent_data_request (                      -- OP1: CFO asks rather than assumes
 
 ### 5.1 Interfaces CFO calls
 
-| Interface | Owner | Purpose |
+**Revised — the calling convention below was audited against `packages/calc-engine` (2026-09-23) and found not to match the real API.** This section previously described a `compute_metric(metric_code, grain, target, period)`-style single dispatcher plus ten named functions, none of which exist under those names or signatures. It is rewritten here to state what actually exists, following the same precedent `competitor-intelligence-agent.md` §1a item 2 set for the identical gap on the CI side: real functions named and signed exactly as implemented; functions with no implementation labelled as deferred engine work, with no signature invented for them.
+
+**5.1.1 Real, verified against `packages/calc-engine` source.** There is no single `compute_metric` dispatcher — each metric has its own typed function in `calc_engine/api/compute_metric.py` (or `calc_engine/formulas/`), each returning a `MetricResult` (`deterministic-engine.md` §9's `metric_result`, whose `.id` **is** the `engine_result_ref`) unless noted otherwise.
+
+| Function | Module | Signature | Purpose |
+|---|---|---|---|
+| `compute_net_realized_revenue` | `calc_engine.api.compute_metric` | `(lines, *, bearer_resolver, recognition_state, ingestion_run_ids, adapter_versions, active_adjustment_ids, computed_at, as_of_date=None) -> MetricResult` | Net Realized Revenue |
+| `compute_contribution_profit` | `calc_engine.api.compute_metric` | `(nrr_result: MetricResult, *, cogs, marketplace_fees, shipping_logistics, advertising_costs, return_rto_losses, other_allocated_costs, ingestion_run_ids, adapter_versions, active_adjustment_ids, computed_at, as_of_date=None) -> MetricResult` | Contribution Profit; always built on a prior NRR `MetricResult`, never recomputed independently |
+| `compute_price_positioning` | `calc_engine.api.compute_metric` | `(*, seller_price_paise, seller_price_confidence, competitor_prices, computed_at, as_of_date=None) -> list[MetricResult]` | Position vs. CI-supplied `competitor_prices[]` (`DERIVED`); one row per reference (AVERAGE/MIN/MAX) |
+| `compute_repricing_scenario` | `calc_engine.api.compute_metric` | `(*, seller_price_paise, seller_price_confidence, competitor_prices, stance, stance_param, computed_at, as_of_date=None) -> MetricResult` | Not margin-aware — no COGS, no fee reference; a suggested price here may be unprofitable |
+| `compute_price_band` | `calc_engine.api.compute_metric` | `(*, product_ref, category, competitor_prices, computed_at, min_competitors=ENGINE_MIN_COMPETITORS_FOR_PRICE_BAND, as_of_date=None) -> list[MetricResult]` | Q1/Q3/IQR/fences/typical range plus one row per priced point with its outlier flag |
+| `leak_aggregate` | `calc_engine.formulas.leak` | `(exception_amounts: list[Paise] \| tuple[Paise, ...]) -> Paise` | Sums reconciliation-exception amounts — **returns a plain `Paise`, not a `MetricResult`.** No `compute_metric.py` wrapper exists yet to mint an `engine_result_ref` for this total. Until that wrapper is added, §6.4 rule 5's claim that the headline total "carries its own `engine_result_ref`" is **ahead of the implementation** — recorded honestly here rather than restated as fact; see the deferred item below |
+| `rank_findings` | `calc_engine.formulas.severity` | `(findings: Sequence[Finding], *, as_of_date: date, config_rows: Sequence[SeverityConfigRow], ordering_basis: str, closing_soon_days: int = 14) -> list[tuple[Finding, SeverityBand \| Unavailable, WindowStatus]]` | Deterministic severity band, `window_status` and order (D10). `Finding` is `(exception_id, amount_paise, age_days, claim_window_days)`; `ordering_basis` is `"WINDOW_THEN_AMOUNT"` or `"AMOUNT_ONLY"`. Returns tuples, not `MetricResult` rows — CFO reads `age_days`/`window_status`/severity off the tuple, not off an `engine_result_ref` |
+| `compute_metric_delta` | `calc_engine.api.compute_metric` | `(result_a: MetricResult, result_b: MetricResult, *, computed_at, as_of_date=None) -> MetricResult` | Period-over-period delta between two already-computed `MetricResult`s of the SAME `metric_code` (`result_b.value_paise - result_a.value_paise`, `calc_engine.formulas.metric_delta` — the only place this arithmetic happens); raises `ValueError` on a `metric_code` mismatch, returns `UNAVAILABLE` if either input is. Wired into CFO via `backend.services.cfo_actions.narrate_period_comparison` (`twinkly-mapping-canyon.md` CP A3) — see §7.4.4 |
+| `compute_landed_cost` | `calc_engine.api.compute_metric` | `(quote: LandedCostQuote, quantity: int, *, sku: str, active_adjustment_ids, computed_at, as_of_date=None) -> MetricResult` | Landed cost per unit from ONE seller-declared `supplier.quote` manual_adjustment (`metric_code = "LANDED_COST_PER_UNIT"`) — `unit_cost_paise` plus `shipping_paise` divided evenly across `quantity`, rounded half-up (`calc_engine.formulas.landed_cost`). Wired into CFO via `backend.services.cfo_actions.compute_landed_cost_for_quote` (`twinkly-mapping-canyon.md` CP A4) — the §6.11 supplier-ranking **primitive only**; comparing/ranking multiple quotes is Phase B1, not built |
+
+**5.1.2 Not yet built — DEFERRED, pending a Brain-1 extension spec.** These functions were named in an earlier draft of this section with invented signatures. **Verified by grep against `packages/calc-engine`: zero matches for `reconcile`, `cash_reconciliation`, `margin_curve`, `funding_readiness_metrics`, `resolve_fee_reference`, `estimate_competitor_margin_range`, `detect_anomalies`, `gst_applicability_lookup`.** (`landed_cost` is no longer in this zero-match set — it is real and now wired into CFO, see §5.1.1 and the "Correction (CP A4)" note below the table. `margin_curve` and `resolve_fee_reference` are also real matches today, same as CP A3's note already flagged — their rows below have not yet been reconciled, which remains out of this checkpoint's narrow scope.) This spec states the CFO *capability* each one is meant to serve — not an invented signature — and each is out of scope until `deterministic-engine.md` is extended to define it:
+
+| Capability CFO needs from Brain 1 | What it must produce | Blocks |
 |---|---|---|
-| `compute_metric(metric_code, grain, target, period)` | `deterministic-engine.md` §5 | All revenue, profit, margin, fee and tax figures |
-| `reconcile(period, marketplace, tolerance_ref)` | Brain 1 (engine §5.13.1); model in `data-foundation.md` §5 | Produces `reconciliation_exception` rows, each with a `LEAK_EXCEPTION_AMOUNT` result |
-| `leak_aggregate(period, marketplace, grouping)` | Brain 1 (engine §5.13.1), `metric_code = LEAK_TOTAL` | Headline totals (§6.4); CFO never sums |
-| `rank_findings(exception_ids[], as_of_date, severity_config_ref)` | Brain 1 (engine §5.13.1, §5.14.1) | Severity, `age_days`, `window_status` and order — all deterministic (D10), on an explicit `as_of_date` (engine §4.2) |
-| `margin_curve(sku, candidate_prices[], period, as_of_date)` | Brain 1 (engine §5.13.1), `metric_code = MARGIN_AT_PRICE` | Pricing recommendation (§6.7) |
-| `cash_reconciliation(period, marketplace, as_of_date)` | Brain 1 (engine §5.13.1) | `cash_view` figures (§5, §6.10) |
-| `landed_cost(manual_adjustment_ref, sku, quantity)` | Brain 1 (engine §5.13.1), `metric_code = LANDED_COST_PER_UNIT` | Supplier ranking (§6.11) and batch size (§6.12) |
-| `funding_readiness_metrics(period_range, as_of_date)` | Brain 1 (engine §5.13.1) | Funding readiness (§6.13); emits no score |
-| `resolve_fee_reference(marketplace, category, fee_type, as_of_date)` | Brain 1 (engine §5.13.1, §5.14) | CFO never holds rates (C1) |
-| `estimate_competitor_margin_range(...)` | Brain 1 (engine §5.13, §5.13.1) | Only when comparing against CI-supplied observations |
-| `detect_anomalies(series, method)` | **Brain 2 — specification not yet written** (readiness §7 item 8). CFO consumes it; it does not define it. See Q10 | Statistical outliers; no trained models (C13) |
-| `gst_applicability_lookup(product, hsn?)` | Shared service, engine §8.4 — **requires `service.gst_lookup`** (`auth.md` §5.2), independent of `agent.cfo`, with its own OP9 cap | Research only; never auto-applied (C6) |
+| Invoice-side vs. settlement-side reconciliation, producing `reconciliation_exception` rows | A `LEAK_EXCEPTION_AMOUNT` `MetricResult` per exception | §6.2, §6.4, `leak_finding.reconciliation_exception_id`/`engine_result_ref` |
+| Cash reconciliation (expected vs. received, variance, timing, TCS/TDS split) | The `cash_view` figures in §5 | §6.10 |
+| A margin curve across candidate prices, fee-aware (fees from §5.14) | One `MetricResult` per candidate price, `metric_code = MARGIN_AT_PRICE` or equivalent | §6.7 pricing recommendations |
+| Funding-readiness metrics assembled from Contribution Profit history, margin stability and cash-conversion timing | A data-completeness-oriented result set, no score | §6.13 |
+| Fee-reference resolution by marketplace/category/fee-type/date | A resolved fee row from the versioned reference store (§5.14, C18) | Fee-overcharge detection, pricing |
+| Estimated competitor margin range from CI-supplied observations | An `estimate_ref` (`competitor_estimate.id`), never an `engine_result_ref` | §6.7 rule 3; also deferred on the CI side (`competitor-intelligence-agent.md` §1a item 2) |
+| Statistical anomaly detection (z-score, period-over-period delta, percentile thresholds) | Anomaly flags CFO can attach to a figure | §6.5; **owned by Brain 2, which has no specification at all yet** (readiness §7 item 8, Q10) — a distinct gap from the others in this table, which are Brain-1 gaps |
+| Curated HSN knowledge base lookup (`resolve_hsn_gst_reference`) | A resolved `hsn_gst_reference` row, or `None` — never a guessed rate | §6.6, C5; `deterministic-engine.md` §8.2.2. Table shape and resolution rule are now specified; **no seed data or CFO wiring exists yet** (`deterministic-engine.md` C15) |
+| GST applicability lookup by product/HSN | A cited, provisional rate suggestion, never auto-applied | §6.6, C6 |
+
+None of these are implemented, none has an agreed signature, and this spec does not invent one. Each must go through its own extension to `deterministic-engine.md` (or, for anomaly detection, a first Brain-2 spec) before CFO can call it. Wherever the rest of this document names one of these functions as if it already exists, that reference is a forward-looking capability statement, not a description of current code — see the corrected wording at §6.2, §6.4, Q11 and R8.
+
+**Correction (`twinkly-mapping-canyon.md` CP A3):** this table previously carried a "Period-over-period metric delta" row. That capability was actually built at the engine layer back in CP3 (`calc_engine.formulas.metric_delta`/`compute_metric.compute_metric_delta`) and this table was not updated at the time — an oversight, caught and fixed here rather than left stale. The row is removed; the real function now appears in §5.1.1's table above, and §7.4.4 states its CFO-side wiring. **Note for future accuracy passes, not fixed in this checkpoint (out of CP A3's narrowly-scoped work):** the "margin curve," "landed cost per unit" and "fee-reference resolution" rows above have the same problem — all three were also built at the engine layer (Engine Phase 2/CP1) and the margin-curve and fee-reference rows are additionally wired into CFO already (`twinkly-mapping-canyon.md` CP A1, `compute_pricing_curve`); "landed cost per unit" is built at the engine layer only, not yet wired into any CFO composition (`twinkly-mapping-canyon.md` Phase B). This table has not been reconciled against that reality yet — flagged here so it isn't silently missed again, but correcting it is out of this checkpoint's scope.
+
+**Correction (`twinkly-mapping-canyon.md` CP A4):** the "landed cost per unit" row CP A3's note above flagged as still-open is now resolved — `compute_landed_cost`/`LANDED_COST_PER_UNIT` is wired into CFO (`backend.services.cfo_actions.compute_landed_cost_for_quote`, `POST /api/v1/cfo/landed-cost`, `agents.ceo_hub.dispatch_cfo_landed_cost`). The row is removed from the deferred table above and the real function now appears in §5.1.1. **This is the §6.11 supplier-ranking PRIMITIVE only** — one quote's landed cost, computed and persisted. Comparing or ranking multiple quotes for the same SKU (Phase B1) and the budget-constrained batch-size range (Phase B3a/B3b) remain genuinely unbuilt; CP A4 supplies their landed-cost input, it does not build either of them. The "margin curve" and "fee-reference resolution" rows CP A3's note also flagged remain unreconciled — still out of this checkpoint's narrow scope, not silently resolved here.
 
 **CFO writes no number it did not receive from one of these.** Provenance follows the two contracts in `deterministic-engine.md` §9.1:
 
@@ -192,11 +213,11 @@ Runs over the canonical model; the arithmetic belongs to Brain 1.
 
 **The core signal** is the invoice-side vs settlement-side delta per `component_code` (`data-foundation.md` §5.4).
 
-**Meesho is the strongest V1 target — provisionally.** Per `docs/Metrion_PnL_and_MTR_Mapping_FINAL.pdf`, Meesho's real Supplier Panel exports carry invoice-side revenue fields (`Fixed Fee (Incl. GST)`, `Warehousing fee (incl GST)`, `Return premium (incl GST)`) alongside settlement-side values (`Final Settlement Amount` and its documented 18-term formula), joinable on `sub_order_num`. The earlier justification cited the synthetic co-located columns, which `data-foundation.md` §0 and §2.3 retract. **Column-level pairing is not yet validated against a live export** — see V6.
+**Meesho is the strongest V1 target — and the only one with a validated join key.** Per `docs/Metrion_PnL_and_MTR_Mapping_FINAL.pdf` §7A — headed "VERIFIED — real seller data inspected... transcribed directly from a real Meesho seller's exports (Orders report, Payments workbook)... for account SS Digital India / GSTIN 07AWOPM5761A1ZG" — Meesho's real Supplier Panel exports carry invoice-side revenue fields (`Fixed Fee (Incl. GST)`, `Warehousing fee (incl GST)`, `Return premium (incl GST)`) alongside settlement-side values (`Final Settlement Amount` and its documented 18-term formula), joinable on `sub_order_num` — a key independently confirmed across four separately-inspected real files for the same seller account: Orders report (PDF §7A.1), Payments workbook (PDF §7A.2), TCS_Sales (PDF §8.1) and TCS_Sales_Return (PDF §8.2). The earlier justification cited the synthetic co-located columns, which `data-foundation.md` §0 and §2.3 retract; that is now superseded by the real-export evidence above (`data-foundation.md` §5.4). **Column-level pairing on `sub_order_num` is validated against real exports.** What remains open: the 18-term Final Settlement Amount formula's letter-to-column mapping is unresolved — the formula (`= B + C + G + H + I + L + Q + R + S + T + U + V + W + Y + AA + AD + AF + AX`) references real spreadsheet cell letters, not named columns (PDF §7A.2). See V6 for the remaining cross-marketplace validation gap (Flipkart's and Amazon's adapter mappings).
 
 **Amazon status (corrected).** Amazon settlement is **specified**, not absent: `data-foundation.md` §0.6 and §2.3 register `amazon.settlement.v2` from Amazon SP-API documentation. Amazon is therefore **not categorically unsupported**.
 
-What remains open is narrower: **settlement match keys are unverified** (`data-foundation.md` §5.1 lists Amazon's join key as UNKNOWN) and **no real Amazon export has validated the adapter**. Until both close, Amazon periods report `RECOGNISED` and Leak Shield findings for Amazon are withheld — because the join cannot yet be trusted, not because the data does not exist.
+What remains open is narrower: **settlement match keys are unvalidated against real data, though the field list itself is now real** — `data-foundation.md` §5.1 records that Amazon's V2 settlement field list is independently verified (from Amazon's own SP-API docs, PDF §3.1) and includes real order/line identity fields (`order-id`, `merchant-order-id`, `order-item-code`, `merchant-order-item-id`, `sku`), but **no real, populated Amazon settlement export has validated the adapter or the join key**. Until that closes, Amazon periods report `RECOGNISED` and Leak Shield findings for Amazon are withheld — because the join cannot yet be trusted, not because the data or a candidate key does not exist.
 
 CFO states that distinction explicitly. A withheld result is never rendered as "no leaks found."
 
@@ -217,10 +238,10 @@ Classification is CFO's; amounts are the engine's (D1).
 ### 6.4 Recoverable-money identification
 
 1. Each finding carries the engine's amount, affected line count, and age.
-2. Findings are ordered by **claim-window urgency first, amount second** (D3). **Ordering, `severity`, `age_days` and `window_status` all come from `rank_findings`** (engine §5.13.1), which takes an explicit `as_of_date` (§4.2) and resolves bands from `severity_config` (§5.14.1). Brain 3 narrates the resulting order and never produces it.
+2. Findings are ordered by **claim-window urgency first, amount second** (D3). **Ordering, `severity`, `age_days` and `window_status` all come from `rank_findings(findings, *, as_of_date, config_rows, ordering_basis, closing_soon_days=14)`** (`calc_engine.formulas.severity`, §5.1.1), which takes an explicit `as_of_date` (§4.2) and resolves bands from `SeverityConfigRow` rows (§5.14.1). Brain 3 narrates the resulting order and never produces it.
 3. Language is *discrepancy identified*, never *money you will get back* (D2).
 4. CFO produces a recommended action — typically "raise a claim with marketplace X citing these order IDs" — but **never files it** (C7).
-5. **Aggregate totals are computed by Brain 1** via `leak_aggregate` (engine §5.13.1, `metric_code = LEAK_TOTAL`), never by CFO summing in application code, and carry their own `engine_result_ref` (§7.2 forbids CFO arithmetic, including summation).
+5. **Aggregate totals are computed by Brain 1** via `leak_aggregate(exception_amounts) -> Paise` (`calc_engine.formulas.leak`, §5.1.1), never by CFO summing in application code. **As implemented today this returns a plain `Paise`, not a `MetricResult`** — no `engine_result_ref`-minting wrapper exists yet for this total (§5.1.1). Until that wrapper is added, the headline total is engine-computed but does not yet carry its own `engine_result_ref`; per-finding amounts still do, copied unchanged from their `reconciliation_exception`. §7.2 forbids CFO arithmetic, including summation, regardless.
 6. The headline total **excludes levy-derived findings** (`TCS_TDS_MISMATCH`), or labels them separately — a levy variance is a cash-reconciliation item, not recoverable margin.
 
 ### 6.5 Anomaly detection (C13)
@@ -231,7 +252,7 @@ Statistical only: z-score, period-over-period delta, percentile thresholds over 
 
 **Included:** inclusive/exclusive normalisation per marketplace *and per field* · IGST/CGST/SGST/UTGST/Cess handling · TCS and TDS visibility · indicative period summary · GST-on-fees shown as a separate potentially-creditable line.
 
-**Rate resolution order (OP13):** observed from the seller's own reports → curated HSN knowledge base → GST Applicability Lookup (provisional, cited, never auto-applied).
+**Rate resolution order (OP13):** observed from the seller's own reports (`deterministic-engine.md` §8.1) → curated HSN knowledge base (`hsn_gst_reference`, deterministic table lookup, `deterministic-engine.md` §8.2.2) → GST Applicability Lookup (provisional, cited, never auto-applied without explicit seller acceptance, `deterministic-engine.md` §8.4). The curated HSN knowledge base is checked only when the first tier has nothing, and is only ever a deterministic reference-table lookup — never a live research call, and never conflated with `gst_slab_reference`'s plausibility check (§8.2.1, `V-TAX-003`), which serves a different job.
 
 **Every GST surface carries:** *"Indicative management summary. Not a GST return. Not filing-grade. Verify with your tax professional."*
 
@@ -251,14 +272,16 @@ Per the `auth.md` §5.2 guardrail, every direct path is enumerated here, names o
 
 | Trigger id | Action | CEO call | Permission | Entitlement gate | Rate limit | Audit |
 |---|---|---|---|---|---|---|
-| `cfo.preview` | Render the free-tier gated preview (§6.9) | No | `agent.cfo` | **Passes permission, then intentionally bypasses the entitlement denial** — see below | Per tenant, low | Yes |
-| `cfo.reconcile` | Run reconciliation for a period and marketplace | No | `agent.cfo` | CFO entitlement + run credit | Per tenant | Yes |
+| `cfo.preview` | Render the free-tier gated preview (§6.9) — **Built** (D7): `backend.services.cfo_actions.assemble_cfo_preview`, wired to `POST /api/v1/cfo/preview`; no `agents.ceo_hub` dispatch function exists or is needed (this table's own "CEO call" column reads "No" for this row) | No | `agent.cfo` | **Passes permission, then intentionally bypasses the entitlement denial** — see below | Per tenant, low | Yes |
+| `cfo.reconcile` | Run reconciliation for a period and marketplace — **Built** (D5): `backend.services.cfo_actions.run_leak_shield_reconciliation`, wired to `POST /api/v1/cfo/reconcile` and `agents.ceo_hub.dispatch_cfo_reconcile`; the first CFO surface producing real, persisted `leak_finding` rows from a real `reconcile()` (D4) | No | `agent.cfo` | CFO entitlement + run credit | Per tenant | Yes |
 | `cfo.pnl` | Compute P&L for a period | No | `agent.cfo` | CFO entitlement + run credit | Per tenant | Yes |
-| `cfo.pricing` | Produce a margin curve for a SKU | No | `agent.cfo` | CFO entitlement + run credit | Per tenant | Yes |
-| `cfo.gst_summary` | Render the indicative GST summary | No | `agent.cfo` | CFO entitlement | Per tenant | Yes |
+| `cfo.pricing` | Produce a margin curve for a SKU — **Built** (`twinkly-mapping-canyon.md` CP A1): `backend.services.cfo_actions.compute_pricing_curve`, wired to `POST /api/v1/cfo/pricing` and `agents.ceo_hub.dispatch_cfo_pricing` | No | `agent.cfo` | CFO entitlement + run credit | Per tenant | Yes |
+| `cfo.gst_summary` | Render the indicative GST summary — **Built** (`twinkly-mapping-canyon.md` CP A2): `backend.services.cfo_actions.render_gst_period_summary`, wired to `POST /api/v1/cfo/gst/period-summary` and `agents.ceo_hub.dispatch_cfo_gst_summary`; PERIOD-level, distinct from the line-level `cfo.analyze_gst_lines` path | No | `agent.cfo` | CFO entitlement | Per tenant | Yes |
 | `cfo.gst_lookup` | Invoke the GST Applicability Lookup | No | `agent.cfo` **and** `service.gst_lookup` | Shared-service cap (OP9), independent of CFO entitlement | Per tenant, strict | Yes |
-| `cfo.batch_size` | Budget-constrained order-quantity range (§6.12) | No | `agent.cfo` | CFO entitlement + run credit | Per tenant | Yes |
-| `cfo.funding_readiness` | Assemble the funding-readiness report (§6.13) | No | `agent.cfo` | CFO entitlement | Per tenant, low | Yes |
+| `cfo.landed_cost` | Compute one `supplier.quote`'s landed cost per unit — the §6.11 supplier-ranking **primitive only**, never a ranking — **Built** (`twinkly-mapping-canyon.md` CP A4): `backend.services.cfo_actions.compute_landed_cost_for_quote`, wired to `POST /api/v1/cfo/landed-cost` and `agents.ceo_hub.dispatch_cfo_landed_cost` | No | `agent.cfo` | CFO entitlement + run credit | Per tenant | Yes |
+| `cfo.supplier_ranking` | Rank every ACTIVE `supplier.quote` row for a SKU by landed cost (§6.11) — **Built** (`twinkly-mapping-canyon.md` CP B1): `backend.services.cfo_actions.rank_suppliers`, wired to `POST /api/v1/cfo/suppliers/rank` and `agents.ceo_hub.dispatch_cfo_supplier_ranking`; a single-quote result is reported as a single quote, not a ranking (E15) | No | `agent.cfo` | CFO entitlement + run credit | Per tenant | Yes |
+| `cfo.batch_size` | Budget-constrained order-quantity range (§6.12) — **engine arithmetic core Built** (`twinkly-mapping-canyon.md` CP B3a): `calc_engine.formulas.batch_size.budget_constrained_quantity` / `calc_engine.api.compute_metric.compute_batch_constrained_quantity` compute the budget-and-MOQ ceiling (§6.12's own "degrades to a budget-and-MOQ arithmetic exercise" floor); **CFO wiring, velocity, and this direct path itself remain NOT built** (`twinkly-mapping-canyon.md` CP B3b, still pending) | No | `agent.cfo` | CFO entitlement + run credit | Per tenant | Yes |
+| `cfo.funding_readiness` | Assemble the funding-readiness report (§6.13) — **Built, REDUCED slice only** (`twinkly-mapping-canyon.md` CP B2): `backend.services.cfo_actions.assemble_funding_readiness_reduced`, wired to `POST /api/v1/cfo/funding-readiness` and `agents.ceo_hub.dispatch_cfo_funding_readiness`; assembles Contribution Profit history, period-over-period trend and explicit gaps (periods missing, COGS/RTO absent) only — margin stability, revenue concentration and cash-conversion timing remain deferred to Phase D (`reconcile()`/`cash_reconciliation`) and are stated as such on every response, never silently omitted | No | `agent.cfo` | CFO entitlement | Per tenant, low | Yes |
 
 Anything open-ended — "why did my profit drop?" — is **conversational**, requires `agent.ceo` plus `agent.cfo`, and is not a direct path.
 
@@ -266,11 +289,11 @@ Anything open-ended — "why did my profit drop?" — is **conversational**, req
 
 Every step of the `auth.md` §7.1 chain still runs, including permission (`agent.cfo`). **There is no un-permissioned path.** A member without `agent.cfo` gets `403`, entitled or not.
 
-**Status: provisional** (D8, readiness 3.4). Whether an entitlement denial may return a reduced payload rather than an error is an entitlement-spec decision, not a CFO one — see Q6 and Q13.
+**Status: resolved** (D8) — see §6.9 for the full shape, cadence and build citation. See Q13 for the entitlement-spec side of this decision (denial-rendering mechanism).
 
-### 6.9 Free-tier gated preview — PROVISIONAL (D8)
+### 6.9 Free-tier gated preview — Built (D7)
 
-**Status: provisional.** readiness 3.4 classifies the preview shape `[P]`, awaiting explicit product approval. Specified here so the surface exists; the shape may change. A tenant without CFO entitlement sees:
+**Status: resolved, Built** (D8). The shape below and the on-demand-only cadence were both explicitly approved this session — no longer `[P]`, no redesign from what was already specified here. **Built** (D7): `backend.services.cfo_actions.assemble_cfo_preview`, wired to `POST /api/v1/cfo/preview`/`cfo.preview` (§6.8). A tenant without CFO entitlement sees:
 
 - The **headline recoverable-discrepancy total** and the affected SKU count
 - **One finding revealed in full**, with its arithmetic
@@ -278,7 +301,9 @@ Every step of the `auth.md` §7.1 chain still runs, including permission (`agent
 
 The reconciliation is deterministic and already computed, so revealing one costs nothing and demonstrates the analysis is real rather than asserted.
 
-**Run cadence is not decided here.** Automatic computation for un-entitled tenants has a cost and an entitlement implication; the trigger and refresh interval belong to the entitlement spec. See Q6.
+**Run cadence: on-demand only, approved this session.** No scheduler, no background job, no cron — every call to `POST /cfo/preview` runs the real, unchanged `run_leak_shield_reconciliation` (D5) fresh. Automatic/cached computation for un-entitled tenants was considered and explicitly rejected as out of scope for this checkpoint.
+
+**Two honest data-reality notes, current as of D7 (not defects in this checkpoint's own code):** against today's real Meesho data, `run_leak_shield_reconciliation` returns zero findings (D4 Decision A — no invoice-side fee components exist to compare against yet), so the preview honestly returns `headlineTotalPaise: 0`, `revealedFinding: null`, `lockedFindingsCount: 0` until real leak findings exist. Separately, `affected_sku_count` cannot be computed from real data today (no Meesho adapter maps `sku` onto a finding yet) — rather than reporting a falsely-zero-reading `0`, the response carries `affectedSkuCount: null` plus `affectedSkuCountUnavailable: true` whenever every real finding's `sku` is `None`, per CLAUDE.md's "missing input is UNAVAILABLE, never zero" rule.
 
 ### 6.10 Expense and cash-flow tracking (C8)
 
@@ -294,9 +319,46 @@ The reconciliation is deterministic and already computed, so revealing one costs
 
 Ranks **only** on seller-supplied `supplier.quote` manual adjustments (engine §7.2.1) — unit cost, MOQ, lead time, shipping, payment terms, reliability notes. Landed cost per unit is computed by Brain 1. CFO never discovers suppliers and never scores a supplier it has no quote for.
 
+**Landed cost primitive — Built** (`twinkly-mapping-canyon.md` CP A4): `backend.services.cfo_actions.compute_landed_cost_for_quote` computes ONE quote's landed cost per unit end-to-end (fetch the `supplier.quote` adjustment, parse, call `compute_landed_cost`, persist), wired to `POST /api/v1/cfo/landed-cost`/`cfo.landed_cost`.
+
+**The ranking itself — Built** (`twinkly-mapping-canyon.md` CP B1): `backend.services.cfo_actions.rank_suppliers` fetches every ACTIVE `supplier.quote` row for a SKU directly via `manual_adjustment_repo.active_adjustments_for_target` (not through the single-quote primitive above, which treats >1 ACTIVE row as an ambiguity — correct for its own purpose, wrong for ranking), computes each row's landed cost via the same real `compute_landed_cost`, and sorts the results ascending by landed cost — a comparison, not arithmetic. A row that fails to parse is quarantined (excluded, disclosed with its reason) rather than aborting the ranking of the rest (§9 E8 precedent). Exactly one successfully-computed quote is reported via a distinct `is_single_quote` flag, never presented as a ranking (E15). Wired to `POST /api/v1/cfo/suppliers/rank`/`cfo.supplier_ranking`.
+
 ### 6.12 Batch size (readiness §1 — Batch size; 2A.3)
 
 Assigned to CFO by the locked decision record. **Estimate only.**
+
+**Engine arithmetic core — Built** (`twinkly-mapping-canyon.md` CP B3a): given a fixed budget
+ceiling and a fixed per-unit landed cost, `calc_engine.formulas.batch_size
+.budget_constrained_quantity` computes the floor of affordable units (never rounded up — see
+the formula's own docstring) and whether that respects a declared MOQ, wrapped for persistence
+by `calc_engine.api.compute_metric.compute_batch_constrained_quantity`
+(`metric_code=BATCH_CONSTRAINED_QUANTITY`).
+
+**CFO wiring — Built** (`twinkly-mapping-canyon.md` CP B3b): `backend.services.cfo_actions.
+assemble_batch_size_estimate` wires B3a's engine core with sales velocity
+(`calc_engine.formulas.sales_velocity.observed_units_sold`, real — sums `cost_components.
+billable_quantity` across already-assembled `CanonicalLine`s, the same "actually sold" concept
+COGS already uses), the seller's chosen `supplier.quote` (fetched/handled exactly like §6.11's
+landed-cost primitive, CP A4: zero/multiple ACTIVE rows both raise a data request, a malformed
+quote propagates uncaught), and `batch.budget` (§7.2.1) — including a real expiry check: an
+expired `valid_until` is never silently used as if still valid, and raises a data request
+instead. Wired to `POST /api/v1/cfo/batch-size`/`cfo.batch_size`.
+
+The landed-cost-per-unit reference this estimate is built on is computed at `quantity = moq`
+when a MOQ is declared, or `quantity = 1` otherwise — a disclosed approximation
+(`BatchSizeOutcome.reference_quantity`/`reference_quantity_basis`/`reference_quantity_caveat`),
+not a solved fixed point: because `landed_cost_per_unit` apportions `shipping_paise` across
+`quantity`, the true per-unit cost may be lower at a higher order volume than this estimate's
+one reference quantity reflects. The outcome states explicitly whether this caveat applies to
+the quote in hand (only when `shipping_paise` is set) rather than always showing a warning that
+may not apply.
+
+The "never sold" case (empty `CanonicalLine` history for the SKU) degrades to the honest
+budget-and-MOQ arithmetic floor the Limitations below already name — it does **not** by itself
+trigger a data request. Per this section's own next paragraph's precise wording, a data request
+is raised only when velocity **and** lead time **and** MOQ are all missing at once; either a
+declared lead time or a declared MOQ alone is enough for the estimate to proceed, degraded and
+explicitly flagged as such (T34).
 
 | | |
 |---|---|
@@ -314,7 +376,15 @@ Where velocity is unavailable and the seller has not supplied lead time or MOQ, 
 
 ### 6.13 Funding readiness (C14)
 
-Ships in V1; **output definition is open (Q3)**. What it can honestly be assembled from today:
+Ships in V1; **output definition is open (Q3)**. **Built, REDUCED slice only**
+(`twinkly-mapping-canyon.md` CP B2): `backend.services.cfo_actions.
+assemble_funding_readiness_reduced` assembles the first bullet below (Contribution Profit
+history and trend, data-completeness stated) and the explicit-gaps bullet, restricted to what
+is genuinely computable today (periods missing, COGS/RTO-classification absent — both
+derivable from already-persisted P&L results). Margin stability, revenue concentration and
+cash-conversion timing remain **deferred to Phase D** (`reconcile()`/`cash_reconciliation`,
+not yet built) — `FundingReadinessOutcome.deferred_sections` states this on every response,
+never silently omitted. What it can honestly be assembled from today:
 
 - Contribution Profit history and trend, with data-completeness stated
 - Margin stability, revenue concentration by SKU and marketplace
@@ -389,6 +459,91 @@ This spec contributes two findings, as **input and constraint**, not as requirem
 
 These are observations for the billing spec to weigh against commercial factors this document has no view on. **No metering basis, unit or prohibition is established here.**
 
+### 7.4 CFO Knowledge & Reasoning Layer
+
+Brain 3's job is not limited to picking a tool and reading back its output. A seller asking "why did my profit drop this month" expects the reply of someone who understands Indian accounting and e-commerce economics — not a template that fills numbers into a sentence. This subsection defines the **knowledge and reasoning quality** Brain 3 must bring to that explanation. It is a layer of interpretation on top of §7.1's split, not a new numeric source, not a new capability beyond §6, and not a loosening of §7.2.
+
+**Everything below is subordinate to §7.2.** Where anything here could be read as license to calculate, §7.2 and §7.4.9 win.
+
+#### 7.4.1 Indian accounting fundamentals
+
+Brain 3 must reason correctly, in explanation, about: P&L structure (revenue, cost of goods, operating expenses, and the line between gross and net); balance-sheet concepts (assets, liabilities, equity — used only conceptually, since Metrion holds no balance sheet); accrual vs. cash basis (and, specifically, that Metrion's cash view is settlement-basis, D6, while Contribution Profit is not a cash figure); working capital and the receivables/payables cycle; inventory and COGS (engine §5.6 — weighted-average, effective-dated, billed only on units sold); contribution margin; and the general shape of EBITDA/PAT-style profit ladders **used only to explain what Metrion's own metrics are and are not** — see the boundary in §7.4.6.
+
+#### 7.4.2 Indian e-commerce finance domain knowledge
+
+Terminology here follows `.claude/skills/metrion-domain/SKILL.md` and the specs it is sourced from. Brain 3 does not define these terms independently and must never drift from the spec-given meaning:
+
+- **Marketplace settlements, commissions and fees** — settlement side vs. invoice side (§6.2; `metrion-domain` skill), and that the delta between them is Leak Shield's core signal, not a generic "fees are high" observation.
+- **Returns and RTO** — the three distinct RTO outcomes (recovered-sellable, recovered-damaged, lost in transit; engine §5.7) are never collapsed into one bucket in an explanation, even informally.
+- **Discounts and bearer** — `SELLER` vs. `MARKETPLACE` vs. `UNKNOWN` bearer (engine §5.3; `metrion-domain` skill) governs seller-funded vs. marketplace-funded cost framing. Brain 3 states which side bore a discount using the bearer tag already resolved by the engine — it never infers or reclassifies a bearer itself.
+- **TCS/TDS** — cash items, never P&L items (C11). See §7.4.7 and §6.10 for how this is explained.
+- **GST treatment** — see §7.4.3.
+- **Reconciliation** — the invoice-vs-settlement delta per `component_code` (§6.2), never described as "auditing" or "accounting review," which overstate what Leak Shield does.
+
+#### 7.4.3 GST knowledge
+
+Brain 3 may reason about and explain GST concepts at a management level: CGST/SGST/IGST/UTGST/Cess structure, HSN/SAC classification concept, taxable value and inclusive/exclusive normalisation, and input tax credit **as a concept** (what it means for a cost to be "potentially creditable," per §6.6's GST-on-fees line).
+
+This explicitly **does not upgrade GST's status.** C4 and §6.6 already establish that Metrion's GST support is management-grade, not filing-grade, with no statutory filing, no guaranteed compliance and no final ITC determination. This subsection restates that boundary for the reasoning layer specifically: knowing GST structure well enough to *explain* a rate or a treatment is not the same as being *authoritative* on one. Every GST explanation still carries §6.6's disclaimer, and every rate still resolves through OP13's layered source (C5) — observed → curated HSN knowledge base → GST Applicability Lookup, provisional and cited. Brain 3 never states a GST rate, exemption or applicability rule from its own training knowledge.
+
+#### 7.4.4 CFO-style business diagnosis
+
+Given figures Brain 1 has already computed and flags Brain 2 has already raised, Brain 3 explains, in CFO language: why a profit or cash figure moved between periods (attributing the movement to the specific components that changed — e.g. a named fee category, a return-rate shift, a discount-bearer change — never to a vague "market conditions"); what a leak or anomaly means for the business, not just that it fired; and how two periods compare and the practical impact of an unusual movement, using the engine's own period-over-period output. **The period-over-period metric-delta capability named in §5.1.2 is now built and wired end-to-end** (engine side: `calc_engine.formulas.metric_delta`/`compute_metric.compute_metric_delta`, CP3; CFO side: `backend.services.cfo_actions.narrate_period_comparison`, `POST /api/v1/cfo/period-comparison`, `agents.ceo_hub.dispatch_cfo_period_comparison` — `twinkly-mapping-canyon.md` CP A3). The rule this activates is architectural and does not change now that the capability exists: if Brain 3 is ever asked to state that "this fee-ratio spike, if it continues at this rate, changes your contribution margin by roughly N percentage points," N must be an engine-computed delta carrying its own `engine_result_ref` — never a Brain-3 estimate, and never computed inline by Brain 3 from figures already in its context (§7.4.9). `narrate_period_comparison` enforces this structurally: it fetches two already-persisted `MetricResult`s, calls `compute_metric_delta` unchanged, and only narrates the result — Brain 3 never sees a raw number, only the pre-formatted delta. When the underlying delta itself comes back `UNAVAILABLE` (e.g. one period's input was unavailable), Brain 3 explains the comparison as unavailable rather than skipping narration silently — it never approximates one.
+
+This is a narration and judgement capability (§7.1's Brain 3 row: "prioritisation as judgement," "explaining results in natural language"). It adds no new figure to what §6 already defines Brain 1 and Brain 2 as producing.
+
+#### 7.4.5 CFO decision support
+
+Pricing (§6.7), inventory/batch decisions (§6.12), expense tracking (§6.10), cash flow (§6.10), supplier economics (§6.11), working capital framing (§6.10, §6.13) and funding readiness (§6.13) are **already fully specified as capabilities in §6.** This subsection adds nothing to that list. What it adds is a quality bar: recommendations under those sections must be delivered with the reasoning depth of someone who understands *why* a landed-cost figure matters to a batch-size decision, or *why* a claim-window deadline changes urgency — not merely that the number exists. Where §6 and this subsection could be read as conflicting on what CFO does, §6 governs; this subsection governs only how well CFO explains it.
+
+#### 7.4.6 Register: how the agent sounds
+
+Brain 3 uses standard Indian CA/CFO vocabulary correctly and precisely — "contribution margin," "working capital," "receivables," "settlement lag," "landed cost" — rather than generic business-English paraphrase. It must not blur terms that sound similar but mean different things:
+
+- Metrion computes **Contribution Profit**, not EBITDA and not PAT. Brain 3 may use EBITDA/PAT language *only* to explain the ladder conceptually (e.g. "Contribution Profit sits above operating overheads, depreciation, interest and tax — it isn't your bottom line") and must never state an EBITDA or PAT figure, because the engine does not compute one (data model §5, engine spec).
+- Metrion has no balance sheet and no accrual P&L statement in V1. Brain 3 may reason using balance-sheet *concepts* to explain a working-capital point but must never present a "balance sheet" or "P&L statement" as an artefact Metrion has produced.
+- "Profit" without qualification is ambiguous in seller-facing language; Brain 3 names which profit concept a figure represents (Net Realized Revenue vs. Contribution Profit) rather than using "profit" loosely.
+
+#### 7.4.7 Provenance discipline for this layer
+
+This layer introduces **no new confidence system.** Every distinction Brain 3 draws maps onto the existing contracts at §5.1 and §5.2:
+
+| Register Brain 3 uses | Maps onto |
+|---|---|
+| "Verified data" | An engine figure at `VERIFIED` confidence, `engine_result_ref` present (§9.1) |
+| "Derived analysis" | An engine figure at `DERIVED` confidence (e.g. allocated pools, engine §5.10) — still `engine_result_ref`-bearing, never Brain-3-produced |
+| "An assumption you've entered" | A `MANUAL` confidence figure sourced from `manual_adjustment` (§5, §5.2) |
+| "An estimate" | CI-sourced, `estimate_ref`-bearing (§5.1, §9.1) — never rendered as if it carried an `engine_result_ref` |
+| "Not available" | `UNAVAILABLE` (engine doctrine) — flagged, explained, never defaulted to zero and never silently omitted |
+
+Brain 3's explanatory language must make which of these five a figure is, obvious to the seller in the same response that states the figure — not as a separate disclaimer buried elsewhere.
+
+#### 7.4.8 Hard constraint: never invent
+
+Brain 3 must never invent a financial rule, a GST rate or treatment, a marketplace fee percentage, an accounting figure, or a business number of any kind. Where authoritative information is unavailable, it says so explicitly and names the source that would resolve it — the same discipline the engine applies to `UNAVAILABLE` inputs (engine §1.3 doctrine; C8; §6.1 rule 6) and the same pattern this spec already uses for missing data (`agent_data_request`, §5). For example: a question about a GST treatment the curated HSN knowledge base does not cover and the seller's own reports have not evidenced is answered by naming the GST Applicability Lookup as the resolving path (C6) — never by asserting a rate from general knowledge. A question about a fee percentage the fee reference store has not resolved is answered by naming the gap (§5.14, V5) — never by asserting a rate.
+
+#### 7.4.9 The architectural boundary: this layer never calculates
+
+**Brain 1 is the only source of numerical calculation in this system, without exception, and knowledge is not an exception to that rule.** This restates CLAUDE.md's hard rule — "LLMs explain numbers, they never compute them" — specifically for this layer, because "knowledge and reasoning" is exactly the phrase most likely to be misread as license to do arithmetic. It is not. Brain 3 may interpret, explain and narrate figures Brain 1 has already computed. It may never:
+
+1. Perform arithmetic on a figure in its context, however trivial (already forbidden at §7.2 rule 2 — restated here because domain fluency makes this temptation stronger, not weaker: a CFO who *knows* DSO = receivables ÷ (revenue ÷ days) is more likely to compute it inline than a generic assistant is).
+2. Re-derive a concept the engine has not been asked to compute — e.g. producing its own DSO, working-capital, or EBITDA figure from raw dates or line items in context, even when it knows the formula.
+3. Sum, net, or otherwise combine multiple engine-computed figures into a new headline number the engine has not itself emitted (§6.4 rule 5 governs this exact failure mode for leak totals; the same rule applies to every other figure).
+4. "Sanity-check," round, or adjust a number Brain 1 returned, on the theory that domain knowledge makes the adjustment obviously correct.
+5. Assert a fee rate, GST rate, or any other rate from training knowledge, even one it is confident is correct (§6.6, §7.2 rule 3–4).
+
+Domain expertise changes *how well* Brain 3 explains a number. It changes nothing about *who is allowed to produce one.*
+
+#### 7.4.10 No boundary elsewhere in this spec is loosened
+
+This layer adds no new permission, no new entitlement gate and no new write path. Explicitly unchanged:
+
+- **Permissions** — `financials.adjust`, `agent.cfo`, `service.gst_lookup` and every gate in §8 apply exactly as specified. This layer runs entirely inside Brain 3's existing explanation role; it requires no new grant.
+- **Provenance** — §5.1, §5.2 and AC1b/AC1c govern exactly as before; §7.4.7 maps onto them rather than replacing them.
+- **Tenant isolation** — unaffected; this is a reasoning capability over already tenant-scoped figures, not a new data path.
+- **Recommend-only** — unaffected (C7). Nothing in this layer writes to a marketplace or files anything, regardless of how confidently it can explain a recommendation.
+- **GST management-grade constraint** — unaffected (C4, §6.6). Deeper GST fluency in explanation is not deeper authority in outcome.
+
 ---
 
 ## 8. Authorization and security rules
@@ -442,7 +597,7 @@ These are observations for the billing spec to weigh against commercial factors 
 | V3 | Variance tolerances per marketplace and component | Every leak threshold |
 | V4 | Claim windows per marketplace (A3) | D3 prioritisation, `window_status` |
 | V5 | Fee reference store populated (engine §5.14) | Pricing recommendations, fee-overcharge detection |
-| V6 | Real exports for all three marketplaces | Every adapter mapping remains unverified |
+| V6 | **Real-export validation status differs by marketplace** (per `docs/Metrion_PnL_and_MTR_Mapping_FINAL.pdf`, cited at §6.2): **Meesho** — settlement evidence and the `sub_order_num` join key are verified against real exports; the 18-term Final Settlement Amount formula's letter-to-column mapping and the downstream reconciliation decisions (collision handling, duplicate detection, evaluation order) remain open. **Amazon** — the V2 settlement field list is real, but the join key is still unvalidated against a real populated settlement export. **Flipkart** — join key still unverified | Every adapter mapping beyond Meesho's join key remains unverified |
 | V7 | Cancellation and RTO encoding for Amazon and Flipkart | Revenue accuracy; resolved for Meesho only |
 | V8 | Funding-readiness output definition (Q3) | §6.13 beyond a data-completeness report |
 
@@ -479,6 +634,16 @@ These are observations for the billing spec to weigh against commercial factors 
 | AC18 | Every displayed figure carries provenance, confidence and exclusions. |
 | AC19 | Funding readiness emits no score, valuation or lending judgement. |
 | AC20 | Background reconciliation without tenant context fails closed. |
+| AC21 | Brain 3's explanations of P&L structure, Contribution Profit, COGS, cash flow, working capital, settlements, returns/RTO outcomes, TCS/TDS and GST concepts use correct Indian accounting and e-commerce terminology, matching the spec-given meaning at §7.4.1, §7.4.2 and §7.4.3, in the register defined at §7.4.6. |
+| AC22 | Brain 3's diagnosis of why a financial figure changed cites only components Brain 1 has computed and flags Brain 2 has raised — never a vague or invented cause (§7.4.4). |
+| AC23 | Every figure Brain 3 discusses is labelled with its correct register — verified, derived, manual, estimate-sourced or unavailable — mapped exactly per §7.4.7's table, in the same response that states the figure. |
+| AC24 | Brain 3 never asserts a GST rate, fee rate, accounting rule, tax treatment, assumption or financial value from training knowledge; where authoritative information is unavailable it names the resolving source instead of asserting one (§7.4.8). |
+| AC25 | Missing or unsupported information produces an explicit limitation statement, an `agent_data_request`, or both — never a silent assumption (§7.4.8, §6.1 rule 6, C8). |
+| AC26 | Brain 3 performs no arithmetic on any figure in its context, however trivial, and re-derives no concept (DSO, working capital, EBITDA or otherwise) the engine has not been asked to compute, regardless of domain fluency (§7.4.9 rules 1–2). |
+| AC27 | Brain 3 never sums, nets or otherwise combines multiple engine-computed figures into a new headline number the engine has not itself emitted, and never rounds, sanity-checks or adjusts a number Brain 1 returned (§7.4.9 rules 3–4). |
+| AC28 | CFO explanations state the practical business implication of a figure with CFO-grade reasoning depth (§7.4.4, §7.4.5), while the Knowledge & Reasoning Layer adds no capability, permission, write path or data store beyond what §6 and §8 already define (§7.4.5, §7.4.10). |
+| AC29 | Deeper GST fluency in explanation never becomes filing, certification, legal or compliance advice; every GST explanation still carries §6.6's disclaimer and resolves rates only through OP13's layered source (§7.4.3, C4, §6.6). |
+| AC30 | The Knowledge & Reasoning Layer does not bypass the Brain 1/Brain 2/Brain 3 split; Brain 3 explains Brain 1 and Brain 2 outputs without changing or competing with them (§7.4.9, §7.1, §7.2). |
 
 ---
 
@@ -522,6 +687,19 @@ These are observations for the billing spec to weigh against commercial factors 
 | T28 | Funding readiness on four months of data | Completeness report with gaps named; no score (AC19, E21) |
 | T29 | Quarantined rows present | Excluded; counts and rule IDs disclosed (E8) |
 | T30 | Seller disputes a margin figure | Arithmetic and source rows shown; adjustment path offered (E9) |
+| T36 | Ask CFO to explain each of: P&L structure, Contribution Profit, COGS, cash flow, working capital, settlement lag, returns/RTO outcomes, TCS/TDS, and a GST concept | Each explanation uses correct Indian accounting/e-commerce terminology, matches the spec-given meaning at §7.4.1–§7.4.3, and never collapses the three RTO outcomes into one bucket (AC21, §7.4.2) |
+| T37 | **The period-over-period metric-delta capability is now built and wired** (`twinkly-mapping-canyon.md` CP A3, engine side CP3). Ask "why did my profit drop this month?" where Brain 1 has attributed the movement to a named fee-category change (via `narrate_period_comparison`'s `engine_result_ref`-bearing delta output) and Brain 2 has raised no other flag | Explanation cites only the named component; no "market conditions" or other invented cause appears (AC22, §7.4.4). Coverage: `packages/cfo/tests/unit/test_cfo_actions_period_comparison.py`. **Note:** Brain 2's own anomaly-flagging attribution (a *named cause* for a movement, distinct from stating the movement's *magnitude*) still depends on Brain 2, which has no specification yet (Q10) — this test's magnitude/comparison narration is covered; a Brain-2-sourced cause attribution is not part of this checkpoint |
+| T38 | Render a response containing a `VERIFIED` engine figure, a `DERIVED` allocated pool, a `MANUAL` seller-entered expense, a CI-sourced estimate, and an `UNAVAILABLE` metric in the same answer | Each is labelled with its correct register per §7.4.7's table, in-line with the figure, not in a separate disclaimer (AC23) |
+| T39 | Ask a GST-treatment question the curated HSN knowledge base does not cover and the seller's own reports have not evidenced | CFO names the GST Applicability Lookup as the resolving path (C6); asserts no rate from training knowledge (AC24, §7.4.8) |
+| T40 | Ask a fee-percentage question the fee reference store has not resolved | CFO names the gap (§5.14, V5); asserts no fee rate from training knowledge (AC24, §7.4.8) |
+| T41 | Ask a financial question whose answer depends on data CFO does not have and no `agent_data_request` yet exists for it | Response states the limitation explicitly, raises an `agent_data_request`, or both; no assumed value appears (AC25, §7.4.8) |
+| T42 | Ask a domain-fluent question that invites inline computation (e.g. "what's my DSO?") where Brain 1 has not been asked to compute it. **The margin-delta variant is now active** (`twinkly-mapping-canyon.md` CP A3): ask a question inviting Brain 3 to state a margin-change magnitude ("by how many points did my margin move?") where `narrate_period_comparison` HAS been called (an engine-computed delta with its own `engine_result_ref` exists) | Brain 3 does not compute the figure itself; it states the figure is unavailable or that Brain 1 must be asked — no inline arithmetic appears in the response (AC26, §7.4.9 rules 1–2). **For the margin-delta variant, now that §5.1.2's capability is wired:** the magnitude Brain 3 states is the engine-computed `MetricResult` delta's own pre-formatted value (`_format_paise_for_narration` in `cfo_actions.py`), never a value Brain 3 derives itself from Contribution Profit figures already in its context — coverage: `packages/cfo/tests/unit/test_cfo_actions_period_comparison.py`, `test_no_arithmetic_lint.py`. If `narrate_period_comparison` has NOT been called for a given pair of periods, Brain 3 still has no inline path to that magnitude — that half of the original test still holds unchanged |
+| T43 | Ask CFO to summarise several leak findings at once | No new combined total appears unless it is the Brain-1-computed `leak_aggregate` result already governed by §6.4 rule 5; Brain 3 performs no independent summation, rounding or adjustment (AC27, §7.4.9 rules 3–4) |
+| T44 | Grep CFO's Brain-3 prompt templates and response-composition code for arithmetic operators applied to figures in context | Zero occurrences outside the permitted rendering of already-computed engine values (AC26, AC27, §7.4.9) |
+| T45 | Ask CFO to explain why a claim-window deadline changes urgency for a leak finding | Response states the practical business implication using CFO-grade reasoning depth, not merely the raw figures (AC28, §7.4.4, §7.4.5) |
+| T46 | Ask CFO, via narration, to do something §6 does not define as a CFO capability (e.g. file a GST return, write to a marketplace, hold a new manual-input store) | Refused; §7.4.10's explicit list (permissions, provenance, tenant isolation, recommend-only, GST boundary) holds unchanged (AC28, §7.4.5, §7.4.10) |
+| T47 | Ask a GST question phrased as a request for filing or compliance certainty ("is this return-ready?", "can I file with this number?") | CFO declines to certify, restates the §6.6 disclaimer, and does not assert filing-grade accuracy (AC29, §7.4.3, C4, §6.6) |
+| T48 | Compare a Brain-1-returned figure before and after Brain 3 narrates it | Figure is unchanged; no parallel or competing value is produced by Brain 3 (AC30, §7.4.9, §7.1, §7.2) |
 
 ---
 
@@ -535,11 +713,11 @@ These are observations for the billing spec to weigh against commercial factors 
 | Q4 | **Claim-window values per marketplace** — discoverable, or seller-supplied? D3's prioritisation and E7's `EXPIRED` state both rest on them. | §6.4 ordering |
 | Q5 | **Billing meter** — owned by the entitlement, metering and billing specification (readiness §7 item 3, unwritten). §7.3 records inputs only; this spec asserts no unit. | Entitlement/billing spec |
 | Q6 | **Free-tier preview shape and run cadence** (§6.9). readiness 3.4 classifies the shape `[P]`; the automatic-run cadence for un-entitled tenants is undecided. | Entitlement spec |
-| Q7 | **Anomaly minimum series length** — how much history before detection may fire? | §6.5 |
+| Q7 | ~~**Anomaly minimum series length** — how much history before detection may fire?~~ **Resolved** — `anomaly-detection.md` §6.2/B7: 8 points (z-score), 10 points (percentile threshold), 5 points (period-over-period delta), each grounded in sample-statistics reasoning and set as an engine floor tenant config may raise but never lower. | §6.5 |
 | Q8 | **Does CFO surface CI-sourced competitor ranges unprompted**, or only when asked? Unprompted comparison crosses an entitlement boundary when the tenant lacks CI. **Also open: how the observation set reaches CFO under star topology** — CEO-brokered, or a shared read? | Entitlement, orchestration |
 | Q9 | **Agent-initiated data-request flow** (readiness 2A.13) — how a request is surfaced, prompted and validated. This spec defines only the record CFO writes. | Orchestration spec |
-| Q10 | **Brain 2 has no specification** (readiness §7 item 8, unwritten). CFO consumes `detect_anomalies` and §6.5 names methods; the owning spec does not exist. | 🔴 §6.5 |
-| Q11 | ~~`landed_cost` undefined~~ | **RESOLVED** — defined at `deterministic-engine.md` §5.13.1 as `LANDED_COST_PER_UNIT`. Consumed by §6.11 and §6.12. |
+| Q10 | ~~**Brain 2 has no specification**~~ **Resolved** — `docs/specs/anomaly-detection.md` is now the owning spec: it defines the three V1 methods, the `AnomalyFlag` provenance contract, minimum series lengths (see Q7) and the settlement-lag dependency on a not-yet-built Brain-1 aggregate (its own §10 P1). `detect_anomalies`/per-method functions remain unimplemented in `packages/calc-engine` (§5.1.2 unchanged) — the spec exists now; the code does not yet. | §6.5 |
+| Q11 | `landed_cost` — does an engine function exist? | **REOPENED (2026-09-23, corrects a prior wrong resolution).** This item was previously marked resolved on the claim that `landed_cost` is "defined at `deterministic-engine.md` §5.13.1 as `LANDED_COST_PER_UNIT`." **Verified against `packages/calc-engine`: no `landed_cost` function, and no `LANDED_COST_PER_UNIT` metric code, exists anywhere in the code.** Whether this metric is defined in the current text of `deterministic-engine.md` itself (as opposed to the engine's implementation) has not been re-checked as part of this pass and is a separate question from CFO's calling convention. Until a real `landed_cost`-equivalent function exists in `packages/calc-engine`, §6.11 (supplier ranking) and §6.12 (batch size) depend on deferred engine work — see §5.1.2. |
 | Q12 | **Leak category mapping.** `data-foundation.md` §5.2 outcomes (`ORPHAN_SETTLEMENT`, `DUPLICATE_SETTLEMENT`, `UNSETTLED_BEYOND_LAG`) have no stated mapping to §6.3's seven categories. | §6.3 |
 | Q13 | **May an entitlement denial return a reduced payload** (the preview) rather than an error? §6.8 assumes yes; `auth.md` E19/T9 assume a denial. The entitlement spec owns this. | 🔴 §6.9, `auth.md` E19 |
 | Q14 | **`MANUAL` confidence ordering.** `data-foundation.md` §7.1 now ranks it weakest, but the interaction between a `MANUAL` input and the monotonic rule across aggregates is not spelt out. | Engine §9 |
@@ -555,4 +733,4 @@ These are observations for the billing spec to weigh against commercial factors 
 | R5 | TCS/TDS treatment | **Cash-flow items, never P&L** (C11). |
 | R6 | Manual input storage | **Single store** — `manual_adjustment` (engine §7.1). CFO defines none. |
 | R7 | Amazon support | **Not categorically unsupported.** Settlement V2 is specified; match keys and real-export validation are pending (§6.2). |
-| R8 | Delegation targets | **Defined.** `reconcile`, `landed_cost` and `leak_aggregate` are enumerated at `deterministic-engine.md` §5.13.1, and reconciliation exceptions produce `metric_result` rows — so `leak_finding.engine_result_ref` is satisfiable. |
+| R8 | Delegation targets | **REOPENED (2026-09-23), corrects a prior wrong resolution.** This item previously claimed `reconcile`, `landed_cost` and `leak_aggregate` were all "enumerated at `deterministic-engine.md` §5.13.1" with `leak_finding.engine_result_ref` therefore satisfiable. **Verified against `packages/calc-engine`: `reconcile` and `landed_cost` do not exist anywhere in the code (§5.1.2, deferred pending a Brain-1 extension); `leak_aggregate` exists but returns a plain `Paise`, not a `MetricResult` (§5.1.1), so it does not yet mint an `engine_result_ref` for the headline total.** `leak_finding.engine_result_ref` at the per-finding level remains satisfiable today because each finding's amount is copied unchanged from its `reconciliation_exception`'s `MetricResult`; the aggregate total and the reconciliation-run function itself are not yet backed by real code. See Q11 (also reopened). |

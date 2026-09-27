@@ -7,10 +7,12 @@ Turns seller-uploaded Amazon/Flipkart/Meesho marketplace report files into the c
 "Brain 2" — that name is already reserved in this repo's vocabulary for the future statistical
 anomaly-detection layer (see `docs/planning/phase-1-readiness-review.md`).
 
-**Scope:** sales-side ingestion only, this pass. Settlement-side adapters
-(`amazon.settlement.v2`, `meesho.payments.v1`) and the reconciliation tables
-(`settlement_line`, `reconciliation_run`/`match`/`exception`) are deferred — no schema for
-them exists anywhere in `data-foundation.md`.
+**Scope:** primarily sales-side ingestion, plus `meesho.payments.v1` — the first
+settlement-side adapter, covering only the Payments workbook's "Order Payments" tab, and only
+its two spec-confirmed columns (`docs/specs/data-foundation.md` §5.6/§1.4) — and its backing
+`settlement_line` table (§5.6). `amazon.settlement.v2` and the reconciliation tables
+(`reconciliation_run`/`match`/`exception`, calc-engine-owned per §5.7) remain deferred — no
+schema for them exists in this package.
 
 **Column coverage is honest, not exhaustive.** Every adapter's `column_map` includes only
 columns `data-foundation.md` actually names verbatim. Every other column in a real file is

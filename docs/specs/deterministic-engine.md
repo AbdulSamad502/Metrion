@@ -449,6 +449,79 @@ becomes `UNSETTLED_BEYOND_LAG` once that threshold is crossed, but is only surfa
 reportable leak exception once `days_since(...) > settlement_lag_days + grace_period_days` —
 the grace period is a reporting buffer on top of the lag threshold, not a second lag.
 
+### 5.12.2 Join-key confidence cap for `reconcile()` — CONFIRMED design decision (Amazon/Flipkart extension, this session)
+
+`data-foundation.md` §5.1.5 designs how `reconcile()` extends from Meesho-only matching to also
+run against Amazon and Flipkart, given that neither marketplace's join key (`order_ref` alone,
+per §5.1.5) has been validated against a real populated export, unlike Meesho's `line_ref`
+(`sub_order_num`, VERIFIED). This subsection is the confidence consequence of that extension —
+the single most important part of this design, since a Leak Shield finding presented with
+unwarranted confidence on an unvalidated join is exactly the kind of thing that erodes seller
+trust (`CLAUDE.md`: "a number a seller cannot trace is worse than no number at all").
+
+**The problem this closes.** `combine_confidence` (`data-foundation.md` §7.1) already folds the
+matched `sales_line`'s and `settlement_line`'s own row-level confidence (field-mapping
+confidence — is this column's meaning trustworthy) into `reconciliation_match.confidence`. That
+is a **different axis of uncertainty** from "is the join key itself correct" — a match's
+component-amount mapping can be perfectly trustworthy while the row it was joined to is still
+only a guess about which order/line it actually belongs to. Folding both into one confidence
+value without a second signal would let an Amazon/Flipkart match happen to read the same
+confidence as a Meesho one whenever both marketplaces' underlying rows carry the same
+field-mapping confidence — exactly the unwarranted-confidence risk this subsection exists to rule
+out.
+
+**Mechanism — both a confidence cap and an explicit flag, not one alone.**
+
+1. **Confidence cap.** `reconcile()` gains a second, explicit per-marketplace lookup — a
+   join-key confidence, distinct from any row's field-mapping confidence:
+
+   | Marketplace | Join-key confidence | Basis |
+   |---|---|---|
+   | Meesho | `VERIFIED` | `line_ref` (`sub_order_num`) is `data-foundation.md` §5.1's VERIFIED key. |
+   | Amazon | `PROVISIONAL` | `order_ref`-only key, specified-but-unvalidated (§5.1, §5.1.2, §5.1.5). |
+   | Flipkart | `PROVISIONAL` | `order_ref`-only key, specified-but-unvalidated (§5.1, §5.1.3, §5.1.5). |
+
+   This value is folded into **every** confidence `reconcile()` produces for that marketplace's
+   run — `reconciliation_match.confidence`, and every `reconciliation_exception.confidence` /
+   `LEAK_EXCEPTION_AMOUNT` `metric_result.confidence`, from **both** Path A and Path B (§5.8) —
+   via the same, already-existing `combine_confidence` call, with the marketplace's join-key
+   confidence added as one more input alongside the row(s)' own confidence. Because
+   `combine_confidence` is monotonic (weakest input wins, `data-foundation.md` §7.1), an
+   Amazon/Flipkart match or exception can **never** present as better than `PROVISIONAL`,
+   regardless of how strong the underlying `sales_line`/`settlement_line` field-mapping
+   confidence is or later becomes. Path B is included deliberately, not only amount-bearing
+   Path A outcomes: `UNSETTLED_BEYOND_LAG`'s determination that "no settlement was found" is
+   itself dependent on the same unvalidated join key correctly resolving zero candidates — an
+   unvalidated key can produce a false negative (a real settlement exists but the candidate key
+   failed to find it) just as it can produce a false positive collision, so the cap applies
+   uniformly to everything a non-Meesho run of `reconcile()` produces, not selectively.
+
+2. **Explicit flag, not confidence alone.** Confidence alone conflates two different reasons a
+   figure might read `PROVISIONAL` — an unverified column mapping, or an unvalidated join key —
+   and the CFO agent (`cfo-agent.md`) needs to explain *which* to the seller, not merely disclose
+   that some caveat exists (an LLM may narrate a number's caveat but must be given the caveat's
+   real reason to narrate, never infer one, per `CLAUDE.md`'s "LLMs explain numbers, they never
+   compute them"). `reconciliation_run.join_key_validated` (`data-foundation.md` §5.9, added this
+   session) is the explicit, queryable flag: `true` for Meesho, `false` for Amazon/Flipkart,
+   fixed for a run's whole lifetime (a run's `marketplace` never changes mid-run) and therefore
+   deliberately **not** duplicated onto every child `reconciliation_match`/`reconciliation_exception`
+   row — consumers join back to the parent run.
+
+**Net effect, stated precisely.** An Amazon or Flipkart `reconciliation_match`/
+`reconciliation_exception` produced under this design is real output, computed by the same
+deterministic arithmetic as a Meesho one, but (a) can never present with confidence better than
+`PROVISIONAL`, and (b) is always distinguishably flagged as `join_key_validated = false` at its
+run, so any consumer — CFO's leak-ranking, a seller-facing caveat, a future audit — can tell
+"matched, but on an unvalidated key" apart from an ordinary match without having to infer it from
+confidence level alone (confidence `PROVISIONAL` has other, unrelated causes too — e.g. every row
+in this codebase today is at best `PROVISIONAL` regardless of marketplace, `data-foundation.md`
+§7.1 — so confidence alone is not a reliable signal of *this specific* caveat).
+
+**What this does not do.** Neither the confidence cap nor the flag upgrades Amazon's or
+Flipkart's join key from *specified-but-unvalidated* to *validated* (`data-foundation.md` §5.1's
+status table is unchanged) — it only ensures the output produced against that unvalidated key is
+never mistaken, by confidence level or by silence, for output produced against a validated one.
+
 ---
 
 ### 5.13 Estimated competitor margin range (extension for observed inputs)
@@ -493,7 +566,7 @@ Named here so no agent delegates to a capability this spec does not define.
 | Interface | Returns | Notes |
 |---|---|---|
 | `compute_metric(metric_code, grain, target, period)` | `metric_result` | The general entry point (§9) |
-| `reconcile(period, marketplace, tolerance_ref)` | `reconciliation_exception[]` + a `metric_result` for each aggregate | Tolerances resolve from configuration, never constants (F4). Model defined in `data-foundation.md` §5 |
+| `reconcile(period, marketplace, tolerance_ref)` | `reconciliation_exception[]` + a `metric_result` for each aggregate | Tolerances resolve from configuration, never constants (F4). Model defined in `data-foundation.md` §5; `reconciliation_run`/`reconciliation_match`/`reconciliation_exception` migrations are calc-engine-owned (`data-foundation.md` §5.7, confirmed Phase C, same precedent as `metric_result`). Schema and outcome-to-table mapping: `data-foundation.md` §5.9. **Built (Meesho only so far)**: `calc_engine.api.reconcile.reconcile` (`packages/calc-engine/src/calc_engine/api/reconcile.py`) — real Postgres-integration-tested against real Meesho export data, `packages/calc-engine/tests/integration/test_reconcile_real_meesho_data.py`. **Amazon/Flipkart extension designed, not yet built**: per-marketplace join key, join-key confidence cap and flag, and Amazon's amount-gap handling are specified in `data-foundation.md` §5.1.5 and §5.12.2 above — a following checkpoint implements this against `reconcile.py`/`leak.py`; running it against Amazon/Flipkart today does not upgrade either marketplace's join key past *specified-but-unvalidated* (`data-foundation.md` §5.1). |
 | `landed_cost(manual_adjustment_ref, sku, quantity)` | `metric_result`, `metric_code = LANDED_COST_PER_UNIT` | Unit cost + shipping + duties, per the referenced `supplier.quote`. Consumed by supplier ranking and batch size |
 | `leak_aggregate(period, marketplace, grouping)` | `metric_result`, `metric_code = LEAK_TOTAL` | Sums reconciliation exception amounts. **Agents never sum leak amounts themselves** |
 | `estimate_competitor_margin_range(...)` | `competitor_estimate` | §5.13; carries an `estimate_ref`, never an `engine_result_ref`. **CI-exclusive** — no other agent surface reads or writes `competitor_estimate` |
@@ -795,12 +868,25 @@ Any figure incorporating a manual input is labelled `MANUAL` and names the adjus
 | `batch.budget` | `SKU` \| `ACCOUNT` | `{amount_paise, valid_until?}` — budget ceiling for batch-size estimation (B9) |
 | `settlement.receipt` | `SETTLEMENT` | `{expected_paise?, received_paise, received_date, note?}` |
 | `supplier.quote` | `SUPPLIER` | `{supplier_name, sku?, unit_cost_paise, moq?, lead_time_days?, shipping_paise?, payment_terms?, reliability_note?}` |
+| `gst_rate_override` | `SKU` | `{rate_pct, hsn?, category?, gst_lookup_result_id, effective_from?}` — `rate_pct` is a Decimal-string (e.g. `"18.0000"`), never a JSON float, matching this registry's paise-based fields' no-float rule. `gst_lookup_result_id` is mandatory and references the specific `gst_lookup_result` row (§8.4) the seller accepted, so provenance traces all the way to that row's cited `source_url`/`retrieved_at` — not just to "a seller clicked accept." `hsn`/`category` echo the accepted classification for display without re-joining to the (append-only, potentially superseded) lookup row. |
 
 Structured values are still **append-only and superseding** — a corrected quote is a new row that supersedes, never an update.
 
+**`gst_rate_override`, and how it differs from `gst_lookup_result.status`.** §8.4's `gst_lookup_result` already carries its own `status` (`PROVISIONAL | SELLER_VERIFIED | REJECTED`) plus `verified_by`/`verified_at` — that status marks the lookup *row itself* as reviewed, but on its own it does not let the accepted rate flow into any calculation. §8.4's L2 requires the accepted rate to become "a labelled manual input" before it can be applied, and `gst_rate_override` is that manual input — a separate, additional record. Marking a `gst_lookup_result` `SELLER_VERIFIED` and creating a `gst_rate_override` that references it are two distinct, separately-recorded acts; a future implementation must not treat the former as sufficient to unblock a calculation.
+
+*Grain.* `SKU`, not `LINE`: a GST rate is a property of the SKU's product/HSN classification, not of an individual order line — it does not vary line-to-line for the same SKU. This matches how `gst_lookup_result.sku` and the resolution order's tier 1 "observed" rate already operate at SKU/classification level (§8.1, §8.2.2), and mirrors `cogs_per_unit`'s existing `SKU` grain above.
+
+*Tier precedence.* Once accepted, a `gst_rate_override` ranks **above tier 1** (observed) in OP13's three-tier GST rate-resolution order (§8.2.2), not merely as a gap-filler alongside tier 3. A seller's explicit acceptance of a specific classification is stronger evidence than an unclassified, machine-observed rate on a report line, and §7's own standing model already allows a manual input to take precedence over observed data (that is the point of the manual-adjustment mechanism). Concretely: for a SKU carrying an `ACTIVE` `gst_rate_override`, that override is checked and applied before tier 1 is consulted at all; tiers 1→2→3 are unchanged and continue to apply, in that same order, to every SKU without an accepted override. §8.2.2's own text describing tiers 1-3 is not being redesigned by this addition.
+
+*Confidence.* An accepted `gst_rate_override` carries `MANUAL` confidence (`data-foundation.md` §7.1), not `PROVISIONAL`. Accepting a `gst_lookup_result` does not strengthen the underlying research's evidentiary basis — the web source is exactly as provisional after acceptance as before. What changes is accountability: the seller has now taken ownership of the figure, and `MANUAL` is this codebase's existing label for a seller-supplied fact, treated the same as `cogs_per_unit`. Under `combine_confidence`'s monotonic rule, a calculation using a `gst_rate_override` therefore cannot present as better than `MANUAL`.
+
+*Permission.* Creating or superseding a `gst_rate_override` requires `financials.adjust`, per §7's standing rule (restated at `cfo-agent.md` §5, permission rule 4) — no exception for this field.
+
+*Never automatic.* No code path may create a `gst_rate_override` row without an explicit seller acceptance action against a specific `gst_lookup_result`. This is the entire point of L2. A `gst_rate_override` must never be synthesized merely because a `gst_lookup_result` reaches `SELLER_VERIFIED` through some other flow — acceptance-that-unblocks-a-calculation and verification-of-the-lookup-row are kept as two separate acts precisely so the former is never accidentally implied by the latter.
+
 ### 7.3 Permitted manual inputs at V1
 
-COGS per SKU · discount bearer override · RTO outcome classification · cancellation flag · advertising spend · **other seller-declared expense pools (packaging, storage, logistics, other)** · **settlement receipt corrections where a report is missing or disputed** · other cost pools · fee-GST treatment toggle · return refund amount where settlement data is absent · **seller-supplied logistics costs** (forward, reverse, RTO legs) where marketplace reports omit them · supplier quote data for CFO ranking (price, MOQ, lead time, shipping, payment terms, reliability notes).
+COGS per SKU · discount bearer override · RTO outcome classification · cancellation flag · advertising spend · **other seller-declared expense pools (packaging, storage, logistics, other)** · **settlement receipt corrections where a report is missing or disputed** · other cost pools · fee-GST treatment toggle · return refund amount where settlement data is absent · **seller-supplied logistics costs** (forward, reverse, RTO legs) where marketplace reports omit them · supplier quote data for CFO ranking (price, MOQ, lead time, shipping, payment terms, reliability notes) · GST rate/HSN classification override accepted by the seller from a GST Applicability Lookup result (§8.4 L2).
 
 ---
 
@@ -863,6 +949,166 @@ excluded. This reference is never applied retroactively to a row that predates i
 `effective_from`, and it never substitutes for the GST Applicability Lookup (§8.4) or the
 professional-verification disclaimer (§8.3).
 
+### 8.2.2 Curated HSN knowledge base (`hsn_gst_reference`)
+
+OP13 (`phase-1-readiness-review.md`) names the middle tier of the layered GST rate source as
+a **"curated HSN→rate knowledge base maintained by Metrion in the policy KB."** No table has
+ever been defined for it — `cfo-agent.md` C5, §6.6 and OP13 all cite "the curated HSN
+knowledge base" by name only. This section is that definition, and it resolves a latent
+ambiguity in OP13's own wording along the way: **"policy KB" here means a structured,
+versioned SQL reference table, not pgvector/RAG.** Semantic retrieval (OP12) is reserved for
+narrative document content — nothing that resolves a money-bearing rate is ever looked up by
+embedding similarity; that would let an LLM-adjacent retrieval step originate a figure, which
+the project's hard rule forbids regardless of how "curated" the underlying content is. This
+table is queried by exact/prefix code match through a typed repository function, the same
+pattern as `gst_slab_reference` and `fee_reference` below — never by vector search.
+
+**Relationship to the other two GST reference tables, restated so the three are never
+conflated:**
+
+| Table | Job | Shape |
+|---|---|---|
+| `gst_slab_reference` (§8.2.1) | Plausibility check on an **already-observed** rate (`V-TAX-003`) | Flat set of valid rate percentages, no HSN/category column |
+| `hsn_gst_reference` (this section) | Supplies a **candidate rate for an unobserved line**, by HSN/SAC/category classification | HSN-code-to-rate lookup, deterministic, no live research |
+| `gst_lookup_result` (§8.4) | Live web research fallback when the first two both miss | Per-query, on-demand, requires explicit seller acceptance before use (L2) |
+
+**Why this table is seeded with real data, unlike `fee_reference` (§5.14).** `fee_reference`
+ships with zero rows because marketplace commission rates are private commercial data nobody
+can verify without a real marketplace agreement — this project's standing rule is never to
+invent real numbers. GST rates by HSN chapter are the opposite in kind: they are **public,
+government-published statutory law** (CBIC notifications, GST Council rate schedules), the
+same class of source `gst_slab_reference` already draws on ("Seeded from official CBIC / GST
+Council published rate tables, one row per slab, each row citing its own `source_url` and
+`retrieved_at`," §8.2.1). `hsn_gst_reference` follows that same precedent, not
+`fee_reference`'s "ships empty" one — a future reader should not assume every reference table
+in this engine starts empty; it depends on whether the underlying data is public and citable.
+**This spec pass defines the table shape only. No rows are seeded here** — real HSN/GST rate
+data is sourced from official public sources and loaded in a following checkpoint (§11, new
+item below).
+
+**Schema:**
+
+```sql
+hsn_gst_reference (
+  id uuid pk,
+  hsn_code text not null,           -- HSN/SAC code or chapter/heading-level prefix; see below
+  description text not null,        -- human-readable category name
+  rate_pct numeric(7,4) not null,
+  source_url text not null,
+  source_title text,
+  retrieved_at timestamptz not null,
+  effective_from date not null,
+  effective_to date,
+  version int not null,
+  confidence text not null default 'PROVISIONAL'
+)
+```
+
+Platform-owned, no `tenant_id` — matches `gst_slab_reference`/`fee_reference`'s precedent for
+platform-wide reference data. RLS still applies: per `config_repo.py`'s existing
+`gst_slabs_effective_on`/`resolve_fee_reference` docstrings, even a table with no `tenant_id`
+column requires a `tenant_scope()` connection to satisfy RLS context — `tenant_id` plays no
+role in the `WHERE` clause here either, it only opens a valid connection.
+
+**HSN code precision — variable length, not fixed at 8 digits.** Real e-commerce sellers
+frequently know only a 4- or 6-digit HSN, not the full 8-digit code, and CBIC's own rate
+notifications are frequently published at chapter (2-digit) or heading (4-digit) level
+covering many 8-digit codes at a single rate. Forcing every row to 8 digits would either
+require guessing digits that were never published at that granularity, or silently drop
+chapter-level notifications that are the actual public source. `hsn_code` is therefore stored
+at whatever precision its source publishes — 2 to 8 digits — and matched by prefix (below),
+not by fixed-length equality.
+
+**Resolution function** (mirrors `resolve_fee_reference`'s exact resolution pattern, §5.14):
+
+```
+resolve_hsn_gst_reference(tenant_id, *, hsn_code, as_of_date) -> dict | None
+```
+
+**Matching rule (V1 — kept deliberately simple):**
+
+1. A reference row matches a queried `hsn_code` when the row's `hsn_code` is a **leading-digit
+   prefix of, or exactly equal to,** the queried code (e.g. a stored `"6109"` row matches a
+   queried `"61091000"`; a stored `"61091000"` row matches only a queried `"61091000"`).
+2. Among matching rows, the **longest (most specific) matching prefix wins**; ties broken by
+   latest `effective_from`.
+3. `effective_from <= as_of_date` and (`effective_to IS NULL OR effective_to >= as_of_date`)
+   gate every candidate — never applied retroactively, same rule as `gst_slab_reference` and
+   `fee_reference`.
+4. **If the queried code is shorter than every candidate row's stored code** (the seller only
+   knows a shallower classification level than anything on file — e.g. querying `"61"` against
+   a table that only has 6- and 8-digit rows under that chapter), the function returns `None`
+   rather than guessing among children that may carry different rates. Resolving that case by
+   checking whether all children under the queried prefix happen to share one rate is a real
+   possible refinement, deliberately **deferred out of V1** to keep the matching rule simple
+   and auditable; note it here so a future checkpoint doesn't need to rediscover it.
+5. No match under rules 1–4 → `None`. Never a guessed or defaulted rate, matching every other
+   resolver in this engine (§5.14, §8.2.1).
+
+**Sequencing within OP13's three-tier order.** CFO/Brain 1 resolves a GST rate for a line or
+SKU in this exact order, and only advances a tier when the prior one has nothing:
+
+1. **Observed** — the rate already present in the seller's own uploaded data, via canonical
+   `TAX`-kind `line_component` rows on the line itself (§8.1's inclusive/exclusive
+   normalisation already depends on this being known; no new code is needed for this tier — it
+   is how §8.1 already works today).
+2. **`hsn_gst_reference`** (this table) — reached only when tier 1 has no observed rate for
+   that line/SKU. Deterministic table lookup, no live research, no seller interaction required
+   to apply it.
+3. **GST Applicability Lookup** (§8.4) — reached only when tiers 1 and 2 both miss. Live
+   research, `PROVISIONAL`, requires explicit seller acceptance before it ever enters a
+   calculation (L2).
+
+A `hsn_gst_reference` hit never overrides an observed rate from tier 1, and tier 3 is never
+invoked when tier 1 or 2 already resolved one.
+
+**Auto-application, contrasted with tier 3's `L2` gate.** Because `hsn_gst_reference` is
+curated, static, platform-owned reference data — the same class as `gst_slab_reference` and
+`fee_reference`, both of which feed calculations directly once resolved — a rate resolved from
+this table **may enter a calculation automatically**, subject to the confidence treatment
+below. This is a deliberate contrast with tier 3 (§8.4, `gst_lookup_result`), which is live,
+externally researched, per-query content and therefore requires explicit, recorded seller
+acceptance (L2) before it can be applied. `hsn_gst_reference` carries no equivalent
+acceptance gate — the gate that matters for this table is sourcing rigor at seed time
+(`source_url`/`retrieved_at` mandatory, same as every sibling table), not a per-use seller
+click.
+
+**Confidence and disclaimer treatment — this checkpoint's first answer to the question.**
+Every row defaults to `confidence = 'PROVISIONAL'`, mirroring `gst_slab_reference`'s own
+default: a curated public-data table is still not a substitute for the seller's own filing.
+When a `hsn_gst_reference` row resolves a rate used inside a calculation, its `confidence`
+value is one of the inputs `combine_confidence` folds over under the existing monotonic rule
+(`data-foundation.md` §7.1) — no special-casing, no new confidence mechanism. Concretely: a
+line that was otherwise `VERIFIED` but pulls its GST rate from this table cannot present as
+better than `PROVISIONAL`, because `combine_confidence` always yields the weakest input. This
+table's results feed a `metric_result` with a normal `engine_result_ref`, the same as
+`fee_reference`-resolved fee rates — they are not a separate `estimate_ref` contract (§9.1);
+they are a deterministic table lookup, not a live or observation-scoped estimate. **This
+table's rate is never GST classification or tax advice** — the same caveat class as §8.2.1's
+"not GST classification or tax advice" and §8.3's disclaimer. Any displayed figure computed
+using a `hsn_gst_reference`-resolved rate is labelled to show the rate came from Metrion's
+curated reference, not from the seller's own observed data, alongside §8.3's standing
+disclaimer: *"Indicative management summary. Not a GST return. Not filing-grade. Verify with
+your tax professional."*
+
+**Relationship to `V-TAX-003` (§8.2.1), stated explicitly so the two never appear to
+conflict.** `V-TAX-003` checks plausibility of a rate that has *already been observed* on a
+line, against `gst_slab_reference`'s flat set of valid percentages — it never supplies a rate,
+only flags an implausible one. `hsn_gst_reference` does the opposite job: it supplies a
+candidate rate for a line where *no rate has been observed at all*. Both can be true on the
+same period at once — one line's observed rate gets plausibility-checked by `V-TAX-003` while
+a different, unobserved line's rate is filled from `hsn_gst_reference` — without any overlap
+or contradiction.
+
+**Illustrative example (not real, not seeded by this spec pass):**
+
+| `hsn_code` | `description` | `rate_pct` | `confidence` |
+|---|---|---|---|
+| `"6109"` (illustrative) | "T-shirts, cotton, knitted (illustrative)" | `12.0000` (illustrative) | `PROVISIONAL` |
+
+This row is an example of the shape only. No claim is made about its accuracy — real rows are
+sourced and loaded in the following checkpoint referenced in §11.
+
 ### 8.3 Indicative tax summary
 
 Per period and marketplace: output tax by head · GST charged on fees (potentially creditable) · TCS collected · TDS deducted · taxable value by rate slab · count of excluded rows.
@@ -898,12 +1144,149 @@ gst_lookup_result (
 | # | Rule |
 |---|---|
 | L1 | Result is stored as **externally researched, provisional** knowledge. |
-| L2 | It **never** enters a calculation automatically. Application requires explicit seller acceptance, which creates a labelled manual input (§7). |
+| L2 | It **never** enters a calculation automatically. Application requires explicit seller acceptance, which creates a labelled manual input (§7). That manual input is `gst_rate_override` (§7.2.1) — creating it is the act that unblocks a calculation, distinct from merely marking this row's `status` `SELLER_VERIFIED`. |
 | L3 | `source_url` and `retrieved_at` are mandatory. A result without both is discarded. |
 | L4 | Where classification is uncertain, `ambiguity_note` is populated and alternatives are shown. Confident-sounding single answers are not produced from ambiguous evidence. |
 | L5 | Every display carries: *"Likely classification based on web research. Final GST classification must be verified through official GST guidance or a qualified tax professional."* |
 | L6 | Results are cached with a TTL and **never** applied retroactively to historical periods — GST rates change. |
 | L7 | An LLM may extract and structure the result. It may not originate a rate. Every figure traces to a cited source. |
+
+#### 8.4.1 Fetch mechanism (curated allowlist, no search API)
+
+L1-L7 above specify the *output* contract. This subsection specifies the *mechanism* by
+which a query actually becomes fetched, cited web content — how §8.4 goes from "product
+title, and where available HSN/SAC or category" to a `source_url` and `retrieved_at` that
+satisfy L3. Everything below is new in this pass; nothing in L1-L7 is restated or changed.
+
+**Decision (approved).** A curated, hardcoded allowlist of trusted domains — no general
+search-API integration. This mirrors the existing pattern in
+`packages/competitor-intelligence/src/competitor_intelligence/capture/`: a `Fetcher`
+Protocol with one real `HttpxFetcher` implementation, injected rather than imported
+directly (so tests never touch the network), and an allowlist check
+(`is_allowed_host`-equivalent) that runs *before* any fetch call, hardcoded and
+non-tenant-configurable. G2's implementation checkpoint reuses this exact shape — a
+`GstFetcher` Protocol, one real implementation, one allowlist module — not a new one.
+
+**The allowlist.**
+
+Two tiers, both hardcoded and named explicitly here (never "any tax blog" or a runtime-
+configurable list):
+
+*Tier 1 — official government sources:*
+
+| Domain | Status as checked this session (2026-09-25) |
+|---|---|
+| `cbic-gst.gov.in` | Reachable, but `gst-goods-services-rates.html` returns only a stub redirect notice pointing to `taxinformation.cbic.gov.in` — no rate data on the page itself. |
+| `taxinformation.cbic.gov.in` | **Unreachable** — TLS certificate verification failure on a standard fetch. |
+| `gst.gov.in` | Not tested this session. Included on the allowlist (it is the GSTN/GST Council's own portal, the most authoritative possible source), but its actual fetchability is an open implementation-time verification item — see below. |
+
+*Tier 2 — named secondary publishers* (established, non-anonymous Indian tax-advisory
+sites, already used as real seed sources in `hsn_gst_reference`, §8.2.2 —
+`packages/calc-engine/migrations/versions/20260925_0007_hsn_gst_reference.py`):
+
+`cleartax.in`, `taxguru.in`, `getswipe.in`, `busy.in`, `gimbooks.com`, `rushtax.app`,
+`taxgarden.in`
+
+Judgment call, stated explicitly: Tier 1 is included first, but this session's own direct
+evidence is that the two most likely CBIC entry points are either stale or unreachable, and
+`gst.gov.in` is unverified. Treating official-only as the allowlist would leave G2 with no
+realistic fetchable source in V1, which is worse for the seller than a clearly-labelled
+secondary-tier hit — the seller already sees the L5 disclaimer regardless of tier, and a
+"likely classification, please verify" figure sourced from a named, established publisher is
+more useful than `UNAVAILABLE`. Tier 2 is therefore included, but a Tier 2 hit is
+distinguished from a Tier 1 hit at the result level (next section) rather than presented
+identically. No domain outside these two named lists is ever added at runtime, by an LLM
+suggestion, or by following an off-allowlist redirect target — the same rule
+`competitor_intelligence.capture.allowlist` already enforces for its own domains.
+
+**Tier reflected in the result.** `gst_lookup_result` does not currently carry an explicit
+tier column (§8.4's schema is not being redesigned in this pass); until a following
+checkpoint adds one, the tier is inferable from `source_url`'s host against the two named
+lists above, and consuming surfaces (CFO narration, frontend disclaimer copy) MUST treat a
+Tier 2 source as *lower confidence, more prominent disclaimer* than a Tier 1 source — this
+is a requirement on the consumer, not a schema change.
+
+**Query mechanism.** There is no search-API integration (explicitly rejected — out of scope,
+new paid vendor dependency). Two shapes were considered:
+
+- (a) *Predictable query-string URL per site.* Rejected for V1: whether any allowlisted
+  domain actually exposes a stable, query-string-based rate-lookup URL was not verified in
+  this spec-only pass, and building a mechanism around an unverified assumption risks a
+  fetch mechanism that silently never matches anything. Flagged as an implementation-time
+  verification item (below) — if such a URL is confirmed for a specific domain during G2's
+  build, it may be added as a targeted enhancement, but it is not the V1 mechanism.
+- (b) *Fetch known static reference pages, let the LLM extract from within the fetched
+  content.* **Chosen.** Each allowlisted domain is paired with a short, hardcoded list of
+  known static rate-schedule / HSN-reference pages (analogous to the specific URLs already
+  cited as `source_url` in the `hsn_gst_reference` seed migration — e.g. `busy.in`'s
+  `/gst-rates/stationery/`). G2 fetches the relevant known page(s) for the query's category
+  (where a category is available in the input) or a general rate-schedule page, and passes
+  the fetched text plus the query to the LLM extraction step (L7, detailed below) to find a
+  matching line within that page's actual content. This is the more realistic V1 mechanism
+  given this session's own direct evidence that official "search" entry points are stale or
+  unreachable — it needs no assumption about any site's search behaviour, only that a known
+  static page exists and can be fetched.
+
+  The concrete set of known pages per domain (which URL fetches for which product category)
+  is an implementation-time artefact, not enumerated exhaustively in this spec — it is
+  expected to grow/be corrected as pages are actually inspected during the build checkpoint,
+  the same way the allowlist domains above are fixed but the specific fetched URLs within
+  them are a maintained list, not a spec-frozen one.
+
+  **Implementation-time verification items** (not resolved in this spec-only pass):
+  - Confirm `gst.gov.in` is reachable via a standard fetch (unverified this session).
+  - Confirm at least one working static reference page per Tier-1 domain before relying on
+    it; if none is fetchable, G2's V1 behaviour degrades to Tier 2 only for that query (see
+    fetch-failure handling below) rather than blocking.
+  - Re-check whether any allowlisted domain exposes a stable query-string search URL (option
+    (a) above) — if so, it may reduce reliance on Tier 2 sources for future rates.
+
+**Fetch failure / no-match handling.** A failed fetch (transport error, timeout, non-2xx,
+TLS failure — mirroring `FetchError`'s shape in
+`competitor_intelligence.capture.fetcher`) or a successfully fetched page whose content does
+not actually contain a matching rate/HSN/category for the query produces **no**
+`gst_lookup_result` row — never a row with a placeholder, a best-guess, or a `source_url`
+that doesn't actually support the value shown. This is what L3 already requires
+(`source_url`/`retrieved_at` mandatory, discarded if either missing); this subsection states
+the mechanism-level consequence explicitly: G2 attempts each known page for the query, in
+Tier 1 then Tier 2 order, and stops at the first page whose fetched content yields a
+genuine match per the L7 extraction step. If every attempt fails or yields no match, the
+lookup surfaces to CFO/the seller as an honest **"no reliable source found"** outcome —
+functionally equivalent to `hsn_gst_reference` returning `None` (§8.2.2, C15): no rate is
+guessed in the gap, and the UI states plainly that web research did not find a matching
+classification, inviting a manual/seller-verified entry instead. Given this session's own
+direct reachability findings for the CBIC domains, this is a real, expected V1 outcome for
+some queries — not a rare edge case to hand-wave.
+
+**LLM extraction step (mechanism for L7).** L7 already states the LLM may extract and
+structure, never originate. Concretely: the LLM extraction call is given (1) the query
+(product title, and HSN/SAC or category where available) and (2) the actual fetched page
+text from the current attempt only — never the query alone, and never answered from the
+model's own training knowledge. The call reuses the existing `LlmProvider` Protocol
+(`packages/cfo/src/cfo/reasoning/provider.py`, `complete(*, model, prompt) -> str`) — no new
+LLM-interface shape is introduced. The prompt is constructed so extraction is only valid
+when the fetched text itself states a rate/HSN/category; if the fetched page does not
+contain a relevant statement, the extraction step returns no match (feeding the
+fetch-failure/no-match path above), rather than the LLM inferring or guessing from
+adjacent context. This is the same "explain/extract, never originate" boundary CLAUDE.md
+and §1 already state for computed figures, extended here to cited-text extraction:
+the model may summarise and locate what the fetched page says; it may never supply a figure
+the fetched page does not contain.
+
+**Caching / TTL (mechanism for L6).** L6 already requires caching with a TTL and forbids
+retroactive application to historical periods. TTL chosen: **14 days**. Reasoning: GST rate
+changes are infrequent (typically announced via GST Council meetings, not continuous
+drift), so an hours-scale TTL would re-fetch needlessly and stress the same small set of
+external sites this mechanism depends on; a months-scale TTL risks silently serving a stale
+rate past a real Council-notified change without re-checking. Fourteen days is a defensible
+middle ground — short enough that a rate change is caught within roughly two weeks, long
+enough to avoid redundant fetches of static pages that rarely change. Enforced as a
+`retrieved_at`-age check: before reusing a cached `gst_lookup_result` row for a query, G2
+computes `now - retrieved_at`; if it exceeds 14 days, the row is not reused and the fetch
+mechanism above runs again, producing a fresh row (old row retained for audit history, not
+deleted — consistent with never mutating a prior `gst_lookup_result` in place). Per L6,
+a cached (or freshly fetched) result is never applied retroactively to a historical period
+regardless of its age.
 
 ---
 
@@ -1014,7 +1397,8 @@ Extends `data-foundation.md` §9. Specific to this engine.
 | C11 | Settlement join grain (A9) |
 | C12 | Whether marketplace-funded discounts are ever later recovered from the seller (E14) |
 | C13 | Fee refund behaviour on returns — which fees are returned, which are retained |
-| C14 | **`cash_reconciliation` (§5.13.1) has no defined formula for `CASH_EXPECTED`/`CASH_RECEIVED`** — every other §5 metric states its formula explicitly; this one names only its inputs and outputs. Blocks implementing `cash_reconciliation` at all until the formula is confirmed (deferred, Category C) |
+| C14 | **`cash_reconciliation` (§5.13.1) has no defined formula for `CASH_EXPECTED`/`CASH_RECEIVED`** — every other §5 metric states its formula explicitly; this one names only its inputs and outputs. Blocks implementing `cash_reconciliation` at all until the formula is confirmed (deferred, Category C). **Reconsidered and explicitly re-deferred (Phase D6 pass, 2026-09-25):** the economically correct definition of `CASH_EXPECTED` — revenue minus the fees/taxes that should legitimately be deducted — requires per-component INVOICE-side fee data (`FEE`/`TAX`/`LEVY` `line_component` rows), which no adapter in this codebase produces yet (the same gap `reconcile()`'s own Decision A, `calc_engine/api/reconcile.py`, already names and works around for `VARIANCE_EXCEEDS_TOLERANCE`). A simplified version (raw invoice total vs. settlement total) was considered and explicitly rejected — it would just restate `leak_amount()`'s existing line-level signal under a "cash flow" label, not add real information, and risks reading as more meaningful than it is. Decision: no partial `cash_reconciliation()` ships. Revisit once an invoice-side fee-component adapter exists. |
+| C15 | **`hsn_gst_reference` (§8.2.2) ships with zero seed rows in this spec pass** — the table shape and resolution rule are defined here; real CBIC/GST Council-sourced rows are sourced and loaded in a following checkpoint. Until seeded, `resolve_hsn_gst_reference` always returns `None`, and OP13's tier (b) is a defined no-op — every line without an observed rate (tier a) falls straight through to the GST Applicability Lookup (tier c, §8.4). This is a correct, honest degraded state, not a bug: no rate is ever guessed in the gap. |
 
 ---
 
@@ -1042,6 +1426,9 @@ The engine is accepted when all hold.
 | AC16 | Re-ingesting a file preserves all manual adjustments. |
 | AC17 | A formula version change produces a new calculation run; historical results are unchanged. |
 | AC18 | **NEW.** `compute_price_band` (§5.15.1) returns `UNAVAILABLE` with a named reason below 3 supplied competitor prices; computes `Q1`/`Q3` by linear-interpolation percentile only; computes fences from the **full** supplied set including outliers; excludes outliers **only** from the typical-range headline while still returning them flagged; uses integer paise throughout including the interpolation; and never returns better than `DERIVED`. **No percentile, IQR, fence or outlier arithmetic exists outside this engine** — in particular not in `packages/competitor-intelligence` (`competitor-intelligence-agent.md` §6.16.3, AC28). |
+| AC19 | `resolve_hsn_gst_reference` (§8.2.2) returns `None` — never a guessed or defaulted rate — for any queried `hsn_code`/`as_of_date` combination with no matching row under the prefix rule, and is never applied retroactively past its `effective_to`. |
+| AC20 | `hsn_gst_reference` (tier b, OP13) is checked only when the seller's own uploaded data carries no observed rate for that line/SKU (tier a), and the GST Applicability Lookup (tier c, §8.4) is invoked only when tiers a and b both miss — this ordering holds for every GST-rate resolution path in the engine. |
+| AC21 | Any calculation using a rate resolved from `hsn_gst_reference` carries confidence no better than `PROVISIONAL` via the existing monotonic `combine_confidence` rule (`data-foundation.md` §7.1), and the resulting figure is labelled as using a curated-reference (not observed) rate, alongside §8.3's standing disclaimer. |
 
 ---
 
@@ -1083,6 +1470,11 @@ The engine is accepted when all hold.
 | T32 | `compute_price_band` with prices `[85000, 90000, 95000, 105000, 400000]` paise | `Q1`/`Q3` by linear interpolation over **all five** values; `IQR = Q3 − Q1`; fences at `Q1 − 1.5×IQR` / `Q3 + 1.5×IQR`; `400000` returned flagged `is_outlier = true`; `PRICE_BAND_TYPICAL_LOW/HIGH` = `85000`/`105000`, excluding the outlier only from the headline (AC18, rules 5–7) |
 | T33 | `compute_price_band` run twice on an identical input tuple | Byte-identical `metric_result` rows; integer paise throughout with no float in the interpolation; result not part of `canonical_data_version` (AC1, AC3, AC18, rules 8 and 11) |
 | T34 | `compute_price_band` where every supplied price is `DERIVED` (the only case CI can produce) | Result confidence is `DERIVED`; never `VERIFIED` or `PROVISIONAL` (AC15, rule 9) |
+| T35 | Line with no observed GST rate; queried `hsn_code` exactly matches a seeded `hsn_gst_reference` row effective as of `as_of_date` | Rate resolved from that row; result confidence capped at `PROVISIONAL`; figure labelled as a curated-reference rate (AC19, AC21, §8.2.2) |
+| T36 | Line queried with an 8-digit `hsn_code`; table holds only a 4-digit chapter-level row as a prefix | 4-digit row matches by prefix rule 1; resolved (§8.2.2 matching rule) |
+| T37 | Line queried with a 2-digit `hsn_code`; table holds only 6- and 8-digit rows under that chapter | `None` returned — queried code shorter than every candidate row (§8.2.2 matching rule 4); falls through to GST Applicability Lookup (AC20) |
+| T38 | Line with an observed GST rate present in the seller's own report | `hsn_gst_reference` never consulted; observed rate used as-is (tier a precedence, AC20) |
+| T39 | `hsn_gst_reference` empty (no rows seeded, C15) | Every unobserved line falls through to the GST Applicability Lookup; no rate guessed in the gap (C15) |
 
 ---
 

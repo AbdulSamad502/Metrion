@@ -1,29 +1,74 @@
 """The entitlement chokepoint — auth.md §7.2's second gate ("has this tenant purchased/is
-entitled to use CI, and is there room left?"), kept distinct from `agent.ci` permission
-(`auth/permissions.py`), exactly as §7.2 requires.
+entitled to use this agent, and is there room left?"), kept distinct from `agent.*`
+permission (`auth/permissions.py`), exactly as §7.2 requires.
 
-**No entitlement spec exists yet** (`auth.md` line 5: "entitlement spec (not yet written)"),
-and every numeric limit anyone has mentioned for CI — 25 URLs / 100 runs per month
+**CI (`resolve_ci_entitlement`) stays a TEMPORARY, always-pass scaffold.** No CI entitlement
+spec exists yet (`auth.md` line 5: "entitlement spec (not yet written)"), and every numeric
+limit anyone has mentioned for CI — 25 URLs / 100 runs per month
 (`competitor-intelligence-agent.md` §12 Q3) — is explicitly flagged **provisional and
-unlocked**, and `phase-1-readiness-review.md` 3.3 defers "final pricing, tiers, and credit
-values... by agreement." Implementing any of those numbers as a real deny threshold would be
-inventing a business rule this codebase has not actually decided, which is exactly what was
-asked not to do here.
+unlocked**. Implementing any of those numbers as a real deny threshold would be inventing a
+business rule this codebase has not actually decided. What this module DOES do, instead of
+leaving `entitlement_check` a bare hardcoded string: compute the tenant's REAL current CI
+usage (from already-persisted data, not a stub number) and route every call through one named
+function.
 
-What this module DOES do, instead of leaving `entitlement_check` a bare hardcoded string:
-compute the tenant's REAL current CI usage (from already-persisted data, not a stub number)
-and route every call through one named function. `phase-1-readiness-review.md` calls the
-entitlement chokepoint "live from day one, not a stub" — this is that chokepoint's
-plumbing, minus the one number nobody has decided yet. When the entitlement spec lands, only
-`resolve_ci_entitlement`'s body changes — no caller of it does.
+**CFO (`resolve_cfo_entitlement`) is REAL, F2 of the entitlement roadmap** — rewritten against
+`docs/specs/entitlement.md` (§5 data model, §5.5 `EntitlementResult` contract, §6 core rules)
+now that that spec exists and is approved. It is no longer a hardcoded always-`passed=True`
+scaffold: it resolves a real `meter_code` (`metered_event_meter_map`, falling back to the
+`direct_action_code` itself per E5), computes a real tenant-timezone `period_key` (A1/rule 8),
+resolves a real `entitlement_cap_config` row (tenant override beats platform default, latest
+`effective_from` wins — rule 2), and only *then* evaluates pass/deny by comparison. **Nothing
+about the outcome changes today** — no row in any of these tables is seeded by this rewrite's
+own migration (`backend/migrations/versions/20260925_0004_entitlement_tables.py`), so every
+real call still resolves `cap_value=None`/`evaluation_basis=NO_CAP_CONFIGURED`/`passed=True`,
+exactly as documented at entitlement.md §5.5: "F2's rewrite changes nothing about outcome
+until the first non-null cap_value is seeded... it only changes the mechanism."
+
+**Explicitly NOT implemented here (out of scope for F2, see entitlement.md's critical
+constraint / E6):** `tenant_cart_item` (`NO_ACTIVE_CART_ITEM`) enforcement. No tenant —
+existing or new — has a `tenant_cart_item` row today (`tenant_repo.create()` writes none, and
+onboarding is not touched by this change), so enforcing that check now would deny CFO for
+every tenant. `entitlement_repo.active_cart_item()` exists and is tested in isolation, but is
+not called from `resolve_cfo_entitlement` yet — a missing cart item is treated the same as an
+unset cap: not yet enforced, not a denial.
+
+**`service.gst_lookup` (`resolve_gst_lookup_entitlement`) is G3's addition and stays a
+TEMPORARY, always-pass scaffold, for the identical reason `resolve_ci_entitlement` does.**
+`cfo-agent.md` §6.8's `cfo.gst_lookup` row and AC17b/T31 require this shared-service action to
+be metered against its **own** OP9 cap, independently of `resolve_cfo_entitlement`'s `agent.cfo`
+cap — but no entitlement spec has ever assigned OP9 a real numeric limit (identical status to
+CI's 25-URLs/100-runs figures: mentioned in prose, never confirmed as a real product decision).
+Implementing a hardcoded deny threshold here would be inventing a business rule nobody has
+actually decided, exactly the mistake `resolve_ci_entitlement`'s own docstring already warns
+against. What this function DOES do, instead of a bare hardcoded `passed=True`: compute the
+tenant's REAL current `gst_lookup_result` usage (`calc_engine.repositories.gst_lookup_repo.
+count_for_tenant`, live-queried, not a stub) — mirroring `active_competitor_urls`'s own "real,
+live-queried usage" precedent exactly — so a future cap can be compared against actual numbers
+from day one rather than needing its own telemetry added later.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
+from sqlalchemy import text
+
+from calc_engine.repositories import gst_lookup_repo
 from competitor_intelligence.repositories import competitor_url_repo
+
+from backend.db import engine
+from backend.repositories import entitlement_repo
+
+_GET_TENANT_TIMEZONE_SQL = "SELECT timezone FROM tenant WHERE id = :tenant_id"
+
+# entitlement.md A1: tenant.timezone defaults to Asia/Kolkata (auth.md §5.1) — used here as
+# the fallback when a tenant row can't be found or carries no timezone, never as a silent
+# substitute for a real lookup.
+_DEFAULT_TENANT_TIMEZONE = "Asia/Kolkata"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,3 +91,209 @@ def entitlement_check_value(result: CiEntitlementResult) -> str:
     """Maps to `agent_run.entitlement_check`'s existing `PASS | DENIED` column contract
     (`backend/migrations/versions/20260917_0002_orchestration_tables.py`)."""
     return "PASS" if result.passed else "DENIED"
+
+
+@dataclass(frozen=True, slots=True)
+class GstLookupEntitlementResult:
+    """`resolve_gst_lookup_entitlement`'s own result shape — deliberately mirrors
+    `CiEntitlementResult`'s `passed: bool` + real usage-count shape (not `EntitlementResult`'s
+    heavier §5.5 contract, which resolves a real `meter_code`/`period_key`/`entitlement_cap_
+    config` row via `entitlement_repo` — no such resolution exists for `service.gst_lookup`
+    today, and inventing one would be exactly the "fabricated cap" this scaffold's docstring
+    warns against). `gst_lookup_count` is real, live-queried usage, not a stub number."""
+
+    passed: bool
+    reason: str | None
+    gst_lookup_count: int
+
+
+def resolve_gst_lookup_entitlement(tenant_id: UUID) -> GstLookupEntitlementResult:
+    """Always passes today — see this module's docstring for why `service.gst_lookup`'s OP9
+    shared-service cap has no real numeric limit to enforce yet, and why that is a deliberate,
+    documented scaffold rather than an oversight. `gst_lookup_count` is real, live-queried
+    usage (`calc_engine.repositories.gst_lookup_repo.count_for_tenant`), so a future cap can be
+    compared against actual numbers from day one rather than needing its own telemetry added
+    later — the identical reasoning `resolve_ci_entitlement`'s `active_competitor_urls` already
+    established for CI."""
+    count = gst_lookup_repo.count_for_tenant(tenant_id)
+    return GstLookupEntitlementResult(passed=True, reason=None, gst_lookup_count=count)
+
+
+def gst_lookup_entitlement_check_value(result: GstLookupEntitlementResult) -> str:
+    """Maps to `agent_run.entitlement_check`'s existing `PASS | DENIED` column contract, same
+    as `entitlement_check_value`/`cfo_entitlement_check_value` above."""
+    return "PASS" if result.passed else "DENIED"
+
+
+@dataclass(frozen=True, slots=True)
+class EntitlementResult:
+    """docs/specs/entitlement.md §5.5's exact result contract — the shape
+    `resolve_cfo_entitlement` (and any future `resolve_pi_entitlement`/
+    `resolve_cmo_entitlement`) is rewritten against at F2."""
+
+    passed: bool
+    reason: str | None
+    meter_code: str
+    usage_count: int
+    cap_value: int | None
+    evaluation_basis: str  # NO_CAP_CONFIGURED | UNDER_CAP | OVER_CAP
+    denial_rendering: str  # ERROR | REDUCED_PAYLOAD
+    reduced_payload_action_code: str | None
+    period_key: str
+
+
+def _tenant_timezone(tenant_id: UUID) -> str:
+    """`tenant` carries no `tenant_id` column and gets no RLS policy (it IS the identity
+    root — same reasoning as `tenant_repo.py`), so this goes through the plain engine, never
+    `tenant_scope()`. Falls back to the documented platform default (A1) if the tenant row is
+    somehow missing or its `timezone` column is empty — never raises, since a missing
+    timezone must not block the entitlement chokepoint itself."""
+    with engine().connect() as conn:
+        row = conn.execute(text(_GET_TENANT_TIMEZONE_SQL), {"tenant_id": str(tenant_id)}).first()
+    if row is not None and row[0]:
+        return str(row[0])
+    return _DEFAULT_TENANT_TIMEZONE
+
+
+def _period_key(occurred_at: datetime, *, tz_name: str, period_unit: str) -> str:
+    """Tenant-timezone calendar bucket (A1/rule 8). `period_key` is computed once, at
+    evaluation/write time, never lazily re-derived later (rule 8's "never silently
+    reinterprets historical events"). `period_unit` here is a documented, conservative
+    design choice for F2's own use, since no capability_entitlement_rule/entitlement_cap_
+    config row is seeded to supply a real one today: MONTH is the default bucket
+    (`YYYY-MM`) used for the result's own `period_key` and for usage aggregation unless a
+    resolved cap names DAY (`YYYY-MM-DD`) or RUN_LIFETIME (a constant, non-resetting
+    bucket) instead. Uses the standard-library `zoneinfo` — no bespoke timezone-conversion
+    logic is written here, only the bucket-formatting choice above it."""
+    try:
+        local = occurred_at.astimezone(ZoneInfo(tz_name))
+    except Exception:
+        local = occurred_at.astimezone(ZoneInfo(_DEFAULT_TENANT_TIMEZONE))
+
+    if period_unit == "DAY":
+        return local.strftime("%Y-%m-%d")
+    if period_unit == "RUN_LIFETIME":
+        return "LIFETIME"
+    return local.strftime("%Y-%m")
+
+
+def resolve_cfo_entitlement(
+    tenant_id: UUID,
+    *,
+    direct_action_code: str,
+    agent_code: str = "CFO",
+    occurred_at: datetime | None = None,
+    as_of_date: date | None = None,
+) -> EntitlementResult:
+    """The real, F2 rewrite of the CFO entitlement chokepoint — see module docstring for the
+    full "what changed, what didn't" explanation. `direct_action_code` is the trigger id the
+    calling dispatch function actually performed (e.g. `"cfo.pricing"`, `"cfo.reconcile"` —
+    `agents/ceo_hub.py`'s own `CFO_*` constants, reused verbatim by every call site); it is
+    never chosen or guessed by this function.
+
+    Resolution order (entitlement.md §6):
+    1. `meter_code` — `metered_event_meter_map`, tenant override beats platform default,
+       falling back to `direct_action_code` itself if no row exists at all (E5, "never
+       dropped").
+    2. `period_key` — tenant-timezone calendar bucket (A1/rule 8), defaulted to a MONTH
+       bucket unless a resolved cap names a different `period_unit` (see `_period_key`).
+    3. `entitlement_cap_config` — tenant override beats platform default. No row today
+       (nothing seeded) means `cap_value=None`, `evaluation_basis=NO_CAP_CONFIGURED`,
+       `passed=True` — E1/§5.5's exact, honest, real state. A resolved row with a non-null
+       `cap_value` is compared against a real, live-aggregated `usage_count`
+       (`entitlement_repo.usage_count_for_period`) — `UNDER_CAP`/pass or `OVER_CAP`/deny.
+    4. `capability_entitlement_rule` — resolves `denial_rendering`/
+       `reduced_payload_action_code`. No row (or an unrecognised `denial_rendering` value)
+       means the column's own default, `"ERROR"` (rule 9).
+
+    Deliberately does NOT resolve/enforce `tenant_cart_item` (E6's `NO_ACTIVE_CART_ITEM`) —
+    see module docstring for why.
+    """
+    now = occurred_at or datetime.now(timezone.utc)
+    resolved_as_of_date = as_of_date or now.date()
+
+    meter_map_row = entitlement_repo.resolve_meter_map(
+        tenant_id, event_kind=direct_action_code, as_of_date=resolved_as_of_date
+    )
+    meter_code = str(meter_map_row["meter_code"]) if meter_map_row is not None else direct_action_code
+
+    tz_name = _tenant_timezone(tenant_id)
+    period_key = _period_key(now, tz_name=tz_name, period_unit="MONTH")
+
+    cap_row = entitlement_repo.resolve_cap_config(
+        tenant_id,
+        agent_code=agent_code,
+        meter_code=meter_code,
+        scope="TENANT",
+        as_of_date=resolved_as_of_date,
+    )
+
+    cap_value: int | None = None
+    usage_count = 0
+    evaluation_basis = "NO_CAP_CONFIGURED"
+    passed = True
+    reason: str | None = None
+
+    if cap_row is not None and cap_row.get("cap_value") is not None:
+        cap_value = int(cap_row["cap_value"])
+        period_unit = str(cap_row.get("period_unit") or "MONTH")
+        if period_unit != "MONTH":
+            period_key = _period_key(now, tz_name=tz_name, period_unit=period_unit)
+
+        usage_count = entitlement_repo.usage_count_for_period(
+            tenant_id, agent_code=agent_code, meter_code=meter_code, period_key=period_key
+        )
+
+        if usage_count >= cap_value:
+            evaluation_basis = "OVER_CAP"
+            passed = False
+            reason = "OVER_CAP"
+        else:
+            evaluation_basis = "UNDER_CAP"
+            passed = True
+
+    rule_row = entitlement_repo.resolve_capability_rule(
+        tenant_id, agent_code=agent_code, direct_action_code=direct_action_code, as_of_date=resolved_as_of_date
+    )
+    denial_rendering = str(rule_row["denial_rendering"]) if rule_row is not None else "ERROR"
+    if denial_rendering not in ("ERROR", "REDUCED_PAYLOAD"):
+        denial_rendering = "ERROR"
+    reduced_payload_action_code = (
+        str(rule_row["reduced_payload_action_code"])
+        if rule_row is not None and rule_row.get("reduced_payload_action_code") is not None
+        else None
+    )
+    if denial_rendering != "REDUCED_PAYLOAD":
+        reduced_payload_action_code = None
+
+    return EntitlementResult(
+        passed=passed,
+        reason=reason,
+        meter_code=meter_code,
+        usage_count=usage_count,
+        cap_value=cap_value,
+        evaluation_basis=evaluation_basis,
+        denial_rendering=denial_rendering,
+        reduced_payload_action_code=reduced_payload_action_code,
+        period_key=period_key,
+    )
+
+
+def cfo_entitlement_check_value(result: EntitlementResult) -> str:
+    """Maps to `agent_run.entitlement_check`'s existing `PASS | DENIED` column contract."""
+    return "PASS" if result.passed else "DENIED"
+
+
+class EntitlementDenied(Exception):
+    """F3 of the entitlement roadmap — the real enforcement signal `resolve_cfo_entitlement`'s
+    result (F2) was computed for but nothing previously acted on. Raised by `agents.ceo_hub`'s
+    `dispatch_cfo_*` functions when `result.passed` is `False`, carrying the full
+    `EntitlementResult` so the caller (a FastAPI route, or `api/v1/cfo.py` directly) can render
+    the correct denial without re-deriving it. Deliberately a plain Python exception, not an
+    `HTTPException` — this module is a service-layer chokepoint, not a FastAPI route, and must
+    not import FastAPI. The route layer is responsible for converting this into the actual HTTP
+    response (see `api/v1/cfo.py`)."""
+
+    def __init__(self, result: EntitlementResult) -> None:
+        self.result = result
+        super().__init__(result.reason or "entitlement denied")

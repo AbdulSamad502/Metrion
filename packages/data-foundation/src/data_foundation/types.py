@@ -23,6 +23,13 @@ from typing import Iterator, Mapping, Protocol, Sequence
 
 from calc_engine.types import Confidence  # noqa: F401  (re-exported for convenience)
 
+# A row can be either a plain dict (existing behavior — every current adapter/test uses this;
+# a dict literal cannot hold duplicate keys, so no duplicate-header case is possible this way)
+# OR an ordered list of (header, value) tuples (new — the only way to represent a real export
+# with two columns literally sharing the same header string, since a dict can't). Additive:
+# nothing that constructs a RawFile with a dict today needs to change.
+RowData = Mapping[str, str] | Sequence[tuple[str, str]]
+
 
 @dataclass(frozen=True, slots=True)
 class ColumnBinding:
@@ -47,10 +54,18 @@ class FileSample:
 class RawFile:
     """What `parse()` consumes — already-tabular rows. `rows` yields raw string values keyed
     by original column header; `parse()` never receives pre-converted types (§2.2 rule 2: pure,
-    shape-only, no inference of what a string "should" mean beyond the declared column_map)."""
+    shape-only, no inference of what a string "should" mean beyond the declared column_map).
+
+    Each row is a `RowData`: either a plain `dict[str, str]` (the common case — every adapter
+    built so far uses this, and it is unchanged from before) or an ordered `Sequence[tuple[str,
+    str]]` of (header, value) pairs. The tuple-list form exists solely to represent a real
+    export where the same header string appears more than once at different column positions
+    with different meanings (a plain dict cannot hold two entries for the same key, so it
+    cannot represent that file shape at all) — see `adapters/base.py`'s occurrence-indexed
+    `column_map` lookup for how a duplicate header is disambiguated."""
 
     columns: tuple[str, ...]
-    rows: Sequence[Mapping[str, str]]
+    rows: Sequence[RowData]
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,11 +107,26 @@ class ParsedRow:
     one adapter's `column_map`/`enum_maps`/`date_formats` to one raw row."""
 
     source_row_number: int
-    source_row_json: dict[str, str]  # verbatim original row, every original column preserved
+    source_row_json: dict[str, str]  # "verbatim" in the common case only — see source_row_pairs
     canonical_fields: dict[str, object]  # sales_line-shaped: order_ref, quantity, dates, ...
     components: tuple[ComponentValue, ...]
     unknown_columns: tuple[str, ...]  # present in the row, absent from column_map (-> V-COL-001)
     unmapped_enum_fields: tuple[tuple[str, str], ...]  # (canonical_field, raw_value) -> V-ENUM-001
+    # Full-fidelity ordered copy of the row, additive alongside source_row_json (never replacing
+    # it — existing callers/tests keep working unchanged). A real Meesho export
+    # (meesho.payments.v1's "Order Payments" tab) was found to carry the SAME header twice
+    # ("Fixed Fee (Incl. GST)" at two column positions with different meaning) — a Python dict
+    # (source_row_json's type) cannot hold two entries under one key, so building it via
+    # `dict(pairs)` silently keeps only the last-seen value, losing the other. `source_row_pairs`
+    # is the ordered (header, value) list `_parse_row` actually iterated, before any
+    # dict-collapsing — it is duplicate-safe by construction. No DDL/schema change is required
+    # to persist it losslessly: the `jsonb` columns on `sales_line`/`settlement_line`
+    # (data-foundation.md §1.3/§5.6) accept a JSON *array* of pairs exactly as readily as a JSON
+    # object, so a future settlement-side persistence path can `json.dumps(source_row_pairs)`
+    # into the same column type sales_line already uses for the dict form. Every adapter today
+    # populates this field; only meesho.payments.v1 currently produces rows where it actually
+    # differs in content from `source_row_json`.
+    source_row_pairs: tuple[tuple[str, str], ...] = ()
 
 
 class MarketplaceAdapter(Protocol):

@@ -18,7 +18,15 @@ pytestmark = pytest.mark.skipif(
     reason="DATABASE_URL_APP/DATABASE_URL not set — integration tests need a live Postgres",
 )
 
-_TABLES = ("validation_finding", "line_component", "sales_line", "report_period", "ingestion_run", "report_file")
+_TABLES = (
+    "validation_finding",
+    "line_component",
+    "sales_line",
+    "settlement_line",
+    "report_period",
+    "ingestion_run",
+    "report_file",
+)
 
 
 @pytest.fixture

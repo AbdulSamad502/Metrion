@@ -19,6 +19,7 @@ _ENGINE_TABLES = {
     "discount_bearer_config",
     "gst_slab_reference",
     "fee_reference",
+    "hsn_gst_reference",
     "reconciliation_tolerance_config",
     "severity_config",
 }
@@ -61,3 +62,8 @@ def test_downgrade_then_upgrade_restores_all_engine_tables(migrate_engine):
     with migrate_engine.connect() as conn:
         seeded_count = conn.execute(text("SELECT count(*) FROM formula_definition")).scalar_one()
     assert seeded_count == 4
+
+    # hsn_gst_reference seed data (migration 20260925_0007) survives the round-trip too
+    with migrate_engine.connect() as conn:
+        hsn_seeded_count = conn.execute(text("SELECT count(*) FROM hsn_gst_reference")).scalar_one()
+    assert hsn_seeded_count == 15

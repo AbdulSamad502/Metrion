@@ -2,14 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "frontend",
+      "name": "metrion-backend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["backend/scripts/run_dev.py"],
+      "port": 8000
+    },
+    {
+      "name": "metrion-frontend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
       "port": 3000
-    },
-    {
-      "name": "backend",
-      "url": "http://localhost:8000"
     }
   ]
 }

@@ -1,0 +1,40 @@
+[project]
+name = "cfo"
+version = "0.1.0"
+description = "Metrion CFO agent — see docs/specs/cfo-agent.md"
+requires-python = ">=3.12"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",
+    "httpx>=0.27",
+    # NOTE: `calc-engine` (packages/calc-engine) is a real runtime dependency — CFO's
+    # composition logic calls `calc_engine.api.compute_metric` functions directly
+    # (cfo-agent.md §5.1) — but it is deliberately NOT listed here, for the same reason
+    # backend/pyproject.toml documents for not listing `competitor-intelligence`: a relative
+    # `file:` specifier resolves against the *installer's* cwd, not this file's directory,
+    # and this monorepo has no workspace-aware build tool yet. See `.github/workflows/ci.yml`
+    # (installs calc-engine before cfo) and `backend/README.md`'s install order.
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "hypothesis>=6.100", "mypy>=1.10"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cfo = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+files = ["src"]

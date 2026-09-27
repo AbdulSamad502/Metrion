@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from data_foundation.adapters.base import MoneyParseError, rupees_to_paise
+from data_foundation.adapters.base import BaseAdapter, MoneyParseError, rupees_to_paise
 from data_foundation.adapters.flipkart_sales_report_v1 import adapter as flipkart_adapter
 from data_foundation.adapters.meesho_orders_v1 import adapter as meesho_orders_adapter
 from data_foundation.adapters.meesho_tcs_sales_return_v1 import adapter as meesho_return_adapter
-from data_foundation.types import FileSample, RawFile
+from data_foundation.types import ColumnBinding, FileSample, RawFile
 
 
 def test_rupees_to_paise_positive():
@@ -81,7 +81,27 @@ def test_flipkart_discount_bearer_split_maps_to_distinct_codes():
 
 
 def test_meesho_return_negative_taxable_amount():
-    # §2.3: "Negative total_taxable_sale_value"
+    # Unit test of rupees_to_paise's handling of a negative numeric string, not an assertion
+    # that real Meesho return data is always negative (see meesho_tcs_sales_return_v1.py's
+    # docstring — the one real sample inspected was positive).
     raw = RawFile(columns=("total_taxable_sale_value",), rows=[{"total_taxable_sale_value": "-372.06"}])
     row = list(meesho_return_adapter.parse(raw))[0]
     assert row.canonical_fields["taxable_amount"] == -37_206
+
+
+def test_column_map_ambiguous_bare_and_tuple_key_raises_at_construction():
+    # data-foundation.md architecture decision: a bare string key "X" and an explicit tuple key
+    # ("X", 0) both target occurrence 0 of header "X" — having both is ambiguous and must fail
+    # fast at adapter-definition/import time, not per-row at parse time.
+    with pytest.raises(ValueError, match="X"):
+        BaseAdapter(
+            adapter_id="test.ambiguous.v1",
+            marketplace="MEESHO",
+            report_category="TEST",
+            format_version="v1",
+            date_formats={},
+            column_map={
+                "X": ColumnBinding(canonical_field="line_ref", component_code=None, is_verified=False),
+                ("X", 0): ColumnBinding(canonical_field="line_ref", component_code=None, is_verified=False),
+            },
+        )

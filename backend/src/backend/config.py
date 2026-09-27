@@ -74,3 +74,14 @@ def ci_review_vision_model() -> str:
     ollama_extractor.py`). Defaults to the same model as listing extraction — both are
     vision-classification tasks; an operator may point them at different models via env."""
     return os.environ.get("CI_REVIEW_VISION_MODEL", ci_vision_model())
+
+
+@lru_cache
+def cfo_narration_model() -> str:
+    """The Ollama model used for CFO's Brain-3 narration (`cfo.reasoning.narrate.
+    narrate_figures`, via `cfo.reasoning.ollama_provider.OllamaLlmProvider`) — text-only,
+    unrelated to `ci_vision_model()`'s vision-classification models above. No model choice is
+    locked by cfo-agent.md; this is a configurable default, not a spec decision, so an
+    operator can swap models without a code change (mirrors `ci_vision_model()`'s own
+    precedent exactly)."""
+    return os.environ.get("CFO_NARRATION_MODEL", "qwen3:8b")

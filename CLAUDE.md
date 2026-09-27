@@ -15,15 +15,21 @@ worse than no number at all.
 ## Stack
 
 - **Frontend** — Next.js (App Router), React, TypeScript
-- **Backend** — Python, FastAPI
-- **Database** — PostgreSQL, with Row-Level Security (`FORCE`) as the isolation boundary
+- **Backend** — Python, **FastAPI only**. Confirmed decision: Flask is not added alongside it — one web framework, no fragmentation. (Pydantic is FastAPI's request/response validation layer, already in use on every route — not a separate future adoption.)
+- **Database** — PostgreSQL, with Row-Level Security (`FORCE`) as the isolation boundary. **Confirmed decision: MySQL is not adopted**, for this or any other core store — Postgres RLS *is* the multi-tenancy security boundary (see below), and MySQL has no equivalent. A different engine for a genuinely separate concern (e.g. an analytics warehouse) is a new, explicit decision to raise when that need is real, not a default.
 - **Vector / RAG** — pgvector, in the same Postgres. *Not Qdrant* (V1 decision; Qdrant is a documented future migration path only)
 - **Cache / queues** — Redis
+- **Runtime / infra** — Docker (Docker Compose locally for Postgres/Redis; the same containers this project's tests run against). Formalized here because it already is the de facto runtime, not a new addition.
 - **Identity** — Clerk, using Clerk Organizations (one Organization = one tenant)
 - **Payments** — Razorpay
 - **WhatsApp** — via a BSP (Gupshup / Interakt), not the direct Meta Cloud API
-- **LLM** — local Ollama in dev, always behind a provider abstraction; vision behind a separate `VisionProvider` slot
-- **Agent orchestration** — CEO star topology, fixed tool catalog. No LLM-generated SQL or Python. No LangGraph.
+- **LLM** — local Ollama in dev, always behind a provider abstraction (`LlmProvider`: `complete(model, prompt) -> str`, text in/text out, no numeric parameter anywhere in the interface — this shape is deliberate, see the hard rule below); vision behind a separate `VisionProvider` slot
+- **Agent orchestration** — CEO star topology, fixed tool catalog. No LLM-generated SQL or Python. **No LangGraph, no LangChain-as-orchestrator** — confirmed decision, reaffirmed explicitly when reconsidered: an LLM must never silently decide what code runs or touch a number, which is exactly what a fixed, hand-rolled tool catalog (`ceo_hub.py`'s dispatch functions) enforces structurally and a general agent framework's tool-calling loop does not. **LangChain is permitted only for narrow, non-orchestration utilities** — e.g. a document loader or text-splitter feeding pgvector ingestion for RAG — never for agent routing, never wrapping a `dispatch_cfo_*`/CEO-hub call, never anywhere an LLM's output could change which deterministic function runs.
+- **Data analytics / parsing** — pandas, openpyxl and equivalents for marketplace-report ingestion (`data-foundation`'s adapters) — already in real use, not a future addition.
+- **Web scraping** — httpx-based fetchers behind a `Fetcher` Protocol, hardcoded domain allowlists (`competitor-intelligence`'s pattern, reused by the GST Applicability Lookup) — already in real use.
+- **NLP (non-LLM)** — permitted for narrow, deterministic text-matching jobs (e.g. GST/HSN description matching) where a classical technique is a better fit than an LLM call — never for anything that produces or adjusts a money figure, which stays inside the hard rule below regardless of technique.
+- **ML / DL** — **statistical only at V1, no trained models** (`docs/planning/phase-1-readiness-review.md` C13, confirmed; built as Brain 2's anomaly engine — z-score, percentile threshold, period-over-period delta). A trained-model path (PyTorch, MLOps, drift monitoring) is a legitimate V2+ upgrade, but reopening C13 is its own explicit product decision — training-data sourcing, monitoring, and eval strategy all need deciding *before* any model code, not a retrofit onto existing statistical code.
+- **LLM evals** — required for any new Brain-3 narration surface (a prompt template, an extraction step like the GST Applicability Lookup's, a new `narrate_*` composition). At minimum: does it ever state a number not present in its cited figures/`FigureToken`s, does it drop a required disclaimer, does it narrate a non-result (`AnomalyInsufficientHistory`-style) as if it were a real negative result. This was a real, missing practice as of this note — add eval coverage alongside the narration code, not after.
 
 ## The hard rule: LLMs explain numbers, they never compute them
 

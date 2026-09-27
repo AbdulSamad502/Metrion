@@ -298,3 +298,246 @@ export type DiscoveryRunDetail = {
   otherAnalyzed: Candidate[];
   unanalyzed: Candidate[];
 };
+
+// --- CFO agent test harness (backend/src/backend/api/v1/cfo.py) ---------------------
+// Every type below matches that file's hand-built response dicts exactly (camelCase
+// keys) — request bodies sent to these routes stay snake_case, matching the Pydantic
+// models that file defines (never camelCased on the way out).
+
+/** Feature 1 — `PUT /cfo/expenses` response. */
+export type ManualAdjustmentIdResponse = { manualAdjustmentId: string };
+
+/** One row from `GET /cfo/expenses` (`_expense_entry_to_dict`). */
+export type ExpenseEntry = {
+  manualAdjustmentId: string;
+  category: string;
+  amountPaise: number;
+  targetType: string;
+  targetRef: string;
+  createdAt: string;
+  createdBy: string;
+};
+
+export type ExpenseListResponse = { entries: ExpenseEntry[]; totalPaise: number };
+
+/** `GET /cfo/expenses/budget-status` — `noBudgetSet: true` is a real, distinguished
+ * outcome (never a fabricated zero ceiling); `budgetPaise`/`remainingPaise` are `null`
+ * only in that case. */
+export type BudgetStatus = {
+  category: string;
+  periodStart: string;
+  periodEnd: string;
+  spentPaise: number;
+  noBudgetSet: boolean;
+  budgetPaise: number | null;
+  remainingPaise: number | null;
+  exceeded: boolean;
+  manualAdjustmentId: string | null;
+};
+
+/** `POST /cfo/gst/analyze-lines` — one row per line, `_gst_line_result_to_dict`. Never a
+ * period total (see that route's own docstring). */
+export type GstLineResult = {
+  lineRef: string;
+  normalizedExclusivePaise: number | null;
+  isAvailable: boolean;
+  unavailableReason: string | null;
+  ratePlausibilityMatched: boolean | null;
+  ratePlausibilitySeverity: string | null;
+  disclaimer: string;
+};
+
+export type AnalyzeGstLinesResponse = { lines: GstLineResult[] };
+
+/** `POST /cfo/pricing`, `/landed-cost`, `/suppliers/rank`, `/funding-readiness`,
+ * `/batch-size`, `/gst/period-summary` all reuse this exact shape
+ * (`_pricing_metric_result_to_dict`) — byte-identical to `MetricResult` above, kept as a
+ * separate alias only so call sites reading this file can see which routes share it. */
+export type PricingMetricResult = MetricResult;
+
+/** `POST /cfo/pnl` — every one of the six is this shape, `_period_pnl_metric_result_to_dict`
+ * (`MetricResult` + `valueFraction`, populated INSTEAD OF `valuePaise` for percentage
+ * metrics like `CONTRIBUTION_MARGIN_PCT`, never alongside it). */
+export type PeriodPnlMetricResult = MetricResult & { valueFraction: string | null };
+
+export type PeriodPnlResponse = {
+  nrr: PeriodPnlMetricResult;
+  contributionProfit: PeriodPnlMetricResult;
+  marginPct: PeriodPnlMetricResult;
+  feeRatioPct: PeriodPnlMetricResult;
+  returnRatePct: PeriodPnlMetricResult;
+  marketplaceFeeFlags: string[];
+  dataRequestId: string | null;
+};
+
+export type GstPeriodSummaryResponse = { results: MetricResult[]; disclaimer: string };
+
+export type PeriodComparisonResponse = {
+  delta: MetricResult | null;
+  narration: string | null;
+  dataRequestId: string | null;
+};
+
+export type LandedCostResponse = { result: MetricResult | null; dataRequestId: string | null };
+
+export type RankedSupplierQuote = {
+  result: MetricResult;
+  supplierName: string | null;
+  reliabilityNote: string | null;
+  paymentTerms: string | null;
+  leadTimeDays: number | null;
+  moq: number | null;
+};
+
+export type QuarantinedSupplierQuote = {
+  adjustmentId: string;
+  supplierName: string | null;
+  reason: string;
+};
+
+export type SupplierRankingResponse = {
+  ranked: RankedSupplierQuote[];
+  quarantined: QuarantinedSupplierQuote[];
+  isSingleQuote: boolean;
+  dataRequestId: string | null;
+};
+
+export type FundingReadinessGap = { kind: string; period: string | null; reason: string };
+export type DeferredSection = { name: string; reason: string; blockedOn: string | null };
+
+export type FundingReadinessResponse = {
+  contributionProfitHistory: MetricResult[];
+  trend: MetricResult[];
+  gaps: FundingReadinessGap[];
+  deferredSections: DeferredSection[];
+  dataRequestId: string | null;
+};
+
+export type BatchSizeResponse = {
+  result: MetricResult | null;
+  landedCostResult: MetricResult | null;
+  velocityStatus: string;
+  observedUnitsSold: number | null;
+  velocityUnavailableReason: string | null;
+  referenceQuantity: number | null;
+  referenceQuantityBasis: string | null;
+  referenceQuantityCaveatApplies: boolean;
+  referenceQuantityCaveat: string | null;
+  leadTimeDays: number | null;
+  moq: number | null;
+  dataRequestId: string | null;
+};
+
+export type LeakFinding = {
+  leakFindingId: string;
+  leakCategory: string;
+  severity: string;
+  windowStatus: string;
+  amountPaise: number;
+  marketplace: string;
+  engineResultRef: string;
+};
+
+export type ReconcileResponse = {
+  reconciliationRunId: string;
+  findings: LeakFinding[];
+  matchCount: number;
+  exceptionCount: number;
+  ambiguousMatchCount: number;
+  datesMissingCount: number;
+};
+
+export type CfoPreviewFinding = LeakFinding & { sku: string | null };
+
+export type CfoPreviewResponse = {
+  headlineTotalPaise: number | null;
+  headlineEngineResultRef: string | null;
+  affectedSkuCount: number | null;
+  affectedSkuCountUnavailable: string | null;
+  revealedFinding: CfoPreviewFinding | null;
+  lockedFindingsCount: number;
+};
+
+/** `POST /cfo/anomaly-check` — `_anomaly_flag_to_dict`. */
+export type AnomalyFlag = {
+  id: string;
+  metric: string;
+  targetRef: string;
+  period: string;
+  method: string;
+  decoratesEngineResultRef: string;
+  sourceEngineResultRefs: string[];
+  score: string;
+  fired: boolean;
+  severity: string | null;
+  dataConfidence: string;
+  seriesLength: number;
+  minSeriesLengthRequired: number;
+  configVersion: string;
+  formulaVersion: string;
+  asOfDate: string;
+  computedAt: string;
+};
+
+export type AnomalyMethodOutcome = {
+  method: string;
+  flag: AnomalyFlag | null;
+  insufficientHistory: {
+    metric: string;
+    method: string;
+    targetRef: string;
+    seriesLength: number;
+    minSeriesLengthRequired: number;
+    reason: string;
+  } | null;
+  zeroVariance: { metric: string; method: string; targetRef: string; seriesLength: number; reason: string } | null;
+  configurationGap: { metric: string; method: string; targetRef: string; reason: string } | null;
+};
+
+export type AnomalyCheckResponse = {
+  targetRef: string;
+  metric: string;
+  seriesLength: number;
+  methods: AnomalyMethodOutcome[];
+  narration?: string;
+};
+
+/** `POST /cfo/gst-lookup` — `_gst_lookup_result_to_dict` / `_gst_lookup_no_match_to_dict`. */
+export type GstLookupAlternative = { ratePct: string | null; hsn: string | null; category: string | null };
+
+export type GstLookupResult = {
+  id: string;
+  queryText: string;
+  sku: string | null;
+  queryHsn: string | null;
+  likelyRatePct: string | null;
+  likelyHsn: string | null;
+  likelyCategory: string | null;
+  ambiguityNote: string | null;
+  alternatives: GstLookupAlternative[];
+  sourceUrl: string | null;
+  sourceTitle: string | null;
+  retrievedAt: string;
+  status: string;
+  disclaimer: string;
+};
+
+export type GstLookupNoMatch = { queryText: string; attemptedUrls: string[]; reason: string };
+
+export type GstLookupResponse = {
+  result: GstLookupResult | null;
+  noMatch: GstLookupNoMatch | null;
+  fromCache: boolean;
+};
+
+export type PricingCurveResponse = { curve: MetricResult[]; dataRequestId: string | null };
+
+/** `GET /cfo/data-requests`. */
+export type DataRequestItem = {
+  id: string;
+  requestedField: string;
+  reason: string | null;
+  blockingMetric: string | null;
+  status: string;
+  createdAt: string;
+};

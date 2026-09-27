@@ -50,6 +50,8 @@ def _clean_engine_tables(migrate_engine):
         "discount_bearer_config",
         "reconciliation_tolerance_config",
         "severity_config",
+        "anomaly_detection_config",
+        "gst_lookup_result",
     )
     with migrate_engine.begin() as conn:
         for t in tables:

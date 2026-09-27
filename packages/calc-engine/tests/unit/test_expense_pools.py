@@ -5,13 +5,17 @@ cost every line definitely incurred.
 
 from __future__ import annotations
 
+from datetime import date
 from fractions import Fraction
 
 import pytest
 
 from calc_engine.formulas.expense_pools import (
+    ExpenseBudgetEntry,
     ExpensePoolEntry,
     allocate_account_level_expense_pool,
+    check_expense_budget,
+    parse_expense_budget_adjustment,
     parse_expense_pool_adjustment,
     resolve_sku_level_expense,
 )
@@ -66,3 +70,72 @@ def test_allocate_account_level_expense_pool_absent_is_zero_for_every_target():
     weights = [("SKU-A", Fraction(1)), ("SKU-B", Fraction(1))]
     result = allocate_account_level_expense_pool(None, weights)
     assert result == {"SKU-A": ZERO, "SKU-B": ZERO}
+
+
+# --- expense.budget (Feature 2: budget-limit check) ---
+
+
+def test_parse_expense_budget_adjustment_full_shape():
+    entry = parse_expense_budget_adjustment(
+        {
+            "category": "packaging",
+            "amount_paise": 500_000,
+            "period_start": "2026-09-01",
+            "period_end": "2026-09-30",
+        }
+    )
+    assert entry == ExpenseBudgetEntry(
+        category="packaging",
+        amount_paise=Paise(500_000),
+        period_start=date(2026, 9, 1),
+        period_end=date(2026, 9, 30),
+    )
+
+
+def test_parse_expense_budget_adjustment_missing_amount_raises():
+    with pytest.raises(ValueError):
+        parse_expense_budget_adjustment(
+            {"category": "packaging", "period_start": "2026-09-01", "period_end": "2026-09-30"}
+        )
+
+
+def test_parse_expense_budget_adjustment_invalid_category_raises():
+    with pytest.raises(ValueError):
+        parse_expense_budget_adjustment(
+            {
+                "category": "not_a_real_category",
+                "amount_paise": 500_000,
+                "period_start": "2026-09-01",
+                "period_end": "2026-09-30",
+            }
+        )
+
+
+def test_parse_expense_budget_adjustment_end_before_start_raises():
+    with pytest.raises(ValueError):
+        parse_expense_budget_adjustment(
+            {
+                "category": "packaging",
+                "amount_paise": 500_000,
+                "period_start": "2026-09-30",
+                "period_end": "2026-09-01",
+            }
+        )
+
+
+def test_check_expense_budget_under_budget_not_exceeded():
+    result = check_expense_budget(Paise(500_000), Paise(300_000))
+    assert result.remaining_paise == Paise(200_000)
+    assert result.exceeded is False
+
+
+def test_check_expense_budget_exact_spend_not_exceeded():
+    result = check_expense_budget(Paise(500_000), Paise(500_000))
+    assert result.remaining_paise == ZERO
+    assert result.exceeded is False
+
+
+def test_check_expense_budget_exceeded_remaining_is_negative_not_floored():
+    result = check_expense_budget(Paise(500_000), Paise(650_000))
+    assert result.remaining_paise == Paise(-150_000)  # real overage, never floored to zero
+    assert result.exceeded is True

@@ -81,10 +81,28 @@ _CHILD_TABLES = (
     "whatsapp_message",
     "whatsapp_alert_subscription",
     "investigation_message",
+    # entitlement.md §5 tenant-owned tables — deleted before agent_run (metered_event's
+    # nullable FK to agent_run(id)) and before tenant/app_user themselves.
+    "member_entitlement_allocation",
+    "metered_event",
+    "tenant_cart_item",
+    "tenant_plan",
     "agent_run",
     "investigation",
     "whatsapp_binding",
     "membership",
+)
+
+# entitlement.md §5/§7 platform-config tables (nullable tenant_id, no RLS-loop cleanup
+# possible the way _CHILD_TABLES is — a NULL tenant_id row has no tenant to scope through).
+# Deleted directly as the table owner (metrion_migrate), mirroring
+# packages/calc-engine/tests/integration/conftest.py's own `_clean_engine_tables` pattern for
+# reconciliation_tolerance_config/severity_config.
+_PLATFORM_CONFIG_TABLES = (
+    "entitlement_cap_config",
+    "metered_event_meter_map",
+    "capability_entitlement_rule",
+    "plan",
 )
 
 
@@ -109,6 +127,13 @@ def _clean(migrate_engine) -> None:
     with migrate_engine.begin() as conn:
         conn.execute(text("DELETE FROM tenant"))
         conn.execute(text("DELETE FROM app_user"))
+        # Platform-config tables (nullable tenant_id) — an unscoped delete as table owner
+        # only reaches tenant_id IS NULL rows (the RLS predicate's other branch needs
+        # app.current_tenant_id set); that's exactly the row shape every test here seeds
+        # (platform-default rows via migrate_engine, mirroring fee_reference's precedent),
+        # so this is sufficient cleanup, not a gap.
+        for t in _PLATFORM_CONFIG_TABLES:
+            conn.execute(text(f"DELETE FROM {t}"))
 
 
 @pytest.fixture(autouse=True)
