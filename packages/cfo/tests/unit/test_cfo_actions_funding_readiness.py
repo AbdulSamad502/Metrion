@@ -313,11 +313,13 @@ def test_ac19_outcome_instance_has_no_numeric_or_categorical_judgement_field(
         "gaps",
         "deferred_sections",
         "data_request_id",
+        "cash_conversion_timing",
     }
     assert isinstance(outcome.contribution_profit_history, list)
     assert isinstance(outcome.trend, list)
     assert isinstance(outcome.gaps, list)
     assert isinstance(outcome.deferred_sections, tuple)
+    assert isinstance(outcome.cash_conversion_timing, list)
 
 
 # ---------------------------------------------------------------------------------------
@@ -337,7 +339,7 @@ def test_deferred_sections_name_margin_stability_revenue_concentration_and_cash_
     assert "revenue_concentration_by_sku_and_marketplace" in names
     assert "cash_conversion_timing" in names
     for section in outcome.deferred_sections:
-        assert "Phase D" in section.blocked_on
+        assert section.blocked_on  # non-empty, names why — never a blank placeholder
         assert section.reason  # non-empty, names why — never a blank placeholder
 
 
@@ -354,3 +356,65 @@ def test_deferred_sections_present_even_when_history_and_gaps_are_both_empty(
     assert outcome.contribution_profit_history == []
     assert outcome.gaps == []
     assert len(outcome.deferred_sections) == 3
+
+
+# ---------------------------------------------------------------------------------------
+# cash_conversion_timing — real SETTLEMENT_LAG_DAYS rows, fetched dynamically.
+# ---------------------------------------------------------------------------------------
+
+
+def _settlement_lag_result() -> MetricResult:
+    return MetricResult(
+        id=uuid4(),
+        metric_code="SETTLEMENT_LAG_DAYS",
+        value_paise=None,
+        recognition_state=RecognitionState.RECOGNISED,
+        confidence="VERIFIED",
+        calculation_basis="SettlementLagDays (anomaly-detection.md §6.1/§6.6)",
+        formula_version="SETTLEMENT_LAG_DAYS.v1",
+        canonical_data_version="non-canonical",
+        as_of_date=_AS_OF,
+        input_refs=(),
+        exclusions=(),
+        computed_at=_COMPUTED_AT,
+        is_available=True,
+        manual_adjustment_set=(),
+    )
+
+
+def test_cash_conversion_timing_populated_when_a_real_settlement_lag_days_row_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A metric-code-aware fake — proves the fetch is real per-metric_code, not the same rows
+    reused for both series (the other tests' single-lambda fakes can't tell these apart)."""
+    lag_result = _settlement_lag_result()
+
+    def _fake_list_by_metric_code(tenant_id, *, metric_code, period_start, period_end):
+        if metric_code == "SETTLEMENT_LAG_DAYS":
+            return [_row_for(lag_result, period=f"{period_start}/{period_end}")]
+        return []
+
+    monkeypatch.setattr(cfo_actions_module.metric_result_repo, "list_by_metric_code", _fake_list_by_metric_code)
+
+    outcome = assemble_funding_readiness_reduced(_TENANT, _request(expected_periods=()))
+
+    assert len(outcome.cash_conversion_timing) == 1
+    assert outcome.cash_conversion_timing[0].metric_code == "SETTLEMENT_LAG_DAYS"
+    assert outcome.cash_conversion_timing[0].id == lag_result.id
+    # Real data found -> no longer named as a deferred gap.
+    names = {section.name for section in outcome.deferred_sections}
+    assert "cash_conversion_timing" not in names
+    assert "margin_stability" in names  # the other two stay deferred regardless
+    assert "revenue_concentration_by_sku_and_marketplace" in names
+
+
+def test_cash_conversion_timing_empty_and_still_deferred_when_no_row_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cfo_actions_module.metric_result_repo, "list_by_metric_code", lambda *a, **k: [])
+
+    outcome = assemble_funding_readiness_reduced(_TENANT, _request(expected_periods=()))
+
+    assert outcome.cash_conversion_timing == []
+    names = {section.name for section in outcome.deferred_sections}
+    assert "cash_conversion_timing" in names

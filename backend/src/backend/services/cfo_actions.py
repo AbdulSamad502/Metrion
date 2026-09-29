@@ -150,11 +150,11 @@ change."""
 from __future__ import annotations
 
 import calendar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from fractions import Fraction
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 from uuid import UUID
 
 from calc_engine.anomaly.period_over_period_delta import period_over_period_delta
@@ -190,10 +190,17 @@ from calc_engine.api.compute_metric import (
     compute_return_rate_pct,
     compute_settlement_lag_days,
 )
+from calc_engine.api.cash_reconciliation import cash_reconciliation as compute_cash_reconciliation
 from calc_engine.api.reconcile import reconcile
 from calc_engine.formulas import expense_pools
 from calc_engine.formulas.cost_components import CostEntry
 from calc_engine.formulas.fee_resolution import FeeReference, resolve_fee_or_unavailable
+from calc_engine.formulas.financial_health import (
+    FinancialHealthConfigRow,
+    FinancialHealthInput,
+    HealthBand,
+)
+from calc_engine.formulas.financial_health import assemble_financial_health as compute_financial_health_band
 from calc_engine.formulas.landed_cost import parse_supplier_quote_adjustment
 from calc_engine.formulas.leak import ReconciliationOutcome
 from calc_engine.formulas.settlement_lag import SettlementLagAggregate, settlement_lag_days_aggregate
@@ -210,7 +217,9 @@ from calc_engine.gst_lookup.fetcher import GstFetcher, HttpxGstFetcher
 from calc_engine.gst_lookup.llm_provider import LlmProvider as GstLookupLlmProvider
 from calc_engine.gst_lookup.lookup import gst_applicability_lookup
 from calc_engine.gst_lookup.types import GstLookupNoMatch, GstLookupQuery, GstLookupResult
+from calc_engine.formulas.line_status_overrides import resolve_line_count, resolve_line_status
 from calc_engine.repositories import (
+    canonical_repo,
     config_repo,
     gst_lookup_repo,
     manual_adjustment_repo,
@@ -218,17 +227,38 @@ from calc_engine.repositories import (
     reconciliation_repo,
 )
 from calc_engine.repositories.manual_adjustment_repo import insert_adjustment
-from calc_engine.types import Bearer, CanonicalLine, Confidence, Paise, RecognitionState, Unavailable, sum_paise
+from calc_engine.types import (
+    Bearer,
+    CanonicalLine,
+    ComponentRow,
+    Confidence,
+    Paise,
+    RecognitionState,
+    Unavailable,
+    sum_paise,
+)
 
 from data_foundation.component_registry import COMPONENT_KIND_BY_CODE
 
 from cfo.leak.compose import ComposedFinding, LeakExceptionInput, classify_and_rank_leaks
 from cfo.pnl import inputs as pnl_inputs
 from cfo.reasoning.narrate import FigureToken, narrate_figures
+from cfo.reasoning.narration_safety import NarrationSafetyResult, check_narration_safety
 from cfo.reasoning.ollama_provider import OllamaLlmProvider
 from cfo.reasoning.prompts import GST_DISCLAIMER
 from cfo.reasoning.provider import LlmProvider
-from cfo.repositories import leak_finding_repo
+from cfo.reasoning.signals import (
+    AnomalyFlagInput,
+    DataRequestInput,
+    ExpenseBudgetInput,
+    FinancialHealthMetricInput,
+    LeakFindingInput,
+    PricingCandidateInput,
+    StrategicSignal,
+    SupplierRankInput,
+    compose_strategic_signals,
+)
+from cfo.repositories import agent_data_request_repo, leak_finding_repo
 from cfo.repositories.agent_data_request_repo import insert as insert_data_request
 
 from backend.config import cfo_narration_model, ollama_host
@@ -669,6 +699,554 @@ def enter_expense(
     )
 
 
+# deterministic-engine.md §7.2.1's `cancellation_state_override`/`return_status_override`/
+# `rto_status_override` (this session — closes the CFO end-to-end evaluation's headline finding,
+# docs/evaluation/cfo-e2e-evaluation-mtr-mock-2026-09-27.md §1/§3/§4/§11: real MTR files with no
+# resolvable cancellation/return/RTO status at all, so NET_REALIZED_REVENUE/CONTRIBUTION_PROFIT
+# were UNAVAILABLE for 100% of that dataset). DELIBERATELY NOT added to
+# `_ALLOWED_MANUAL_ADJUSTMENT_FIELDS` above — same reasoning as `gst_rate_override`'s own
+# exclusion (see that set's comment): each of these three fields has a real, narrow, enumerated
+# value domain (`calc_engine.formulas.line_status_overrides` names the exact allowed strings),
+# and the generic `enter_expense` path passes a caller's `value` straight through, uninspected —
+# it must never be able to write an invalid status string for one of these fields.
+_LINE_STATUS_OVERRIDE_VALUES: dict[str, frozenset[str]] = {
+    "cancellation_state_override": frozenset({"CANCELLED", "NOT_CANCELLED"}),
+    "return_status_override": frozenset({"RETURNED", "NOT_RETURNED"}),
+    "rto_status_override": frozenset({"RTO", "NOT_RTO"}),
+}
+
+# `returned_qty_override`/`rto_qty_override` (added while building the ingestion-to-canonical
+# composition layer, §6.16 — deterministic-engine.md §7.2.1): a different value shape from the
+# three enum fields above (a non-negative count, not a closed string set), so they get their
+# own validated write function (`declare_line_count_override`) rather than being folded into
+# `_LINE_STATUS_OVERRIDE_VALUES`'s enum-membership check, which does not fit a count at all.
+_LINE_COUNT_OVERRIDE_FIELDS: frozenset[str] = frozenset({"returned_qty_override", "rto_qty_override"})
+
+
+@dataclass(frozen=True, slots=True)
+class DeclareLineStatusOverrideRequest:
+    """One seller declaration of a real order-line outcome their marketplace upload does not
+    resolve (deterministic-engine.md §7.2.1's new LINE-grain override triple). `target_ref` is
+    always `str(sales_line_id)` — this mirrors `rto_outcome`/`discount_bearer`/
+    `return_refund_amount`'s existing per-line grain, never a SKU- or period-wide default."""
+
+    sales_line_id: UUID
+    field: str
+    value: str
+    created_by: UUID
+    reason: str | None = None
+    supersedes_id: UUID | None = None
+    now: datetime | None = None
+
+
+def declare_line_status_override(tenant_id: UUID, request: DeclareLineStatusOverrideRequest) -> UUID:
+    """Writes one ACTIVE `cancellation_state_override`/`return_status_override`/
+    `rto_status_override` manual_adjustment row for `request.sales_line_id`, after validating
+    both `request.field` is one of the three real fields and `request.value` is one of that
+    field's real enumerated values — CFO never persists a status string the engine's own
+    `calc_engine.formulas.line_status_overrides.resolve_line_status` would not recognise.
+
+    **This records the seller's declaration; it does not, by itself, change any already-
+    computed figure.** deterministic-engine.md §7.2.1's own note on these fields is explicit
+    that no production composition layer today reads `sales_line`/`line_component` rows from
+    the database and merges manual-adjustment overlays into a `CanonicalLine` automatically —
+    every multi-line CFO composition (`compute_period_pnl` included) is caller-assembled. A
+    future ingestion-to-canonical composition layer is the intended consumer of this row (via
+    `get_line_status_overrides` below); until it exists, this function's value is exactly what
+    §7.1 promises for every manual input — "re-ingestion never destroys adjustments; new parse
+    runs re-attach them by natural key" — the seller's declaration is durably recorded and
+    ready the moment that composition layer is built, never lost in the meantime."""
+    if request.field not in _LINE_STATUS_OVERRIDE_VALUES:
+        raise ValueError(
+            f"'{request.field}' is not one of deterministic-engine.md §7.2.1's line-status-"
+            f"override fields: {sorted(_LINE_STATUS_OVERRIDE_VALUES)}"
+        )
+    allowed_values = _LINE_STATUS_OVERRIDE_VALUES[request.field]
+    if request.value not in allowed_values:
+        raise ValueError(
+            f"'{request.value}' is not a valid value for '{request.field}' — must be one of "
+            f"{sorted(allowed_values)}"
+        )
+    return insert_adjustment(
+        tenant_id,
+        target_type="LINE",
+        target_ref=str(request.sales_line_id),
+        field=request.field,
+        value=request.value,
+        created_by=request.created_by,
+        created_at=request.now or datetime.now(),
+        reason=request.reason,
+        supersedes_id=request.supersedes_id,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class DeclareLineCountOverrideRequest:
+    """Mirrors `DeclareLineStatusOverrideRequest` exactly, for `returned_qty_override`/
+    `rto_qty_override` — the two count-shaped LINE fields no real `sales_line` column or
+    adapter supplies today (deterministic-engine.md §7.2.1's note on these fields)."""
+
+    sales_line_id: UUID
+    field: str
+    value: int
+    created_by: UUID
+    reason: str | None = None
+    supersedes_id: UUID | None = None
+    now: datetime | None = None
+
+
+def declare_line_count_override(tenant_id: UUID, request: DeclareLineCountOverrideRequest) -> UUID:
+    """Same validate-then-write shape as `declare_line_status_override`, for a count instead of
+    an enum: `request.field` must be one of the two real count-override fields, and
+    `request.value` must be a non-negative integer — never a negative "count" (meaningless) and
+    never a bool masquerading as an int (Python's `bool` is an `int` subclass; excluded
+    explicitly, the same guard `parse_batch_budget_adjustment`'s own `amount_paise` check
+    already uses for the identical reason)."""
+    if request.field not in _LINE_COUNT_OVERRIDE_FIELDS:
+        raise ValueError(
+            f"'{request.field}' is not one of deterministic-engine.md §7.2.1's line-count-"
+            f"override fields: {sorted(_LINE_COUNT_OVERRIDE_FIELDS)}"
+        )
+    if not isinstance(request.value, int) or isinstance(request.value, bool) or request.value < 0:
+        raise ValueError(f"'{request.field}' requires a non-negative integer, got {request.value!r}")
+    return insert_adjustment(
+        tenant_id,
+        target_type="LINE",
+        target_ref=str(request.sales_line_id),
+        field=request.field,
+        value=request.value,
+        created_by=request.created_by,
+        created_at=request.now or datetime.now(),
+        reason=request.reason,
+        supersedes_id=request.supersedes_id,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class LineStatusOverrides:
+    """The seller's current ACTIVE declarations for one `sales_line_id`, one field per §7.2.1
+    entry — `None` for a field with no ACTIVE row, never a fabricated default. A caller
+    resolving a `CanonicalLine`'s real status feeds each field here, together with that line's
+    own observed value, into `calc_engine.formulas.line_status_overrides.resolve_line_status`
+    (real, unchanged) — never applies one of these fields directly without that precedence
+    check, or a seller's override could silently outrank real marketplace-reported data."""
+
+    cancellation_state_override: str | None
+    return_status_override: str | None
+    rto_status_override: str | None
+    returned_qty_override: int | None = None
+    rto_qty_override: int | None = None
+
+
+def get_line_status_overrides(tenant_id: UUID, *, sales_line_id: UUID) -> LineStatusOverrides:
+    """Reads back the current ACTIVE row (if any) for each of the three §7.2.1 line-status-
+    override fields PLUS the two count-override fields, for one `sales_line_id`. More than one
+    ACTIVE row for the same field is a real data anomaly `active_adjustments_for_target` itself
+    does not resolve (§7.1: "conflict is surfaced, not resolved") — this function takes the
+    newest (index 0, that function's own documented ordering) rather than silently averaging or
+    erroring, the same convention `check_expense_budget`'s own budget lookup already uses."""
+    target_ref = str(sales_line_id)
+    values: dict[str, object] = {}
+    for field in (*_LINE_STATUS_OVERRIDE_VALUES, *_LINE_COUNT_OVERRIDE_FIELDS):
+        rows = manual_adjustment_repo.active_adjustments_for_target(
+            tenant_id, target_type="LINE", target_ref=target_ref, field=field
+        )
+        values[field] = rows[0]["value"] if rows else None
+    return LineStatusOverrides(
+        cancellation_state_override=values["cancellation_state_override"],
+        return_status_override=values["return_status_override"],
+        rto_status_override=values["rto_status_override"],
+        returned_qty_override=values["returned_qty_override"],
+        rto_qty_override=values["rto_qty_override"],
+    )
+
+
+# ---------------------------------------------------------------------------------------
+# Ingestion-to-canonical composition layer — cfo-agent.md §6.16. Closes the gap
+# `canonical_repo.py`'s own docstring names explicitly: "assembling a CanonicalLine (including
+# rto_outcome, rto_qty, quarantine_rule_ids and the manual_adjustment overlay) is the caller's
+# job, not this repository's." Every multi-line CFO composition before this session
+# (`compute_period_pnl`, GST period summary, batch-size) required a caller to hand-assemble
+# `CanonicalLine`s over HTTP — this function is the first real, DB-driven caller: it reads
+# `sales_line`/`line_component` rows (`canonical_repo`, real, unchanged) and applies the exact
+# same manual_adjustment overlay/precedence rules (`resolve_line_status`/`resolve_line_count`,
+# real, unchanged, tested in `test_line_status_overrides.py`) that a hand-assembling caller
+# would otherwise have to re-derive.
+# ---------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class CanonicalAssemblyBlockedLine:
+    """One `sales_line` this composition could NOT turn into a `CanonicalLine` — never silently
+    dropped without a reason, never silently defaulted into one with a fabricated value.
+    `missing_inputs` names the exact manual_adjustment field(s) that would unblock it, so a
+    caller can turn this straight into an `agent_data_request` (OP1: CFO asks rather than
+    assumes) — this function itself does not raise one, leaving that choice to its caller."""
+
+    sales_line_id: UUID
+    reason: str
+    missing_inputs: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CanonicalAssemblyOutcome:
+    lines: tuple[CanonicalLine, ...]
+    blocked: tuple[CanonicalAssemblyBlockedLine, ...]
+    # The three side-channels a P&L-computing caller needs alongside `lines` itself —
+    # `PeriodPnlRequest`'s own fields, auto-derived here instead of hand-assembled over HTTP.
+    sku_by_line: dict[str, str]  # str(sales_line_id) -> sku, only for lines with a real sku
+    ingestion_run_ids: tuple[UUID, ...]  # every distinct ingestion_run_id behind an assembled line
+    active_adjustment_ids: tuple[UUID, ...]  # every manual_adjustment row actually applied
+
+
+def _resolve_required_qty(
+    *, final_status: str | None, positive_value: str, override: int | None
+) -> tuple[int | None, str | None]:
+    """`CanonicalLine.returned_qty`/`rto_qty` already default to `0` in the dataclass itself —
+    that existing default IS this codebase's own answer for "no evidence a return/RTO
+    happened," and applies here whenever `final_status` is anything other than a DEFINITIVE
+    `positive_value` confirmation: a resolved "no" is a real zero, and an unresolved `None`
+    status (true for essentially every real marketplace's RTO status today, C2) is no evidence
+    either — defaulting to `0` there is exactly as honest as the dataclass's own baked-in
+    default, not a new assumption layered on top of it.
+
+    The ONE case that genuinely requires a real count is `final_status == positive_value` — a
+    return/RTO is DEFINITELY confirmed, so `0` there would be an active lie, not a default.
+    Only that case blocks when no `returned_qty_override`/`rto_qty_override` exists. Returns
+    `(qty, blocked_reason)` — exactly one is `None`."""
+    if final_status != positive_value:
+        return 0, None
+    resolved = resolve_line_count(None, override)
+    if resolved is None:
+        return None, (
+            f"{positive_value.lower()} status is confirmed but no real unit count is known — "
+            f"no sales_line column or adapter supplies one, and no returned_qty_override/"
+            f"rto_qty_override manual_adjustment exists for this line"
+        )
+    return resolved, None
+
+
+def assemble_canonical_lines_for_period(
+    tenant_id: UUID, *, period_start: date, period_end: date
+) -> CanonicalAssemblyOutcome:
+    """Builds real `CanonicalLine`s for every `sales_line` row in `[period_start, period_end]`
+    (`canonical_repo.sales_lines_in_period`, the SAME period-bounded, document-date-coalesced
+    query `compute_period_pnl`'s own composition already relies on via its callers) plus that
+    line's real `line_component` rows (`canonical_repo.components_for_lines`) and manual_
+    adjustment overlays:
+
+    - `return_status`: `resolve_line_status(observed=<sales_line.return_status>, override=
+      <return_status_override>)` — the real column an adapter may have populated (e.g.
+      `meesho.orders.v1`'s `Return Status` mapping) wins; the override fills the gap only when
+      the column is `NULL`.
+    - `cancellation_state`/`rto_status`: `resolve_line_status(observed=None, override=...)` —
+      `sales_line`'s real schema (confirmed by reading `20260917_0001_sales_side_tables.py`) has
+      no column for either, and no adapter maps one, so `observed` is always `None` for real
+      data; these two are entirely override-driven today, honestly.
+    - `returned_qty`/`rto_qty`: `_resolve_required_qty` above — `0` when genuinely known-not-
+      returned/RTO'd, the override's value when a return/RTO occurred or status is unresolved
+      and an override exists, otherwise this LINE is excluded via `blocked` rather than guessed.
+    - `rto_outcome`/`refunded_amount`: read straight from the existing, already-speced
+      `rto_outcome`/`return_refund_amount` manual_adjustment fields (LINE grain) — `None` when
+      no ACTIVE row exists, which correctly cascades `Unavailable` downstream in
+      `cost_components.py`/`revenue_reductions.py` exactly as those formulas already document.
+    - `quantity`/`gross_item_amount` being `NULL` on the row (both real, nullable columns —
+      `quantity`'s own nullability is a confirmed Category C amendment, `data-foundation.md`
+      §1.3) blocks the line — `CanonicalLine.quantity`/`gross_item_amount` are not `Optional`,
+      so there is no honest value to substitute.
+    - `document_type` has no adapter mapping anywhere in the registry (confirmed by reading
+      every adapter) and is never consulted by any formula (confirmed by reading every
+      production call site) — defaults to the literal `"INVOICE"` when the column is `NULL`,
+      a structural fact about what a sales-side report row is, not a guessed classification,
+      and provably inert either way.
+
+    Returns every line that COULD be honestly assembled, plus every line that could not, with
+    why — never partially fabricates one. The caller (e.g. a future `compute_period_pnl_for_
+    tenant`) decides what to do with `blocked` (typically: raise an `agent_data_request` per
+    distinct `missing_inputs` reason via `raise_data_request`)."""
+    rows = canonical_repo.sales_lines_in_period(tenant_id, period_start=period_start, period_end=period_end)
+    sales_line_ids = [
+        row["sales_line_id"] if isinstance(row["sales_line_id"], UUID) else UUID(str(row["sales_line_id"]))
+        for row in rows
+    ]
+    component_rows = canonical_repo.components_for_lines(tenant_id, sales_line_ids=sales_line_ids)
+
+    components_by_line: dict[UUID, list[ComponentRow]] = {}
+    for c in component_rows:
+        line_id = c["sales_line_id"] if isinstance(c["sales_line_id"], UUID) else UUID(str(c["sales_line_id"]))
+        raw_id = c["id"]
+        components_by_line.setdefault(line_id, []).append(
+            ComponentRow(
+                id=raw_id if isinstance(raw_id, UUID) else UUID(str(raw_id)),
+                component_kind=c["component_kind"],
+                component_code=c["component_code"],
+                source_side=c["source_side"],
+                amount=Paise(int(c["amount"])),
+                tax_amount=Paise(int(c["tax_amount"])) if c.get("tax_amount") is not None else None,
+                rate_pct=Fraction(Decimal(str(c["rate_pct"]))) if c.get("rate_pct") is not None else None,
+            )
+        )
+
+    lines: list[CanonicalLine] = []
+    blocked: list[CanonicalAssemblyBlockedLine] = []
+    sku_by_line: dict[str, str] = {}
+    ingestion_run_ids: set[UUID] = set()
+    active_adjustment_ids: set[UUID] = set()
+
+    for row, sales_line_id in zip(rows, sales_line_ids):
+        raw_ingestion_run_id = row.get("ingestion_run_id")
+        if raw_ingestion_run_id is not None:
+            ingestion_run_ids.add(
+                raw_ingestion_run_id if isinstance(raw_ingestion_run_id, UUID) else UUID(str(raw_ingestion_run_id))
+            )
+        sku = row.get("sku")
+        if sku is not None:
+            sku_by_line[str(sales_line_id)] = sku
+        quantity = row.get("quantity")
+        gross_item_amount = row.get("gross_item_amount")
+        if quantity is None or gross_item_amount is None:
+            missing = tuple(f for f, v in (("quantity", quantity), ("gross_item_amount", gross_item_amount)) if v is None)
+            blocked.append(
+                CanonicalAssemblyBlockedLine(
+                    sales_line_id=sales_line_id,
+                    reason=f"sales_line is missing {', '.join(missing)} — no adapter populated it for this row",
+                    missing_inputs=missing,
+                )
+            )
+            continue
+
+        overrides = get_line_status_overrides(tenant_id, sales_line_id=sales_line_id)
+        final_return_status = resolve_line_status(row.get("return_status"), overrides.return_status_override)
+        final_cancellation_state = resolve_line_status(None, overrides.cancellation_state_override)
+        final_rto_status = resolve_line_status(None, overrides.rto_status_override)
+
+        returned_qty, returned_qty_blocked = _resolve_required_qty(
+            final_status=final_return_status, positive_value="RETURNED", override=overrides.returned_qty_override
+        )
+        rto_qty, rto_qty_blocked = _resolve_required_qty(
+            final_status=final_rto_status, positive_value="RTO", override=overrides.rto_qty_override
+        )
+        if returned_qty_blocked is not None or rto_qty_blocked is not None:
+            reasons = [r for r in (returned_qty_blocked, rto_qty_blocked) if r is not None]
+            missing = tuple(
+                f
+                for f, r in (
+                    ("returned_qty_override", returned_qty_blocked),
+                    ("rto_qty_override", rto_qty_blocked),
+                )
+                if r is not None
+            )
+            blocked.append(
+                CanonicalAssemblyBlockedLine(sales_line_id=sales_line_id, reason="; ".join(reasons), missing_inputs=missing)
+            )
+            continue
+
+        rto_outcome_rows = manual_adjustment_repo.active_adjustments_for_target(
+            tenant_id, target_type="LINE", target_ref=str(sales_line_id), field="rto_outcome"
+        )
+        rto_outcome = rto_outcome_rows[0]["value"] if rto_outcome_rows else None
+        if rto_outcome_rows:
+            raw_id = rto_outcome_rows[0]["id"]
+            active_adjustment_ids.add(raw_id if isinstance(raw_id, UUID) else UUID(str(raw_id)))
+
+        refund_rows = manual_adjustment_repo.active_adjustments_for_target(
+            tenant_id, target_type="LINE", target_ref=str(sales_line_id), field="return_refund_amount"
+        )
+        refunded_amount = Paise(int(refund_rows[0]["value"])) if refund_rows else None
+        if refund_rows:
+            raw_id = refund_rows[0]["id"]
+            active_adjustment_ids.add(raw_id if isinstance(raw_id, UUID) else UUID(str(raw_id)))
+
+        lines.append(
+            CanonicalLine(
+                sales_line_id=sales_line_id,
+                marketplace=row["marketplace"],
+                document_type=row.get("document_type") or "INVOICE",
+                quantity=int(quantity),
+                invoice_date=row.get("invoice_date"),
+                dispatch_date=row.get("dispatch_date"),
+                order_date=row.get("order_date"),
+                gross_item_amount=Paise(int(gross_item_amount)),
+                components=tuple(components_by_line.get(sales_line_id, [])),
+                confidence=Confidence(row["confidence"]),
+                cancellation_state=final_cancellation_state,
+                return_status=final_return_status,
+                returned_qty=returned_qty or 0,
+                refunded_amount=refunded_amount,
+                rto_status=final_rto_status,
+                rto_qty=rto_qty or 0,
+                rto_outcome=rto_outcome,
+            )
+        )
+
+    return CanonicalAssemblyOutcome(
+        lines=tuple(lines),
+        blocked=tuple(blocked),
+        sku_by_line=sku_by_line,
+        ingestion_run_ids=tuple(ingestion_run_ids),
+        active_adjustment_ids=tuple(active_adjustment_ids),
+    )
+
+
+def _parse_cogs_per_unit_row(row: Mapping[str, object]) -> CostEntry:
+    """One ACTIVE `cogs_per_unit` manual_adjustment row -> one `CostEntry`. Mirrors §7.2.1's own
+    documented backward-compatible shape: either `{amount_paise, effective_from?}` or a bare
+    scalar paise int (`effective_from` defaulting to the row's own `created_at` in both cases
+    when not stated) — never a float, never a guessed amount. Raises on a genuinely malformed
+    row rather than silently skipping it, the same "malformed raises, never silently zeroed"
+    convention `parse_expense_pool_adjustment`/`parse_batch_budget_adjustment` already use."""
+    value = row["value"]
+    created_at = row["created_at"]
+    default_effective_from = created_at.date() if isinstance(created_at, datetime) else created_at
+
+    if isinstance(value, dict):
+        amount_paise = value.get("amount_paise")
+        if not isinstance(amount_paise, int) or isinstance(amount_paise, bool):
+            raise ValueError(f"cogs_per_unit adjustment missing/invalid amount_paise: {value!r}")
+        effective_from_raw = value.get("effective_from")
+        if isinstance(effective_from_raw, date):
+            effective_from = effective_from_raw
+        elif isinstance(effective_from_raw, str):
+            effective_from = date.fromisoformat(effective_from_raw)
+        else:
+            effective_from = default_effective_from
+    elif isinstance(value, int) and not isinstance(value, bool):
+        amount_paise = value
+        effective_from = default_effective_from
+    else:
+        raise ValueError(f"cogs_per_unit adjustment has an unrecognised value shape: {value!r}")
+
+    return CostEntry(amount_paise=Paise(amount_paise), effective_from=effective_from)
+
+
+def resolve_cost_history_for_skus(tenant_id: UUID, skus: Iterable[str]) -> dict[str, list[CostEntry]]:
+    """Fetches every ACTIVE `cogs_per_unit` row per SKU (real, unchanged repository read) and
+    parses each into a `CostEntry` — the auto-derived counterpart to `cost_history_by_sku`,
+    which every multi-line CFO composition before this session required a caller to hand-
+    assemble over HTTP. A SKU with no ACTIVE `cogs_per_unit` row at all is simply absent from
+    the returned dict (never a fabricated zero-cost entry) — `weighted_average_cost` already
+    treats a missing SKU as `Unavailable`, the correct, existing behaviour this function does
+    not need to reproduce itself."""
+    history: dict[str, list[CostEntry]] = {}
+    for sku in set(skus):
+        rows = manual_adjustment_repo.active_adjustments_for_target(
+            tenant_id, target_type="SKU", target_ref=sku, field="cogs_per_unit"
+        )
+        if rows:
+            history[sku] = [_parse_cogs_per_unit_row(row) for row in rows]
+    return history
+
+
+@dataclass(frozen=True, slots=True)
+class PeriodPnlForTenantRequest:
+    """Everything `compute_period_pnl_for_tenant` needs BEYOND what `assemble_canonical_lines_
+    for_period`/`resolve_cost_history_for_skus` auto-derive. The four component-code sets and
+    the two expense-pool value lists are deliberately still caller-supplied — these are genuine
+    tenant/business classifications (which component codes count as a fee, forward logistics,
+    reverse logistics, or a non-refunded fee; which expense pools apply) that this composition
+    does not guess, mirroring `PeriodPnlRequest`'s own unchanged judgment call 4 for exactly
+    these fields."""
+
+    period_start: date
+    period_end: date
+    as_of_date: date
+    recognition_state: RecognitionState
+    fee_component_codes: frozenset[str]
+    forward_logistics_codes: frozenset[str]
+    reverse_logistics_codes: frozenset[str]
+    non_refunded_fee_codes: frozenset[str]
+    requested_by: UUID
+    advertising_adjustment_values: Sequence[Mapping[str, object]] = ()
+    other_adjustment_values: Sequence[Mapping[str, object]] = ()
+    duplicate_fee_candidate_codes: frozenset[str] = frozenset()
+    computed_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PeriodPnlForTenantOutcome:
+    """`pnl` is `None` exactly when NOT ONE real `sales_line` row for this period could be
+    assembled into a `CanonicalLine` at all (e.g. every row blocked, or none exist) — never a
+    fabricated zero-line P&L. `blocked_lines` and `data_request_ids` are populated even when
+    `pnl` is not `None`: a partial P&L over the lines that DID assemble, with the rest openly
+    named as blocked, not silently dropped."""
+
+    pnl: PeriodPnlOutcome | None
+    assembled_line_count: int
+    blocked_lines: tuple[CanonicalAssemblyBlockedLine, ...]
+    data_request_ids: tuple[UUID, ...]
+
+
+def compute_period_pnl_for_tenant(tenant_id: UUID, request: PeriodPnlForTenantRequest) -> PeriodPnlForTenantOutcome:
+    """The real, DB-driven counterpart to `compute_period_pnl` (cfo-agent.md §6.16): assembles
+    `CanonicalLine`s and their `sku_by_line`/`cost_history_by_sku`/`ingestion_run_ids`/
+    `active_adjustment_ids` side-channels from the real database (`assemble_canonical_lines_
+    for_period`/`resolve_cost_history_for_skus`, both real, unchanged), raises ONE aggregated
+    `agent_data_request` per DISTINCT blocking reason (never one per blocked line — the same
+    "don't spam per-item, batch by distinct cause" discipline this codebase's narration layer
+    already applies to LLM calls, applied here to data requests), then calls `compute_period_pnl`
+    (real, unchanged) exactly as any caller-assembled invocation would."""
+    assembly = assemble_canonical_lines_for_period(
+        tenant_id, period_start=request.period_start, period_end=request.period_end
+    )
+
+    lines_by_reason: dict[tuple[str, ...], list[UUID]] = {}
+    for blocked_line in assembly.blocked:
+        lines_by_reason.setdefault(blocked_line.missing_inputs, []).append(blocked_line.sales_line_id)
+
+    data_request_ids = [
+        raise_data_request(
+            tenant_id,
+            requested_field=", ".join(missing_inputs) or "unknown",
+            reason=(
+                f"{len(line_ids)} sales_line row(s) in {request.period_start.isoformat()}.."
+                f"{request.period_end.isoformat()} blocked pending {', '.join(missing_inputs) or 'an unspecified input'} "
+                f"(e.g. sales_line {line_ids[0]})"
+            ),
+            blocking_metric="CONTRIBUTION_PROFIT",
+        )
+        for missing_inputs, line_ids in lines_by_reason.items()
+    ]
+
+    if not assembly.lines:
+        return PeriodPnlForTenantOutcome(
+            pnl=None, assembled_line_count=0, blocked_lines=assembly.blocked, data_request_ids=tuple(data_request_ids)
+        )
+
+    cost_history_by_sku = resolve_cost_history_for_skus(tenant_id, assembly.sku_by_line.values())
+
+    pnl = compute_period_pnl(
+        tenant_id,
+        PeriodPnlRequest(
+            lines=assembly.lines,
+            period_start=request.period_start,
+            period_end=request.period_end,
+            as_of_date=request.as_of_date,
+            recognition_state=request.recognition_state,
+            sku_by_line=assembly.sku_by_line,
+            cost_history_by_sku=cost_history_by_sku,
+            fee_component_codes=request.fee_component_codes,
+            forward_logistics_codes=request.forward_logistics_codes,
+            reverse_logistics_codes=request.reverse_logistics_codes,
+            non_refunded_fee_codes=request.non_refunded_fee_codes,
+            advertising_adjustment_values=request.advertising_adjustment_values,
+            other_adjustment_values=request.other_adjustment_values,
+            ingestion_run_ids=assembly.ingestion_run_ids,
+            adapter_versions=(),
+            active_adjustment_ids=assembly.active_adjustment_ids,
+            requested_by=request.requested_by,
+            duplicate_fee_candidate_codes=request.duplicate_fee_candidate_codes,
+            computed_at=request.computed_at,
+        ),
+    )
+
+    return PeriodPnlForTenantOutcome(
+        pnl=pnl,
+        assembled_line_count=len(assembly.lines),
+        blocked_lines=assembly.blocked,
+        data_request_ids=tuple(data_request_ids),
+    )
+
+
 # The five real §7.2.1 expense-pool categories `enter_expense` already accepts, minus the
 # "expense." prefix — reused by both new features below so neither invents its own list.
 _EXPENSE_CATEGORIES: frozenset[str] = frozenset(
@@ -689,6 +1267,12 @@ class ExpenseEntry:
     target_ref: str
     created_at: datetime
     created_by: UUID
+    # The seller's own free-text description of what this expense was (e.g. "petrol for
+    # delivery run", "travel to supplier meeting") — `enter_expense` already accepted this via
+    # its `reason` parameter (a plain pass-through to manual_adjustment.reason) but this read
+    # path previously dropped it, leaving the seller's own description write-only. `category`
+    # alone ("other") does not tell a seller what a past entry actually was.
+    reason: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -789,6 +1373,7 @@ def list_expenses(
                 target_ref=row["target_ref"],
                 created_at=row["created_at"],
                 created_by=raw_created_by if isinstance(raw_created_by, UUID) else UUID(str(raw_created_by)),
+                reason=row["reason"],
             )
         )
 
@@ -1958,8 +2543,12 @@ def rank_suppliers(tenant_id: UUID, request: SupplierRankingRequest) -> Supplier
 # twinkly-mapping-canyon.md Phase B2). REDUCED slice only: Contribution Profit history/trend
 # with data-completeness stated, and explicit gaps (periods missing, COGS/RTO absent). Margin
 # stability, revenue concentration and cash-conversion timing are §6.13 bullets this checkpoint
-# does NOT build — Phase D (`reconcile()`/`cash_reconciliation`) is a genuine dependency, not a
-# style choice, and this function's own output says so structurally.
+# does NOT build. `cash_reconciliation()` is now real (deterministic-engine.md §5.13.3,
+# 2026-09-29) — cash-conversion timing's raw input (`settled_within_lag_count`/
+# `unsettled_beyond_lag_count`) exists — but no `funding_readiness_metrics` composition consumes
+# it yet, and margin stability specifically still needs `CASH_EXPECTED` (structurally
+# UNAVAILABLE, §5.13.3), so this function's own output continues to say so structurally rather
+# than silently assuming the gap closed.
 # ---------------------------------------------------------------------------------------
 
 
@@ -2008,10 +2597,11 @@ _DEFERRED_FUNDING_READINESS_SECTIONS: tuple[DeferredFundingReadinessSection, ...
         reason=(
             "§6.13 names margin stability as part of the full funding-readiness output; this "
             "reduced assembly (twinkly-mapping-canyon.md CP B2) does not compute it — margin "
-            "stability needs a settlement-reconciled view of margin over time that does not "
-            "exist yet"
+            "stability needs a settlement-reconciled view of margin over time, which needs "
+            "CASH_EXPECTED (deterministic-engine.md §5.13.3), structurally UNAVAILABLE until an "
+            "adapter maps invoice-side marketplace-fee components"
         ),
-        blocked_on="Phase D — reconcile()/cash_reconciliation not yet built",
+        blocked_on="CASH_EXPECTED structurally UNAVAILABLE (§5.13.3) — no funding_readiness_metrics composition built yet",
     ),
     DeferredFundingReadinessSection(
         name="revenue_concentration_by_sku_and_marketplace",
@@ -2019,17 +2609,27 @@ _DEFERRED_FUNDING_READINESS_SECTIONS: tuple[DeferredFundingReadinessSection, ...
             "§6.13 names revenue concentration by SKU and marketplace as part of the full "
             "funding-readiness output; this reduced assembly does not compute it"
         ),
-        blocked_on="Phase D — reconcile()/cash_reconciliation not yet built",
+        blocked_on="No funding_readiness_metrics composition built yet",
     ),
-    DeferredFundingReadinessSection(
-        name="cash_conversion_timing",
-        reason=(
-            "§6.13 names cash-conversion timing from settlement data as part of the full "
-            "funding-readiness output; this reduced assembly does not compute it — it requires "
-            "the cash_reconciliation() engine formula (§6.10/§6.13), which does not exist yet"
-        ),
-        blocked_on="Phase D — cash_reconciliation() not yet built",
+)
+
+# cash_conversion_timing is deliberately NOT in the static tuple above — it is now real
+# (SETTLEMENT_LAG_DAYS, anomaly-detection.md §6.1/§6.6, computed and persisted by
+# `run_leak_shield_reconciliation` every time Leak Shield reconciliation runs for a
+# tenant/marketplace/period) and `assemble_funding_readiness_reduced` fetches it dynamically,
+# below — it only stays deferred, with the row appended dynamically, for a period Leak Shield
+# has genuinely never run against (no SETTLEMENT_LAG_DAYS row exists to show).
+_CASH_CONVERSION_TIMING_DEFERRED = DeferredFundingReadinessSection(
+    name="cash_conversion_timing",
+    reason=(
+        "§6.13 names cash-conversion timing from settlement data as part of the full "
+        "funding-readiness output. The real metric (SETTLEMENT_LAG_DAYS, "
+        "anomaly-detection.md §6.1/§6.6) exists and is persisted by "
+        "run_leak_shield_reconciliation, but no such row was found for this tenant in the "
+        "requested period — Leak Shield reconciliation has not run for it yet, so there is "
+        "nothing real to surface here (never a fabricated day count)"
     ),
+    blocked_on="POST /cfo/preview (or another Leak Shield reconciliation run) has not run for this period yet",
 )
 
 
@@ -2074,6 +2674,7 @@ class FundingReadinessOutcome:
     gaps: list[FundingReadinessGap]
     deferred_sections: tuple[DeferredFundingReadinessSection, ...]
     data_request_id: UUID | None
+    cash_conversion_timing: list[MetricResult] = field(default_factory=list)
 
 
 def assemble_funding_readiness_reduced(
@@ -2081,7 +2682,12 @@ def assemble_funding_readiness_reduced(
 ) -> FundingReadinessOutcome:
     """Assembles cfo-agent.md §6.13's REDUCED funding-readiness slice (twinkly-mapping-
     canyon.md CP B2): Contribution Profit history and trend, with data-completeness stated, and
-    explicit gaps — periods missing, COGS/RTO-classification absent. Margin stability, revenue
+    explicit gaps — periods missing, COGS/RTO-classification absent. Also fetches any real,
+    already-persisted `SETTLEMENT_LAG_DAYS` rows for the period (`cash_conversion_timing`) —
+    real cash-conversion-timing data wherever Leak Shield reconciliation has already run for
+    this tenant/period, never computed fresh here (no new reconciliation run, no new
+    arithmetic) and never fabricated when none exists — `deferred_sections` still names the gap
+    honestly when it's empty. Margin stability, revenue
     concentration and cash-conversion timing are NOT assembled here (`deferred_sections`
     states this structurally, never by silent omission) — Phase D (`reconcile()`/
     `cash_reconciliation`) is a genuine, undone dependency.
@@ -2174,12 +2780,29 @@ def assemble_funding_readiness_reduced(
             blocking_metric="CONTRIBUTION_PROFIT",
         )
 
+    # --- cash-conversion timing: real, already-persisted SETTLEMENT_LAG_DAYS rows only ---------
+    # Fetched the SAME way CONTRIBUTION_PROFIT history is fetched above — no new reconciliation
+    # run, no new arithmetic. A row exists for this period only where Leak Shield reconciliation
+    # (run_leak_shield_reconciliation, cfo-agent.md §6.2/§6.4) already ran and persisted one.
+    settlement_lag_rows = metric_result_repo.list_by_metric_code(
+        tenant_id,
+        metric_code="SETTLEMENT_LAG_DAYS",
+        period_start=period_start_label,
+        period_end=period_end_label,
+    )
+    cash_conversion_timing = [_metric_result_from_row(row) for row in settlement_lag_rows]
+
+    deferred_sections = _DEFERRED_FUNDING_READINESS_SECTIONS
+    if not cash_conversion_timing:
+        deferred_sections = deferred_sections + (_CASH_CONVERSION_TIMING_DEFERRED,)
+
     return FundingReadinessOutcome(
         contribution_profit_history=history,
         trend=trend,
         gaps=gaps,
-        deferred_sections=_DEFERRED_FUNDING_READINESS_SECTIONS,
+        deferred_sections=deferred_sections,
         data_request_id=data_request_id,
+        cash_conversion_timing=cash_conversion_timing,
     )
 
 
@@ -3312,6 +3935,186 @@ def run_anomaly_check(tenant_id: UUID, request: AnomalyCheckRequest) -> AnomalyC
 
 
 # ---------------------------------------------------------------------------------------
+# Financial Health Band — cfo-agent.md §6.15. Reads this tenant's already-persisted
+# CONTRIBUTION_MARGIN_PCT/FEE_RATIO_PCT/RETURN_RATE_PCT `metric_result` rows for one period (the
+# SAME read path `run_anomaly_check` above already established for its own history fetch —
+# `metric_result_repo.list_by_metric_code`) and classifies them via `calc_engine.formulas.
+# financial_health.assemble_financial_health` (real, unchanged, imported here as
+# `compute_financial_health_band`) — a deterministic banding, never a new derived financial
+# figure (see that module's own docstring on why this is classification, not arithmetic).
+# ---------------------------------------------------------------------------------------
+
+# The three real §6.15 metrics this feature scores, and the exact metric_result row each reads
+# from — deliberately the same three `compute_metric.py` already computes end-to-end (P&L's
+# CONTRIBUTION_MARGIN_PCT/FEE_RATIO_PCT, return_rate's RETURN_RATE_PCT). No fourth metric is
+# invented here; funding readiness and expense-budget utilization already have their own real
+# surfaces (`assemble_funding_readiness_reduced`, `check_expense_budget`) and are deliberately
+# NOT folded into this single band, to avoid this feature silently re-deriving a figure another
+# composition already owns.
+_FINANCIAL_HEALTH_METRIC_CODES: tuple[str, ...] = ("CONTRIBUTION_MARGIN_PCT", "FEE_RATIO_PCT", "RETURN_RATE_PCT")
+
+
+def _financial_health_input_from_row(row: Mapping[str, object], *, metric: str) -> FinancialHealthInput | None:
+    """One `value_fraction`-typed `metric_result` row -> one `FinancialHealthInput`, or `None`
+    when the row is itself `UNAVAILABLE` (never a zero-valued placeholder) — mirrors
+    `_series_point_from_fraction_metric_row`'s identical guard, immediately above, over the
+    same `value_fraction_numerator`/`value_fraction_denominator` column pair."""
+    if not bool(row.get("is_available")):
+        return None
+    numerator = row.get("value_fraction_numerator")
+    denominator = row.get("value_fraction_denominator")
+    if numerator is None or denominator is None:
+        return None
+    raw_id = row["id"]
+    engine_result_ref = raw_id if isinstance(raw_id, UUID) else UUID(str(raw_id))
+    return FinancialHealthInput(
+        metric=metric,
+        value_fraction=Fraction(int(numerator), int(denominator)),  # type: ignore[arg-type]
+        engine_result_ref=engine_result_ref,
+    )
+
+
+def _latest_row(rows: Sequence[Mapping[str, object]]) -> Mapping[str, object] | None:
+    """More than one `metric_result` row for the same (metric_code, period) is a real
+    possibility (`metric_result` has no supersession mechanism — every `save()` call is a new
+    INSERT, unlike `manual_adjustment`'s `supersedes_id` chain) — this takes the most recently
+    computed row, never averages or errors, the same "newest wins" convention
+    `active_adjustments_for_target`/`severity_config_rows` already establish for their own
+    multi-row cases."""
+    if not rows:
+        return None
+    return max(rows, key=lambda r: r["computed_at"])
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialHealthRequest:
+    period_start: date
+    period_end: date
+    as_of_date: date
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialHealthOutcome:
+    """`overall_band`/`per_metric_bands` are `None` exactly when NOT ONE of the three metrics
+    could be classified (`unavailable_reason` then names why) — never a fabricated GOOD band.
+    `engine_result_refs` cites every `metric_result` row that actually drove a band, so a
+    seller can trace this outcome back to the real P&L figures behind it."""
+
+    overall_band: HealthBand | None
+    per_metric_bands: dict[str, HealthBand]
+    engine_result_refs: tuple[UUID, ...]
+    per_metric_refs: dict[str, UUID] = field(default_factory=dict)
+    per_metric_values: dict[str, Fraction] = field(default_factory=dict)
+    unavailable_reason: str | None = None
+
+
+def assemble_financial_health(tenant_id: UUID, request: FinancialHealthRequest) -> FinancialHealthOutcome:
+    """Fetches this tenant's `CONTRIBUTION_MARGIN_PCT`/`FEE_RATIO_PCT`/`RETURN_RATE_PCT` for
+    `request.period_start`..`request.period_end` (the exact compound period label
+    `compute_period_pnl`'s own `period_label` writes — see `list_by_metric_code`'s own
+    docstring), takes the latest row per metric, resolves `financial_health_config` for
+    `request.as_of_date`, and classifies via `compute_financial_health_band` (real, unchanged).
+
+    **Never computes a figure itself** — every value classified in was already computed and
+    persisted by `compute_period_pnl`; this function only fetches, reconstructs
+    (`_financial_health_input_from_row`), and classifies. A period for which `compute_period_pnl`
+    was never run, or ran but left every metric `UNAVAILABLE` (e.g. the cancellation/RTO-status
+    gap deterministic-engine.md §7.2.1 documents), correctly yields `overall_band=None` with a
+    real, named `unavailable_reason` — never a default GOOD band standing in for "no data.\""""
+    period_start_label = request.period_start.isoformat()
+    period_end_label = request.period_end.isoformat()
+
+    inputs: list[FinancialHealthInput] = []
+    for metric_code in _FINANCIAL_HEALTH_METRIC_CODES:
+        rows = metric_result_repo.list_by_metric_code(
+            tenant_id,
+            metric_code=metric_code,
+            period_start=period_start_label,
+            period_end=period_end_label,
+        )
+        latest = _latest_row(rows)
+        if latest is None:
+            continue
+        health_input = _financial_health_input_from_row(latest, metric=metric_code)
+        if health_input is not None:
+            inputs.append(health_input)
+
+    config_rows_raw = config_repo.financial_health_config_rows(tenant_id, as_of_date=request.as_of_date)
+    config_rows = [
+        FinancialHealthConfigRow(
+            metric=str(row["metric"]),
+            direction=str(row["direction"]),
+            at_risk_threshold_pct=row.get("at_risk_threshold_pct"),  # type: ignore[arg-type]
+            watch_threshold_pct=row.get("watch_threshold_pct"),  # type: ignore[arg-type]
+        )
+        for row in config_rows_raw
+    ]
+
+    result = compute_financial_health_band(inputs, config_rows)
+    if isinstance(result, Unavailable):
+        return FinancialHealthOutcome(
+            overall_band=None, per_metric_bands={}, engine_result_refs=(), unavailable_reason=result.reason
+        )
+    return FinancialHealthOutcome(
+        overall_band=result.overall_band,
+        per_metric_bands=dict(result.per_metric_bands),
+        engine_result_refs=result.engine_result_refs,
+        per_metric_refs=dict(result.per_metric_refs),
+        per_metric_values=dict(result.per_metric_values),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CashReconciliationRequest:
+    marketplace: str
+    period_start: date
+    period_end: date
+    as_of_date: date
+
+
+@dataclass(frozen=True, slots=True)
+class CashReconciliationOutcome:
+    """Thin pass-through of `calc_engine.api.cash_reconciliation.CashReconciliationResult` —
+    this function computes nothing itself, it only calls the engine and shapes the result for
+    the HTTP layer. See `deterministic-engine.md` §5.13.3 for why `cash_expected`/`cash_variance`
+    are structurally unavailable this pass, and why `tds_deducted` is unavailable for every
+    marketplace: real, disclosed data-foundation gaps, not defects in this function."""
+
+    cash_received: MetricResult
+    cash_expected: MetricResult
+    cash_variance: MetricResult
+    tcs_collected: MetricResult
+    tds_deducted: MetricResult
+    settled_within_lag_count: int
+    unsettled_beyond_lag_count: int
+    dates_missing_count: int
+
+
+def assemble_cash_reconciliation(tenant_id: UUID, request: CashReconciliationRequest) -> CashReconciliationOutcome:
+    """cfo-agent.md §6.10 — real HTTP wiring for `deterministic-engine.md` §5.13.3's
+    `cash_reconciliation`. No new arithmetic: every figure comes straight from the engine call
+    below."""
+    result = compute_cash_reconciliation(
+        tenant_id,
+        marketplace=request.marketplace,
+        period_start=request.period_start,
+        period_end=request.period_end,
+        as_of_date=request.as_of_date,
+        computed_at=datetime.now(timezone.utc),
+    )
+    return CashReconciliationOutcome(
+        cash_received=result.cash_received,
+        cash_expected=result.cash_expected,
+        cash_variance=result.cash_variance,
+        tcs_collected=result.tcs_collected,
+        tds_deducted=result.tds_deducted,
+        settled_within_lag_count=result.settled_within_lag_count,
+        unsettled_beyond_lag_count=result.unsettled_beyond_lag_count,
+        dates_missing_count=result.dates_missing_count,
+    )
+
+
+# ---------------------------------------------------------------------------------------
 # E3's own named close-out gap, closed here: `narrate_anomaly_check` — the Brain-3 narration
 # step `run_anomaly_check` deliberately never built for itself (B8: Brain 2 has no LLM of its
 # own; `run_anomaly_check`'s own docstring: "read-only statistics, no narration"). Reuses
@@ -3904,3 +4707,332 @@ def accept_gst_lookup_result(
         supersedes_id=supersedes_id,
     )
     return GstRateOverrideOutcome(manual_adjustment_id=manual_adjustment_id)
+
+
+# ---------------------------------------------------------------------------------------
+# Strategic Insight layer — cfo-agent.md §7.5. The user's own stated principle, restated as
+# code structure, not just a comment: "Functions calculate. The LLM reasons. The CFO
+# recommends. The user authorizes." Nothing below computes a new financial figure or decides
+# WHICH deterministic function ran — `assemble_strategic_briefing` only CALLS functions that
+# already exist (`assemble_financial_health`, `run_anomaly_check`, `check_expense_budget`,
+# `leak_finding_repo.list_for_tenant`, `agent_data_request_repo.list_for_tenant`), hands their
+# already-computed outputs to `cfo.reasoning.signals.compose_strategic_signals` (pure,
+# deterministic categorization/ranking, no DB, no LLM — see that module's own docstring), and
+# makes exactly ONE `narrate_figures` call for the whole briefing — never one call per signal —
+# to keep LLM token cost flat regardless of how many signals fired (the same "CFO's model cost
+# is flat with respect to seller data volume" discipline cfo-agent.md §7.3.1 already states).
+# ---------------------------------------------------------------------------------------
+
+# Closed vocabulary check: every category `compose_strategic_signals` can produce must have a
+# context sentence here, so the narration prompt can describe what a category means without
+# the LLM ever being asked to classify one itself. Kept as a plain dict, not inferred.
+_SIGNAL_CATEGORY_BLURB: dict[str, str] = {
+    "PROFITABILITY": "contribution margin trending toward or into an unhealthy range",
+    "FEE_RATIO": "marketplace fees as a share of revenue trending toward or into an unhealthy range",
+    "RETURN_RATE": "return rate trending toward or into an unhealthy range",
+    "LEAK": "a Leak Shield reconciliation finding (an invoice-vs-settlement variance)",
+    "ANOMALY": "a statistically flagged deviation in a tracked metric",
+    "EXPENSE_BUDGET": "a seller-declared expense budget exceeded for its category/period",
+    "DATA_GAP": "an open request for missing data that is blocking a calculation",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class SellerGoal:
+    target_margin_pct: str | None  # Decimal-string, never a float (§7.2.1)
+    priority_category: str | None
+    note: str | None
+
+
+def set_seller_goal(
+    tenant_id: UUID, *, target_margin_pct: str | None, priority_category: str | None, note: str | None,
+    created_by: UUID, now: datetime | None = None,
+) -> UUID:
+    """`seller.goal` (§7.2.1) — context only, never a rule any formula branches on. Superseding,
+    same convention as `set_expense_budget`."""
+    existing = manual_adjustment_repo.active_adjustments_for_target(
+        tenant_id, target_type="ACCOUNT", target_ref=str(tenant_id), field="seller.goal"
+    )
+    return insert_adjustment(
+        tenant_id, target_type="ACCOUNT", target_ref=str(tenant_id), field="seller.goal",
+        value={"target_margin_pct": target_margin_pct, "priority_category": priority_category, "note": note},
+        created_by=created_by, created_at=now or datetime.now(),
+        supersedes_id=existing[0]["id"] if existing else None,
+    )
+
+
+def get_seller_goal(tenant_id: UUID) -> SellerGoal | None:
+    rows = manual_adjustment_repo.active_adjustments_for_target(
+        tenant_id, target_type="ACCOUNT", target_ref=str(tenant_id), field="seller.goal"
+    )
+    if not rows:
+        return None
+    value = rows[0]["value"]
+    return SellerGoal(
+        target_margin_pct=value.get("target_margin_pct"),
+        priority_category=value.get("priority_category"),
+        note=value.get("note"),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class StrategicBriefingRequest:
+    """Everything `assemble_strategic_briefing` needs. Every field beyond `period_start`/
+    `period_end`/`as_of_date`/`requested_by` is OPT-IN — a caller that supplies none of
+    `anomaly_target_ref`/`expense_budget_categories` still gets a real briefing built from
+    whatever Financial Health, persisted Leak Shield findings, and open data requests already
+    exist; this function never fabricates history for an input the caller declined to ask for."""
+
+    period_start: date
+    period_end: date
+    as_of_date: date
+    requested_by: UUID
+    anomaly_target_ref: str | None = None
+    expense_budget_categories: tuple[str, ...] = ()
+    # Opt-in scenario-comparison signals — the caller already ran `compute_pricing_curve`/
+    # `rank_suppliers` separately (both real, unchanged) and passes the results straight
+    # through; this function re-derives nothing, it only classifies what it's handed.
+    pricing_candidates: tuple[PricingCandidateInput, ...] = ()
+    supplier_ranking: tuple[SupplierRankInput, ...] = ()
+    include_narration: bool = True
+    computed_at: datetime | None = None
+    narration_model: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StrategicBriefingOutcome:
+    """`signals` is `compose_strategic_signals`'s own deterministic output, unmodified — the
+    LLM never reorders, re-categorizes, or drops any of them. `narrative` is `None` when
+    `request.include_narration=False` OR there were zero signals to narrate (never an empty
+    LLM call over nothing)."""
+
+    signals: tuple[StrategicSignal, ...]
+    narrative: str | None
+    generated_at: datetime
+    narration_safety: NarrationSafetyResult | None = None
+
+
+def _figure_token_for_signal(signal: StrategicSignal) -> FigureToken:
+    """One `StrategicSignal` -> one `FigureToken` — takes the signal's own first evidence item
+    (every builder in `cfo.reasoning.signals` produces exactly one today) and formats whichever
+    of `value_paise`/`value_fraction`/`text_value` is populated via the SAME presentation-only
+    helpers (`_format_paise_for_narration`/`_format_fraction_as_decimal_for_narration`) every
+    other narration path in this module already uses — never a third, new formatting
+    convention. `note` states the category and the deterministically-assigned recommended
+    action verbatim, so Brain 3 restates it rather than inventing its own."""
+    evidence = signal.evidence[0] if signal.evidence else None
+    if evidence is None:
+        formatted_value = signal.severity_label
+        register = "DERIVED"
+        ref: str | None = None
+    elif evidence.value_paise is not None:
+        formatted_value = _format_paise_for_narration(evidence.value_paise, is_available=evidence.is_available)
+        register = evidence.register
+        ref = str(evidence.engine_result_ref) if evidence.engine_result_ref is not None else None
+    elif evidence.value_fraction is not None:
+        formatted_value = (
+            f"{_format_fraction_as_decimal_for_narration(evidence.value_fraction)}%"
+            if not evidence.is_available
+            else _format_fraction_as_decimal_for_narration(evidence.value_fraction) + "%"
+        )
+        register = evidence.register
+        ref = str(evidence.engine_result_ref) if evidence.engine_result_ref is not None else None
+    else:
+        formatted_value = evidence.text_value or "UNAVAILABLE"
+        register = evidence.register
+        ref = str(evidence.engine_result_ref) if evidence.engine_result_ref is not None else None
+
+    return FigureToken(
+        label=signal.headline,
+        formatted_value=formatted_value,
+        register=register,
+        engine_result_ref=ref,
+        note=(
+            f"category={signal.category} ({_SIGNAL_CATEGORY_BLURB.get(signal.category, signal.category)}); "
+            f"severity={signal.severity_label}; deterministically recommended action="
+            f"{signal.recommended_action_type} — restate this action, do not propose a different one"
+        ),
+    )
+
+
+_STRATEGIC_BRIEFING_CONTEXT = (
+    "You are given a list of financial signals for one Indian e-commerce seller, already "
+    "identified, categorized, and PRIORITIZED by a deterministic engine — the order given is "
+    "final; never re-rank, merge, or drop any signal. For each signal: state the likely root "
+    "cause using ONLY the cited figure and its note, in one or two sentences of plain Indian "
+    "CA/CFO vocabulary. When a signal's note names a recommended action, restate that action "
+    "verbatim as your recommendation for that signal — you may explain WHY it fits, but you "
+    "never substitute a different action. Never invent a GST rate, a fee percentage, a rupee "
+    "figure, or any number not given to you. If two or more signals share the same root cause, "
+    "say so explicitly rather than repeating yourself. End with one short overall priority "
+    "sentence naming which single signal most deserves attention first — this must be the "
+    "FIRST signal in the given order, since it is already the most severe."
+)
+
+
+def assemble_strategic_briefing(tenant_id: UUID, request: StrategicBriefingRequest) -> StrategicBriefingOutcome:
+    """Composes the Strategic Insight briefing (cfo-agent.md §7.5): gathers already-computed
+    outputs from existing CFO/engine functions, classifies+ranks them via `compose_strategic_
+    signals` (pure, deterministic), and — when signals exist and narration is requested — makes
+    exactly ONE `narrate_figures` call over the whole ranked list.
+
+    1. **Financial Health** (`assemble_financial_health`, real, unchanged) — every non-GOOD
+       metric for `request.period_start`..`request.period_end` becomes one signal, its evidence
+       citing the real classified value and `engine_result_ref` (`FinancialHealthOutcome.
+       per_metric_values`/`per_metric_refs`, both real).
+    2. **Anomalies** (`run_anomaly_check`, real, unchanged) — ONLY when `request.
+       anomaly_target_ref` is supplied (opt-in: this function never runs an anomaly check the
+       caller did not ask for). Runs all three §6.1 series (`MARGIN_PCT`/`FEE_RATIO_PCT`/
+       `RETURN_RATE_PCT`) for that target_ref/window; only a FIRED flag becomes a signal — an
+       insufficient-history/zero-variance/configuration-gap outcome is not itself a strategic
+       signal (§9's own "never narrate a non-result as if it were a real negative result" rule,
+       applied here by simply not turning a non-result into a signal at all).
+    3. **Leak Shield findings** — reads ALREADY-PERSISTED `leak_finding` rows
+       (`cfo.repositories.leak_finding_repo.list_for_tenant`, real, unchanged) with
+       `status="NEW"` — never re-runs reconciliation itself (that is `run_leak_shield_
+       reconciliation`'s own, separate, explicitly-invoked action).
+    4. **Expense budgets** (`check_expense_budget`, real, unchanged) — ONLY for the categories
+       `request.expense_budget_categories` names (opt-in, same reasoning as anomalies above).
+    5. **Open data requests** (`cfo.repositories.agent_data_request_repo.list_for_tenant`, real,
+       unchanged) with `status="OPEN"` — the CFO's own existing "I need this to compute X"
+       record, reused as a signal source rather than a second, competing mechanism.
+
+    No arithmetic anywhere in this function: every value handed to `compose_strategic_signals`
+    or `_figure_token_for_signal` was already computed by the function that produced it."""
+    computed_at = request.computed_at or datetime.now()
+
+    # --- 1. Financial Health -----------------------------------------------------------------
+    health_outcome = assemble_financial_health(
+        tenant_id,
+        FinancialHealthRequest(
+            period_start=request.period_start, period_end=request.period_end, as_of_date=request.as_of_date
+        ),
+    )
+    health_inputs = [
+        FinancialHealthMetricInput(
+            metric=metric,
+            band=band.value,
+            value_fraction=health_outcome.per_metric_values[metric],
+            engine_result_ref=health_outcome.per_metric_refs[metric],
+        )
+        for metric, band in health_outcome.per_metric_bands.items()
+        if metric in health_outcome.per_metric_values and metric in health_outcome.per_metric_refs
+    ]
+
+    # --- 2. Anomalies (opt-in) ------------------------------------------------------------------
+    anomaly_inputs: list[AnomalyFlagInput] = []
+    if request.anomaly_target_ref is not None:
+        for metric in (METRIC_MARGIN_PCT, METRIC_FEE_RATIO_PCT, METRIC_RETURN_RATE_PCT):
+            anomaly_outcome = run_anomaly_check(
+                tenant_id,
+                AnomalyCheckRequest(
+                    target_ref=request.anomaly_target_ref,
+                    period_start=request.period_start,
+                    period_end=request.period_end,
+                    as_of_date=request.as_of_date,
+                    requested_by=request.requested_by,
+                    metric=metric,
+                    computed_at=computed_at,
+                ),
+            )
+            for method_outcome in anomaly_outcome.methods:
+                flag = method_outcome.flag
+                if flag is not None and flag.fired:
+                    anomaly_inputs.append(
+                        AnomalyFlagInput(
+                            metric=flag.metric,
+                            method=flag.method,
+                            target_ref=flag.target_ref,
+                            severity=flag.severity,
+                            score=flag.score,
+                            decorates_engine_result_ref=flag.decorates_engine_result_ref,
+                        )
+                    )
+
+    # --- 3. Leak Shield findings (already persisted, never re-run here) -----------------------
+    leak_inputs = [
+        LeakFindingInput(
+            leak_finding_id=row["id"] if isinstance(row["id"], UUID) else UUID(str(row["id"])),
+            leak_category=str(row["leak_category"]),
+            severity=str(row["severity"]),
+            amount_paise=int(row["amount_paise"]),
+            marketplace=str(row["marketplace"]),
+            engine_result_ref=(
+                row["engine_result_ref"]
+                if isinstance(row["engine_result_ref"], UUID)
+                else UUID(str(row["engine_result_ref"]))
+            ),
+            confidence=str(row["confidence"]),
+        )
+        for row in leak_finding_repo.list_for_tenant(tenant_id)
+        if row.get("status") == "NEW"
+    ]
+
+    # --- 4. Expense budgets (opt-in) -----------------------------------------------------------
+    expense_budget_inputs: list[ExpenseBudgetInput] = []
+    for category in request.expense_budget_categories:
+        status = check_expense_budget(
+            tenant_id, category=category, period_start=request.period_start, period_end=request.period_end
+        )
+        if status.no_budget_set:
+            continue
+        expense_budget_inputs.append(
+            ExpenseBudgetInput(
+                category=status.category,
+                exceeded=status.exceeded,
+                remaining_paise=status.remaining_paise.value if status.remaining_paise is not None else 0,
+            )
+        )
+
+    # --- 5. Open data requests -----------------------------------------------------------------
+    data_request_inputs = [
+        DataRequestInput(
+            requested_field=str(row["requested_field"]),
+            reason=str(row["reason"]),
+            blocking_metric=(str(row["blocking_metric"]) if row.get("blocking_metric") is not None else None),
+        )
+        for row in agent_data_request_repo.list_for_tenant(tenant_id)
+        if row.get("status") == "OPEN"
+    ]
+
+    signals = compose_strategic_signals(
+        financial_health=health_inputs,
+        anomaly_flags=anomaly_inputs,
+        leak_findings=leak_inputs,
+        expense_budgets=expense_budget_inputs,
+        data_requests=data_request_inputs,
+        pricing_candidates=request.pricing_candidates,
+        supplier_ranking=request.supplier_ranking,
+    )
+
+    narrative: str | None = None
+    narration_safety: NarrationSafetyResult | None = None
+    if request.include_narration and signals:
+        figures = [_figure_token_for_signal(s) for s in signals]
+        provider = OllamaLlmProvider(host=ollama_host())
+        context = _STRATEGIC_BRIEFING_CONTEXT
+        goal = get_seller_goal(tenant_id)
+        if goal is not None:
+            # Context only — the goal never changes severity_rank/recommended_action_type
+            # (both already fixed, deterministically, above); it only lets Brain 3 frame WHY
+            # a signal matters to THIS seller specifically, never a new decision rule.
+            context += (
+                f"\n\nThe seller has declared this goal/context (state it, never treat it as a "
+                f"rule that changes any figure): target_margin_pct={goal.target_margin_pct!r}, "
+                f"priority_category={goal.priority_category!r}, note={goal.note!r}."
+            )
+        narrative = narrate_figures(
+            provider,
+            model=request.narration_model or cfo_narration_model(),
+            context=context,
+            figures=figures,
+        )
+        # CLAUDE.md's LLM-evals requirement (cfo-agent.md §7.5) — a mechanical, post-hoc check
+        # against the same figures the prompt was built from. Never blocks or withholds the
+        # narrative (a heuristic false positive should not silently hide a real, safe response);
+        # it only surfaces the flag on the outcome for the caller/UI to show a review warning.
+        narration_safety = check_narration_safety(narrative, figures)
+
+    return StrategicBriefingOutcome(
+        signals=tuple(signals), narrative=narrative, generated_at=computed_at, narration_safety=narration_safety
+    )

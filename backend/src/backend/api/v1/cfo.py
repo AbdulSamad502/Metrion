@@ -30,13 +30,21 @@ for why it deliberately does NOT re-run the entitlement caps `post_gst_lookup` e
 
 from __future__ import annotations
 
-from datetime import date
+import hashlib
+from datetime import date, datetime, timezone
 from fractions import Fraction
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+
+from data_foundation.adapters.registry import ADAPTER_REGISTRY
+from data_foundation.ingestion.file_reader import read_csv_file
+from data_foundation.ingestion.persist import ingest_and_persist
+from data_foundation.ingestion.pipeline import AdapterMismatchError
+from data_foundation.repositories import report_file_repo
 
 from calc_engine.formulas.cost_components import CostEntry
 from calc_engine.types import CanonicalLine, ComponentRow, Confidence, Paise, RecognitionState, Unavailable
@@ -57,33 +65,47 @@ from backend.agents.ceo_hub import (
 )
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CFO, FINANCIALS_ADJUST, SERVICE_GST_LOOKUP, has_permission
-from backend.config import cfo_narration_model, ollama_host
+from backend.config import cfo_narration_model, cfo_report_storage_dir, ollama_host
 from backend.entitlement import resolve_cfo_entitlement, resolve_gst_lookup_entitlement
 from backend.services.cfo_actions import (
     AcceptGstLookupRequest,
     AnomalyCheckRequest,
     BatchSizeRequest,
+    CashReconciliationRequest,
+    DeclareLineCountOverrideRequest,
+    DeclareLineStatusOverrideRequest,
     EnterExpenseBudgetRequest,
+    FinancialHealthRequest,
     FundingReadinessRequest,
+    StrategicBriefingRequest,
     GstLineInput,
     GstLineResult,
     GstLookupRequest,
     GstPeriodSummaryRequest,
     LandedCostRequest,
     PeriodComparisonRequest,
+    PeriodPnlForTenantRequest,
     PeriodPnlRequest,
     PricingCurveRequest,
     SupplierRankingRequest,
     accept_gst_lookup_result,
     analyze_gst_lines,
     assemble_batch_size_estimate,
+    assemble_cash_reconciliation,
     assemble_cfo_preview,
+    assemble_financial_health,
     assemble_funding_readiness_reduced,
+    assemble_strategic_briefing,
     check_expense_budget,
     compute_landed_cost_for_quote,
     compute_period_pnl,
+    compute_period_pnl_for_tenant,
     compute_pricing_curve,
+    declare_line_count_override,
+    declare_line_status_override,
     enter_expense,
+    get_line_status_overrides,
+    get_seller_goal,
     list_expenses,
     narrate_anomaly_check,
     narrate_period_comparison,
@@ -93,11 +115,120 @@ from backend.services.cfo_actions import (
     run_gst_applicability_lookup,
     run_leak_shield_reconciliation,
     set_expense_budget,
+    set_seller_goal,
 )
 from cfo.reasoning.ollama_provider import OllamaLlmProvider
+from cfo.reasoning.signals import PricingCandidateInput, SupplierRankInput
 from cfo.repositories.agent_data_request_repo import list_for_tenant
 
 router = APIRouter(prefix="/api/v1/cfo")
+
+# cfo-agent.md §6.16 (ingestion). Direct-path only, no CEO dispatch — same reasoning as
+# CFO_PREVIEW below. Read-write (creates a report_file/ingestion_run/sales_line trail, not a
+# manual financial adjustment), so `financials.adjust` is NOT required — mirrors `POST /ci/
+# evidence`'s own "uploading source data isn't declaring a financial fact" reasoning.
+CFO_INGEST = "cfo.ingest"
+CFO_SELLER_GOAL = "cfo.seller_goal"
+
+
+class SellerGoalHttpRequest(BaseModel):
+    target_margin_pct: str | None = None
+    priority_category: str | None = None
+    note: str | None = None
+
+
+@router.put("/seller-goal")
+def put_seller_goal(
+    body: SellerGoalHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)
+) -> dict[str, str]:
+    """cfo-agent.md §7.5 — seller-declared context only, never a rule any formula branches on."""
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_SELLER_GOAL)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST):
+        raise HTTPException(status_code=403, detail="financials.adjust permission required")
+    manual_adjustment_id = set_seller_goal(
+        ctx.tenant_id, target_margin_pct=body.target_margin_pct, priority_category=body.priority_category,
+        note=body.note, created_by=ctx.app_user_id,
+    )
+    return {"manualAdjustmentId": str(manual_adjustment_id)}
+
+
+@router.get("/seller-goal")
+def get_seller_goal_route(ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    assert ctx.tenant_id is not None
+    goal = get_seller_goal(ctx.tenant_id)
+    if goal is None:
+        return {"targetMarginPct": None, "priorityCategory": None, "note": None}
+    return {"targetMarginPct": goal.target_margin_pct, "priorityCategory": goal.priority_category, "note": goal.note}
+
+
+@router.post("/ingest")
+async def post_ingest(
+    file: UploadFile,
+    marketplace: str,
+    adapter_id: str,
+    ctx: AuthContext = require_auth(permission=AGENT_CFO),
+) -> dict[str, object]:
+    """Upload -> parse -> validate -> persist (cfo-agent.md §6.16). CSV only this pass.
+    Local-disk storage (`cfo_report_storage_dir`), same functional-only posture as `POST /ci/
+    evidence`. Deduped by content hash (§3.1: a byte-identical re-upload is reported, not
+    re-ingested) and, within `ingest_and_persist`, by natural key (§6 rule 4)."""
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_INGEST)
+
+    adapter = ADAPTER_REGISTRY.get(adapter_id)
+    if adapter is None:
+        raise HTTPException(status_code=400, detail=f"unknown adapter_id {adapter_id!r}")
+
+    contents = await file.read()
+    content_sha256 = hashlib.sha256(contents).hexdigest()
+
+    existing_id = report_file_repo.find_by_content_hash(ctx.tenant_id, content_sha256)
+    if existing_id is not None:
+        return {"reportFileId": str(existing_id), "duplicate": True}
+
+    storage_dir = Path(cfo_report_storage_dir())
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    stored_name = f"{content_sha256}{Path(file.filename or '').suffix or '.csv'}"
+    (storage_dir / stored_name).write_bytes(contents)
+
+    uploaded_at = datetime.now(timezone.utc)
+    report_file_id = report_file_repo.insert_report_file(
+        ctx.tenant_id,
+        marketplace=marketplace,
+        report_category=adapter.report_category,
+        content_sha256=content_sha256,
+        original_filename=file.filename or stored_name,
+        byte_size=len(contents),
+        storage_uri=f"file://{storage_dir / stored_name}",
+        uploaded_by=ctx.app_user_id,
+        uploaded_at=uploaded_at,
+    )
+
+    try:
+        sample, raw_file = read_csv_file(contents)
+        outcome = ingest_and_persist(
+            ctx.tenant_id, report_file_id=report_file_id, adapter_id=adapter_id,
+            sample=sample, raw_file=raw_file, started_at=uploaded_at,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except AdapterMismatchError as exc:
+        raise HTTPException(
+            status_code=400, detail=f"file does not match adapter {adapter_id!r} — missing columns {exc.missing_columns}"
+        ) from None
+
+    return {
+        "reportFileId": str(report_file_id),
+        "duplicate": False,
+        "ingestionRunId": str(outcome.ingestion_run_id),
+        "rowCountRead": outcome.row_count_read,
+        "rowCountAccepted": outcome.row_count_accepted,
+        "rowCountRejected": outcome.row_count_rejected,
+        "rowCountDuplicate": outcome.row_count_duplicate,
+        "persistedSalesLineIds": [str(i) for i in outcome.persisted_sales_line_ids],
+    }
+
 
 # D7 (cfo-agent.md §6.8 `cfo.preview` table row) — the trigger id string, reused verbatim from
 # the spec's own table. Defined HERE, not in `agents/ceo_hub.py`'s `CFO_*` constants, because
@@ -121,6 +252,30 @@ CFO_GST_LOOKUP = "cfo.gst_lookup"
 # call `_require_cfo_entitlement`, mirroring `GET /cfo/data-requests`'s own identical
 # "read-only, no entitlement gate" precedent.
 CFO_EXPENSE_BUDGET_SET = "cfo.expense_budget_set"
+
+# Line-status-override write addition (deterministic-engine.md §7.2.1's new
+# `cancellation_state_override`/`return_status_override`/`rto_status_override` triple — closes
+# the CFO end-to-end evaluation's headline finding, see `declare_line_status_override`'s own
+# docstring). Same reasoning as `CFO_EXPENSE_BUDGET_SET` immediately above: no `dispatch_cfo_*`
+# wiring exists or is added for this — direct-path only, HTTP route below. The read route
+# (`GET /cfo/line-status-override`) needs no trigger id of its own — same "read-only, no
+# entitlement gate" precedent as `GET /cfo/expenses`.
+CFO_LINE_STATUS_OVERRIDE = "cfo.line_status_override"
+
+# Financial Health Band addition (cfo-agent.md §6.15). Defined here, not in `ceo_hub.py`, for
+# the SAME reason as `CFO_PREVIEW`/`CFO_GST_LOOKUP`/`CFO_EXPENSE_BUDGET_SET` above: no
+# `dispatch_cfo_*` wiring exists or is added for this — direct-path only, HTTP route below.
+# Read-only (no manual write), so unlike `put_expense`/`put_line_status_override` this route
+# needs no second `financials.adjust` gate — same "computed insight, not a manual input"
+# reasoning `post_anomaly_check` already established for its own entitlement-only gate.
+CFO_FINANCIAL_HEALTH = "cfo.financial_health"
+CFO_CASH_RECONCILIATION = "cfo.cash_reconciliation"
+
+# Strategic Insight layer addition (cfo-agent.md §7.5). Defined here, not in `ceo_hub.py`, for
+# the SAME reason as `CFO_FINANCIAL_HEALTH` above: no `dispatch_cfo_*` wiring exists or is added
+# for this — direct-path only, HTTP route below. Read-only (gathers already-computed/persisted
+# outputs, creates no manual input), so needs no `financials.adjust` gate either.
+CFO_STRATEGIC_BRIEFING = "cfo.strategic_briefing"
 
 
 def _require_cfo_entitlement(tenant_id: UUID, *, direct_action_code: str) -> None:
@@ -231,6 +386,7 @@ def _expense_entry_to_dict(entry: Any) -> dict[str, object]:
         "targetRef": entry.target_ref,
         "createdAt": entry.created_at.isoformat(),
         "createdBy": str(entry.created_by),
+        "reason": entry.reason,
     }
 
 
@@ -339,6 +495,113 @@ def get_expense_budget_status(
             str(status.manual_adjustment_id) if status.manual_adjustment_id is not None else None
         ),
     }
+
+
+class DeclareLineStatusOverrideHttpRequest(BaseModel):
+    """One seller declaration of a real order-line outcome (deterministic-engine.md §7.2.1's
+    `cancellation_state_override`/`return_status_override`/`rto_status_override`) — mirrors
+    `EnterExpenseRequest`'s own shape, restricted to this trio's real enumerated values by
+    `declare_line_status_override` itself, not by this model (the same division of validation
+    responsibility `EnterExpenseRequest`/`enter_expense` already use)."""
+
+    sales_line_id: UUID
+    field: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+    reason: str | None = None
+    supersedes_id: UUID | None = None
+
+
+@router.put("/line-status-override")
+def put_line_status_override(
+    body: DeclareLineStatusOverrideHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)
+) -> dict[str, str]:
+    """Direct-execution write for a seller's cancellation/return/RTO status declaration, for
+    the real order-line case the CFO end-to-end evaluation surfaced: a marketplace upload that
+    carries no resolvable status at all for a line. Same second gate `put_expense` already
+    established (`financials.adjust`, §8 rule 4) — this creates a manual financial-adjacent
+    input exactly like an expense entry does."""
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_LINE_STATUS_OVERRIDE)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST):
+        raise HTTPException(status_code=403, detail="financials.adjust permission required")
+
+    try:
+        manual_adjustment_id = declare_line_status_override(
+            ctx.tenant_id,
+            DeclareLineStatusOverrideRequest(
+                sales_line_id=body.sales_line_id,
+                field=body.field,
+                value=body.value,
+                created_by=ctx.app_user_id,
+                reason=body.reason,
+                supersedes_id=body.supersedes_id,
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    return {"manualAdjustmentId": str(manual_adjustment_id)}
+
+
+@router.get("/line-status-override")
+def get_line_status_override(
+    sales_line_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CFO)
+) -> dict[str, object]:
+    """Read-only surfacing of one line's current declarations, all five fields at once —
+    `agent.cfo` only, same "viewing isn't creating" reasoning as `GET /cfo/expenses`. `None` for
+    a field with no ACTIVE row, never a fabricated default."""
+    assert ctx.tenant_id is not None
+    overrides = get_line_status_overrides(ctx.tenant_id, sales_line_id=sales_line_id)
+    return {
+        "salesLineId": str(sales_line_id),
+        "cancellationStateOverride": overrides.cancellation_state_override,
+        "returnStatusOverride": overrides.return_status_override,
+        "rtoStatusOverride": overrides.rto_status_override,
+        "returnedQtyOverride": overrides.returned_qty_override,
+        "rtoQtyOverride": overrides.rto_qty_override,
+    }
+
+
+class DeclareLineCountOverrideHttpRequest(BaseModel):
+    """Mirrors `DeclareLineStatusOverrideHttpRequest`'s shape, `value` typed `int` instead of
+    `str` — the two count-shaped fields (`returned_qty_override`/`rto_qty_override`) validated
+    by `declare_line_count_override` itself, not by this model."""
+
+    sales_line_id: UUID
+    field: str = Field(min_length=1)
+    value: int
+    reason: str | None = None
+    supersedes_id: UUID | None = None
+
+
+@router.put("/line-count-override")
+def put_line_count_override(
+    body: DeclareLineCountOverrideHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)
+) -> dict[str, str]:
+    """Sibling write route to `PUT /cfo/line-status-override`, for the two count-shaped fields
+    no real report/adapter supplies today (deterministic-engine.md §7.2.1). Same second gate
+    (`financials.adjust`) as every other manual-input write route."""
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_LINE_STATUS_OVERRIDE)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST):
+        raise HTTPException(status_code=403, detail="financials.adjust permission required")
+
+    try:
+        manual_adjustment_id = declare_line_count_override(
+            ctx.tenant_id,
+            DeclareLineCountOverrideRequest(
+                sales_line_id=body.sales_line_id,
+                field=body.field,
+                value=body.value,
+                created_by=ctx.app_user_id,
+                reason=body.reason,
+                supersedes_id=body.supersedes_id,
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    return {"manualAdjustmentId": str(manual_adjustment_id)}
 
 
 class GstLineRequest(BaseModel):
@@ -645,6 +908,88 @@ def post_period_pnl(
     }
 
 
+class PeriodPnlForTenantHttpRequest(BaseModel):
+    """The real, DB-driven counterpart to `PeriodPnlHttpRequest` — no `lines`/`sku_by_line`/
+    `cost_history_by_sku`/`ingestion_run_ids`/`active_adjustment_ids` fields at all, since
+    `compute_period_pnl_for_tenant` auto-derives every one of them from the real database
+    (cfo-agent.md §6.16). The four component-code classification sets remain caller-supplied —
+    genuine tenant/business classifications this composition does not guess."""
+
+    period_start: date
+    period_end: date
+    as_of_date: date
+    recognition_state: str = Field(pattern="^(RECOGNISED|REALIZED|UNAVAILABLE)$")
+    fee_component_codes: list[str] = Field(default_factory=list)
+    forward_logistics_codes: list[str] = Field(default_factory=list)
+    reverse_logistics_codes: list[str] = Field(default_factory=list)
+    non_refunded_fee_codes: list[str] = Field(default_factory=list)
+    advertising_adjustment_values: list[dict[str, Any]] = Field(default_factory=list)
+    other_adjustment_values: list[dict[str, Any]] = Field(default_factory=list)
+    duplicate_fee_candidate_codes: list[str] = Field(default_factory=list)
+
+
+def _canonical_assembly_blocked_line_to_dict(blocked: Any) -> dict[str, object]:
+    return {
+        "salesLineId": str(blocked.sales_line_id),
+        "reason": blocked.reason,
+        "missingInputs": list(blocked.missing_inputs),
+    }
+
+
+@router.post("/pnl-for-tenant")
+def post_period_pnl_for_tenant(
+    body: PeriodPnlForTenantHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)
+) -> dict[str, object]:
+    """Direct-execution path (cfo-agent.md §6.16, the ingestion-to-canonical composition layer)
+    for `backend.services.cfo_actions.compute_period_pnl_for_tenant`. Unlike `POST /cfo/pnl`,
+    this route reads real `sales_line`/`line_component`/`manual_adjustment` rows for the period
+    and assembles them itself — the caller supplies only the period, the recognition state, and
+    the four component-code classification sets. `pnl: null` with real `blockedLines`/
+    `dataRequestIds` (never a fabricated result) is the correct, honest outcome when every real
+    line for this period was blocked or none exist."""
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_PNL)
+
+    outcome = compute_period_pnl_for_tenant(
+        ctx.tenant_id,
+        PeriodPnlForTenantRequest(
+            period_start=body.period_start,
+            period_end=body.period_end,
+            as_of_date=body.as_of_date,
+            recognition_state=RecognitionState(body.recognition_state),
+            fee_component_codes=frozenset(body.fee_component_codes),
+            forward_logistics_codes=frozenset(body.forward_logistics_codes),
+            reverse_logistics_codes=frozenset(body.reverse_logistics_codes),
+            non_refunded_fee_codes=frozenset(body.non_refunded_fee_codes),
+            advertising_adjustment_values=body.advertising_adjustment_values,
+            other_adjustment_values=body.other_adjustment_values,
+            duplicate_fee_candidate_codes=frozenset(body.duplicate_fee_candidate_codes),
+            requested_by=ctx.app_user_id,
+        ),
+    )
+
+    return {
+        "pnl": (
+            None
+            if outcome.pnl is None
+            else {
+                "nrr": _period_pnl_metric_result_to_dict(outcome.pnl.nrr),
+                "contributionProfit": _period_pnl_metric_result_to_dict(outcome.pnl.contribution_profit),
+                "marginPct": _period_pnl_metric_result_to_dict(outcome.pnl.margin_pct),
+                "feeRatioPct": _period_pnl_metric_result_to_dict(outcome.pnl.fee_ratio_pct),
+                "returnRatePct": _period_pnl_metric_result_to_dict(outcome.pnl.return_rate_pct),
+                "marketplaceFeeFlags": list(outcome.pnl.marketplace_fee_flags),
+                "dataRequestId": (
+                    str(outcome.pnl.data_request_id) if outcome.pnl.data_request_id is not None else None
+                ),
+            }
+        ),
+        "assembledLineCount": outcome.assembled_line_count,
+        "blockedLines": [_canonical_assembly_blocked_line_to_dict(b) for b in outcome.blocked_lines],
+        "dataRequestIds": [str(i) for i in outcome.data_request_ids],
+    }
+
+
 class GstPeriodSummaryLineRequest(BaseModel):
     """One canonical line's tax-relevant fields for the PERIOD summary. Deliberately a
     different shape from `GstLineRequest` (which drives the LINE-level `/gst/analyze-lines`
@@ -937,12 +1282,14 @@ def post_funding_readiness(
     canyon.md` CP B2) for `backend.services.cfo_actions.assemble_funding_readiness_reduced` —
     the same composition root `agents.ceo_hub.dispatch_cfo_funding_readiness` uses (C20).
 
-    This is the REDUCED §6.13 slice: Contribution Profit history, period-over-period trend, and
-    explicit gaps (periods missing, COGS/RTO-classification absent). **No score, valuation or
-    lending judgement anywhere** (AC19) — the response has no "readiness score" or "risk
-    rating" field. Margin stability, revenue concentration and cash-conversion timing are NOT
-    included; `deferredSections` states this explicitly on every response rather than omitting
-    those bullets silently, pending Phase D (`reconcile()`/`cash_reconciliation`)."""
+    This is the REDUCED §6.13 slice: Contribution Profit history, period-over-period trend,
+    explicit gaps (periods missing, COGS/RTO-classification absent), and — real wherever Leak
+    Shield reconciliation has already run for this tenant/period — `cashConversionTiming`
+    (`SETTLEMENT_LAG_DAYS`, anomaly-detection.md §6.1/§6.6). **No score, valuation or lending
+    judgement anywhere** (AC19) — the response has no "readiness score" or "risk rating" field.
+    Margin stability and revenue concentration are still NOT included; `deferredSections` states
+    this explicitly on every response, and adds `cash_conversion_timing` back to that list only
+    for a period where no `SETTLEMENT_LAG_DAYS` row exists yet — never a fabricated day count."""
     assert ctx.tenant_id is not None
     _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_FUNDING_READINESS)
 
@@ -963,6 +1310,7 @@ def post_funding_readiness(
         "gaps": [_funding_readiness_gap_to_dict(g) for g in outcome.gaps],
         "deferredSections": [_deferred_section_to_dict(s) for s in outcome.deferred_sections],
         "dataRequestId": str(outcome.data_request_id) if outcome.data_request_id is not None else None,
+        "cashConversionTiming": [_pricing_metric_result_to_dict(r) for r in outcome.cash_conversion_timing],
     }
 
 
@@ -1303,6 +1651,218 @@ def post_anomaly_check(
         )
 
     return response
+
+
+class FinancialHealthHttpRequest(BaseModel):
+    period_start: date
+    period_end: date
+    as_of_date: date
+
+
+@router.post("/financial-health")
+def post_financial_health(
+    body: FinancialHealthHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)
+) -> dict[str, object]:
+    """Direct-execution path (cfo-agent.md §6.15, Financial Health Band) for
+    `backend.services.cfo_actions.assemble_financial_health`. Classifies this tenant's already-
+    persisted `CONTRIBUTION_MARGIN_PCT`/`FEE_RATIO_PCT`/`RETURN_RATE_PCT` for one period into a
+    `GOOD`/`WATCH`/`AT_RISK` band per `financial_health_config` — never a new derived figure,
+    only a classification of figures `POST /cfo/pnl` already computed and persisted for this
+    period. `overallBand: null` with a real `unavailableReason` (never a fabricated `GOOD`) is
+    the correct, honest outcome for a period `cfo.pnl` was never run for, or one where every
+    metric came back UNAVAILABLE (e.g. deterministic-engine.md §7.2.1's cancellation/RTO-status
+    gap)."""
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_FINANCIAL_HEALTH)
+
+    outcome = assemble_financial_health(
+        ctx.tenant_id,
+        FinancialHealthRequest(
+            period_start=body.period_start, period_end=body.period_end, as_of_date=body.as_of_date
+        ),
+    )
+
+    return {
+        "overallBand": outcome.overall_band.value if outcome.overall_band is not None else None,
+        "perMetricBands": {metric: band.value for metric, band in outcome.per_metric_bands.items()},
+        "engineResultRefs": [str(ref) for ref in outcome.engine_result_refs],
+        "unavailableReason": outcome.unavailable_reason,
+    }
+
+
+class CashReconciliationHttpRequest(BaseModel):
+    marketplace: str
+    period_start: date
+    period_end: date
+    as_of_date: date
+
+
+@router.post("/cash-reconciliation")
+def post_cash_reconciliation(
+    body: CashReconciliationHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)
+) -> dict[str, object]:
+    """Direct-execution path (cfo-agent.md §6.10, deterministic-engine.md §5.13.3) for
+    `backend.services.cfo_actions.assemble_cash_reconciliation`. `cashReceived` is real, summed
+    from persisted `settlement_line` rows; `cashExpected`/`cashVariance` are structurally
+    `isAvailable: false` this pass — no adapter anywhere maps an invoice-side marketplace-fee
+    component, so a net "expected settlement" figure cannot be honestly computed yet (a real,
+    disclosed data-foundation gap, never approximated from a gross, pre-deduction amount).
+    `tcsCollected` is real for FLIPKART only; `tdsDeducted` is `isAvailable: false` for every
+    marketplace this pass — no adapter maps a TDS component anywhere. `settledWithinLagCount`/
+    `unsettledBeyondLagCount` reuse the same settlement-lag classification `cfo.preview`'s
+    Leak Shield reconciliation already runs, applied here independently (no prior `reconcile()`
+    run is required to call this route)."""
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_CASH_RECONCILIATION)
+
+    outcome = assemble_cash_reconciliation(
+        ctx.tenant_id,
+        CashReconciliationRequest(
+            marketplace=body.marketplace,
+            period_start=body.period_start,
+            period_end=body.period_end,
+            as_of_date=body.as_of_date,
+        ),
+    )
+
+    return {
+        "cashReceived": _pricing_metric_result_to_dict(outcome.cash_received),
+        "cashExpected": _pricing_metric_result_to_dict(outcome.cash_expected),
+        "cashVariance": _pricing_metric_result_to_dict(outcome.cash_variance),
+        "tcsCollected": _pricing_metric_result_to_dict(outcome.tcs_collected),
+        "tdsDeducted": _pricing_metric_result_to_dict(outcome.tds_deducted),
+        "settledWithinLagCount": outcome.settled_within_lag_count,
+        "unsettledBeyondLagCount": outcome.unsettled_beyond_lag_count,
+        "datesMissingCount": outcome.dates_missing_count,
+    }
+
+
+class PricingCandidateHttpInput(BaseModel):
+    sku: str
+    price_paise: int
+    margin_pct: str
+    engine_result_ref: UUID
+
+
+class SupplierRankHttpInput(BaseModel):
+    sku: str
+    supplier_name: str
+    landed_cost_paise: int
+    engine_result_ref: UUID
+
+
+class StrategicBriefingHttpRequest(BaseModel):
+    """Every opt-in field defaults to "don't run this check" — mirrors `FinancialHealthHttpRequest`'s
+    minimal shape, extended only with the opt-in signal sources `assemble_strategic_briefing`
+    itself documents as opt-in (see that function's own docstring). `pricing_candidates`/
+    `supplier_ranking` are the caller's own already-computed `compute_pricing_curve`/
+    `rank_suppliers` output, copied through unchanged (never recomputed here) — same opt-in,
+    pass-through contract as `anomaly_target_ref`/`expense_budget_categories`."""
+
+    period_start: date
+    period_end: date
+    as_of_date: date
+    anomaly_target_ref: str | None = None
+    expense_budget_categories: list[str] = Field(default_factory=list)
+    include_narration: bool = True
+    model: str | None = None
+    pricing_candidates: list[PricingCandidateHttpInput] = Field(default_factory=list)
+    supplier_ranking: list[SupplierRankHttpInput] = Field(default_factory=list)
+
+
+def _strategic_signal_to_dict(signal: Any) -> dict[str, object]:
+    evidence = signal.evidence[0] if signal.evidence else None
+    return {
+        "category": signal.category,
+        "severityRank": signal.severity_rank,
+        "severityLabel": signal.severity_label,
+        "recommendedActionType": signal.recommended_action_type,
+        "headline": signal.headline,
+        "evidence": (
+            None
+            if evidence is None
+            else {
+                "label": evidence.label,
+                "valuePaise": evidence.value_paise,
+                "valueFraction": str(evidence.value_fraction) if evidence.value_fraction is not None else None,
+                "textValue": evidence.text_value,
+                "isAvailable": evidence.is_available,
+                "register": evidence.register,
+                "engineResultRef": (
+                    str(evidence.engine_result_ref) if evidence.engine_result_ref is not None else None
+                ),
+            }
+        ),
+    }
+
+
+@router.post("/strategic-briefing")
+def post_strategic_briefing(
+    body: StrategicBriefingHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)
+) -> dict[str, object]:
+    """Direct-execution path (cfo-agent.md §7.5, Strategic Insight layer) for
+    `backend.services.cfo_actions.assemble_strategic_briefing`. Gathers already-computed
+    Financial Health bands, persisted Leak Shield findings, open data requests, and (only when
+    the caller opts in via `anomalyTargetRef`/`expenseBudgetCategories`/`pricingCandidates`/
+    `supplierRanking`) fired anomaly flags, expense-budget overages, and pricing/supplier
+    scenario-comparison signals, ranks them deterministically, and — when `includeNarration=true`
+    (the default) and at least one signal exists — makes exactly ONE LLM call over the whole
+    ranked list. Every `recommendedActionType` is deterministically assigned; the LLM never
+    picks or reorders one. `pricingCandidates`/`supplierRanking` are copied through unchanged —
+    this route never calls `compute_pricing_curve`/`rank_suppliers` itself, the caller must have
+    already run those and pass their output. Read-only: creates no manual input, so needs no
+    `financials.adjust` gate."""
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_STRATEGIC_BRIEFING)
+
+    outcome = assemble_strategic_briefing(
+        ctx.tenant_id,
+        StrategicBriefingRequest(
+            period_start=body.period_start,
+            period_end=body.period_end,
+            as_of_date=body.as_of_date,
+            requested_by=ctx.app_user_id,
+            anomaly_target_ref=body.anomaly_target_ref,
+            expense_budget_categories=tuple(body.expense_budget_categories),
+            include_narration=body.include_narration,
+            narration_model=body.model,
+            pricing_candidates=tuple(
+                PricingCandidateInput(
+                    sku=c.sku,
+                    price_paise=c.price_paise,
+                    margin_pct=Fraction(c.margin_pct),
+                    engine_result_ref=c.engine_result_ref,
+                )
+                for c in body.pricing_candidates
+            ),
+            supplier_ranking=tuple(
+                SupplierRankInput(
+                    sku=s.sku,
+                    supplier_name=s.supplier_name,
+                    landed_cost_paise=s.landed_cost_paise,
+                    engine_result_ref=s.engine_result_ref,
+                )
+                for s in body.supplier_ranking
+            ),
+        ),
+    )
+
+    return {
+        "signals": [_strategic_signal_to_dict(s) for s in outcome.signals],
+        "narrative": outcome.narrative,
+        "generatedAt": outcome.generated_at.isoformat(),
+        "narrationSafety": (
+            None
+            if outcome.narration_safety is None
+            else {
+                "isSafe": outcome.narration_safety.is_safe,
+                "fabricatedNumbers": list(outcome.narration_safety.fabricated_numbers),
+                "unavailableFiguresStatedAsReal": list(
+                    outcome.narration_safety.unavailable_figures_stated_as_real
+                ),
+            }
+        ),
+    }
 
 
 class GstLookupHttpRequest(BaseModel):

@@ -33,6 +33,7 @@ def _row(
     value: dict[str, object],
     created_by: UUID,
     created_at: datetime,
+    reason: str | None = None,
 ) -> dict[str, object]:
     return {
         "id": row_id,
@@ -40,7 +41,7 @@ def _row(
         "target_ref": target_ref,
         "field": field,
         "value": value,
-        "reason": None,
+        "reason": reason,
         "created_by": created_by,
         "created_at": created_at,
         "supersedes_id": None,
@@ -78,6 +79,35 @@ def test_list_expenses_filters_by_category(monkeypatch: pytest.MonkeyPatch) -> N
     assert outcome.entries[0].category == "packaging"
     assert outcome.entries[0].amount_paise.value == 5_000
     assert outcome.total_paise.value == 5_000
+
+
+def test_list_expenses_surfaces_the_sellers_own_reason_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A seller's free-text description of an "other" expense (e.g. "petrol for delivery
+    run") is stored via `enter_expense`'s existing `reason` parameter — this read path must
+    surface it back, not just the category, so the seller can tell entries apart later."""
+    created_by = uuid4()
+    now = datetime(2026, 9, 23, tzinfo=timezone.utc)
+    other_row = _row(
+        row_id=uuid4(),
+        target_type="ACCOUNT",
+        target_ref="default",
+        field="expense.other",
+        value={"amount_paise": 1_500},
+        created_by=created_by,
+        created_at=now,
+        reason="petrol for delivery run",
+    )
+
+    def _fake(tenant_id, *, field=None, field_prefix=None):
+        assert field == "expense.other"
+        return [other_row]
+
+    monkeypatch.setattr(cfo_actions_module.manual_adjustment_repo, "active_adjustments_by_field", _fake)
+
+    outcome = list_expenses(uuid4(), category="other")
+
+    assert len(outcome.entries) == 1
+    assert outcome.entries[0].reason == "petrol for delivery run"
 
 
 def test_list_expenses_excludes_expense_budget_rows_from_prefix_scan(monkeypatch: pytest.MonkeyPatch) -> None:

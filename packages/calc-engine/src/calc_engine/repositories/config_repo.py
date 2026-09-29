@@ -103,6 +103,17 @@ _SEVERITY_CONFIG_SQL = text(
     """
 )
 
+_FINANCIAL_HEALTH_CONFIG_SQL = text(
+    """
+    SELECT DISTINCT ON (metric) metric, direction, at_risk_threshold_pct, watch_threshold_pct,
+           effective_from, version
+    FROM financial_health_config
+    WHERE (tenant_id = :tenant_id OR tenant_id IS NULL)
+      AND effective_from <= :as_of_date
+    ORDER BY metric, (tenant_id IS NOT NULL) DESC, effective_from DESC
+    """
+)
+
 
 def resolve_discount_bearer(
     tenant_id: UUID, *, marketplace: str, component_code: str, as_of_date: date
@@ -250,4 +261,17 @@ def severity_config_rows(tenant_id: UUID, *, as_of_date: date) -> list[dict[str,
     treats a metric with no row here as simply not applicable to a finding, never a default."""
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(_SEVERITY_CONFIG_SQL, {"tenant_id": str(tenant_id), "as_of_date": as_of_date})
+        return [dict(row._mapping) for row in rows]
+
+
+def financial_health_config_rows(tenant_id: UUID, *, as_of_date: date) -> list[dict[str, Any]]:
+    """cfo-agent.md §6.15: at most one row per `metric` (CONTRIBUTION_MARGIN_PCT/
+    FEE_RATIO_PCT/RETURN_RATE_PCT), each the latest tenant-or-platform row effective as of
+    as_of_date — same resolution order as `severity_config_rows` immediately above.
+    `formulas/financial_health.py` treats a metric with no row here as simply not scored for
+    that tenant, never a default band."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            _FINANCIAL_HEALTH_CONFIG_SQL, {"tenant_id": str(tenant_id), "as_of_date": as_of_date}
+        )
         return [dict(row._mapping) for row in rows]

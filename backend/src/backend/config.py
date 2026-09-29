@@ -45,6 +45,13 @@ def frontend_origin() -> str:
 
 
 @lru_cache
+def cfo_report_storage_dir() -> str:
+    """Local-disk storage for seller-uploaded marketplace report files (cfo-agent.md §6.16) —
+    same functional-only, real-object-storage-is-later posture as `ci_evidence_storage_dir`."""
+    return os.environ.get("CFO_REPORT_DIR", "./data/cfo-reports")
+
+
+@lru_cache
 def ci_evidence_storage_dir() -> str:
     """Local-disk storage for seller-uploaded evidence screenshots (Step 4, functional-only
     — not a secret, so a default is fine here unlike everything else in this file). Real

@@ -572,7 +572,7 @@ Named here so no agent delegates to a capability this spec does not define.
 | `estimate_competitor_margin_range(...)` | `competitor_estimate` | §5.13; carries an `estimate_ref`, never an `engine_result_ref`. **CI-exclusive** — no other agent surface reads or writes `competitor_estimate` |
 | `estimate_product_feasibility(...)` | `product_feasibility_estimate` | §5.13.2; carries its own `estimate_ref`. **PI-exclusive** — distinct table from `competitor_estimate`, never used for a seller's own SKU (use `margin_curve` instead) |
 | `margin_curve(sku, candidate_prices[], period, as_of_date)` | `metric_result[]`, `metric_code = MARGIN_AT_PRICE` | **CFO-exclusive** — requires an owned `sku` with COGS history. One result per candidate price. Fees resolve from §5.14. Backs the pricing recommendation. Never callable for a product the seller does not yet own — see §5.13.2 for that case |
-| `cash_reconciliation(period, marketplace, as_of_date)` | `metric_result[]` — `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE` | Settlement-based; also surfaces TCS/TDS as cash items, never P&L |
+| `cash_reconciliation(tenant_id, marketplace, period_start, period_end, as_of_date, computed_at)` | `CashReconciliationResult` — `CASH_RECEIVED` (real), `CASH_EXPECTED`/`CASH_VARIANCE` (structurally `UNAVAILABLE` this pass), `TCS_COLLECTED` (real for FLIPKART only), `TDS_DEDUCTED` (`UNAVAILABLE`, every marketplace) | §5.13.3. Settlement-based; TCS/TDS shown as cash items, never P&L (C11) |
 | `rank_findings(exception_ids[], as_of_date, severity_config_ref)` | ordered list + `metric_result` per finding — `FINDING_AGE_DAYS`, `FINDING_SEVERITY` | Deterministic ranking and severity (§5.14.1). Takes `as_of_date` per §4.2 |
 | `funding_readiness_metrics(period_range, as_of_date)` | `metric_result[]` — `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS` | Inputs to the funding-readiness report. Emits no score |
 | `resolve_fee_reference(marketplace, category, fee_type, as_of_date)` | `fee_reference` row or a declared gap | §5.14. A miss is reported, never defaulted to zero |
@@ -580,7 +580,7 @@ Named here so no agent delegates to a capability this spec does not define.
 | `compute_repricing_scenario(sku, seller_price_paise, competitor_prices[], stance, stance_param, as_of_date)` | `metric_result[]`, `metric_code = REPRICING_SCENARIO` | §5.15. Pure price arithmetic — explicitly not margin-aware; distinct from `margin_curve` |
 | `compute_price_band(product_ref, category, competitor_prices[], as_of_date)` | `metric_result[]`, `metric_code = PRICE_BAND` | §5.15.1. Quartile/IQR distribution over CI-supplied competitor prices. Requires **at least 3** prices, else `UNAVAILABLE` with a named reason. Competitor prices enter `DERIVED` per the CI boundary |
 
-`metric_code` is extended accordingly: `LANDED_COST_PER_UNIT`, `LEAK_TOTAL`, `LEAK_EXCEPTION_AMOUNT`, `MARGIN_AT_PRICE`, `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE`, `FINDING_AGE_DAYS`, `FINDING_SEVERITY`, `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS`, `PRICE_POSITIONING`, `REPRICING_SCENARIO`, `PRICE_BAND`.
+`metric_code` is extended accordingly: `LANDED_COST_PER_UNIT`, `LEAK_TOTAL`, `LEAK_EXCEPTION_AMOUNT`, `MARGIN_AT_PRICE`, `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE`, `TCS_COLLECTED`, `TDS_DEDUCTED`, `FINDING_AGE_DAYS`, `FINDING_SEVERITY`, `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS`, `PRICE_POSITIONING`, `REPRICING_SCENARIO`, `PRICE_BAND`.
 
 **Reconciliation exceptions produce `metric_result` rows** under `metric_code = LEAK_EXCEPTION_AMOUNT`, one per exception. Each amount is therefore citable by `engine_result_ref`, which is what makes `leak_finding.engine_result_ref` satisfiable.
 
@@ -633,6 +633,66 @@ product_feasibility_estimate (
   computed_at timestamptz not null
 )
 ```
+
+### 5.13.3 Cash reconciliation (C11, D6; unblocks `cfo-agent.md` §6.10/§6.13)
+
+**Status: real, scoped narrower than the §5.13.1 interface-table stub implied.** That table
+row (`cash_reconciliation(period, marketplace, as_of_date) -> CASH_EXPECTED, CASH_RECEIVED,
+CASH_VARIANCE`) predates this section and was never a reviewed signature — `cfo-agent.md`
+§5.1.2 already flagged it as a zero-match placeholder, not a built capability. This section is
+the real one, written after auditing what invoice-side data actually exists in this codebase
+(2026-09-29): **`calc_engine.api.reconcile`'s own Decision A (that module's docstring) is
+correct about the capability that matters here — no adapter maps an invoice-side marketplace
+commission/fee `line_component`, anywhere.** (Its literal "zero adapters produce any
+INVOICE-side component" wording is narrower in practice — `flipkart.sales_report.v1` does map
+one INVOICE-side `component_code="TCS"` row, per `BaseAdapter.source_side`'s "INVOICE" default —
+but that one exception does not change the load-bearing fact: **no real adapter anywhere
+captures the marketplace's own commission/fee deduction as an invoice-side figure**, which is
+the one input a net "expected settlement" figure cannot be computed without.)
+
+**What this means for scope.** Computing `CASH_EXPECTED` as "invoice amount net of every
+deduction the marketplace will make before paying out" would require summing invoice-side FEE
+components that do not exist in any real ingested data today. Inventing that number from
+`gross_item_amount_paise` alone (before any deduction) would silently misrepresent every normal
+settlement as a large false "shortfall" — exactly the class of plausible-but-unconfirmed
+calculation CLAUDE.md's hard rule forbids. `CASH_EXPECTED` and the `CASH_VARIANCE` derived from
+it are therefore **structurally `UNAVAILABLE` in this pass**, not computed with a placeholder
+value — the same "declare the gap, never fabricate" treatment `reconcile()` already gives
+Decision A. Closing this requires a data-foundation adapter extension (real, invoice-side
+COMMISSION/fee `line_component` mapping, sourced from real exports) — named here as a real
+follow-up, not attempted in this pass.
+
+**What is real and computed this pass**, reusing already-built, already-tested primitives —
+this function adds no new financial arithmetic of its own, it composes existing ones:
+
+```
+cash_reconciliation(
+  tenant_id, *,
+  marketplace, period_start, period_end, as_of_date, computed_at
+) -> CashReconciliationResult {
+  cash_received: MetricResult,            -- metric_code = CASH_RECEIVED, always available
+  cash_expected: MetricResult,            -- metric_code = CASH_EXPECTED, is_available = False (this pass, structurally)
+  cash_variance: MetricResult,            -- metric_code = CASH_VARIANCE, is_available = False (derives from cash_expected)
+  tcs_collected: MetricResult,            -- metric_code = TCS_COLLECTED; UNAVAILABLE outside a marketplace with a known TCS mapping
+  tds_deducted: MetricResult,             -- metric_code = TDS_DEDUCTED; UNAVAILABLE everywhere this pass (no adapter maps one, any marketplace)
+  settled_within_lag_count: int,
+  unsettled_beyond_lag_count: int,        -- same classify_settlement_lag()/should_report_unsettled_as_leak() Path B logic reconcile() already runs
+  dates_missing_count: int,
+  formula_version, computed_at
+}
+```
+
+1. **`CASH_RECEIVED`** = Σ `settlement_line.gross_settlement_amount` across every `settlement_line` row for this `(tenant_id, marketplace, period_start, period_end)` where `gross_settlement_amount` is not null — the same real, already-persisted figure `reconcile()`'s Path A already reads via `settlement_repo.settlement_lines_in_period`. A settlement row whose `gross_settlement_amount` is null (e.g. Amazon's melted amount-type/description/value triple, `data-foundation.md`'s documented shape) is excluded from the sum and counted separately, never treated as a zero contribution. Confidence is `combine_confidence` across every summed row's own `confidence` — never presented as more certain than the weakest settlement row that fed it. `is_available = False` with a named reason only when **zero** settlement rows exist for the period (never a fabricated zero next to real, non-zero activity elsewhere in the period).
+2. **`CASH_EXPECTED` / `CASH_VARIANCE`** — `is_available = False`, `unavailable_reason = "no invoice-side marketplace-fee component data exists for any adapter yet — see deterministic-engine.md §5.13.3"`. This is a real, permanent (until the adapter gap closes) structural result, not a transient error.
+3. **`TCS_COLLECTED`** = Σ `line_component.amount` where `component_code = 'TCS'` across sales lines in the period/marketplace, **only for a marketplace this function knows has a real TCS mapping** (`FLIPKART` today, via `flipkart.sales_report.v1`'s `TDS Amount` column, §5.9's own note on that naming trap). For any other marketplace, `is_available = False` with `unavailable_reason = "no adapter maps a TCS component for this marketplace"` — never a defaulted zero standing in for "not captured." When `FLIPKART` genuinely has zero TCS-coded rows in a real period, that **is** a real, available zero (the mapping exists, the amount summed to nothing), correctly distinguished from the unavailable case above by which branch produced it.
+4. **`TDS_DEDUCTED`** — `is_available = False` for every marketplace this pass; confirmed by the same source-scan this section opened with, no adapter anywhere maps a `component_code = 'TDS'` row. Revisit this line the day one does.
+5. **Timing** (`settled_within_lag_count` / `unsettled_beyond_lag_count` / `dates_missing_count`) reuses `calc_engine.formulas.leak.classify_settlement_lag`/`should_report_unsettled_as_leak` **unchanged** against the same sales lines `reconcile()`'s own Path B already classifies — this function does not reimplement lag classification, it counts the same real outcome `reconcile()` already computes for the identical period/marketplace. This is the one part of "expected vs received... timing" (§5.1.2's capability-need row) genuinely available today, because it never depended on the missing fee-component data — only on `sales_line` dates and the existing `reconciliation_tolerance_config` lag/grace thresholds.
+6. **TCS/TDS are cash items, never P&L items** (C11, D6) — `cash_reconciliation`'s own output is the only place they are surfaced with an amount; `compute_contribution_profit` must never read from this function's output.
+7. Every `MetricResult` this function mints — available or not — carries `formula_version` and an `as_of_date`, per §9's rules, whether or not `is_available` is true.
+
+**`metric_code` extended accordingly**: `CASH_RECEIVED`, `CASH_EXPECTED`, `CASH_VARIANCE`, `TCS_COLLECTED`, `TDS_DEDUCTED` (supersedes the bare `CASH_EXPECTED`/`CASH_RECEIVED`/`CASH_VARIANCE` list §5.13.1's stub table row named, by adding the two tax-visibility codes C11 already requires as separate cash-surface figures).
+
+**Funding readiness (§6.13 of `cfo-agent.md`).** `CASH_RECEIVED` and the timing counts above are now real inputs a future `funding_readiness_metrics` extension could use for "cash-conversion timing" — but `MARGIN_STABILITY`/`REVENUE_CONCENTRATION`/`CASH_CONVERSION_DAYS` (§5.13.1's own stub row) remain unbuilt; this section unblocks the *input*, it does not itself build the funding-readiness metric that would consume it. That remains a distinct, still-open piece of work.
 
 ### 5.14 Fee reference store (C18 / B9)
 
@@ -869,8 +929,24 @@ Any figure incorporating a manual input is labelled `MANUAL` and names the adjus
 | `settlement.receipt` | `SETTLEMENT` | `{expected_paise?, received_paise, received_date, note?}` |
 | `supplier.quote` | `SUPPLIER` | `{supplier_name, sku?, unit_cost_paise, moq?, lead_time_days?, shipping_paise?, payment_terms?, reliability_note?}` |
 | `gst_rate_override` | `SKU` | `{rate_pct, hsn?, category?, gst_lookup_result_id, effective_from?}` — `rate_pct` is a Decimal-string (e.g. `"18.0000"`), never a JSON float, matching this registry's paise-based fields' no-float rule. `gst_lookup_result_id` is mandatory and references the specific `gst_lookup_result` row (§8.4) the seller accepted, so provenance traces all the way to that row's cited `source_url`/`retrieved_at` — not just to "a seller clicked accept." `hsn`/`category` echo the accepted classification for display without re-joining to the (append-only, potentially superseded) lookup row. |
+| `cancellation_state_override` | `LINE` | `"CANCELLED" \| "NOT_CANCELLED"` |
+| `return_status_override` | `LINE` | `"RETURNED" \| "NOT_RETURNED"` |
+| `rto_status_override` | `LINE` | `"RTO" \| "NOT_RTO"` |
+| `returned_qty_override` | `LINE` | non-negative integer |
+| `rto_qty_override` | `LINE` | non-negative integer |
+| `seller.goal` | `ACCOUNT` | `{target_margin_pct?, priority_category?, note?}` — seller-declared context only (cfo-agent.md §7.5): fed to Brain 3 as narration context, never as a rule an engine formula branches on. `target_margin_pct` is a Decimal-string, matching this registry's no-float rule. |
 
 Structured values are still **append-only and superseding** — a corrected quote is a new row that supersedes, never an update.
+
+**`cancellation_state_override` / `return_status_override` / `rto_status_override` (this session, confirmed) — the real, load-bearing gap the CFO end-to-end evaluation surfaced** (`docs/evaluation/cfo-e2e-evaluation-mtr-mock-2026-09-27.md` §1/§3/§4/§11): none of the three real MTR-shaped mock files carried a resolvable cancellation-status or RTO-status column, only a generic "Return Status" — and `net_realized_revenue`'s own tri-state contract (`CanonicalLine.cancellation_state`/`return_status`/`rto_status`, all `None` = "not resolvable for this marketplace") correctly refused to compute `NET_REALIZED_REVENUE`/`CONTRIBUTION_PROFIT` at all rather than guess. These three fields are the seller-declared escape hatch for exactly that gap — "my upload doesn't say, but I know this order was actually delivered / cancelled / returned" — the same category of input `rto_outcome` and `cancellation_flag` above already are, just for the tri-state status fields themselves rather than the inventory-outcome/boolean fields those two cover.
+
+- **Grain:** `LINE` (`target_ref` = `sales_line_id`), matching `discount_bearer`/`rto_outcome`/`return_refund_amount`'s existing per-line grain — a cancellation/return/RTO status is a fact about one specific order line, never a SKU- or period-wide default.
+- **Fills a gap, never overrules real data.** These fields are consulted **only** when the line's own observed status (from the adapter/report) is `None` — "not resolvable for this marketplace." When the report already carries a resolved value (even `"DELIVERED"`/`"Not Returned"`, i.e. "resolved, not cancelled/returned/RTO'd"), that value stands and the override, if one exists, is never applied — this is not a correction mechanism for a marketplace-reported value the seller disagrees with (that stays a `gst_rate_override`-style explicit-conflict case, out of scope here), only a filler for a value the marketplace report never carried at all. `calc_engine.formulas.line_status_overrides.resolve_line_status` (§5.4-adjacent, new this session) is the one place this precedence rule is implemented and tested — no caller re-implements it.
+- **Confidence:** `MANUAL`, per §7.2's standing rule — a figure incorporating one of these overrides can never present as `VERIFIED`.
+- **Permission:** `financials.adjust`, the same standing gate as every other manual input (§7's rule, restated at `cfo-agent.md` §5 rule 4).
+- **What this does and does not unblock.** This closes the *input* side of the gap: a seller can now declare a line's real status when their marketplace upload omits it. A real ingestion-to-canonical composition layer (`backend.services.cfo_actions.assemble_canonical_lines_for_period`, cfo-agent.md §6.16) now exists and is the caller that applies `resolve_line_status` for real, persisted lines — no longer hypothetical future work; see §6.16 for the composition itself, and see `returned_qty_override`/`rto_qty_override` immediately below for the two count-shaped fields that same composition surfaced as an identical, real gap. **Still not built:** file upload → parse → validate → persist into `sales_line`/`line_component` — this composition reads rows that already exist in those tables; nothing yet writes a real uploaded report into them (§6.16's own "what remains" note).
+
+**`returned_qty_override` / `rto_qty_override` (added building the composition layer above).** `sales_line`'s real schema (`packages/data-foundation/migrations/versions/20260917_0001_sales_side_tables.py`) has no `returned_qty`/`rto_qty` column at all, and no adapter maps one — confirmed by reading every adapter in `data_foundation/adapters/registry.py`. So for a line whose resolved `return_status`/`rto_status` says a return/RTO occurred, the actual unit COUNT is genuinely unknown from any real report column today, only from a returns-specific report (e.g. `meesho.tcs_sales_return.v1`) correlated by natural key across a SEPARATE ingestion run — real, valuable future work, not attempted here. Until that correlation exists, these two fields are the seller-declared fallback, same LINE grain, same precedence rule as the cancellation trio: consulted only when the count cannot be derived, never overriding a real derived count. **`billable_quantity` (`cost_components.py`) is never computed from an assumed zero when the resolved status says a return/RTO occurred and no count is known — see §6.16's own "blocked, not silently zeroed" rule for exactly how the composition layer surfaces this rather than fabricating billable_quantity=quantity.**
 
 **`gst_rate_override`, and how it differs from `gst_lookup_result.status`.** §8.4's `gst_lookup_result` already carries its own `status` (`PROVISIONAL | SELLER_VERIFIED | REJECTED`) plus `verified_by`/`verified_at` — that status marks the lookup *row itself* as reviewed, but on its own it does not let the accepted rate flow into any calculation. §8.4's L2 requires the accepted rate to become "a labelled manual input" before it can be applied, and `gst_rate_override` is that manual input — a separate, additional record. Marking a `gst_lookup_result` `SELLER_VERIFIED` and creating a `gst_rate_override` that references it are two distinct, separately-recorded acts; a future implementation must not treat the former as sufficient to unblock a calculation.
 
@@ -886,7 +962,7 @@ Structured values are still **append-only and superseding** — a corrected quot
 
 ### 7.3 Permitted manual inputs at V1
 
-COGS per SKU · discount bearer override · RTO outcome classification · cancellation flag · advertising spend · **other seller-declared expense pools (packaging, storage, logistics, other)** · **settlement receipt corrections where a report is missing or disputed** · other cost pools · fee-GST treatment toggle · return refund amount where settlement data is absent · **seller-supplied logistics costs** (forward, reverse, RTO legs) where marketplace reports omit them · supplier quote data for CFO ranking (price, MOQ, lead time, shipping, payment terms, reliability notes) · GST rate/HSN classification override accepted by the seller from a GST Applicability Lookup result (§8.4 L2).
+COGS per SKU · discount bearer override · RTO outcome classification · cancellation flag · advertising spend · **other seller-declared expense pools (packaging, storage, logistics, other)** · **settlement receipt corrections where a report is missing or disputed** · other cost pools · fee-GST treatment toggle · return refund amount where settlement data is absent · **seller-supplied logistics costs** (forward, reverse, RTO legs) where marketplace reports omit them · supplier quote data for CFO ranking (price, MOQ, lead time, shipping, payment terms, reliability notes) · GST rate/HSN classification override accepted by the seller from a GST Applicability Lookup result (§8.4 L2) · **cancellation/return/RTO status declared by the seller for one line, only where the marketplace report itself carries no resolvable status for that line** (`cancellation_state_override`/`return_status_override`/`rto_status_override`) · **returned/RTO unit counts declared by the seller for one line, only where no report/adapter supplies one** (`returned_qty_override`/`rto_qty_override`).
 
 ---
 

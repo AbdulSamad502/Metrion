@@ -1,13 +1,12 @@
 """READ-ONLY selects against sales_line/line_component (data-foundation.md §1.3/§1.4).
 
-This repository is structurally complete against the documented schema, but **not
-runtime-tested** — `sales_line` and `line_component` are owned by data-foundation.md, and no
-migration for them exists anywhere in the repo yet (only calc-engine's own tables, created by
-this package's migration 20260917_0001, actually exist in the database at the time of
-writing). Do not treat the queries below as verified until data-foundation's own migration
-lands and an integration test can run them against a real `sales_line` row — that is out of
-this package's scope to create, per migrations/README.md ("this directory never authors DDL
-for tables owned by data-foundation.md").
+**Update:** `sales_line`/`line_component` are now real, migrated tables
+(`packages/data-foundation/migrations/versions/20260917_0001_sales_side_tables.py`), owned by
+data-foundation.md per that package's own DDL-ownership convention. The queries below are
+exercised against them by real integration tests (e.g.
+`packages/calc-engine/tests/integration/test_reconcile_amazon_flipkart_extension.py`) and by
+`backend.services.cfo_actions.assemble_canonical_lines_for_period` (cfo-agent.md §6.16), which
+is exactly the "caller" this module's own docstring below anticipated.
 
 Read-only by convention, not by grant: this package's own migration does not touch these
 tables' grants at all, since it doesn't create them.
@@ -27,7 +26,7 @@ _LINES_FOR_PERIOD_SQL = text(
     """
     SELECT id AS sales_line_id, marketplace, document_type, quantity, invoice_date,
            dispatch_date, order_date, gross_item_amount, return_status, confidence,
-           order_ref, line_ref, taxable_amount
+           order_ref, line_ref, taxable_amount, sku, ingestion_run_id
     FROM sales_line
     WHERE tenant_id = :tenant_id
       AND coalesce(invoice_date, dispatch_date, order_date) BETWEEN :period_start AND :period_end
@@ -38,7 +37,7 @@ _LINES_WITHOUT_DOCUMENT_DATE_SQL = text(
     """
     SELECT id AS sales_line_id, marketplace, document_type, quantity, invoice_date,
            dispatch_date, order_date, gross_item_amount, return_status, confidence,
-           order_ref, line_ref, taxable_amount
+           order_ref, line_ref, taxable_amount, sku, ingestion_run_id
     FROM sales_line
     WHERE tenant_id = :tenant_id
       AND marketplace = :marketplace

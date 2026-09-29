@@ -316,6 +316,7 @@ export type ExpenseEntry = {
   targetRef: string;
   createdAt: string;
   createdBy: string;
+  reason: string | null;
 };
 
 export type ExpenseListResponse = { entries: ExpenseEntry[]; totalPaise: number };

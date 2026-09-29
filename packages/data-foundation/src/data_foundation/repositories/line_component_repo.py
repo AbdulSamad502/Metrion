@@ -45,3 +45,44 @@ def insert_components(tenant_id: UUID, *, sales_line_id: UUID, components: tuple
                 },
             )
     return ids
+
+
+_INSERT_SETTLEMENT_SQL = text(
+    """
+    INSERT INTO line_component
+        (id, tenant_id, settlement_line_id, component_kind, component_code, source_side, amount,
+         tax_amount, rate_pct, source_column, is_verified, note)
+    VALUES
+        (:id, :tenant_id, :settlement_line_id, :component_kind, :component_code, :source_side, :amount,
+         :tax_amount, :rate_pct, :source_column, :is_verified, :note)
+    """
+)
+
+
+def insert_settlement_components(
+    tenant_id: UUID, *, settlement_line_id: UUID, components: tuple[ComponentValue, ...]
+) -> list[UUID]:
+    """Same shape as `insert_components`, for the settlement side — `sales_line_id` left NULL."""
+    ids: list[UUID] = []
+    with tenant_scope(tenant_id) as conn:
+        for component in components:
+            new_id = uuid4()
+            ids.append(new_id)
+            conn.execute(
+                _INSERT_SETTLEMENT_SQL,
+                {
+                    "id": str(new_id),
+                    "tenant_id": str(tenant_id),
+                    "settlement_line_id": str(settlement_line_id),
+                    "component_kind": component.component_kind,
+                    "component_code": component.component_code,
+                    "source_side": component.source_side,
+                    "amount": component.amount_paise,
+                    "tax_amount": component.tax_amount_paise,
+                    "rate_pct": component.rate_pct,
+                    "source_column": component.source_column,
+                    "is_verified": component.is_verified,
+                    "note": component.note,
+                },
+            )
+    return ids

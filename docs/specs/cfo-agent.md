@@ -150,13 +150,13 @@ agent_data_request (                      -- OP1: CFO asks rather than assumes
 | `rank_findings` | `calc_engine.formulas.severity` | `(findings: Sequence[Finding], *, as_of_date: date, config_rows: Sequence[SeverityConfigRow], ordering_basis: str, closing_soon_days: int = 14) -> list[tuple[Finding, SeverityBand \| Unavailable, WindowStatus]]` | Deterministic severity band, `window_status` and order (D10). `Finding` is `(exception_id, amount_paise, age_days, claim_window_days)`; `ordering_basis` is `"WINDOW_THEN_AMOUNT"` or `"AMOUNT_ONLY"`. Returns tuples, not `MetricResult` rows — CFO reads `age_days`/`window_status`/severity off the tuple, not off an `engine_result_ref` |
 | `compute_metric_delta` | `calc_engine.api.compute_metric` | `(result_a: MetricResult, result_b: MetricResult, *, computed_at, as_of_date=None) -> MetricResult` | Period-over-period delta between two already-computed `MetricResult`s of the SAME `metric_code` (`result_b.value_paise - result_a.value_paise`, `calc_engine.formulas.metric_delta` — the only place this arithmetic happens); raises `ValueError` on a `metric_code` mismatch, returns `UNAVAILABLE` if either input is. Wired into CFO via `backend.services.cfo_actions.narrate_period_comparison` (`twinkly-mapping-canyon.md` CP A3) — see §7.4.4 |
 | `compute_landed_cost` | `calc_engine.api.compute_metric` | `(quote: LandedCostQuote, quantity: int, *, sku: str, active_adjustment_ids, computed_at, as_of_date=None) -> MetricResult` | Landed cost per unit from ONE seller-declared `supplier.quote` manual_adjustment (`metric_code = "LANDED_COST_PER_UNIT"`) — `unit_cost_paise` plus `shipping_paise` divided evenly across `quantity`, rounded half-up (`calc_engine.formulas.landed_cost`). Wired into CFO via `backend.services.cfo_actions.compute_landed_cost_for_quote` (`twinkly-mapping-canyon.md` CP A4) — the §6.11 supplier-ranking **primitive only**; comparing/ranking multiple quotes is Phase B1, not built |
+| `cash_reconciliation` | `calc_engine.api.cash_reconciliation` | `(tenant_id, *, marketplace, period_start, period_end, as_of_date, computed_at) -> CashReconciliationResult` | `deterministic-engine.md` §5.13.3. **Real, narrower than earlier drafts implied**: `CASH_RECEIVED` (real, from persisted `settlement_line` rows) and settlement-lag timing counts (reusing `reconcile()`'s already-tested `classify_settlement_lag` unchanged) are genuinely computed; `CASH_EXPECTED`/`CASH_VARIANCE` are structurally `UNAVAILABLE` this pass — no adapter anywhere maps an invoice-side marketplace-fee component, so a net "expected settlement" figure cannot be honestly derived yet (a real, disclosed data-foundation gap, not an oversight). `TCS_COLLECTED` is real for FLIPKART only (its one real invoice-side TCS mapping); `TDS_DEDUCTED` is `UNAVAILABLE` everywhere — no adapter maps a TDS component for any marketplace yet |
 
-**5.1.2 Not yet built — DEFERRED, pending a Brain-1 extension spec.** These functions were named in an earlier draft of this section with invented signatures. **Verified by grep against `packages/calc-engine`: zero matches for `reconcile`, `cash_reconciliation`, `margin_curve`, `funding_readiness_metrics`, `resolve_fee_reference`, `estimate_competitor_margin_range`, `detect_anomalies`, `gst_applicability_lookup`.** (`landed_cost` is no longer in this zero-match set — it is real and now wired into CFO, see §5.1.1 and the "Correction (CP A4)" note below the table. `margin_curve` and `resolve_fee_reference` are also real matches today, same as CP A3's note already flagged — their rows below have not yet been reconciled, which remains out of this checkpoint's narrow scope.) This spec states the CFO *capability* each one is meant to serve — not an invented signature — and each is out of scope until `deterministic-engine.md` is extended to define it:
+**5.1.2 Not yet built — DEFERRED, pending a Brain-1 extension spec.** These functions were named in an earlier draft of this section with invented signatures. **Verified by grep against `packages/calc-engine`: zero matches for `reconcile`, `margin_curve`, `funding_readiness_metrics`, `resolve_fee_reference`, `estimate_competitor_margin_range`, `detect_anomalies`, `gst_applicability_lookup`.** (`landed_cost` and `cash_reconciliation` are no longer in this zero-match set — both are real and now wired into CFO, see §5.1.1; `cash_reconciliation`'s own real scope is narrower than an earlier draft implied, see `deterministic-engine.md` §5.13.3 and its §5.1.1 row above. `margin_curve` and `resolve_fee_reference` are also real matches today, same as CP A3's note already flagged — their rows below have not yet been reconciled, which remains out of this checkpoint's narrow scope.) This spec states the CFO *capability* each one is meant to serve — not an invented signature — and each is out of scope until `deterministic-engine.md` is extended to define it:
 
 | Capability CFO needs from Brain 1 | What it must produce | Blocks |
 |---|---|---|
 | Invoice-side vs. settlement-side reconciliation, producing `reconciliation_exception` rows | A `LEAK_EXCEPTION_AMOUNT` `MetricResult` per exception | §6.2, §6.4, `leak_finding.reconciliation_exception_id`/`engine_result_ref` |
-| Cash reconciliation (expected vs. received, variance, timing, TCS/TDS split) | The `cash_view` figures in §5 | §6.10 |
 | A margin curve across candidate prices, fee-aware (fees from §5.14) | One `MetricResult` per candidate price, `metric_code = MARGIN_AT_PRICE` or equivalent | §6.7 pricing recommendations |
 | Funding-readiness metrics assembled from Contribution Profit history, margin stability and cash-conversion timing | A data-completeness-oriented result set, no score | §6.13 |
 | Fee-reference resolution by marketplace/category/fee-type/date | A resolved fee row from the versioned reference store (§5.14, C18) | Fee-overcharge detection, pricing |
@@ -282,6 +282,9 @@ Per the `auth.md` §5.2 guardrail, every direct path is enumerated here, names o
 | `cfo.supplier_ranking` | Rank every ACTIVE `supplier.quote` row for a SKU by landed cost (§6.11) — **Built** (`twinkly-mapping-canyon.md` CP B1): `backend.services.cfo_actions.rank_suppliers`, wired to `POST /api/v1/cfo/suppliers/rank` and `agents.ceo_hub.dispatch_cfo_supplier_ranking`; a single-quote result is reported as a single quote, not a ranking (E15) | No | `agent.cfo` | CFO entitlement + run credit | Per tenant | Yes |
 | `cfo.batch_size` | Budget-constrained order-quantity range (§6.12) — **engine arithmetic core Built** (`twinkly-mapping-canyon.md` CP B3a): `calc_engine.formulas.batch_size.budget_constrained_quantity` / `calc_engine.api.compute_metric.compute_batch_constrained_quantity` compute the budget-and-MOQ ceiling (§6.12's own "degrades to a budget-and-MOQ arithmetic exercise" floor); **CFO wiring, velocity, and this direct path itself remain NOT built** (`twinkly-mapping-canyon.md` CP B3b, still pending) | No | `agent.cfo` | CFO entitlement + run credit | Per tenant | Yes |
 | `cfo.funding_readiness` | Assemble the funding-readiness report (§6.13) — **Built, REDUCED slice only** (`twinkly-mapping-canyon.md` CP B2): `backend.services.cfo_actions.assemble_funding_readiness_reduced`, wired to `POST /api/v1/cfo/funding-readiness` and `agents.ceo_hub.dispatch_cfo_funding_readiness`; assembles Contribution Profit history, period-over-period trend and explicit gaps (periods missing, COGS/RTO absent) only — margin stability, revenue concentration and cash-conversion timing remain deferred to Phase D (`reconcile()`/`cash_reconciliation`) and are stated as such on every response, never silently omitted | No | `agent.cfo` | CFO entitlement | Per tenant, low | Yes |
+| `cfo.line_status_override` | Declare/read a seller's cancellation/return/RTO status for one order line, only where the marketplace report itself carries none (§6.14) — **Built**, this session: `backend.services.cfo_actions.declare_line_status_override`/`get_line_status_overrides`, wired to `PUT`/`GET /api/v1/cfo/line-status-override`; no `agents.ceo_hub` dispatch exists or is added (this table's own "CEO call" column reads "No") | No | `agent.cfo` (write additionally requires `financials.adjust`, §7 rule 4) | CFO entitlement | Per tenant | Yes |
+| `cfo.financial_health` | Classify already-computed period metrics into a GOOD/WATCH/AT_RISK band (§6.15) — **Built**, this session, backend only: `backend.services.cfo_actions.assemble_financial_health`, wired to `POST /api/v1/cfo/financial-health`; no `agents.ceo_hub` dispatch exists or is added | No | `agent.cfo` | CFO entitlement | Per tenant, low | Yes |
+| `cfo.strategic_briefing` | Gather, rank, and narrate already-computed strategic signals (§7.5) — **Built**, this session, backend only: `backend.services.cfo_actions.assemble_strategic_briefing`, wired to `POST /api/v1/cfo/strategic-briefing`; no `agents.ceo_hub` dispatch exists or is added | No | `agent.cfo` | CFO entitlement | Per tenant, low | Yes |
 
 Anything open-ended — "why did my profit drop?" — is **conversational**, requires `agent.ceo` plus `agent.cfo`, and is not a direct path.
 
@@ -309,9 +312,9 @@ The reconciliation is deterministic and already computed, so revealing one costs
 
 **Input paths (OP1):** manual entry · report upload · agent-initiated data request. All manual values are written as `manual_adjustment` rows (§5) under the engine's append-only, superseding discipline — CFO adds no store and no second rule.
 
-**Expenses** feed the engine's cost components. Account-level pools are allocated per engine §5.10 and always carry `DERIVED` confidence.
+**Expenses** feed the engine's cost components. Account-level pools are allocated per engine §5.10 and always carry `DERIVED` confidence. The `other` category's `manual_adjustment.reason` field (already accepted by `enter_expense`) is a free-text description of what the expense actually was (e.g. "petrol for delivery run", "travel to supplier meeting") — `list_expenses`/`GET /cfo/expenses` surfaces it back on every entry (this session's fix: it was previously write-accepted but never read back, leaving "other" entries indistinguishable from one another).
 
-**Cash flow** is settlement-based (D6): expected vs received, variance, and timing. TCS and TDS appear **in cash surfaces only, never in P&L** (C11) — including where a `TCS_TDS_MISMATCH` finding surfaces a levy variance, which is a cash-reconciliation item and is excluded from the recoverable-discrepancy headline (§6.4.6). CFO must explain that levies reduce cash received without reducing profit, because sellers routinely read them as losses.
+**Cash flow** is settlement-based (D6): expected vs received, variance, and timing — backed by `cash_reconciliation` (`deterministic-engine.md` §5.13.3), **real but narrower than this paragraph's ideal shape**. `CASH_RECEIVED` and settlement-lag timing are genuinely computed from persisted `settlement_line` data; `CASH_EXPECTED`/`CASH_VARIANCE` are structurally `UNAVAILABLE` until a data-foundation adapter extension captures invoice-side marketplace-fee components (no adapter does today) — CFO must present that as a named, honest gap, never silently omit the variance figure or approximate it from `CASH_RECEIVED` alone. TCS and TDS appear **in cash surfaces only, never in P&L** (C11) — including where a `TCS_TDS_MISMATCH` finding surfaces a levy variance, which is a cash-reconciliation item and is excluded from the recoverable-discrepancy headline (§6.4.6). `TCS_COLLECTED` is real for FLIPKART only; `TDS_DEDUCTED` is `UNAVAILABLE` everywhere this pass. CFO must explain that levies reduce cash received without reducing profit, because sellers routinely read them as losses.
 
 **Bank data is out of scope.** Cash flow is reconstructed from settlements and seller input, not from a bank feed. See **Q1**.
 
@@ -376,15 +379,26 @@ Where velocity is unavailable and the seller has not supplied lead time or MOQ, 
 
 ### 6.13 Funding readiness (C14)
 
-Ships in V1; **output definition is open (Q3)**. **Built, REDUCED slice only**
-(`twinkly-mapping-canyon.md` CP B2): `backend.services.cfo_actions.
-assemble_funding_readiness_reduced` assembles the first bullet below (Contribution Profit
-history and trend, data-completeness stated) and the explicit-gaps bullet, restricted to what
-is genuinely computable today (periods missing, COGS/RTO-classification absent — both
-derivable from already-persisted P&L results). Margin stability, revenue concentration and
-cash-conversion timing remain **deferred to Phase D** (`reconcile()`/`cash_reconciliation`,
-not yet built) — `FundingReadinessOutcome.deferred_sections` states this on every response,
-never silently omitted. What it can honestly be assembled from today:
+Ships in V1; **output definition is open (Q3)**. **Built, REDUCED slice, now including
+cash-conversion timing** (`twinkly-mapping-canyon.md` CP B2, extended 2026-09-29):
+`backend.services.cfo_actions.assemble_funding_readiness_reduced` assembles Contribution Profit
+history/trend and the explicit-gaps bullet (periods missing, COGS/RTO-classification absent —
+both derivable from already-persisted P&L results), **and now also fetches any real,
+already-persisted `SETTLEMENT_LAG_DAYS` row** (anomaly-detection.md §6.1/§6.6, minted by
+`run_leak_shield_reconciliation` every time Leak Shield reconciliation runs) for the requested
+period as `cash_conversion_timing` — no new engine formula, no new arithmetic, purely a second
+`metric_result_repo.list_by_metric_code` fetch alongside the existing Contribution Profit one.
+This is a real metric under its own real name (`SETTLEMENT_LAG_DAYS`), not a newly-invented
+`CASH_CONVERSION_DAYS` metric_code — §5.13.1's stub table row named that code, but the actual
+built capability answers the same "how long does cash take to arrive" question under its real,
+pre-existing name. When no such row exists yet for the period (Leak Shield has never run
+against it), `cash_conversion_timing` is honestly empty and `deferred_sections` names the gap —
+never a fabricated day count. **Margin stability and revenue concentration by SKU/marketplace
+remain genuinely unbuilt** — margin stability needs `CASH_EXPECTED` (`deterministic-engine.md`
+§5.13.3), which is structurally `UNAVAILABLE` until an adapter maps invoice-side marketplace-fee
+components; revenue concentration has no engine primitive at all yet.
+`FundingReadinessOutcome.deferred_sections` states both remaining gaps on every response, never
+silently omitted. What it can honestly be assembled from today:
 
 - Contribution Profit history and trend, with data-completeness stated
 - Margin stability, revenue concentration by SKU and marketplace
@@ -392,6 +406,164 @@ never silently omitted. What it can honestly be assembled from today:
 - Explicit gaps — periods missing, COGS absent, marketplaces unreconciled
 
 **Never:** a lending score, a valuation, an investment recommendation, or any claim of accounting-grade accuracy (D7).
+
+### 6.14 Cancellation/return/RTO status declared by the seller
+
+**Status: Built**, this session — closes the CFO end-to-end evaluation's own headline finding
+(`docs/evaluation/cfo-e2e-evaluation-mtr-mock-2026-09-27.md` §1/§3/§4/§11: real MTR files carry
+no resolvable cancellation/return/RTO status at all, so `NET_REALIZED_REVENUE`/`CONTRIBUTION_
+PROFIT` were `UNAVAILABLE` for 100% of that dataset). Full field definitions, precedence rule
+and confidence treatment live at `deterministic-engine.md` §7.2.1 (`cancellation_state_
+override`/`return_status_override`/`rto_status_override`) — this section states only CFO's own
+wiring and UI-facing behaviour, per this project's "product rules here, arithmetic/field
+registry there" convention (§5.15's own cross-reference note is the precedent for this split).
+
+`backend.services.cfo_actions.declare_line_status_override`/`get_line_status_overrides`, wired
+to `PUT`/`GET /api/v1/cfo/line-status-override` (`cfo.line_status_override`). A seller declares
+one of the three fields for one `sales_line_id` only when their own marketplace upload does not
+resolve it — the write path validates the value against that field's real enumerated domain and
+never silently accepts an invalid status string.
+
+**What this does and does not unblock, restated for the CFO surface specifically:** this closes
+the *input* side of the gap — a seller can now record what they know. It does not, by itself,
+make `POST /cfo/pnl` pick up that declaration automatically: every multi-line CFO composition in
+this codebase is caller-assembled (§6.8's own table; `PeriodPnlHttpRequest`'s docstring,
+judgment call 4), so whichever future ingestion-to-canonical composition layer resolves a real
+uploaded line's `CanonicalLine` is the intended consumer of `get_line_status_overrides`, via
+`calc_engine.formulas.line_status_overrides.resolve_line_status`'s tested precedence rule
+(observed marketplace data always wins; the override fills a genuine gap only). **Recommended
+seller-facing prompt, not yet built as UI:** when `compute_period_pnl` returns `NET_REALIZED_
+REVENUE`/`CONTRIBUTION_PROFIT` `UNAVAILABLE` with `missing_inputs` naming `cancellation_state`/
+`return_status`/`rto_status`, the dashboard should surface a clear, non-alarming prompt asking
+the seller to confirm each affected line's real outcome, rather than a bare `UNAVAILABLE` label
+— this is a frontend/UX follow-up, explicitly out of this session's backend-only scope.
+
+### 6.15 Financial Health Band
+
+**Status: Built**, this session, backend only — no frontend surface yet (explicit scope
+decision this session: build the backend feature completely now, integrate it into the
+dashboard once the real frontend for it exists). A **deterministic classification**, never a
+new derived financial figure (CLAUDE.md's hard rule) — it bands three already-computed,
+already-persisted metrics against tenant-configurable thresholds, the same "ranking/banding is
+not judgement, it is computed deterministically in Brain 1" principle §5.14.1's severity
+banding already established for Leak Shield findings.
+
+**Inputs (no fourth metric invented):** this tenant's latest persisted `CONTRIBUTION_MARGIN_
+PCT`, `FEE_RATIO_PCT`, and `RETURN_RATE_PCT` for one period (`metric_result` rows
+`compute_period_pnl` already wrote) — never re-derived. Funding readiness (§6.13) and expense-
+budget utilization (§6.10) already have their own real surfaces and are deliberately NOT folded
+into this one band, to avoid silently re-deriving a figure another composition already owns.
+
+**Bands:** `GOOD` / `WATCH` / `AT_RISK`, per `financial_health_config` (engine-owned
+configuration, F4 — coefficients are configuration, never constants; tenant-id-nullable
+platform-default pattern, mirroring `severity_config`/`anomaly_detection_config` exactly).
+Each metric's config row states a `direction` (`LOWER_IS_WORSE` for margin, `HIGHER_IS_WORSE`
+for fee ratio and return rate) plus an `at_risk_threshold_pct`/`watch_threshold_pct` pair,
+compared as exact `Fraction`s against the metric's own `value_fraction` — no float, no
+rounding. **`overall_band` is the single worst band among whichever metrics were actually
+classified** — a business is only as healthy as its worst tracked signal.
+
+**Honesty floor:** a metric with no config row, or a config row with both thresholds absent,
+is skipped, never defaulted to `GOOD`. A metric whose own `MetricResult` is itself `UNAVAILABLE`
+(e.g. cascaded from §6.14's cancellation/RTO-status gap) is excluded, never treated as zero. If
+NOT ONE metric could be classified — no `cfo.pnl` run for the period, or every metric came back
+UNAVAILABLE — the outcome is `overallBand: null` with a real, named `unavailableReason`, never
+a fabricated `GOOD` band standing in for "no data." Every classified metric's own
+`engine_result_ref` is cited on the outcome, so a seller can trace the band back to the exact
+persisted figure that drove it (TRUST).
+
+`backend.services.cfo_actions.assemble_financial_health`, wired to `POST /api/v1/cfo/
+financial-health` (`cfo.financial_health`). Read-only — classifies figures `cfo.pnl` already
+computed, creates no manual input, so it needs only `agent.cfo` plus the CFO entitlement gate,
+no `financials.adjust`.
+
+**Never:** a credit score, a valuation, an audit opinion, or any claim of accounting-grade
+certification — restating this section's own non-goal alongside §6.13's identical restriction,
+since a "health band" is exactly the kind of output a seller could otherwise mistake for one.
+No Brain-3 narration exists for this band yet (deliberately, this session) — a future
+`narrate_financial_health` would need its own eval coverage per CLAUDE.md's LLM-evals rule
+before shipping, not a retrofit onto this classification.
+
+### 6.16 Ingestion-to-canonical composition layer — Built, this session
+
+**Status: Built.** Closes the gap `deterministic-engine.md` §7.2.1 and `calc_engine.
+repositories.canonical_repo`'s own docstring both named explicitly: no production code path
+read real `sales_line`/`line_component` rows from the database and merged manual-adjustment
+overlays into a `CanonicalLine` automatically — every multi-line CFO composition (`cfo.pnl`,
+GST period summary, batch-size) was **caller-assembled** over HTTP. This section is the real,
+DB-driven composition; §6.8's other entries are unchanged and remain reachable exactly as
+before — this is a NEW path alongside them, not a replacement.
+
+**`backend.services.cfo_actions.assemble_canonical_lines_for_period(tenant_id, period_start,
+period_end)`** — the composition itself. For every real `sales_line` row in the period
+(`calc_engine.repositories.canonical_repo.sales_lines_in_period`, the same document-date-
+coalesced query `cfo.pnl`'s other callers already rely on):
+
+- **`return_status`**: `resolve_line_status(observed=<sales_line.return_status column>,
+  override=<return_status_override>)` — the real column an adapter may have populated (e.g.
+  `meesho.orders.v1`'s `Return Status` mapping) wins; the override fills the gap only when the
+  column is `NULL`.
+- **`cancellation_state`/`rto_status`**: entirely override-driven today — confirmed by reading
+  every adapter in `data_foundation/adapters/registry.py`, `sales_line`'s real schema
+  (`20260917_0001_sales_side_tables.py`) has no column for either and no adapter maps one, so
+  `observed` is always `None` for real data.
+- **`returned_qty`/`rto_qty`**: `0` (the `CanonicalLine` dataclass's own existing default) for
+  every line EXCEPT one whose resolved status DEFINITIVELY confirms a return/RTO occurred with
+  no known count anywhere — that line is excluded via `blocked`, never given a fabricated `0`.
+  An unresolved (`None`) status is treated the same as a resolved-negative one for this
+  specific purpose: no evidence of a return is not different from confirmed-no-return, for the
+  purpose of a unit count (a real design correction made and tested this session — see
+  `returned_qty_override`/`rto_qty_override` in `deterministic-engine.md` §7.2.1 for the full
+  reasoning and the two fields that fill a genuine gap when a return/RTO IS confirmed).
+- **`rto_outcome`/`refunded_amount`**: read straight from the existing `rto_outcome`/
+  `return_refund_amount` manual_adjustment fields (§7.2.1) — `None` when no ACTIVE row exists,
+  cascading `Unavailable` downstream exactly as those formulas already document.
+- **`quantity`/`gross_item_amount`** `NULL` on the row blocks the line — neither is `Optional`
+  on `CanonicalLine`, so there is no honest value to substitute.
+- **`document_type`** defaults to `"INVOICE"` when `NULL` (true for every real row today — no
+  adapter maps a column, confirmed by reading the registry) — never consulted by any formula
+  (confirmed by reading every production call site), so this is a structural fact about what a
+  sales-side report row is, not a guessed classification, and provably inert either way.
+
+Every line that could NOT be honestly assembled is returned in `blocked`, named with its exact
+reason and `missing_inputs` — never silently dropped, never silently defaulted.
+
+**`backend.services.cfo_actions.resolve_cost_history_for_skus(tenant_id, skus)`** — the
+auto-derived counterpart to `cost_history_by_sku`: fetches every ACTIVE `cogs_per_unit` row per
+SKU and parses it (§7.2.1's documented bare-scalar-or-`{amount_paise, effective_from?}` shape).
+
+**`backend.services.cfo_actions.compute_period_pnl_for_tenant`**, wired to `POST /api/v1/cfo/
+pnl-for-tenant` (`cfo.pnl`, same trigger id and entitlement gate as `POST /cfo/pnl` — this is
+an additional path to the same capability, not a new capability) — the real, DB-driven
+composition: assembles lines + `sku_by_line`/`cost_history_by_sku`/`ingestion_run_ids`/
+`active_adjustment_ids` from the database, raises ONE aggregated `agent_data_request` per
+DISTINCT blocking reason (never one per blocked line), then calls `compute_period_pnl`
+unchanged. The four component-code classification sets (`fee_component_codes`,
+`forward_logistics_codes`, `reverse_logistics_codes`, `non_refunded_fee_codes`) remain
+caller-supplied — genuine tenant/business classifications this composition does not guess,
+mirroring `PeriodPnlRequest`'s own unchanged judgment call 4 for exactly these fields.
+`pnl: null` with real `blockedLines`/`dataRequestIds` (never a fabricated result) is the
+correct, honest response shape for a period where every real line was blocked or none exist.
+
+**Verified end-to-end, not just unit-tested**: `packages/cfo/tests/integration/
+test_period_pnl_for_tenant.py` inserts real `sales_line`/`line_component`/`manual_adjustment`
+rows into a real local Postgres, calls `compute_period_pnl_for_tenant` with zero hand-assembled
+`CanonicalLine`s anywhere in the test, and asserts a real, persisted `CONTRIBUTION_PROFIT`
+`metric_result` row comes out the other end, independently re-read back from the database.
+
+**What remains, explicitly not built this session:**
+- **File upload → parse → validate → persist.** This composition reads already-persisted
+  `sales_line`/`line_component` rows; nothing yet takes an uploaded report file, runs it
+  through `data_foundation.ingestion.pipeline.run_ingestion` (real, already exists, already
+  tested — parse + validate only), and writes the accepted rows into these tables. That is the
+  other half of "upload-to-canonical-to-P&L," and remains the next concrete increment.
+- **`GstPeriodSummaryRequest`/`BatchSizeRequest`'s own `.lines`** are NOT yet wired to this
+  composition — only `cfo.pnl` is, as the proof of concept. The same `assemble_canonical_lines_
+  for_period` call is directly reusable for those two once prioritized; not done here to keep
+  this increment reviewable.
+- **`adapter_versions`** is not auto-derived (passed as `()`  to `compute_period_pnl`) — real,
+  known simplification; would need a join to `ingestion_run` this pass did not build. Zero
+  correctness impact (no formula consults it), disclosed rather than silently guessed.
 
 ---
 
@@ -543,6 +715,119 @@ This layer adds no new permission, no new entitlement gate and no new write path
 - **Tenant isolation** — unaffected; this is a reasoning capability over already tenant-scoped figures, not a new data path.
 - **Recommend-only** — unaffected (C7). Nothing in this layer writes to a marketplace or files anything, regardless of how confidently it can explain a recommendation.
 - **GST management-grade constraint** — unaffected (C4, §6.6). Deeper GST fluency in explanation is not deeper authority in outcome.
+
+### 7.5 Strategic Insight layer — Built, this session, backend only
+
+**Status: Built.** Direct answer to the product goal "the CFO should reason like a strategic
+financial executive, not just a calculator" — implemented exactly within §7.1's existing split
+and §7.4.9's boundary, never loosening either. The user's own stated principle, restated as the
+architecture this subsection documents: **"Functions calculate. The LLM reasons. The CFO
+recommends. The user authorizes."**
+
+**What "reasoning" means here, precisely — and what it deliberately does not mean.** §7.1
+already draws the exact line this layer implements: *"prioritisation as judgement (which
+finding matters most to this seller and why)"* is a real Brain-3 capability, but *"ranking is
+not judgement — ordering by amount, age or window status is arithmetic and is computed
+deterministically... Brain 3 narrates the computed order; it never produces it."* This layer
+is built on that line, not around it:
+
+1. **Signal gathering and ranking — Brain 1, deterministic, no LLM.**
+   `cfo.reasoning.signals.compose_strategic_signals` (pure, no DB, no LLM — mirrors
+   `cfo.leak.compose.classify_and_rank_leaks`'s own established shape) takes ALREADY-COMPUTED
+   outputs — Financial Health bands (§6.15), fired anomaly flags (§6.5), persisted Leak Shield
+   findings (§6.2), expense-budget overages (§6.10), open data requests (§5) — and produces one
+   ordered list of `StrategicSignal`s. `severity_rank` (0..3) is a closed, deterministic lookup
+   from each source's own already-computed band/severity string. `recommended_action_type` is
+   ALSO deterministic: a closed, explicit `category -> action_type` table (e.g. `PROFITABILITY
+   -> REVIEW_PRICING_OR_COGS`, `LEAK -> REVIEW_LEAK_FINDING`) — the LLM never picks or invents
+   an action type, it only explains one already assigned.
+2. **Assembly — Brain 1, deterministic, no LLM.** `backend.services.cfo_actions.
+   assemble_strategic_briefing` calls ONLY functions that already exist and are already
+   specified elsewhere (`assemble_financial_health` §6.15, `run_anomaly_check` §6.5,
+   `check_expense_budget` §6.10, `leak_finding_repo.list_for_tenant` §6.2,
+   `agent_data_request_repo.list_for_tenant` §5) — it computes nothing itself, and it decides
+   nothing about which deterministic function to call beyond the caller's own opt-in request
+   fields (`anomalyTargetRef`/`expenseBudgetCategories`) — never an LLM-driven tool-selection
+   loop (CLAUDE.md's confirmed no-LangGraph/no-LangChain-orchestrator decision, reaffirmed
+   again this session: a fixed dispatch surface, not a general agent loop).
+3. **Narration — Brain 3, exactly ONE LLM call per briefing, never one per signal.** The ranked
+   signal list (never reordered) is handed to `cfo.reasoning.narrate.narrate_figures` — the
+   SAME primitive `narrate_period_comparison`/`narrate_anomaly_check`/`narrate_leak_findings`
+   already established as this codebase's one Brain-3 mechanism, never a second, parallel one.
+   Brain 3's job, per signal: state the likely root cause using ONLY the cited figure, compare
+   trade-offs when relevant, and restate the already-assigned `recommended_action_type`
+   verbatim — never propose a different action, never re-rank, never invent a number. This is
+   `narrate_figures`'s existing "format, don't compute" contract (`FigureToken.formatted_value`
+   is always a pre-formatted string — see that module's own docstring), applied to a new prompt
+   context, not a new LLM-calling mechanism.
+4. **Token efficiency, by construction.** One `narrate_figures` call for the WHOLE ranked list,
+   regardless of how many signals fired — never a call per signal, per category, or per method.
+   Zero signals -> zero LLM calls (`narrative` is `None`, not an empty-context call). Every
+   input the LLM sees is already a compact, pre-formatted string plus a provenance ref — never
+   a raw report, a raw row set, or a full `MetricResult`.
+
+**What Contribution Profit and CEO coordination this closes, and what it does not.** This gives
+the CFO a single, coherent, prioritized view across every signal source that already exists —
+the "strategic executive" quality the product goal asks for. It does **not** introduce
+autonomous execution: every signal's `recommended_action_type` is advisory, and nothing in this
+layer prices a change, places an order, or writes to a marketplace (C7, unaffected). It does
+**not** yet hand anything to another agent — no other Metrion agent exists yet to hand it to —
+but the `StrategicBriefingOutcome`/`StrategicSignal` shape (category, severity, recommended
+action, cited `engine_result_ref`s, all machine-readable) is deliberately the stable contract a
+future CEO-hub-mediated handoff would consume, per the user's own explicit instruction: *"Keep
+the existing fixed orchestration architecture. Do not introduce unrestricted agent-to-agent
+communication."* When a CEO agent exists, the intended integration point is the CEO hub's own
+fixed dispatch surface reading this briefing's structured signals — never a direct CFO-to-agent
+LLM conversation.
+
+**What-if / scenario analysis — explicitly NOT built this session.** `compute_pricing_curve`
+(§6.7) and `rank_suppliers` (§6.11) already produce multiple ranked candidates each — the
+deterministic "simulate this option" primitives this feature would need already exist. Wiring
+them into this Strategic Insight layer (comparing pricing/supplier candidates as signals with
+LLM-narrated trade-offs) is a natural, same-shaped extension, but was not built this session —
+flagged here as the clear next increment, not silently deferred.
+
+**Business-plan-aware prioritization — explicitly NOT built.** The user's brief asked for
+recommendations "according to our business plan." No `business_plan`/seller-goal input
+structure exists anywhere in this codebase today — inventing one to satisfy this request would
+mean guessing what "the business plan" contains, which this session declines to do (CLAUDE.md:
+"never fill gaps with fabricated information"). `severity_rank`/financial impact/risk band are
+the only prioritization basis today; a future seller-declared goal/constraint input (e.g. via a
+new `manual_adjustment` field, following §7.2.1's existing registry-request convention) is a
+real, separate product decision for the user to make explicitly, not one this session decided
+on the CFO's behalf.
+
+**LLM eval coverage — not yet built, required before this ships to a real seller.** This is a
+new Brain-3 narration surface (CLAUDE.md's LLM-evals rule): does it ever state a number not in
+its cited figures/`FigureToken`s, does it ever propose an action other than the one
+deterministically assigned, does it ever drop the "restate verbatim" instruction. Deterministic
+wiring is fully unit-tested (`test_signals.py`, `test_cfo_actions_strategic_briefing.py`); the
+LLM's own prompt-following behavior against a real Ollama call is not yet eval-covered.
+
+**`seller.goal` (§7.2.1, added completing this feature)** — `set_seller_goal`/`get_seller_goal`,
+wired to `PUT`/`GET /api/v1/cfo/seller-goal`. Seller-declared context only
+(`target_margin_pct`/`priority_category`/`note`) — fed into the strategic briefing's narration
+prompt so Brain 3 can explain WHY a signal matters to this seller specifically. It never
+changes a `severity_rank` or `recommended_action_type`, both already fixed deterministically
+before the LLM sees anything — a goal is framing, not a rule an engine formula branches on.
+
+**Pricing/supplier scenario signals (§7.5, added completing this feature)** —
+`signals_from_pricing_candidates`/`signals_from_supplier_ranking` (`cfo.reasoning.signals`):
+`compute_pricing_curve`/`rank_suppliers` already produce multiple ranked candidates; when the
+caller passes 2+ of either into `StrategicBriefingRequest.pricing_candidates`/
+`supplier_ranking`, a `PRICING`/`SUPPLIER` signal is produced citing the real spread (highest-
+margin candidate; cheapest vs. priciest supplier) — never a new number, only a citation of an
+existing comparison. **Not yet wired into `POST /cfo/strategic-briefing`'s HTTP body** — the
+backend function fully supports it; the HTTP request model doesn't expose these two fields yet
+(disclosed simplification, not a silent gap).
+
+**Explicitly not attempted: seeding real GST/marketplace-fee reference data.** The user's
+brief asked for "verified, versioned Indian accounting and GST rules." Doing this honestly
+requires sourcing real, current CBIC GST schedules and each marketplace's own published fee
+tables, then encoding them as `fee_reference`/GST slab rows with real citations — a real
+research task, not a coding task, and one CLAUDE.md's hard rule forbids doing by
+approximation. Not attempted this pass; `compute_pricing_curve` correctly stays `UNAVAILABLE`
+without it, exactly as designed.
 
 ---
 

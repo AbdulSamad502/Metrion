@@ -535,3 +535,48 @@ def test_flipkart_can_produce_orphan_and_duplicate_with_real_amount(two_tenants)
     assert "DUPLICATE_SETTLEMENT" in types
     # Real amount, real output — still capped at PROVISIONAL (unvalidated join key).
     assert all(e["confidence"] == "PROVISIONAL" for e in exceptions)
+
+
+# --- (f) Flipkart CAN produce a genuine SingleMatch/VARIANCE outcome, same as Meesho, when the
+# invoice side and settlement side share a component_code — regression test for the
+# cfo-e2e-evaluation-mtr-mock-2026-09-27.md §9 item 6 asymmetry (Flipkart match_count=0 where
+# Meesho's identical bypass-insert technique produced 40/40). Mirrors
+# test_amazon_zero_duplicate_and_variance_outcomes_vs_meesho_same_shape's Meesho half exactly,
+# substituting Flipkart's order_ref-only join key for Meesho's line_ref — this proves
+# reconcile()'s Path A/Decision-A intersection logic (reconcile.py lines 434-513) is not itself
+# marketplace-gated: a real shared component_code on both sides DOES produce a match and, when
+# the amounts differ beyond tolerance, a VARIANCE_EXCEEDS_TOLERANCE exception, for Flipkart
+# exactly as it does for Meesho. If this test passes, the eval's flagged asymmetry was a property
+# of that one-off eval script's own component-code setup for Flipkart, not a defect in reconcile().
+def test_flipkart_successful_match_with_shared_component_codes(two_tenants):
+    tenant_a, _ = two_tenants
+    ingestion_run_id = _insert_ingestion_run(tenant_a, marketplace="FLIPKART")
+
+    sales_id = _insert_sales_line(
+        tenant_a, ingestion_run_id=ingestion_run_id, marketplace="FLIPKART", order_ref="FK-MATCH-1"
+    )
+    _insert_invoice_component(tenant_a, sales_line_id=sales_id, component_code="COMMISSION", amount_paise=5_000)
+    _insert_tolerance(tenant_a, marketplace="FLIPKART", component_code="COMMISSION", tolerance_paise=50, tolerance_bps=10)
+    _insert_tolerance(tenant_a, marketplace="FLIPKART", component_code="*", tolerance_paise=0, tolerance_bps=0)
+
+    settlement_id = _insert_settlement_line(
+        tenant_a, ingestion_run_id=ingestion_run_id, marketplace="FLIPKART", order_ref="FK-MATCH-1",
+        gross_settlement_amount=6_500, settlement_date_=date(2026, 1, 15),
+    )
+    _insert_settlement_component(tenant_a, settlement_line_id=settlement_id, component_code="COMMISSION", amount_paise=6_500)
+
+    result = reconcile(
+        tenant_a, marketplace="FLIPKART", period_start=_PERIOD_START, period_end=_PERIOD_END,
+        as_of_date=_AS_OF, computed_at=_COMPUTED_AT,
+    )
+
+    matches = _matches_for_run(tenant_a, result.reconciliation_run_id)
+    exceptions = _exceptions_for_run(tenant_a, result.reconciliation_run_id)
+    exception_types = {e["exception_type"] for e in exceptions}
+
+    assert result.match_count == 1
+    assert len(matches) == 1
+    assert matches[0]["component_code"] == "COMMISSION"
+    assert matches[0]["confidence"] == "PROVISIONAL"  # order_ref join key caps it, even matched
+    assert "VARIANCE_EXCEEDS_TOLERANCE" in exception_types
+    assert result.exception_count == 1

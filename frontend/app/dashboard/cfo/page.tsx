@@ -98,6 +98,10 @@ export default function CfoPage() {
             <CfoPreviewSection getToken={getToken} />
             <AnomalyCheckSection getToken={getToken} />
             <PeriodComparisonSection getToken={getToken} />
+            <IngestUploadSection getToken={getToken} />
+            <SellerGoalSection getToken={getToken} />
+            <FinancialHealthSection getToken={getToken} />
+            <StrategicBriefingSection getToken={getToken} />
             <DataRequestsSection rows={dataRequests} error={dataRequestsError} onReload={reloadDataRequests} />
           </div>
         </div>
@@ -339,6 +343,10 @@ function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | 
   const [addCategory, setAddCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
   const [addAmount, setAddAmount] = useState("");
   const [addMarketplace, setAddMarketplace] = useState("");
+  // Free-text description (e.g. "petrol for delivery run", "travel to supplier meeting") —
+  // stored as manual_adjustment.reason, the field enter_expense already accepted but this form
+  // never collected, leaving "other" entries with no way to say what they actually were.
+  const [addDescription, setAddDescription] = useState("");
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addResult, setAddResult] = useState<ManualAdjustmentIdResponse | null>(null);
@@ -361,12 +369,14 @@ function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | 
           target_ref: "default",
           field: `expense.${addCategory.trim()}`,
           value,
+          reason: addDescription.trim() || null,
         }),
       });
       setAddResult(res);
       setAddCategory("");
       setAddAmount("");
       setAddMarketplace("");
+      setAddDescription("");
     } catch (e) {
       setAddError(e instanceof ApiError ? e.message : "Could not add expense");
     } finally {
@@ -488,6 +498,11 @@ function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | 
             </Field>
           </div>
           <div className="mt-3">
+            <Field label="Description (optional) — e.g. travel, petrol, courier">
+              <TextInput value={addDescription} onChange={setAddDescription} placeholder="What was this expense for?" />
+            </Field>
+          </div>
+          <div className="mt-3">
             <SubmitButton onClick={addExpense} busy={addBusy} label="Add expense" busyLabel="Adding…" />
           </div>
           <ErrorText>{addError}</ErrorText>
@@ -528,6 +543,7 @@ function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | 
                   <thead>
                     <tr style={{ color: "var(--text-6)" }}>
                       <th className="pb-2 font-semibold">Category</th>
+                      <th className="pb-2 font-semibold">Description</th>
                       <th className="pb-2 font-semibold">Amount</th>
                       <th className="pb-2 font-semibold">Target</th>
                       <th className="pb-2 font-semibold">Created</th>
@@ -537,6 +553,7 @@ function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | 
                     {listResult.entries.map((e) => (
                       <tr key={e.manualAdjustmentId} style={{ borderTop: "1px solid var(--border-subtle)" }}>
                         <td className="py-2" style={{ color: "var(--text-3)" }}>{e.category}</td>
+                        <td className="py-2" style={{ color: "var(--text-5)" }}>{e.reason ?? "—"}</td>
                         <td className="py-2" style={{ color: "var(--text-3)" }}>{rupees(e.amountPaise)}</td>
                         <td className="py-2" style={{ color: "var(--text-5)" }}>{e.targetType}/{e.targetRef}</td>
                         <td className="py-2" style={{ color: "var(--text-5)" }}>{new Date(e.createdAt).toLocaleString()}</td>
@@ -2119,6 +2136,227 @@ function DataRequestsSection({
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+// --- Ingestion, seller goal, financial health, strategic briefing (cfo-agent.md §6.16/§7.5) --
+
+function IngestUploadSection({ getToken }: { getToken: () => Promise<string | null> }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [marketplace, setMarketplace] = useState("MEESHO");
+  const [adapterId, setAdapterId] = useState("meesho.orders.v1");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+
+  const submit = async () => {
+    if (!file) {
+      setError("Choose a CSV file first.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const token = await getToken();
+      const form = new FormData();
+      form.append("file", file);
+      const qs = new URLSearchParams({ marketplace, adapter_id: adapterId }).toString();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? ""}/api/v1/cfo/ingest?${qs}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: form,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.detail ? JSON.stringify(json.detail) : "Upload failed");
+      setResult(json);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not upload the file");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title="Upload marketplace report (CSV)">
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Marketplace"><TextInput value={marketplace} onChange={setMarketplace} /></Field>
+          <Field label="Adapter id (e.g. meesho.orders.v1)"><TextInput value={adapterId} onChange={setAdapterId} /></Field>
+          <Field label="File">
+            <input type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </Field>
+        </div>
+        <div><SubmitButton onClick={submit} busy={busy} label="Upload & ingest" busyLabel="Ingesting…" /></div>
+        <ErrorText>{error}</ErrorText>
+        {result && <pre className="text-[12px]" style={{ color: "var(--text-5)" }}>{JSON.stringify(result, null, 2)}</pre>}
+      </div>
+    </Section>
+  );
+}
+
+function SellerGoalSection({ getToken }: { getToken: () => Promise<string | null> }) {
+  const [targetMarginPct, setTargetMarginPct] = useState("");
+  const [priorityCategory, setPriorityCategory] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await apiFetch<ManualAdjustmentIdResponse>("/api/v1/cfo/seller-goal", await getToken(), {
+        method: "PUT",
+        body: JSON.stringify({
+          target_margin_pct: targetMarginPct.trim() || null,
+          priority_category: priorityCategory.trim() || null,
+          note: note.trim() || null,
+        }),
+      });
+      setSaved(true);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not save the goal");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title="Seller goal (context for Strategic Briefing narration only)">
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Target margin % (optional)"><TextInput value={targetMarginPct} onChange={setTargetMarginPct} placeholder="15.00" /></Field>
+          <Field label="Priority category (optional)"><TextInput value={priorityCategory} onChange={setPriorityCategory} placeholder="reduce_fees" /></Field>
+          <Field label="Note (optional)"><TextInput value={note} onChange={setNote} /></Field>
+        </div>
+        <div><SubmitButton onClick={submit} busy={busy} label="Save goal" busyLabel="Saving…" /></div>
+        <ErrorText>{error}</ErrorText>
+        {saved && <div className="text-[12.5px]" style={{ color: "var(--accent)" }}>Saved.</div>}
+      </div>
+    </Section>
+  );
+}
+
+function FinancialHealthSection({ getToken }: { getToken: () => Promise<string | null> }) {
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
+  const [asOfDate, setAsOfDate] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+
+  const submit = async () => {
+    if (!periodStart || !periodEnd || !asOfDate) {
+      setError("Fill in all three dates first.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await apiFetch<Record<string, unknown>>("/api/v1/cfo/financial-health", await getToken(), {
+        method: "POST",
+        body: JSON.stringify({ period_start: periodStart, period_end: periodEnd, as_of_date: asOfDate }),
+      });
+      setResult(res);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not compute financial health");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title="Financial Health Band">
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
+          <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
+          <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
+        </div>
+        <div><SubmitButton onClick={submit} busy={busy} label="Compute" busyLabel="Computing…" /></div>
+        <ErrorText>{error}</ErrorText>
+        {result && (
+          <div className="text-[13px]" style={{ color: "var(--text-3)" }}>
+            Overall band: <strong>{String(result.overallBand ?? "UNAVAILABLE")}</strong>
+            {result.unavailableReason ? <span style={{ color: "var(--text-6)" }}> — {String(result.unavailableReason)}</span> : null}
+            <pre className="mt-2 text-[12px]" style={{ color: "var(--text-5)" }}>{JSON.stringify(result.perMetricBands, null, 2)}</pre>
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function StrategicBriefingSection({ getToken }: { getToken: () => Promise<string | null> }) {
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
+  const [asOfDate, setAsOfDate] = useState("");
+  const [includeNarration, setIncludeNarration] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ signals: Record<string, unknown>[]; narrative: string | null } | null>(null);
+
+  const submit = async () => {
+    if (!periodStart || !periodEnd || !asOfDate) {
+      setError("Fill in all three dates first.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await apiFetch<{ signals: Record<string, unknown>[]; narrative: string | null }>(
+        "/api/v1/cfo/strategic-briefing",
+        await getToken(),
+        {
+          method: "POST",
+          body: JSON.stringify({
+            period_start: periodStart, period_end: periodEnd, as_of_date: asOfDate, include_narration: includeNarration,
+          }),
+        },
+      );
+      setResult(res);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not build the briefing");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title="Strategic Briefing (deterministic signals + one narration call)">
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
+          <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
+          <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
+        </div>
+        <label className="flex items-center gap-2 text-[12.5px]" style={{ color: "var(--text-6)" }}>
+          <input type="checkbox" checked={includeNarration} onChange={(e) => setIncludeNarration(e.target.checked)} />
+          Include narration (calls the local LLM — slower)
+        </label>
+        <div><SubmitButton onClick={submit} busy={busy} label="Build briefing" busyLabel="Building…" /></div>
+        <ErrorText>{error}</ErrorText>
+        {result && (
+          <div className="flex flex-col gap-2">
+            {result.signals.length === 0 ? (
+              <div style={{ color: "var(--text-6)" }}>No signals for this period.</div>
+            ) : (
+              result.signals.map((s, i) => (
+                <div key={i} className="text-[12.5px]" style={{ color: "var(--text-3)" }}>
+                  [{String(s.severityLabel)}] {String(s.headline)} — {String(s.recommendedActionType)}
+                </div>
+              ))
+            )}
+            {result.narrative && <div className="mt-2 text-[13px]" style={{ color: "var(--text-3)" }}>{result.narrative}</div>}
+          </div>
         )}
       </div>
     </Section>
