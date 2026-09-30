@@ -13,9 +13,11 @@ dependencies = [
     "svix>=1.45",
     "httpx>=0.27",
     "python-multipart>=0.0.12",
-    # NOTE: `competitor-intelligence` (packages/competitor-intelligence) is a real runtime
-    # dependency — backend/api/v1/ci.py, ceo_hub.py and agents/ceo_hub.py all import it
-    # directly — but it is deliberately NOT listed here. A relative `file:` reference was
+    # NOTE: `competitor-intelligence` (packages/competitor-intelligence), `cfo`
+    # (packages/cfo) and `product-intelligence` (packages/product-intelligence) are all real
+    # runtime dependencies — backend/api/v1/ci.py, cfo.py, pi.py, agents/ceo_hub.py, and
+    # services/pi_actions.py / backend/entitlement.py all import one or more of them directly
+    # — but none is listed here. A relative `file:` reference was
     # tried and reverted: pip resolves a relative `file:` dependency specifier against the
     # CURRENT WORKING DIRECTORY at install time, not against this pyproject.toml's own
     # directory, so `pip install -e backend` succeeds or fails depending on which directory

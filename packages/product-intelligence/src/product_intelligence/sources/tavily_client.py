@@ -7,19 +7,24 @@ credits/mo, no card, `include_images=True` returns source-linked image URLs per 
 both by `discovery/` (candidate discovery) and `supplier/` (web-search supplement to Google
 Places) — a single client, reused by both callers, per the PI build plan §2.
 
-**Checkpoint 1 scaffolding only.** `TavilyClient` (the Protocol) and `TavilySearchResult`/
-`TavilyImage` (the result shapes) are real and complete. `HttpTavilyClient` — the concrete
-implementation that would actually call Tavily's HTTP API — is a stub raising
-`NotImplementedError`; the real HTTP call, retry/timeout handling and rate-limit degradation
-land in Checkpoint 2. No implementation of `TavilyClient` beyond this stub exists in this
-codebase yet, and nothing under `tests/` may construct `HttpTavilyClient`.
+**Checkpoint 2: real.** `HttpTavilyClient` now makes the actual HTTP call against Tavily's
+documented `POST https://api.tavily.com/search` endpoint (`TAVILY_API_KEY` env var, no
+default — see `.env.example`/`backend/.env.example`). Caching lives at the call site
+(`discovery/discovery_run.py`/`supplier/`), never inside this client — this stays a pure API
+wrapper, per this module's own original docstring contract. A non-2xx response, timeout, or
+malformed body raises `TavilyUnavailable`, never a fabricated empty/partial result silently
+presented as real.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Protocol
+from datetime import datetime, timezone
+from typing import Any, Protocol
+
+import httpx
+
+_SEARCH_URL = "https://api.tavily.com/search"
 
 
 class TavilyUnavailable(Exception):
@@ -75,6 +80,21 @@ class HttpTavilyClient:
         self._api_key = api_key
         self._timeout_seconds = timeout_seconds
 
+    def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
+        body = {"api_key": self._api_key, **payload}
+        try:
+            response = httpx.post(_SEARCH_URL, json=body, timeout=self._timeout_seconds)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise TavilyUnavailable(f"Tavily request failed: {exc}") from exc
+        try:
+            parsed = response.json()
+        except ValueError as exc:
+            raise TavilyUnavailable("Tavily response was not valid JSON") from exc
+        if not isinstance(parsed, dict):
+            raise TavilyUnavailable("Tavily response was not a JSON object")
+        return parsed
+
     def search(
         self,
         query: str,
@@ -82,13 +102,74 @@ class HttpTavilyClient:
         include_images: bool = False,
         max_results: int = 10,
     ) -> list[TavilySearchResult]:
-        raise NotImplementedError(
-            "HttpTavilyClient.search: real Tavily HTTP call lands in PI build plan "
-            "Checkpoint 2 — Checkpoint 1 only scaffolds the Protocol/dataclass shapes."
+        retrieved_at = datetime.now(timezone.utc)
+        parsed = self._post(
+            {
+                "query": query,
+                "include_images": include_images,
+                "max_results": max_results,
+                "search_depth": "basic",
+            }
         )
+        raw_results = parsed.get("results")
+        if not isinstance(raw_results, list):
+            raise TavilyUnavailable("Tavily response had no 'results' list")
+
+        results: list[TavilySearchResult] = []
+        for entry in raw_results:
+            if not isinstance(entry, dict):
+                continue
+            url = entry.get("url")
+            title = entry.get("title")
+            if not isinstance(url, str) or not isinstance(title, str):
+                continue
+            content = entry.get("content")
+            score = entry.get("score")
+            results.append(
+                TavilySearchResult(
+                    url=url,
+                    title=title,
+                    content=content if isinstance(content, str) else "",
+                    score=float(score) if isinstance(score, (int, float)) else None,
+                    published_date=entry.get("published_date")
+                    if isinstance(entry.get("published_date"), str)
+                    else None,
+                    retrieved_at=retrieved_at,
+                )
+            )
+        return results
 
     def images_for(self, query: str, *, max_images: int = 5) -> list[TavilyImage]:
-        raise NotImplementedError(
-            "HttpTavilyClient.images_for: real Tavily HTTP call lands in PI build plan "
-            "Checkpoint 2 — Checkpoint 1 only scaffolds the Protocol/dataclass shapes."
+        parsed = self._post(
+            {
+                "query": query,
+                "include_images": True,
+                "max_results": max_images,
+                "search_depth": "basic",
+            }
         )
+        raw_images = parsed.get("images")
+        if not isinstance(raw_images, list):
+            return []
+
+        images: list[TavilyImage] = []
+        for entry in raw_images[:max_images]:
+            # Tavily's `images` entries are either a bare URL string or, with richer
+            # `include_image_descriptions`-style responses, a {"url", "description"} object —
+            # both shapes are handled rather than assuming one, since the exact response shape
+            # is one of the plan's own "not yet verified" items (Context table).
+            if isinstance(entry, str):
+                images.append(TavilyImage(url=entry, source_url=entry, description=None))
+            elif isinstance(entry, dict) and isinstance(entry.get("url"), str):
+                images.append(
+                    TavilyImage(
+                        url=entry["url"],
+                        source_url=entry.get("source_url", entry["url"])
+                        if isinstance(entry.get("source_url"), str)
+                        else entry["url"],
+                        description=entry.get("description")
+                        if isinstance(entry.get("description"), str)
+                        else None,
+                    )
+                )
+        return images

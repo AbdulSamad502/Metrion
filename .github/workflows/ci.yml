@@ -67,6 +67,9 @@ jobs:
       - name: Install cfo
         run: pip install -e "packages/cfo[dev]"
 
+      - name: Install product-intelligence
+        run: pip install -e "packages/product-intelligence[dev]"
+
       - name: calc-engine — no-float lint
         run: python packages/calc-engine/scripts/lint_no_float.py
 
@@ -101,6 +104,13 @@ jobs:
           python -m alembic downgrade base
           python -m alembic upgrade head
 
+      - name: product-intelligence — migrate (upgrade, downgrade, re-upgrade)
+        working-directory: packages/product-intelligence
+        run: |
+          python -m alembic upgrade head
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+
       - name: calc-engine — pytest (unit + integration)
         working-directory: packages/calc-engine
         run: python -m pytest tests/ -v
@@ -117,7 +127,11 @@ jobs:
         working-directory: packages/cfo
         run: python -m pytest tests/ -v
 
-      # backend depends on competitor-intelligence and cfo at import time (api/v1/ci.py,
+      - name: product-intelligence — pytest (unit + integration)
+        working-directory: packages/product-intelligence
+        run: python -m pytest tests/ -v
+
+      # backend depends on competitor-intelligence, cfo and product-intelligence at import time (api/v1/ci.py,
       # ceo_hub.py, agents/ceo_hub.py, and cfo's analogous routes/dispatch) but does not
       # declare either in pyproject.toml — see the comment there for why a relative `file:`
       # dependency doesn't work in this monorepo. competitor-intelligence and cfo are already

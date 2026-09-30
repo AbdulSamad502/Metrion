@@ -24,20 +24,22 @@ cp .env.example .env   # fill in CLERK_SECRET_KEY (copy from frontend/.env.local
                         # CLERK_WEBHOOK_SECRET, FRONTEND_ORIGIN
 pip install -e ../packages/competitor-intelligence   # required — see note below
 pip install -e ../packages/cfo                       # required — see note below
+pip install -e ../packages/product-intelligence      # required — see note below
 pip install -e .[dev]
 uvicorn backend.main:app --reload --app-dir src --port 8000
 ```
 
-**Why the extra install lines:** `backend` imports `competitor_intelligence` and `cfo`
-directly (`api/v1/ci.py`, `api/v1/ceo_hub.py`, `agents/ceo_hub.py`, and CFO's analogous
-routes/dispatch) but does not declare either in `pyproject.toml` — a relative `file:`
+**Why the extra install lines:** `backend` imports `competitor_intelligence`, `cfo` and (as of
+PI's Phase 2 wiring) `product_intelligence` directly (`api/v1/ci.py`, `api/v1/cfo.py`,
+`api/v1/pi.py`, `services/pi_actions.py`, `backend/entitlement.py`'s `resolve_niche_run_
+entitlement`) but does not declare any of them in `pyproject.toml` — a relative `file:`
 dependency specifier was tried and reverted because pip resolves it against the *current
 working directory at install time*, not against this file's own directory, making it silently
 break depending on where `pip install` is run from (see the comment in `pyproject.toml`).
 Until this monorepo adopts a workspace-aware tool (uv/hatch workspaces), install
-`competitor-intelligence` and then `cfo` explicitly first, exactly as `.github/workflows/ci.yml`
-already does — install order is
-`calc-engine → data-foundation → competitor-intelligence → cfo → backend[dev]`.
+`competitor-intelligence`, `cfo` and `product-intelligence` explicitly first, exactly as
+`.github/workflows/ci.yml` already does — install order is
+`calc-engine → data-foundation → competitor-intelligence → cfo → product-intelligence → backend[dev]`.
 
 ### Vision extraction (Ollama)
 

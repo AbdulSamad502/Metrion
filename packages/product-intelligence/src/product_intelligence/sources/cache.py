@@ -18,11 +18,19 @@ workers — not needed for Checkpoint 1 to be real and correct.
 
 No clock is read internally, mirroring the rest of this codebase's determinism convention
 (`calc_engine.api.compute_metric`'s `computed_at` pattern): every call takes `now` explicitly.
+
+**Thread-safety (bug-fix pass, 2026-09-30):** `discovery_run.py`'s Tavily/YouTube queries now
+run through a bounded `ThreadPoolExecutor` (Fix 3, concurrency), so multiple threads can call
+`get`/`put` on the same `InProcessQueryCache` instance concurrently. `_store` is a plain
+`dict`, not safe for concurrent read+write without a lock — `InProcessQueryCache` now guards
+every access with a single `threading.Lock` so a cache read/write from one thread can never
+observe or corrupt another thread's in-flight mutation.
 """
 
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -66,24 +74,28 @@ class InProcessQueryCache:
 
     def __init__(self) -> None:
         self._store: dict[tuple[str, str], CacheEntry] = {}
+        self._lock = threading.Lock()
 
     def get(self, source: str, query_text: str, *, now: datetime) -> object | None:
         key = (source, normalize_query_text(query_text))
-        entry = self._store.get(key)
-        if entry is None:
-            return None
-        if now >= entry.expires_at:
-            del self._store[key]
-            return None
-        return entry.payload
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                return None
+            if now >= entry.expires_at:
+                del self._store[key]
+                return None
+            return entry.payload
 
     def put(self, source: str, query_text: str, payload: object, *, ttl_hours: int, now: datetime) -> None:
         key = (source, normalize_query_text(query_text))
-        self._store[key] = CacheEntry(
-            payload=payload,
-            cached_at=now,
-            expires_at=now + timedelta(hours=ttl_hours),
-        )
+        with self._lock:
+            self._store[key] = CacheEntry(
+                payload=payload,
+                cached_at=now,
+                expires_at=now + timedelta(hours=ttl_hours),
+            )
 
     def evict(self, source: str, query_text: str) -> None:
-        self._store.pop((source, normalize_query_text(query_text)), None)
+        with self._lock:
+            self._store.pop((source, normalize_query_text(query_text)), None)

@@ -33,6 +33,26 @@ every tenant. `entitlement_repo.active_cart_item()` exists and is tested in isol
 not called from `resolve_cfo_entitlement` yet — a missing cart item is treated the same as an
 unset cap: not yet enforced, not a denial.
 
+**PI (`resolve_pi_entitlement`) reuses `resolve_cfo_entitlement`'s real F2 mechanism
+directly** (PI build plan §3) — `resolve_cfo_entitlement` was already generic (its
+`agent_code` parameter defaults to `"CFO"` but is never hardcoded inside the function body),
+so `resolve_pi_entitlement` is a thin, same-shape wrapper passing `agent_code="PI"` and a
+PI-scoped `direct_action_code` (e.g. `"pi.discover"`, `"pi.supplier_lookup"`) through
+unchanged. Exactly like CFO, nothing about the outcome changes until a real
+`entitlement_cap_config` row is seeded for `agent_code="PI"` — every call today resolves
+`NO_CAP_CONFIGURED`/`passed=True`.
+
+**`research.niche_run` (`resolve_niche_run_entitlement`) is PI's addition and stays a
+TEMPORARY, always-pass scaffold, for the identical reason `resolve_gst_lookup_entitlement`
+does.** `product-intelligence-agent.md`/the PI build plan require this shared-service action
+(consuming Tavily/YouTube's own account-wide free-tier quota) to be metered against its
+**own** cap, independently of `resolve_pi_entitlement`'s `agent.pi` cap — but no entitlement
+spec has ever assigned `research.niche_run` a real numeric limit. What this function DOES do,
+instead of a bare hardcoded `passed=True`: compute the tenant's REAL current
+`pi_research_run` usage (`product_intelligence.repositories.pi_research_run_repo.
+count_runs_for_tenant`, live-queried, not a stub) — the identical "real usage, no fabricated
+cap" precedent `resolve_gst_lookup_entitlement`'s `gst_lookup_count` already established.
+
 **`service.gst_lookup` (`resolve_gst_lookup_entitlement`) is G3's addition and stays a
 TEMPORARY, always-pass scaffold, for the identical reason `resolve_ci_entitlement` does.**
 `cfo-agent.md` §6.8's `cfo.gst_lookup` row and AC17b/T31 require this shared-service action to
@@ -281,6 +301,53 @@ def resolve_cfo_entitlement(
 
 def cfo_entitlement_check_value(result: EntitlementResult) -> str:
     """Maps to `agent_run.entitlement_check`'s existing `PASS | DENIED` column contract."""
+    return "PASS" if result.passed else "DENIED"
+
+
+def resolve_pi_entitlement(
+    tenant_id: UUID,
+    *,
+    direct_action_code: str,
+    agent_code: str = "PI",
+    occurred_at: datetime | None = None,
+    as_of_date: date | None = None,
+) -> EntitlementResult:
+    """PI's F2 entitlement chokepoint — see module docstring for why this is a thin wrapper
+    over `resolve_cfo_entitlement`'s already-generic implementation, not a reimplementation."""
+    return resolve_cfo_entitlement(
+        tenant_id,
+        direct_action_code=direct_action_code,
+        agent_code=agent_code,
+        occurred_at=occurred_at,
+        as_of_date=as_of_date,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class NicheRunEntitlementResult:
+    """`resolve_niche_run_entitlement`'s own result shape — mirrors `GstLookupEntitlementResult`
+    exactly (see module docstring): a `passed: bool` + real usage-count shape, not
+    `EntitlementResult`'s heavier §5.5 contract, since no `research.niche_run` cap resolution
+    exists today."""
+
+    passed: bool
+    reason: str | None
+    niche_run_count: int
+
+
+def resolve_niche_run_entitlement(tenant_id: UUID) -> NicheRunEntitlementResult:
+    """Always passes today — see module docstring for why `research.niche_run`'s shared-service
+    cap has no real numeric limit to enforce yet. `niche_run_count` is real, live-queried usage
+    (`product_intelligence.repositories.pi_research_run_repo.count_runs_for_tenant`)."""
+    from product_intelligence.repositories import pi_research_run_repo
+
+    count = pi_research_run_repo.count_runs_for_tenant(tenant_id)
+    return NicheRunEntitlementResult(passed=True, reason=None, niche_run_count=count)
+
+
+def niche_run_entitlement_check_value(result: NicheRunEntitlementResult) -> str:
+    """Maps to `agent_run.entitlement_check`'s existing `PASS | DENIED` column contract, same
+    as `entitlement_check_value`/`gst_lookup_entitlement_check_value` above."""
     return "PASS" if result.passed else "DENIED"
 
 

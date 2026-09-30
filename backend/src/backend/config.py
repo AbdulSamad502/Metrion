@@ -84,6 +84,56 @@ def ci_review_vision_model() -> str:
 
 
 @lru_cache
+def tavily_api_key() -> str:
+    """`product_intelligence.sources.tavily_client.HttpTavilyClient` — not `_required()`: PI's
+    unit/integration tests run entirely against fakes (Phase 1), so an empty key here must not
+    block app startup; only a real `pi.discover`/`pi.supplier_lookup` call against this key
+    fails, honestly, at that call site."""
+    return os.environ.get("TAVILY_API_KEY", "")
+
+
+@lru_cache
+def youtube_api_key() -> str:
+    """`product_intelligence.sources.youtube_client.HttpYoutubeClient` — same "optional at
+    startup, real calls fail honestly" posture as `tavily_api_key()`."""
+    return os.environ.get("YOUTUBE_API_KEY", "")
+
+
+@lru_cache
+def google_places_api_key() -> str:
+    """`product_intelligence.supplier.google_places_client.HttpPlacesClient` — same posture as
+    `tavily_api_key()`."""
+    return os.environ.get("GOOGLE_PLACES_API_KEY", "")
+
+
+@lru_cache
+def pi_text_insight_model() -> str:
+    """The Ollama model used for PI's review-commentary text classification
+    (`review_insight/text_extraction.py`'s `OllamaTextInsightExtractor`) — configurable
+    default, not a spec decision, same reasoning as `ci_vision_model()`."""
+    return os.environ.get("PI_TEXT_INSIGHT_MODEL", "qwen3:8b")
+
+
+@lru_cache
+def pi_product_extraction_model() -> str:
+    """The Ollama model used for PI's discovery-time product-name extraction
+    (`discovery/product_extraction.py`'s `OllamaProductExtractionClient`) — a separate
+    extraction task from `pi_text_insight_model()`'s review-commentary sentiment
+    classification (different prompt, different output contract), so it gets its own
+    configurable default rather than silently reusing that one — same `PI_*_MODEL` env-var
+    convention, same default model family."""
+    return os.environ.get("PI_PRODUCT_EXTRACTION_MODEL", "qwen3:8b")
+
+
+@lru_cache
+def pi_embedding_model() -> str:
+    """The Ollama model used for PI's derived-attribute embeddings (`embedding/embed.py`'s
+    `OllamaEmbeddingClient`). Do not repoint at a different-dimension model without also
+    updating `embed.py`'s `MODEL_DIM`/the `product_embedding.embedding` column type."""
+    return os.environ.get("PI_EMBEDDING_MODEL", "nomic-embed-text")
+
+
+@lru_cache
 def cfo_narration_model() -> str:
     """The Ollama model used for CFO's Brain-3 narration (`cfo.reasoning.narrate.
     narrate_figures`, via `cfo.reasoning.ollama_provider.OllamaLlmProvider`) — text-only,

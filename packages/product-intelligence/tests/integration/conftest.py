@@ -15,10 +15,22 @@ from sqlalchemy import create_engine, text
 _APP_URL = os.environ.get("DATABASE_URL_APP")
 _MIGRATE_URL = os.environ.get("DATABASE_URL")
 
-pytestmark = pytest.mark.skipif(
-    not _APP_URL or not _MIGRATE_URL,
-    reason="DATABASE_URL_APP/DATABASE_URL not set — integration tests need a live Postgres",
-)
+_SKIP_REASON = "DATABASE_URL_APP/DATABASE_URL not set — integration tests need a live Postgres"
+
+
+def pytest_collection_modifyitems(config, items):
+    """`pytestmark` assigned at conftest.py module level does not apply to sibling test
+    modules in this pytest version (only within the same file) — without this hook, tests
+    in this directory error out (fixture ArgumentError) instead of skipping cleanly when no
+    DB is configured, which silently breaks the "never live calls without a DB" contract this
+    conftest's own docstring promises. Applied via the standard hook instead so every test
+    collected under tests/integration/ is skipped, not just ones in this file."""
+    if _APP_URL and _MIGRATE_URL:
+        return
+    skip_marker = pytest.mark.skip(reason=_SKIP_REASON)
+    for item in items:
+        if "tests/integration" in str(item.fspath).replace("\\", "/") or "tests\\integration" in str(item.fspath):
+            item.add_marker(skip_marker)
 
 # Deletion order respects FK dependencies (children before parents) — same rationale/caveat as
 # competitor-intelligence's own fixture: this DELETE runs via migrate_engine (metrion_migrate

@@ -8,7 +8,7 @@ type NavGroup = { label: string; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
   { label: "Profit Intelligence", items: [{ label: "Overview", href: "/dashboard" }, { label: "CEO Hub", href: "/dashboard/ceo-hub" }] },
-  { label: "Analysis", items: [{ label: "Products" }, { label: "Competitors", href: "/dashboard/ceo-hub" }] },
+  { label: "Analysis", items: [{ label: "Products", href: "/dashboard/pi" }, { label: "Competitors", href: "/dashboard/ceo-hub" }] },
   {
     label: "Operations",
     items: [
@@ -39,7 +39,7 @@ export function Sidebar({
 }: {
   userName: string;
   roleLabel: string;
-  active: "Overview" | "Settings" | "CEO Hub" | "CFO";
+  active: "Overview" | "Settings" | "CEO Hub" | "CFO" | "Products";
 }) {
   const { signOut } = useClerk();
   const initials = userName
