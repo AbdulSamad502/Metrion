@@ -9,6 +9,13 @@ dependencies = [
     "psycopg[binary]>=3.1",
     "httpx>=0.27",
     "pgvector>=0.3",
+    # NOTE: `calc-engine` (packages/calc-engine) is a real runtime dependency — PI's
+    # `discovery/feasibility.py` calls `calc_engine.api.estimate_product_feasibility` directly
+    # (PI build plan §1/§6.7) — but it is deliberately NOT listed here, for the same reason
+    # `packages/cfo/pyproject.toml` documents for its own identical calc-engine dependency: a
+    # relative `file:` specifier resolves against the *installer's* cwd, not this file's
+    # directory, and this monorepo has no workspace-aware build tool yet. Install calc-engine
+    # before product-intelligence, same order as CFO's own install instructions.
 ]
 
 [project.optional-dependencies]

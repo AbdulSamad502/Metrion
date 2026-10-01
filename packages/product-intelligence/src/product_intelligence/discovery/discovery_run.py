@@ -27,6 +27,13 @@ threads never mutate `tavily_results`/`youtube_results`/the `*_degraded`/`*_part
 locals directly, so the existing degrade-not-fail behavior is preserved exactly, just no
 longer serialized. `sources/cache.py`'s `InProcessQueryCache` is now internally lock-guarded
 for exactly this reason (its own docstring).
+
+**System-wide outbound throttle (quality pass, 2026-10-01):** the `ThreadPoolExecutor`
+pools above only bound concurrency *within* one run. Every real (non-cache-hit) Tavily/
+YouTube call in this module is wrapped in `sources/rate_limiter.py`'s `throttle()`, a
+process-wide semaphore per source — this is the Context's "Queue outbound calls against a
+fixed rate cap" requirement, actually enforced rather than left to `pi_research_run.status`'s
+unused `QUEUED` value.
 """
 
 from __future__ import annotations
@@ -37,15 +44,23 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from product_intelligence.discovery.candidate_synthesis import dedupe_by_normalized_title, synthesize_candidates
+from product_intelligence.discovery.candidate_synthesis import (
+    dedupe_by_normalized_title,
+    filter_excluded_brands,
+    synthesize_candidates,
+)
 from product_intelligence.discovery.product_extraction import ProductExtractionClient, ProductExtractionUnavailable
 from product_intelligence.discovery.ranking import rank_candidate
 from product_intelligence.repositories import pi_research_run_repo, pi_tenant_config_repo, product_candidate_repo
 from product_intelligence.sources.cache import QueryCache, normalize_query_text
+from product_intelligence.sources.rate_limiter import throttle
 from product_intelligence.sources.tavily_client import TavilyClient, TavilyImage, TavilySearchResult, TavilyUnavailable
 from product_intelligence.sources.youtube_client import YoutubeClient, YoutubeUnavailable, YoutubeVideo
 
 DEFAULT_CANDIDATE_CAP = 30
+_MIN_YOUTUBE_MATCHED_SLOTS = 5  # reserved within candidate_cap for candidates with a real
+# grouped YouTube video (quality pass, 2026-10-01) — see _select_candidates_with_cap's own
+# docstring for why a plain source_diversity sort alone still isn't enough.
 _MAX_RESULTS_PER_TAVILY_QUERY = 10
 _MAX_RESULTS_PER_YOUTUBE_QUERY = 10
 _MAX_CONCURRENT_QUERIES = 5  # bounded deliberately — see module docstring's concurrency note
@@ -167,11 +182,23 @@ def _dict_to_tavily_result(row: dict[str, Any]) -> TavilySearchResult:
 
 
 def _tavily_image_to_dict(image: TavilyImage) -> dict[str, Any]:
-    return {"url": image.url, "source_url": image.source_url, "description": image.description}
+    return {
+        "url": image.url,
+        "source_url": image.source_url,
+        "description": image.description,
+        "title": image.title,
+    }
 
 
 def _dict_to_tavily_image(row: dict[str, Any]) -> TavilyImage:
-    return TavilyImage(url=row["url"], source_url=row["source_url"], description=row["description"])
+    return TavilyImage(
+        url=row["url"],
+        source_url=row["source_url"],
+        description=row["description"],
+        title=row.get("title"),  # .get, not [] — tolerates a pre-2026-10-01 cached payload
+        # written before `title` existed on TavilyImage, same forward-compat posture as any
+        # other cache-payload shape change in this package.
+    )
 
 
 def _youtube_video_to_dict(video: YoutubeVideo) -> dict[str, Any]:
@@ -209,8 +236,13 @@ def _cached_tavily_search(
     if cached is not None:
         payload = cached
     else:
-        results = tavily.search(query, include_images=True, max_results=_MAX_RESULTS_PER_TAVILY_QUERY)
-        images = tavily.images_for(query, max_images=5)
+        # Rate-limited: this is the *real* outbound call (a cache hit above never reaches
+        # here), throttled process-wide against every other tenant's concurrent Tavily
+        # calls (sources/rate_limiter.py — PI build plan Context, "Queue outbound calls
+        # against a fixed rate cap").
+        with throttle("tavily"):
+            results = tavily.search(query, include_images=True, max_results=_MAX_RESULTS_PER_TAVILY_QUERY)
+            images = tavily.images_for(query, max_images=5)
         payload = {
             "results": [_tavily_result_to_dict(r) for r in results],
             "images": [_tavily_image_to_dict(i) for i in images],
@@ -231,9 +263,44 @@ def _cached_youtube_search(
     if cached is not None:
         return [_dict_to_youtube_video(v) for v in cached]
 
-    videos = youtube.search_videos(query, max_results=_MAX_RESULTS_PER_YOUTUBE_QUERY)
+    with throttle("youtube"):
+        videos = youtube.search_videos(query, max_results=_MAX_RESULTS_PER_YOUTUBE_QUERY)
     cache.put("youtube", cache_key, [_youtube_video_to_dict(v) for v in videos], ttl_hours=ttl_hours, now=now)
     return videos
+
+
+def _select_candidates_with_cap(rows: list[dict[str, Any]], *, candidate_cap: int) -> list[dict[str, Any]]:
+    """Picks the final, capped candidate set — quality pass, 2026-10-01, closing the real gap
+    found during live testing: a plain `source_diversity`-descending sort (the previous fix)
+    still wasn't enough to keep YouTube-matched candidates in the result. `source_diversity`
+    counts distinct *domains*, and a niche with many Tavily-only articles across several
+    different websites can rack up `source_diversity` of 2-4 from Tavily alone, with zero
+    YouTube involvement — those pure-Tavily-multi-domain candidates out-rank single-source
+    YouTube ones on the same metric, so YouTube's contribution still got crowded out entirely
+    on a real run (confirmed: 0/30 kept candidates had `engagement_signal=AVAILABLE`, despite
+    several having `source_diversity` as high as 4).
+
+    This reserves up to `_MIN_YOUTUBE_MATCHED_SLOTS` cap slots specifically for candidates
+    that have a real grouped YouTube video (`engagement_signal.status == "AVAILABLE"`) — the
+    best `source_diversity`-ranked ones among them, picked first — then fills every remaining
+    slot from the overall pool (YouTube-matched or not) ranked by `source_diversity`, exactly
+    as before. A YouTube-matched candidate already taken by the reservation is never counted
+    twice. If a niche genuinely doesn't have enough YouTube-matched candidates to fill the
+    reservation, the shortfall simply doesn't reserve anything it doesn't have — this never
+    pads the result with a worse candidate just to hit a quota."""
+    youtube_matched = [r for r in rows if (r.get("engagement_signal") or {}).get("status") == "AVAILABLE"]
+    youtube_matched_sorted = sorted(youtube_matched, key=lambda r: r["source_diversity"], reverse=True)
+    reserved = youtube_matched_sorted[: min(_MIN_YOUTUBE_MATCHED_SLOTS, candidate_cap)]
+    reserved_ids = {id(r) for r in reserved}
+
+    remaining_pool = [r for r in rows if id(r) not in reserved_ids]
+    remaining_sorted = sorted(remaining_pool, key=lambda r: r["source_diversity"], reverse=True)
+    remaining_slots = max(candidate_cap - len(reserved), 0)
+
+    selected = reserved + remaining_sorted[:remaining_slots]
+    # Final presentation order: best source_diversity first, same convention as before this
+    # fix — reservation only changes WHICH rows survive the cap, not the display order.
+    return sorted(selected, key=lambda r: r["source_diversity"], reverse=True)
 
 
 def run_discovery(
@@ -354,7 +421,23 @@ def run_discovery(
         }
         for c in synthesized
     ]
-    rows = dedupe_by_normalized_title(rows)[:candidate_cap]
+    constraints = niche_brief.get("constraints")
+    exclude_brands = constraints.get("exclude_brands") if isinstance(constraints, dict) else None
+    rows = filter_excluded_brands(dedupe_by_normalized_title(rows), exclude_brands)
+
+    # Real-data regression (live testing, 2026-10-01): Tavily results are processed before
+    # YouTube in `synthesize_candidates`'s two loops, so when Tavily's own extraction alone
+    # already yields >= candidate_cap distinct products (common), every YouTube-only or
+    # YouTube-matched group was silently cut by plain insertion-order slicing, discarding
+    # cross-validated signal the plan's own Context explicitly designed PI around ("cross-
+    # validating independent signal types is what gives this a real accuracy story"). A first
+    # fix (sort by source_diversity before capping) helped but wasn't enough on its own —
+    # Tavily-only candidates can also reach a high source_diversity (several different
+    # websites, zero video involvement) and still crowd out every YouTube-matched candidate.
+    # `_select_candidates_with_cap` reserves a few slots specifically for YouTube-matched
+    # candidates so they can never be fully crowded out, on top of the source_diversity
+    # ordering for everything else — see its own docstring for the confirmed live-data proof.
+    rows = _select_candidates_with_cap(rows, candidate_cap=candidate_cap)
 
     candidate_ids: list[UUID] = []
     raw_signals_by_candidate: dict[UUID, CandidateRawSignals] = {}

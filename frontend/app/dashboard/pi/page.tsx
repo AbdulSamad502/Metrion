@@ -233,6 +233,7 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
   const [targetMin, setTargetMin] = useState("");
   const [targetMax, setTargetMax] = useState("");
   const [marketplaces, setMarketplaces] = useState<string[]>([]);
+  const [excludeBrands, setExcludeBrands] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createdBriefId, setCreatedBriefId] = useState<string | null>(null);
@@ -253,6 +254,9 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
           target_price_min_paise: targetMin.trim() ? toPaise(targetMin) : null,
           target_price_max_paise: targetMax.trim() ? toPaise(targetMax) : null,
           marketplaces: marketplaces.length > 0 ? marketplaces : null,
+          constraints: excludeBrands.trim()
+            ? { exclude_brands: excludeBrands.split(",").map((b) => b.trim()).filter(Boolean) }
+            : null,
         }),
       });
       setCreatedBriefId(res.nicheBriefId);
@@ -344,6 +348,19 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
             </div>
           </div>
           <div className="mt-3">
+            <Field label="Exclude brands (optional)">
+              <TextInput
+                value={excludeBrands}
+                onChange={setExcludeBrands}
+                placeholder="e.g. Nike, Puma, Adidas — comma-separated, already-dominant brands to skip"
+              />
+            </Field>
+            <div className="mt-1 text-[11.5px]" style={{ color: "var(--text-7)" }}>
+              Candidates matching these brand names are filtered out before discovery results are shown — a
+              plain, seller-specified exclusion list, never an automated "too famous" judgement.
+            </div>
+          </div>
+          <div className="mt-3">
             <SubmitButton onClick={createDraft} busy={createBusy} label="Create draft" busyLabel="Creating…" />
           </div>
           <ErrorText>{createError}</ErrorText>
@@ -375,6 +392,11 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
                 {rupees(lookupBrief.target_price_max_paise)} · Marketplaces:{" "}
                 {lookupBrief.marketplaces?.join(", ") ?? "none set"}
               </div>
+              {Array.isArray(lookupBrief.constraints?.exclude_brands) && (lookupBrief.constraints!.exclude_brands as string[]).length > 0 && (
+                <div style={{ color: "var(--text-6)" }}>
+                  Excluding brands: {(lookupBrief.constraints!.exclude_brands as string[]).join(", ")}
+                </div>
+              )}
               <div className="mt-2 flex gap-2">
                 <SubmitButton onClick={() => transition("mark-ready")} busy={statusBusy} label="Mark READY" busyLabel="…" />
                 <SubmitButton onClick={() => transition("mark-draft")} busy={statusBusy} label="Mark DRAFT" busyLabel="…" />
@@ -538,6 +560,7 @@ function CandidateCard({ entry }: { entry: PiReportCandidateEntry }) {
           </div>
 
           <WebPriceSignalRow signal={c.web_price_signal} />
+          <FeasibilityRow candidate={c} />
 
           <button
             type="button"
@@ -570,6 +593,34 @@ function CandidateCard({ entry }: { entry: PiReportCandidateEntry }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function FeasibilityRow({ candidate: c }: { candidate: PiCandidate }) {
+  if (c.feasibility_status !== "COMPUTED") {
+    return (
+      <div className="mt-1">
+        <ConfidenceBadge
+          status="unavailable"
+          label="Feasibility: UNAVAILABLE"
+          reason={c.feasibility_unavailable_reason ?? "feasibility has not been computed for this candidate yet"}
+        />
+      </div>
+    );
+  }
+  const isUnknownCogs = c.feasibility_cogs_basis === "UNKNOWN";
+  return (
+    <div className="mt-1">
+      <ConfidenceBadge
+        status="available"
+        label={`Feasibility estimate: ${rupees(c.feasibility_low_paise)} – ${rupees(c.feasibility_high_paise)}${isUnknownCogs ? " (cost unknown)" : ""}`}
+        reason={
+          isUnknownCogs
+            ? "No supplier quote yet — this range reflects your stated price band and marketplace fee spread ONLY. It is NOT a margin estimate; never treat it as confirmed profit."
+            : (c.feasibility_assumptions ?? []).join(" ")
+        }
+      />
     </div>
   );
 }
@@ -681,6 +732,21 @@ function ShortlistSupplierSection({
                           `${ri.reviews_considered ?? 0} comment/snippet source(s) considered — never a marketplace buyer rating record`
                         }
                       />
+                      {ri.sentiment_split && (
+                        <div className="mt-1 ml-1" style={{ color: "var(--text-6)" }}>
+                          Sentiment: {Object.entries(ri.sentiment_split).map(([k, v]) => `${k.toLowerCase()} ${v}`).join(" · ")}
+                        </div>
+                      )}
+                      {ri.positive_themes && Object.keys(ri.positive_themes).length > 0 && (
+                        <div className="mt-0.5 ml-1" style={{ color: "var(--positive, var(--text-6))" }}>
+                          Liked: {Object.entries(ri.positive_themes).map(([k, v]) => `${k} (${v})`).join(", ")}
+                        </div>
+                      )}
+                      {ri.complaint_themes && Object.keys(ri.complaint_themes).length > 0 && (
+                        <div className="mt-0.5 ml-1" style={{ color: "var(--negative, var(--text-6))" }}>
+                          Consider addressing: {Object.entries(ri.complaint_themes).map(([k, v]) => `${k} (${v})`).join(", ")}
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -695,11 +761,21 @@ function ShortlistSupplierSection({
                   entry.supplier_leads.map((lead) => (
                     <div key={lead.id} className="text-[12px]" style={{ color: "var(--text-3)" }}>
                       <strong>{lead.supplier_name}</strong> · {lead.source}
+                      {lead.locality && <> · {lead.locality}</>}
                       {lead.source_url && (
                         <>
                           {" · "}
                           <a href={lead.source_url} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
                             link
+                          </a>
+                        </>
+                      )}
+                      {lead.contact?.phone && <> · {lead.contact.phone}</>}
+                      {lead.contact?.website && (
+                        <>
+                          {" · "}
+                          <a href={lead.contact.website} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+                            website
                           </a>
                         </>
                       )}

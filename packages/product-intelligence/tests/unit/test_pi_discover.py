@@ -11,6 +11,7 @@ import pytest
 
 from product_intelligence.direct_path import pi_discover
 from product_intelligence.discovery.discovery_run import DiscoveryRunOutcome
+from product_intelligence.discovery.feasibility import FeasibilityOutcome
 from product_intelligence.embedding.embed import EmbeddingUnavailable
 from product_intelligence.repositories import niche_brief_repo, pi_research_run_repo, product_candidate_repo
 from product_intelligence.sources.cache import InProcessQueryCache
@@ -60,6 +61,17 @@ class _FakeEmbeddingClient:
 def _patch_repos(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(pi_research_run_repo, "create_run", lambda tenant_id, **kw: uuid4())
     monkeypatch.setattr(pi_research_run_repo, "finish_run", lambda tenant_id, run_id, **kw: None)
+    # Harmless default for every test that doesn't care about feasibility specifically —
+    # a real DB-free UNAVAILABLE outcome, not a mock that silently claims COMPUTED.
+    monkeypatch.setattr(
+        pi_discover,
+        "compute_candidate_feasibility",
+        lambda tenant_id, *, niche_brief, candidate, now=None: FeasibilityOutcome(
+            status="UNAVAILABLE", estimate_ref=None, low_paise=None, high_paise=None,
+            cogs_basis=None, assumptions=None, unavailable_reason="test default — not exercised",
+        ),
+    )
+    monkeypatch.setattr(product_candidate_repo, "update_feasibility", lambda *a, **kw: None)
 
 
 def _ready_brief() -> dict:
@@ -215,3 +227,69 @@ def test_embedding_failures_degrade_run_to_partial_never_fail_whole_run(monkeypa
 
     assert result.status == "PARTIAL"
     assert "degraded embedding generation" in result.partial_reason
+
+
+def test_feasibility_is_computed_and_written_back_for_every_shortlisted_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Quality-pass regression (2026-10-01): `estimate_product_feasibility` previously had no
+    caller anywhere in PI. This proves `submit_pi_discover` actually calls
+    `compute_candidate_feasibility` for each shortlisted candidate and writes the result back
+    via `product_candidate_repo.update_feasibility` — not just that the module exists."""
+    monkeypatch.setattr(niche_brief_repo, "get_brief", lambda tenant_id, brief_id: _ready_brief())
+    candidate_id = uuid4()
+
+    def _fake_run_discovery(tenant_id, *, run_id, niche_brief, tavily, youtube, cache, candidate_cap=30, product_extraction_client=None, now=None):
+        from product_intelligence.discovery.discovery_run import CandidateRawSignals
+
+        return DiscoveryRunOutcome(
+            run_id=run_id, status="COMPLETE", candidate_ids=(candidate_id,), partial_reason=None,
+            tavily_degraded=False, youtube_degraded=False,
+            raw_signals_by_candidate={candidate_id: CandidateRawSignals((), (), None, None)},
+        )
+
+    monkeypatch.setattr(pi_discover, "run_discovery", _fake_run_discovery)
+    monkeypatch.setattr(
+        product_candidate_repo,
+        "list_candidates_for_run",
+        lambda tenant_id, run_id: [
+            {"id": str(candidate_id), "proxy_state": "COMPUTED", "proxy_score": "50.00",
+             "title_length": 5, "title_structure": {}, "keyword_themes": {}}
+        ],
+    )
+    monkeypatch.setattr(pi_discover, "embed_candidate", lambda tenant_id, candidate_id, **kw: None)
+
+    feasibility_calls: list[dict] = []
+    monkeypatch.setattr(
+        pi_discover,
+        "compute_candidate_feasibility",
+        lambda tenant_id, *, niche_brief, candidate, now=None: (
+            feasibility_calls.append({"tenant_id": tenant_id, "candidate": candidate})
+            or FeasibilityOutcome(
+                status="COMPUTED", estimate_ref=uuid4(), low_paise=50_000, high_paise=70_000,
+                cogs_basis="UNKNOWN", assumptions=["no stated_cogs_paise was provided"], unavailable_reason=None,
+            )
+        ),
+    )
+    update_calls: list[dict] = []
+    monkeypatch.setattr(
+        product_candidate_repo,
+        "update_feasibility",
+        lambda tenant_id, candidate_id, **kw: update_calls.append({"candidate_id": candidate_id, **kw}),
+    )
+
+    result = pi_discover.submit_pi_discover(
+        _TENANT_ID, _BRIEF_ID, "SHALLOW",
+        requested_by=_REQUESTED_BY, permission_check="PASS", entitlement_check="PASS",
+        tavily=_NoopTavily(), youtube=_NoopYoutube(), cache=InProcessQueryCache(),
+        text_extractor=_FakeExtractor(), embedding_client=_FakeEmbeddingClient(), now=_NOW,
+    )
+
+    assert result.status == "COMPLETE"
+    assert len(feasibility_calls) == 1
+    assert feasibility_calls[0]["candidate"]["id"] == str(candidate_id)
+    assert len(update_calls) == 1
+    assert update_calls[0]["candidate_id"] == candidate_id
+    assert update_calls[0]["feasibility_status"] == "COMPUTED"
+    assert update_calls[0]["feasibility_low_paise"] == 50_000
+    assert update_calls[0]["feasibility_cogs_basis"] == "UNKNOWN"

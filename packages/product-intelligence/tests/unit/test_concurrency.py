@@ -15,6 +15,7 @@ import pytest
 from product_intelligence.direct_path import pi_discover, pi_supplier_lookup
 from product_intelligence.discovery import discovery_run
 from product_intelligence.discovery.discovery_run import CandidateRawSignals, DiscoveryRunOutcome
+from product_intelligence.discovery.feasibility import FeasibilityOutcome
 from product_intelligence.embedding.embed import EmbeddingUnavailable
 from product_intelligence.repositories import (
     pi_research_run_repo,
@@ -165,6 +166,15 @@ def test_pi_discover_embedding_calls_run_concurrently_not_sequentially(
             pass
 
     monkeypatch.setattr(pi_discover, "embed_candidate", _slow_embed_candidate)
+    monkeypatch.setattr(
+        pi_discover,
+        "compute_candidate_feasibility",
+        lambda tenant_id, *, niche_brief, candidate, now=None: FeasibilityOutcome(
+            status="UNAVAILABLE", estimate_ref=None, low_paise=None, high_paise=None,
+            cogs_basis=None, assumptions=None, unavailable_reason="test stub — not exercised",
+        ),
+    )
+    monkeypatch.setattr(product_candidate_repo, "update_feasibility", lambda *a, **kw: None)
 
     started = time.monotonic()
     result = pi_discover.submit_pi_discover(

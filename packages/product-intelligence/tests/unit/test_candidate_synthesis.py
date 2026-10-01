@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from product_intelligence.discovery.candidate_synthesis import (
     dedupe_by_normalized_title,
+    filter_excluded_brands,
     synthesize_candidates,
 )
 from product_intelligence.discovery.product_extraction import ProductExtractionUnavailable
@@ -114,6 +115,19 @@ def test_web_price_signal_extracts_rupee_prices_and_always_carries_a_disclaimer(
     assert signal["most_recent_mention"] == "2026-09-15"
 
 
+def test_web_price_signal_paise_conversion_uses_decimal_not_float() -> None:
+    """Quality pass (2026-10-01): ₹19.99 * 100 is exactly 1999 paise under Decimal; a float
+    conversion can drift (0.1-style binary-fraction imprecision) for values like this. Not
+    fed into any calc-engine math (§0g), but still a money figure and the project's
+    no-float-in-a-money-path discipline applies to the conversion itself."""
+    results = [_tavily_result("https://a.com/1", "Cable", "priced at Rs. 19.99 on most sites")]
+    candidates = synthesize_candidates(tavily_results=results, tavily_images=[], youtube_videos=[], now=_NOW)
+
+    signal = candidates[0].web_price_signal
+    assert signal["range_low_paise"] == 1_999
+    assert signal["range_high_paise"] == 1_999
+
+
 def test_capture_status_ok_when_neither_source_degraded() -> None:
     results = [_tavily_result("https://a.com/1", "Wireless Earbuds", "wireless earbuds content")]
     candidates = synthesize_candidates(tavily_results=results, tavily_images=[], youtube_videos=[], now=_NOW)
@@ -161,6 +175,51 @@ def test_dedupe_by_normalized_title_collapses_case_and_whitespace_variants() -> 
     ]
     deduped = dedupe_by_normalized_title(rows)
     assert len(deduped) == 2
+
+
+def test_filter_excluded_brands_removes_matching_candidates_only() -> None:
+    """New 2026-10-01: seller-stated `niche_brief.constraints.exclude_brands` — a plain,
+    structured exclusion list, never an LLM-inferred 'too famous' judgement."""
+    rows = [
+        {"candidate_title": "Nike Pegasus 41"},
+        {"candidate_title": "New Balance 1080v15"},
+        {"candidate_title": "Acme Runner Pro"},
+    ]
+    kept = filter_excluded_brands(rows, ["Nike", "New Balance"])
+    assert [r["candidate_title"] for r in kept] == ["Acme Runner Pro"]
+
+
+def test_filter_excluded_brands_requires_every_brand_token_not_a_substring() -> None:
+    """"Nike" must not exclude a candidate that merely contains "nike" inside a longer,
+    unrelated token — token-set containment, not substring search."""
+    rows = [{"candidate_title": "Nikewear Pro Runner"}]
+    # "nikewear" tokenizes as its own distinct token, not "nike" + "wear", so it is NOT a
+    # superset-match for the single-token brand set {"nike"} unless literally equal.
+    kept = filter_excluded_brands(rows, ["Nike"])
+    assert len(kept) == 1
+
+
+def test_filter_excluded_brands_empty_list_or_none_is_a_no_op() -> None:
+    rows = [{"candidate_title": "Nike Pegasus 41"}]
+    assert filter_excluded_brands(rows, None) == rows
+    assert filter_excluded_brands(rows, []) == rows
+
+
+def test_filter_excluded_brands_skips_non_string_entries_without_raising() -> None:
+    """Bug-hunt regression (2026-10-01): `niche_brief.constraints` is accepted unvalidated at
+    the HTTP boundary, so `exclude_brands` could contain a non-string entry. Previously this
+    crashed `_tokenize`'s `.lower()` call uncaught, aborting the whole run."""
+    rows = [{"candidate_title": "Nike Pegasus 41"}, {"candidate_title": "Acme Runner Pro"}]
+    kept = filter_excluded_brands(rows, [123, None, "Nike"])  # type: ignore[list-item]
+    assert [r["candidate_title"] for r in kept] == ["Acme Runner Pro"]
+
+
+def test_filter_excluded_brands_ignores_a_brand_too_short_to_tokenize() -> None:
+    """A brand name that tokenizes to nothing (e.g. "On", below the significance floor) must
+    never vacuously exclude every candidate (empty set is a subset of everything in Python)."""
+    rows = [{"candidate_title": "Nike Pegasus 41"}, {"candidate_title": "Hoka Clifton 9"}]
+    kept = filter_excluded_brands(rows, ["On"])
+    assert len(kept) == 2
 
 
 def test_no_candidates_synthesized_from_empty_input() -> None:
@@ -353,3 +412,162 @@ def test_image_is_labeled_with_source_url_never_implied_as_marketplace_photo() -
 
     assert candidates[0].image_url == "https://img.example.com/1.jpg"
     assert candidates[0].image_source_url == "https://a.com/1"
+
+
+def test_image_matched_via_title_description_containment_when_no_source_url_match() -> None:
+    """Real-data regression (2026-10-01): Tavily's `images_for` response, in practice, never
+    carries a genuine page-URL association with a search result (`source_url` is just the
+    image's own CDN URL) — confirmed via live testing against the real API. The only honest
+    fallback signal is the image's own `title`/`description` text genuinely naming the
+    candidate, matched via containment of the candidate's own tokens (not diluted Jaccard —
+    see `_token_containment`'s docstring for why symmetric IoU under-matches here)."""
+    results = [_tavily_result("https://asics.com/gel-nimbus-28", "ASICS GEL-NIMBUS 28 Running Shoe", "content")]
+    images = [
+        TavilyImage(
+            url="https://img.example.com/nimbus28.jpg",
+            source_url="https://img.example.com/nimbus28.jpg",  # not any result's own url
+            description="A blue and white men's running shoe with a cushioned sole",
+            title="ASICS — Official GEL-NIMBUS Store Page",
+        )
+    ]
+
+    class _Extractor:
+        def extract_products(self, text, *, category_text):
+            return ["ASICS GEL-NIMBUS 28"]
+
+    candidates = synthesize_candidates(
+        tavily_results=results, tavily_images=images, youtube_videos=[], now=_NOW,
+        product_extraction_client=_Extractor(), category_text="running shoes",
+    )
+
+    assert candidates[0].candidate_title == "ASICS GEL-NIMBUS 28"
+    assert candidates[0].image_url == "https://img.example.com/nimbus28.jpg"
+
+
+def test_image_never_matched_via_a_single_generic_identity_token() -> None:
+    """Real-data regression (live testing, 2026-10-01): "UA HB Runner 2" tokenizes to just
+    {"runner"} (short abbreviations are filtered below the length-3 floor), which then
+    trivially containment-matched an unrelated ASICS image whose description happened to
+    mention "running" — confirmed against real Tavily data. A candidate whose own identity
+    reduces to fewer than 2 significant tokens must never get an image via containment
+    matching; a one-word identity is too generic to honestly claim a match."""
+    results = [_tavily_result("https://underarmour.com/ua-hb-runner-2", "UA HB Runner 2", "content")]
+    images = [
+        TavilyImage(
+            url="https://img.example.com/asics.jpg",
+            source_url="https://img.example.com/asics.jpg",
+            description="A grey and white men's running shoe with cushioned sole",
+            title="ASICS — Official Novablast Store Page",
+        )
+    ]
+
+    class _Extractor:
+        def extract_products(self, text, *, category_text):
+            return ["UA HB Runner 2"]
+
+    candidates = synthesize_candidates(
+        tavily_results=results, tavily_images=images, youtube_videos=[], now=_NOW,
+        product_extraction_client=_Extractor(), category_text="running shoes",
+    )
+
+    assert candidates[0].candidate_title == "UA HB Runner 2"
+    assert candidates[0].image_url is None
+
+
+def test_video_with_failed_extraction_still_attaches_to_an_already_extracted_product_group() -> None:
+    """Real-data regression (live testing, 2026-10-01): a video whose own extraction found
+    nothing (a common, legitimate outcome for a vague title) previously could only Jaccard-
+    match against OTHER vague fallback entries, never against an already-extracted, richer
+    tier-1 product group — even when its title plainly names that exact product. This
+    fragmented one real product into two worse candidates (no engagement_signal/thumbnail on
+    the real one, an orphan low-signal duplicate elsewhere) instead of merging correctly."""
+    results = [
+        _tavily_result(
+            "https://asics.com/gel-nimbus-28", "ASICS GEL-NIMBUS 28", "The ASICS GEL-NIMBUS 28 running shoe"
+        )
+    ]
+    videos = [
+        YoutubeVideo(
+            video_id="vid1", title="ASICS Gel Nimbus 28 - Is This Shoe Right For You?",
+            channel_title="RunReviews", view_count=5000, comment_count=40,
+            thumbnail_url="https://i.ytimg.com/vi/vid1/hqdefault.jpg", published_at=_NOW, retrieved_at=_NOW,
+        )
+    ]
+
+    class _Extractor:
+        def extract_products(self, text, *, category_text):
+            # Succeeds for the Tavily result (clean, product-name-shaped text); returns
+            # nothing for the video (simulating a real, legitimate "found nothing" outcome
+            # for a vaguer, question-shaped title) — the exact asymmetry that caused this bug.
+            if "running shoe" in text.lower():
+                return ["ASICS GEL-NIMBUS 28"]
+            return []
+
+    candidates = synthesize_candidates(
+        tavily_results=results, tavily_images=[], youtube_videos=videos, now=_NOW,
+        product_extraction_client=_Extractor(), category_text="running shoes",
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].candidate_title == "ASICS GEL-NIMBUS 28"
+    assert candidates[0].engagement_signal["status"] == "AVAILABLE"
+    assert candidates[0].source_diversity == 2
+
+
+def test_youtube_thumbnail_used_as_image_fallback_when_no_tavily_image_matches() -> None:
+    """New 2026-10-01: a YouTube video's own `thumbnail_url` is an unambiguous, directly-
+    linked image for that specific video (no containment heuristic needed, unlike Tavily
+    images) — used as a free fallback when no Tavily image honestly matches this candidate."""
+    videos = [
+        YoutubeVideo(
+            video_id="vid123", title="ASICS GEL-NIMBUS 28 Review", channel_title="RunReviews",
+            view_count=1000, comment_count=10, thumbnail_url="https://i.ytimg.com/vi/vid123/hqdefault.jpg",
+            published_at=_NOW, retrieved_at=_NOW,
+        )
+    ]
+    candidates = synthesize_candidates(
+        tavily_results=[], tavily_images=[], youtube_videos=videos, now=_NOW,
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].image_url == "https://i.ytimg.com/vi/vid123/hqdefault.jpg"
+    assert candidates[0].image_source_url == "https://www.youtube.com/watch?v=vid123"
+
+
+def test_youtube_thumbnail_fallback_never_overrides_a_real_tavily_match() -> None:
+    results = [_tavily_result("https://a.com/1", "Wireless Earbuds", "wireless earbuds content")]
+    images = [TavilyImage(url="https://img.example.com/1.jpg", source_url="https://a.com/1", description="earbuds")]
+    videos = [
+        YoutubeVideo(
+            video_id="vid1", title="Wireless Earbuds Review", channel_title="c",
+            view_count=1, comment_count=1, thumbnail_url="https://i.ytimg.com/vi/vid1/hqdefault.jpg",
+            published_at=_NOW, retrieved_at=_NOW,
+        )
+    ]
+
+    candidates = synthesize_candidates(tavily_results=results, tavily_images=images, youtube_videos=videos, now=_NOW)
+
+    assert candidates[0].image_url == "https://img.example.com/1.jpg"
+
+
+def test_image_never_cross_attributed_to_an_unrelated_candidate_group() -> None:
+    """Honesty regression (quality pass, 2026-10-01): a candidate group with no real
+    source-matched image must get no image at all, never another candidate's image reused
+    as if it were sourced for this one (§0b — an image is always labeled 'image from
+    [source domain]', which is false if it wasn't actually sourced from that candidate's
+    own contributing result)."""
+    results = [
+        _tavily_result("https://a.com/earbuds", "Wireless Earbuds Pro", "wireless earbuds content"),
+        _tavily_result("https://b.com/speaker", "Bluetooth Speaker X1", "bluetooth speaker content"),
+    ]
+    # Only the first result has a matching image; the second group must stay imageless
+    # rather than inheriting this one.
+    images = [
+        TavilyImage(url="https://img.example.com/1.jpg", source_url="https://a.com/earbuds", description="earbuds"),
+    ]
+    candidates = synthesize_candidates(tavily_results=results, tavily_images=images, youtube_videos=[], now=_NOW)
+
+    by_title = {c.candidate_title: c for c in candidates}
+    assert by_title["Wireless Earbuds Pro"].image_url == "https://img.example.com/1.jpg"
+    assert by_title["Bluetooth Speaker X1"].image_url is None
+    assert by_title["Bluetooth Speaker X1"].image_source_url is None

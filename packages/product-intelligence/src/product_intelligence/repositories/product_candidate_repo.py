@@ -99,6 +99,52 @@ def insert_candidate(
         return row[0]
 
 
+def update_feasibility(
+    tenant_id: UUID,
+    candidate_id: UUID,
+    *,
+    feasibility_status: str,
+    feasibility_estimate_ref: UUID | None,
+    feasibility_low_paise: int | None,
+    feasibility_high_paise: int | None,
+    feasibility_cogs_basis: str | None,
+    feasibility_assumptions: list[str] | None,
+    feasibility_unavailable_reason: str | None,
+) -> None:
+    """Writes back the snapshot `discovery/feasibility.py` computed (or the honest
+    UNAVAILABLE outcome when it couldn't be computed) — a separate post-synthesis update,
+    same shape as review-insight/embedding being computed after the initial `insert_candidate`
+    row exists, never squeezed into the original INSERT (feasibility depends on the already-
+    persisted candidate's id as its own `observation_ref` anchor)."""
+    with tenant_scope(tenant_id) as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE product_candidate
+                SET feasibility_status = :feasibility_status,
+                    feasibility_estimate_ref = :feasibility_estimate_ref,
+                    feasibility_low_paise = :feasibility_low_paise,
+                    feasibility_high_paise = :feasibility_high_paise,
+                    feasibility_cogs_basis = :feasibility_cogs_basis,
+                    feasibility_assumptions = CAST(:feasibility_assumptions AS jsonb),
+                    feasibility_unavailable_reason = :feasibility_unavailable_reason
+                WHERE tenant_id = :tenant_id AND id = :id
+                """
+            ),
+            {
+                "tenant_id": str(tenant_id),
+                "id": str(candidate_id),
+                "feasibility_status": feasibility_status,
+                "feasibility_estimate_ref": str(feasibility_estimate_ref) if feasibility_estimate_ref else None,
+                "feasibility_low_paise": feasibility_low_paise,
+                "feasibility_high_paise": feasibility_high_paise,
+                "feasibility_cogs_basis": feasibility_cogs_basis,
+                "feasibility_assumptions": json.dumps(feasibility_assumptions) if feasibility_assumptions is not None else None,
+                "feasibility_unavailable_reason": feasibility_unavailable_reason,
+            },
+        )
+
+
 def get_candidate(tenant_id: UUID, candidate_id: UUID) -> dict[str, Any] | None:
     with tenant_scope(tenant_id) as conn:
         row = conn.execute(

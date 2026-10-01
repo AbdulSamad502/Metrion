@@ -6,17 +6,62 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from product_intelligence.embedding.embed import (
     MODEL_DIM,
     MODEL_NAME,
     EmbeddingUnavailable,
+    OllamaEmbeddingClient,
     derived_attribute_text,
     embed_candidate,
     find_near_duplicate_candidates,
 )
 from product_intelligence.repositories import product_embedding_repo
+
+
+class _FakeResponse:
+    def __init__(self, *, json_body=None, json_error: Exception | None = None, status_code: int = 200) -> None:
+        self._json_body = json_body
+        self._json_error = json_error
+        self.status_code = status_code
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError("error", request=None, response=None)  # type: ignore[arg-type]
+
+    def json(self):
+        if self._json_error is not None:
+            raise self._json_error
+        return self._json_body
+
+
+def test_ollama_embedding_client_raises_embedding_unavailable_on_malformed_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bug-hunt regression (2026-10-01): unlike every other HTTP client in this package,
+    `OllamaEmbeddingClient.embed()` had no guard around `response.json()` at all — a
+    malformed/non-JSON Ollama response raised `json.JSONDecodeError` uncaught, which wasn't
+    `EmbeddingUnavailable`, so the per-candidate handler in `pi_discover.py` didn't catch it
+    and the whole discovery run aborted."""
+    monkeypatch.setattr(
+        httpx, "post", lambda *a, **kw: _FakeResponse(json_error=ValueError("Expecting value: line 1 column 1"))
+    )
+    client = OllamaEmbeddingClient(host="http://localhost:11434")
+
+    with pytest.raises(EmbeddingUnavailable):
+        client.embed("some text")
+
+
+def test_ollama_embedding_client_raises_embedding_unavailable_when_body_is_not_an_object(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(httpx, "post", lambda *a, **kw: _FakeResponse(json_body=["not", "an", "object"]))
+    client = OllamaEmbeddingClient(host="http://localhost:11434")
+
+    with pytest.raises(EmbeddingUnavailable):
+        client.embed("some text")
 
 _NOW = datetime(2026, 9, 30, tzinfo=timezone.utc)
 _TENANT_ID = uuid4()

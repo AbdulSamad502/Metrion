@@ -52,6 +52,7 @@ def _clean_engine_tables(migrate_engine):
         "severity_config",
         "anomaly_detection_config",
         "gst_lookup_result",
+        "product_feasibility_estimate",
     )
     with migrate_engine.begin() as conn:
         for t in tables:

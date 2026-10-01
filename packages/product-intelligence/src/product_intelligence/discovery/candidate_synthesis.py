@@ -67,6 +67,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Mapping
 from urllib.parse import urlparse
 
@@ -115,6 +116,38 @@ def _jaccard_overlap(a: frozenset[str], b: frozenset[str]) -> float:
     if union == 0:
         return 0.0
     return len(a & b) / union
+
+
+def _token_containment(small: frozenset[str], large: frozenset[str]) -> float:
+    """What fraction of `small`'s own tokens also appear in `large` — containment, not
+    Jaccard/IoU. Used only for image matching (below): a candidate's own name tokens (short,
+    specific — e.g. {"asics","gel","nimbus"}) are the identity to look for; `large` (an
+    image's combined title+description) is typically much longer and more verbose than a
+    grouped-result title, which dilutes symmetric IoU even for a genuinely correct match
+    (module docstring's image-matching note). Requiring full containment of the *candidate's*
+    tokens, rather than a diluted intersection-over-union, is the honest way to ask "does this
+    image's own text actually name this candidate" without loosening the matching standard."""
+    if not small or not large:
+        return 0.0
+    return len(small & large) / len(small)
+
+
+def _find_tier1_group_by_containment(product_groups: list["_Group"], tokens: frozenset[str]) -> "_Group | None":
+    """Matches a raw result/video's text against an already-extracted tier-1 product group
+    (module docstring's "tier-1-first" fix, 2026-10-01) via containment of the GROUP's own
+    (short, specific) identity tokens within the much longer raw-text token set — the same
+    discipline as the image-matching fix above, and for the same reason: symmetric Jaccard
+    dilutes below `_SIMILARITY_THRESHOLD` for a short "asics gel nimbus" identity against a
+    full article/video-title token set even when the match is genuinely correct. Requires
+    full containment and at least 2 identity tokens (same floor as image matching, same
+    justification — a 1-token identity is too generic to safely claim a match). Picks the
+    most specific (largest token-set) group among all full-containment matches, so a more
+    specific product name is preferred over a more generic one when both would qualify."""
+    return max(
+        (g for g in product_groups if len(g.token_set) >= 2 and _token_containment(g.token_set, tokens) >= 1.0),
+        key=lambda g: len(g.token_set),
+        default=None,
+    )
 
 
 def _normalize_product_name(name: str) -> str:
@@ -182,16 +215,22 @@ def _select_representative_title(group: "_Group") -> str:
 
 
 def _extract_prices_paise(content: str) -> list[int]:
+    """`web_price_signal` is still money-shaped (paise) even though it's reference-only and
+    never fed into calc-engine math (§0g) — the project's "no float in a money calculation
+    path" rule applies to the conversion itself, not just to figures that reach Brain 1, so
+    this uses `Decimal` exactly like `calc_engine`'s own fraction/paise helpers rather than
+    `float`."""
     prices: list[int] = []
     for match in _PRICE_PATTERN.finditer(content):
         raw = match.group(1).replace(",", "")
         try:
-            rupees = float(raw)
-        except ValueError:
+            rupees = Decimal(raw)
+        except InvalidOperation:
             continue
         if rupees <= 0:
             continue
-        prices.append(int(round(rupees * 100)))
+        paise = int((rupees * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        prices.append(paise)
     return prices
 
 
@@ -399,7 +438,15 @@ def synthesize_candidates(
         tokens = _tokens_for_similarity(f"{result.title} {result.content}")
         if not tokens:
             continue
-        group = _find_matching_group(fallback_groups, tokens)
+        # Real-data regression (live testing, 2026-10-01): when extraction found nothing or
+        # failed for THIS result's own text, the old code only tried a Jaccard match against
+        # other similarly-vague `fallback_groups` entries — never against the already-
+        # extracted, richer `product_groups`, even when this result is plainly about a
+        # product already found via a different source's successful extraction. That silently
+        # fragmented a single real product into two separate, poorer candidates instead of one
+        # well-evidenced one. Try the tier-1 groups first; only fall back to tier-2 if nothing
+        # there clears the similarity threshold.
+        group = _find_tier1_group_by_containment(product_groups, tokens) or _find_matching_group(fallback_groups, tokens)
         if group is None:
             group = _Group()
             fallback_groups.append(group)
@@ -435,7 +482,11 @@ def synthesize_candidates(
         tokens = _tokens_for_similarity(video.title)
         if not tokens:
             continue
-        group = _find_matching_group(fallback_groups, tokens)
+        # Same tier-1-first fix as the Tavily loop above (module docstring, 2026-10-01) — a
+        # video whose own extraction found nothing still gets a chance to attach its
+        # engagement_signal/thumbnail to an already-extracted product it plainly matches by
+        # title overlap, rather than being stranded in an isolated, poorer fallback group.
+        group = _find_tier1_group_by_containment(product_groups, tokens) or _find_matching_group(fallback_groups, tokens)
         if group is None:
             group = _Group()
             fallback_groups.append(group)
@@ -449,12 +500,56 @@ def synthesize_candidates(
 
     groups: list[_Group] = product_groups + fallback_groups
 
+    # Image attribution must be grounded in an actual source relationship (§0b: an image is
+    # "labeled 'image from [source domain]'", never implied to be the candidate's own photo
+    # when it isn't even sourced from one of the candidate's own contributing results). Match
+    # by source_url against the group's own tavily_results first — a real, verifiable link
+    # between image and candidate, not a textual guess. Fall back to description/title token
+    # overlap only when no direct source match exists. A group that matches nothing gets no
+    # image at all; reusing an unrelated image from elsewhere in the run would silently
+    # misattribute it to a candidate it was never about, which is exactly what §0b forbids.
     image_by_group_id: dict[int, TavilyImage] = {}
+    url_to_group: dict[str, _Group] = {}
+    for group in groups:
+        for result in group.tavily_results:
+            url_to_group.setdefault(result.url, group)
     for image in tavily_images:
-        tokens = _tokens_for_similarity(image.description or "")
+        group = url_to_group.get(image.source_url)
+        if group is not None and id(group) not in image_by_group_id:
+            image_by_group_id[id(group)] = image
+    for image in tavily_images:
+        # `title` is the hosting page/site's own title (e.g. "ASICS — Official Store") —
+        # often the strongest brand/product signal Tavily's image response actually carries,
+        # since `description` is a generic visual description (color/material/style) that
+        # rarely shares tokens with a specific product name. Combining both maximizes honest
+        # match surface. Matched via *containment* of the candidate's own tokens
+        # (`_token_containment`), not symmetric Jaccard: an image's combined title+description
+        # is typically far more verbose than a candidate's short name, which dilutes IoU below
+        # `_SIMILARITY_THRESHOLD` even for a genuinely correct match (confirmed via live
+        # testing — a real "ASICS GEL-NIMBUS 28" candidate against its own correctly-matching
+        # image scored well under 0.5 IoU purely from the image description's extra words).
+        # Requiring every one of the candidate's own tokens to appear in the image's text is
+        # the honest, conservative version of "this image's own text actually names this
+        # candidate" — not a loosened threshold, a differently-shaped one.
+        combined_text = " ".join(t for t in (image.title, image.description) if t)
+        tokens = _tokens_for_similarity(combined_text)
         if not tokens:
             continue
-        group = _find_matching_group(fallback_groups, tokens)
+        # Real-data regression (live testing, 2026-10-01): a candidate name reduced to a
+        # single generic token (e.g. "UA HB Runner 2" -> just {"runner"}, since "UA"/"HB"
+        # are filtered as <=2 chars) achieves 100% containment against almost any running-
+        # shoe image description, misattributing an unrelated brand's image. Requiring at
+        # least 2 identity tokens is a cheap, honest floor: a one-word identity is too
+        # generic to safely claim "this image's text names this specific candidate."
+        group = max(
+            (
+                g
+                for g in groups
+                if len(g.token_set) >= 2 and _token_containment(g.token_set, tokens) >= 1.0
+            ),
+            key=lambda g: len(g.token_set),
+            default=None,
+        )
         if group is not None and id(group) not in image_by_group_id:
             image_by_group_id[id(group)] = image
 
@@ -480,10 +575,22 @@ def synthesize_candidates(
             domains.add("youtube.com")
 
         image = image_by_group_id.get(id(group))
-        if image is None and group.tavily_results:
-            # first result's own image, if any Tavily image at all exists in this run and no
-            # group-specific match was found — reference-image-from-source, still labeled.
-            image = next((img for img in tavily_images), None)
+        candidate_image_url: str | None = image.url if image else None
+        candidate_image_source_url: str | None = image.source_url if image else None
+        if candidate_image_url is None:
+            # YouTube thumbnail fallback (quality pass, 2026-10-01): unlike a Tavily image,
+            # a video's own `thumbnail_url` is an unambiguous, directly-linked official image
+            # for that exact video — no containment heuristic needed, since the video is
+            # already grouped into this candidate (extraction-match or Jaccard-match, same
+            # discipline as every other signal). Zero added cost — `thumbnail_url` is already
+            # fetched as part of the normal YouTube search call, just never used for images
+            # until now. First video with a non-empty thumbnail wins; ties broken by order.
+            # `image_source_url` is the video's own watch URL (not the thumbnail CDN URL), so
+            # the frontend's "image from {domain}" attribution honestly renders "youtube.com".
+            thumb_video = next((v for v in group.youtube_videos if v.thumbnail_url), None)
+            if thumb_video is not None:
+                candidate_image_url = thumb_video.thumbnail_url
+                candidate_image_source_url = f"https://www.youtube.com/watch?v={thumb_video.video_id}"
 
         if tavily_degraded and youtube_degraded:
             capture_status = "UNAVAILABLE"
@@ -519,8 +626,8 @@ def synthesize_candidates(
                 keyword_themes=keyword_themes,
                 observed_category=None,
                 category_confidence=None,
-                image_url=image.url if image else None,
-                image_source_url=image.source_url if image else None,
+                image_url=candidate_image_url,
+                image_source_url=candidate_image_source_url,
                 demand_signal=_fixed_demand_signal(),
                 engagement_signal=_build_engagement_signal(group.youtube_videos),
                 web_price_signal=_build_web_price_signal(group.tavily_results, now=now),
@@ -557,3 +664,50 @@ def dedupe_by_normalized_title(candidates: list[Mapping[str, Any]]) -> list[Mapp
         seen.add(normalized)
         deduped.append(candidate)
     return deduped
+
+
+def filter_excluded_brands(
+    candidates: list[Mapping[str, Any]], exclude_brands: list[str] | None
+) -> list[Mapping[str, Any]]:
+    """Seller-stated brand exclusion — `niche_brief.constraints.exclude_brands` (new field,
+    2026-10-01): a seller researching opportunity *gaps* often explicitly does NOT want
+    already-dominant, heavily-marketed brands (Nike, Puma, ...) crowding out the shortlist,
+    since those aren't realistic white-space opportunities for a small seller. This is a
+    plain, seller-specified structured list — never an LLM-inferred "this brand is too
+    famous" judgement call (no signal in this codebase could honestly support that kind of
+    claim), matching the project's narrow, deterministic-filter precedent (same spirit as
+    `pi_supplier_lookup.py`'s own heuristic filters).
+
+    Matches via token-SET containment (every one of a brand name's own significant tokens
+    must appear in the candidate's), not substring — avoids "Nike" accidentally excluding an
+    unrelated candidate that merely contains "nike" as a substring of a longer word, and
+    correctly handles multi-word brands ("New Balance" needs both "new" and "balance"
+    present, not just one). A brand name that tokenizes to nothing (e.g. "On", too short to
+    clear the significance floor) is skipped entirely for matching — an empty token set is
+    vacuously a subset of everything in Python, which would otherwise exclude every
+    candidate; explicitly guarded against here.
+
+    **Non-string entries are skipped, never raised (bug-hunt pass, 2026-10-01).**
+    `niche_brief.constraints` is accepted as an unvalidated `dict[str, Any]` at the HTTP
+    boundary (`backend/api/v1/pi.py`), so `exclude_brands` could in principle contain a
+    non-string entry (e.g. a stray `null`/number from a malformed request body persisted
+    earlier). Previously this crashed `_tokenize`'s `.lower()` call uncaught, aborting the
+    whole discovery run with `pi_research_run` left stuck at `RUNNING` forever (no top-level
+    handler existed at the time) — fixed at the source here, not just papered over by the
+    safety net `pi_discover.py` now also has, since a malformed brand name is a data-shape
+    issue this function can reasonably tolerate on its own."""
+    if not exclude_brands:
+        return list(candidates)
+    brand_token_sets = [
+        bts for brand in exclude_brands if isinstance(brand, str) and (bts := _tokens_for_similarity(brand))
+    ]
+    if not brand_token_sets:
+        return list(candidates)
+
+    kept: list[Mapping[str, Any]] = []
+    for candidate in candidates:
+        candidate_tokens = _tokens_for_similarity(str(candidate.get("candidate_title", "")))
+        if any(brand_tokens <= candidate_tokens for brand_tokens in brand_token_sets):
+            continue
+        kept.append(candidate)
+    return kept

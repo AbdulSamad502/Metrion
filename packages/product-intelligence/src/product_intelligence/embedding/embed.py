@@ -52,7 +52,19 @@ class OllamaEmbeddingClient:
         except httpx.HTTPError as exc:
             raise EmbeddingUnavailable(f"Ollama embeddings request failed: {exc}") from exc
 
-        body = response.json()
+        try:
+            body = response.json()
+        except ValueError as exc:
+            # Bug-hunt pass (2026-10-01): unlike every other HTTP client in this package
+            # (tavily_client.py, youtube_client.py, google_places_client.py all guard
+            # response.json()), this call had no guard at all — a malformed/non-JSON Ollama
+            # response (truncated stream, a proxy's HTML error page) raised json.JSONDecodeError
+            # uncaught, which isn't EmbeddingUnavailable, so pi_discover.py's per-candidate
+            # handler didn't catch it and the whole run aborted with pi_research_run stuck at
+            # RUNNING forever (before the top-level safety net existed there too).
+            raise EmbeddingUnavailable(f"Ollama embeddings response was not valid JSON: {exc}") from exc
+        if not isinstance(body, dict):
+            raise EmbeddingUnavailable("Ollama embeddings response was not a JSON object")
         embedding = body.get("embedding")
         if not isinstance(embedding, list) or not all(isinstance(v, (int, float)) for v in embedding):
             raise EmbeddingUnavailable("Ollama embeddings response had no numeric 'embedding' list")

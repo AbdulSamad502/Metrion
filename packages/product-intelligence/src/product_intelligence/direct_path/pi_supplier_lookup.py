@@ -29,6 +29,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from product_intelligence.repositories import product_candidate_repo, supplier_lead_repo
+from product_intelligence.sources.rate_limiter import throttle
 from product_intelligence.sources.tavily_client import TavilyClient, TavilySearchResult, TavilyUnavailable
 from product_intelligence.supplier.google_places_client import PlacesClient, PlacesUnavailable
 
@@ -66,6 +67,18 @@ _RETAIL_STOREFRONT_DOMAINS = frozenset(
     }
 )
 
+# Social/content platforms — never a supplier contact under any circumstance, regardless of
+# what the post/page is about. Found as a real live-data bug (quality pass, 2026-10-01): an
+# Instagram post and a Facebook post about a product both passed the pre-existing filter and
+# were persisted as "supplier leads" with no contact info at all, since a social post is never
+# a business's own site to begin with.
+_SOCIAL_MEDIA_DOMAINS = frozenset(
+    {
+        "instagram.com", "facebook.com", "twitter.com", "x.com", "pinterest.com",
+        "tiktok.com", "youtube.com", "youtu.be", "reddit.com", "threads.net", "linkedin.com",
+    }
+)
+
 # Official/retail-storefront framing in a title — "buy X online", "official store" etc. read
 # as a brand's own consumer-facing retail page, not a B2B wholesale contact.
 _RETAIL_STOREFRONT_TITLE_PATTERN = re.compile(
@@ -81,22 +94,57 @@ def _domain(url: str) -> str:
     return netloc[4:] if netloc.startswith("www.") else netloc
 
 
-def _looks_like_supplier(result: TavilySearchResult) -> bool:
+def _collapsed(text: str) -> str:
+    """Lowercased, alphanumeric-only — used only to compare a candidate's own brand/product
+    identity against a result's domain (e.g. "New Balance" -> "newbalance" matches the domain
+    "newbalance.com"'s registrable-label form). Same conservative spirit as
+    `candidate_synthesis.py`'s own `_collapsed_key` for near-identical-spelling matching."""
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def _is_candidates_own_brand_domain(result: TavilySearchResult, candidate_title: str) -> bool:
+    """A result whose domain IS the candidate's own brand (e.g. "newbalance.com" for a "New
+    Balance 1080v15" candidate) is the brand's own site, not a third-party wholesale supplier
+    — a seller researching where to SOURCE a product from a manufacturer/distributor almost
+    never wants the original brand's own consumer storefront. Compares the domain's own first
+    label against a PREFIX of the candidate title's collapsed form, not just its first word —
+    multi-word brand names ("New Balance" -> "newbalance.com") need more than one word to
+    match. A domain label under 3 characters is never checked (too short to be a meaningful
+    brand match); only `netloc` is compared, never `content`, so a domain that merely
+    *mentions* the brand elsewhere in its path is never excluded by this check alone."""
+    domain = _domain(result.url)
+    domain_label = domain.split(".")[0] if domain else ""
+    if len(domain_label) < 3:
+        return False
+    # Bug-hunt pass (2026-10-01): `domain_label` was compared raw (hyphens/digits intact)
+    # against `collapsed_title` (fully alphanumeric-collapsed) — for any domain whose first
+    # label contains a hyphen (e.g. "new-balance-store.com"), `collapsed_title.startswith(...)`
+    # could never match even when the brand genuinely is that domain, silently under-excluding
+    # a brand's own storefront. Both sides must go through the same collapsing.
+    collapsed_domain_label = _collapsed(domain_label)
+    collapsed_title = _collapsed(candidate_title)
+    return bool(collapsed_title) and bool(collapsed_domain_label) and collapsed_title.startswith(collapsed_domain_label)
+
+
+def _looks_like_supplier(result: TavilySearchResult, *, candidate_title: str) -> bool:
     """Heuristic relevance filter for a Tavily "supplier" search result, applied before it is
     ever persisted as a `supplier_lead` — a real bug found in a live run: unfiltered results
     included a major brand's official retail store, a "10 BEST ..." review/listicle article,
     and a foreign (non-Indian) supplier alongside genuine Indian manufacturer/wholesaler
-    leads.
+    leads. **Extended (quality pass, 2026-10-01)** after a second live run surfaced two more
+    non-supplier shapes slipping through: social-media posts (Instagram/Facebook, which carry
+    no contact info at all) and the candidate's own brand selling direct-to-consumer on its
+    own domain (also not a wholesale source).
 
     **This is a heuristic filter, not a guarantee** — same "heuristic, not formal proof"
     honesty this codebase's `narration_safety.py` already models elsewhere. It has no
     exhaustive domain blocklist (impossible to maintain) and no ground-truth "is this
     actually a supplier" signal; it only rejects the shapes of result most likely to be
-    noise (editorial/listicle content, known major retail storefronts, "buy X online"/
-    "official store" framing) and prefers results carrying an explicit supplier-signal word.
-    A genuine supplier lead with an unusual title can still be filtered out incorrectly, and
-    a well-disguised non-supplier can still pass — this narrows the noise, it does not
-    eliminate it.
+    noise (editorial/listicle content, known major retail storefronts, social-media posts,
+    the candidate's own brand domain, "buy X online"/"official store" framing) and prefers
+    results carrying an explicit supplier-signal word. A genuine supplier lead with an
+    unusual title can still be filtered out incorrectly, and a well-disguised non-supplier
+    can still pass — this narrows the noise, it does not eliminate it.
     """
     title = result.title or ""
 
@@ -104,9 +152,11 @@ def _looks_like_supplier(result: TavilySearchResult) -> bool:
         return False
 
     domain = _domain(result.url)
-    if domain in _RETAIL_STOREFRONT_DOMAINS:
+    if domain in _RETAIL_STOREFRONT_DOMAINS or domain in _SOCIAL_MEDIA_DOMAINS:
         return False
     if _RETAIL_STOREFRONT_TITLE_PATTERN.search(title):
+        return False
+    if _is_candidates_own_brand_domain(result, candidate_title):
         return False
 
     return True
@@ -118,12 +168,12 @@ def _has_supplier_signal(result: TavilySearchResult) -> bool:
 
 
 def _filter_and_rank_supplier_results(
-    results: list[TavilySearchResult], *, max_results: int
+    results: list[TavilySearchResult], *, max_results: int, candidate_title: str
 ) -> list[TavilySearchResult]:
     """Applies `_looks_like_supplier` to exclude obvious non-suppliers, then boosts results
     carrying an explicit supplier-signal word ("manufacturer", "wholesale", etc.) to the
     front — a stable sort, so relative order among equally-scored results is preserved."""
-    plausible = [r for r in results if _looks_like_supplier(r)]
+    plausible = [r for r in results if _looks_like_supplier(r, candidate_title=candidate_title)]
     ranked = sorted(plausible, key=lambda r: not _has_supplier_signal(r))
     return ranked[:max_results]
 
@@ -164,7 +214,8 @@ def lookup_suppliers_for_candidates(
         degraded_reason: str | None = None
 
         try:
-            place_matches = places.search_place_ids(query, max_results=_MAX_PLACES_MATCHES_PER_CANDIDATE)
+            with throttle("google_places"):
+                place_matches = places.search_place_ids(query, max_results=_MAX_PLACES_MATCHES_PER_CANDIDATE)
         except PlacesUnavailable as exc:
             place_matches = []
             degraded_reason = f"Google Places unavailable: {exc}"
@@ -172,7 +223,8 @@ def lookup_suppliers_for_candidates(
         if place_matches:
             best_match = place_matches[0]
             try:
-                details = places.enrich_place(best_match.place_id)
+                with throttle("google_places"):
+                    details = places.enrich_place(best_match.place_id)
             except PlacesUnavailable as exc:
                 details = None
                 degraded_reason = "; ".join(p for p in (degraded_reason, f"Places enrichment unavailable: {exc}") if p)
@@ -197,15 +249,18 @@ def lookup_suppliers_for_candidates(
             lead_ids.append(lead_id)
 
         try:
-            raw_web_results = tavily.search(
-                query, include_images=False, max_results=_MAX_TAVILY_RAW_RESULTS_PER_CANDIDATE
-            )
+            with throttle("tavily"):
+                raw_web_results = tavily.search(
+                    query, include_images=False, max_results=_MAX_TAVILY_RAW_RESULTS_PER_CANDIDATE
+                )
         except TavilyUnavailable as exc:
             raw_web_results = []
             degraded_reason = "; ".join(p for p in (degraded_reason, f"Tavily supplier search unavailable: {exc}") if p)
 
         web_results = _filter_and_rank_supplier_results(
-            raw_web_results, max_results=_MAX_TAVILY_LEADS_PER_CANDIDATE
+            raw_web_results,
+            max_results=_MAX_TAVILY_LEADS_PER_CANDIDATE,
+            candidate_title=str(candidate.get("candidate_title", "")),
         )
 
         for result in web_results:

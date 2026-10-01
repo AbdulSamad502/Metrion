@@ -3,9 +3,20 @@
 real-implementation-wired-once-at-the-composition-root shape.
 
 Confirmed source (PI build plan, Checkpoint 0): Tavily is a live V1 source (free tier, 1,000
-credits/mo, no card, `include_images=True` returns source-linked image URLs per result). Used
-both by `discovery/` (candidate discovery) and `supplier/` (web-search supplement to Google
-Places) — a single client, reused by both callers, per the PI build plan §2.
+credits/mo, no card). Used both by `discovery/` (candidate discovery) and `supplier/`
+(web-search supplement to Google Places) — a single client, reused by both callers, per the
+PI build plan §2.
+
+**Image attribution — corrected against the real API (quality pass, 2026-10-01).** The
+original docstring here claimed `include_images=True` returns "source-linked image URLs per
+result" — confirmed FALSE by direct testing against the live API: Tavily's `images` entries
+carry no page-URL association with any individual search result at all. `source_url` is in
+practice the same value as `url` (the image's own hosting/CDN URL), never a distinct page it
+was found on. What the API genuinely offers, with `include_image_descriptions=True` (now
+always requested below): an AI-generated `description` of the image's visual content, and a
+`title` naming the page/site that hosts it (e.g. "ASICS — Official Store"). `candidate_synthesis.py`
+uses both as an honest, approximate, token-overlap signal (never an exact-source claim) — see
+its own module docstring.
 
 **Checkpoint 2: real.** `HttpTavilyClient` now makes the actual HTTP call against Tavily's
 documented `POST https://api.tavily.com/search` endpoint (`TAVILY_API_KEY` env var, no
@@ -38,11 +49,16 @@ class TavilyUnavailable(Exception):
 @dataclass(frozen=True, slots=True)
 class TavilyImage:
     """One `include_images=True` result — always rendered with visible source attribution
-    (§0b of the PI build plan), never implied to be a marketplace listing photo."""
+    (§0b of the PI build plan), never implied to be a marketplace listing photo. `source_url`
+    is, in practice, the same value as `url` (module docstring) — kept as a separate field
+    only because a future Tavily response shape might genuinely distinguish them, not because
+    it reliably does today. `title`/`description` are the real page-title/visual-description
+    fields `include_image_descriptions=True` returns, used for approximate matching only."""
 
     url: str
     source_url: str
     description: str | None = None
+    title: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,10 +156,17 @@ class HttpTavilyClient:
         return results
 
     def images_for(self, query: str, *, max_images: int = 5) -> list[TavilyImage]:
+        # include_image_descriptions=True (quality pass, 2026-10-01, confirmed via direct
+        # live testing): without it, Tavily returns bare image URLs with no title or
+        # description at all, leaving candidate_synthesis.py's image-matching nothing to
+        # match against beyond an unreliable source_url (module docstring). With it, each
+        # entry carries a real AI-generated `description` plus a `title` naming the hosting
+        # page/site — the only genuine per-image signal this API offers.
         parsed = self._post(
             {
                 "query": query,
                 "include_images": True,
+                "include_image_descriptions": True,
                 "max_results": max_images,
                 "search_depth": "basic",
             }
@@ -154,12 +177,11 @@ class HttpTavilyClient:
 
         images: list[TavilyImage] = []
         for entry in raw_images[:max_images]:
-            # Tavily's `images` entries are either a bare URL string or, with richer
-            # `include_image_descriptions`-style responses, a {"url", "description"} object —
-            # both shapes are handled rather than assuming one, since the exact response shape
-            # is one of the plan's own "not yet verified" items (Context table).
+            # Tavily's `images` entries are either a bare URL string (include_image_descriptions
+            # not honored/unsupported) or a {"url", "description", "title"} object — both
+            # shapes handled rather than assuming one.
             if isinstance(entry, str):
-                images.append(TavilyImage(url=entry, source_url=entry, description=None))
+                images.append(TavilyImage(url=entry, source_url=entry, description=None, title=None))
             elif isinstance(entry, dict) and isinstance(entry.get("url"), str):
                 images.append(
                     TavilyImage(
@@ -170,6 +192,7 @@ class HttpTavilyClient:
                         description=entry.get("description")
                         if isinstance(entry.get("description"), str)
                         else None,
+                        title=entry.get("title") if isinstance(entry.get("title"), str) else None,
                     )
                 )
         return images

@@ -174,6 +174,118 @@ def test_supplier_filter_rejects_retail_and_listicle_results_and_accepts_manufac
     assert inserted[0]["supplier_name"] == "Acme Footwear Manufacturer - Running Shoe Wholesale Supplier India"
 
 
+def test_supplier_filter_rejects_social_media_posts(monkeypatch: pytest.MonkeyPatch, _patch_repos) -> None:
+    """Real-data regression (live testing, 2026-10-01): an Instagram post and a Facebook post
+    about a candidate both passed the pre-existing filter and were persisted as supplier_lead
+    rows with no contact info at all — a social post is never a business's own site."""
+    monkeypatch.setattr(
+        product_candidate_repo, "get_candidate", lambda tenant_id, cid: {"candidate_title": "New Balance 1080v15"}
+    )
+    places = _FakePlaces(matches=[])
+    tavily = _FakeTavily(
+        results=[
+            TavilySearchResult(
+                url="https://www.instagram.com/p/abc123",
+                title="New Balance 1080 V15 18999 INR",
+                content="New Balance 1080 V15 18999 INR UK 4.5-7.5",
+                score=0.9, published_date=None, retrieved_at=_NOW,
+            ),
+            TavilySearchResult(
+                url="https://www.facebook.com/somepage/posts/123",
+                title="New Balance 1080 V15 18999 INR",
+                content="New Balance 1080 V15 18999 INR UK 4.5-7.5",
+                score=0.85, published_date=None, retrieved_at=_NOW,
+            ),
+            TavilySearchResult(
+                url="https://indiamart.com/acme-footwear-manufacturer",
+                title="Acme Footwear Manufacturer - Running Shoe Wholesale Supplier India",
+                content="Acme is a leading running shoe manufacturer and wholesale supplier based in Agra, India",
+                score=0.8, published_date=None, retrieved_at=_NOW,
+            ),
+        ]
+    )
+
+    [result] = pi_supplier_lookup.lookup_suppliers_for_candidates(
+        _TENANT_ID, run_id=_RUN_ID, candidate_ids=[_CANDIDATE_ID], places=places, tavily=tavily, now=_NOW
+    )
+
+    assert len(result.lead_ids) == 1
+    inserted = _patch_repos
+    assert inserted[0]["supplier_name"] == "Acme Footwear Manufacturer - Running Shoe Wholesale Supplier India"
+
+
+def test_supplier_filter_rejects_the_candidates_own_brand_domain(
+    monkeypatch: pytest.MonkeyPatch, _patch_repos
+) -> None:
+    """Real-data regression (live testing, 2026-10-01): the candidate's own brand's product
+    page (e.g. newbalance.com for a "New Balance 1080v15" candidate) passed the pre-existing
+    filter — it's the brand selling direct-to-consumer, not a third-party wholesale source."""
+    monkeypatch.setattr(
+        product_candidate_repo, "get_candidate", lambda tenant_id, cid: {"candidate_title": "New Balance 1080v15"}
+    )
+    places = _FakePlaces(matches=[])
+    tavily = _FakeTavily(
+        results=[
+            TavilySearchResult(
+                url="https://www.newbalance.com/pd/1080v15/M1080V15_RU-FTW-802829-PMG-NA.html",
+                title="1080v15 - New Balance",
+                content="Shop the New Balance 1080v15 running shoe",
+                score=0.95, published_date=None, retrieved_at=_NOW,
+            ),
+            TavilySearchResult(
+                url="https://indiamart.com/acme-footwear-manufacturer",
+                title="Acme Footwear Manufacturer - Running Shoe Wholesale Supplier India",
+                content="Acme is a leading running shoe manufacturer and wholesale supplier based in Agra, India",
+                score=0.8, published_date=None, retrieved_at=_NOW,
+            ),
+        ]
+    )
+
+    [result] = pi_supplier_lookup.lookup_suppliers_for_candidates(
+        _TENANT_ID, run_id=_RUN_ID, candidate_ids=[_CANDIDATE_ID], places=places, tavily=tavily, now=_NOW
+    )
+
+    assert len(result.lead_ids) == 1
+    inserted = _patch_repos
+    assert inserted[0]["supplier_name"] == "Acme Footwear Manufacturer - Running Shoe Wholesale Supplier India"
+
+
+def test_supplier_filter_rejects_own_brand_domain_with_a_hyphenated_label(
+    monkeypatch: pytest.MonkeyPatch, _patch_repos
+) -> None:
+    """Bug-hunt regression (2026-10-01): `domain_label` was compared raw (hyphens intact)
+    against the fully-collapsed candidate title — a domain like "new-balance.com" could never
+    match even when the brand genuinely is that domain, silently under-excluding it."""
+    monkeypatch.setattr(
+        product_candidate_repo, "get_candidate", lambda tenant_id, cid: {"candidate_title": "New Balance 1080v15"}
+    )
+    places = _FakePlaces(matches=[])
+    tavily = _FakeTavily(
+        results=[
+            TavilySearchResult(
+                url="https://www.new-balance.com/pd/1080v15",
+                title="1080v15 - New Balance",
+                content="Shop the New Balance 1080v15 running shoe",
+                score=0.95, published_date=None, retrieved_at=_NOW,
+            ),
+            TavilySearchResult(
+                url="https://indiamart.com/acme-footwear-manufacturer",
+                title="Acme Footwear Manufacturer - Running Shoe Wholesale Supplier India",
+                content="Acme is a leading running shoe manufacturer and wholesale supplier based in Agra, India",
+                score=0.8, published_date=None, retrieved_at=_NOW,
+            ),
+        ]
+    )
+
+    [result] = pi_supplier_lookup.lookup_suppliers_for_candidates(
+        _TENANT_ID, run_id=_RUN_ID, candidate_ids=[_CANDIDATE_ID], places=places, tavily=tavily, now=_NOW
+    )
+
+    assert len(result.lead_ids) == 1
+    inserted = _patch_repos
+    assert inserted[0]["supplier_name"] == "Acme Footwear Manufacturer - Running Shoe Wholesale Supplier India"
+
+
 def test_supplier_filter_prefers_supplier_signal_results_when_over_cap(_patch_repos) -> None:
     places = _FakePlaces(matches=[])
     tavily = _FakeTavily(

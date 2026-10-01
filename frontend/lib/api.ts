@@ -644,6 +644,16 @@ export type PiCandidate = {
   source_urls: { url: string; fetched_at: string }[];
   capture_status: string;
   confidence: string;
+  /** Added 2026-10-01 — `estimate_product_feasibility` wiring (PI build plan §6.7). A
+   * price/fee-spread range from Brain 1, never a margin claim while `feasibility_cogs_basis`
+   * is "UNKNOWN" (always true today — no supplier-quote mechanism exists in PI yet). */
+  feasibility_status: "COMPUTED" | "UNAVAILABLE";
+  feasibility_estimate_ref: string | null;
+  feasibility_low_paise: number | null;
+  feasibility_high_paise: number | null;
+  feasibility_cogs_basis: "STATED" | "UNKNOWN" | null;
+  feasibility_assumptions: string[] | null;
+  feasibility_unavailable_reason: string | null;
 };
 
 /** Raw `product_review_insight` row (`product_review_insight_repo`), snake_case.
