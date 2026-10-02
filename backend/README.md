@@ -59,6 +59,31 @@ env vars aren't set, screenshot uploads fail with an Ollama "model not found" er
 doesn't obviously point back to a missing env var. No model choice is locked by the CI spec
 (§1a item 4 / Q7 remains open) — pick whatever vision model you have.
 
+### Request-body limits (uploads)
+
+Two routes accept file uploads: `POST /api/v1/cfo/ingest` (CSV) and `POST /api/v1/ci/evidence`
+(screenshot). Limits, from the inside out:
+
+| Layer | What it does | Status |
+|---|---|---|
+| Route (`uploads.read_upload_capped`) | Rejects a file over `CFO_MAX_UPLOAD_BYTES` (default 20 MB) / `CI_MAX_EVIDENCE_BYTES` (default 10 MB) with **413** before it is loaded, ingested or written | **Implemented** |
+| ASGI middleware (`request_limits.RequestBodyLimitMiddleware`) | Rejects an oversized **request body** with **413** before auth, multipart parsing or temp-file spooling — by `Content-Length` when present, and by counting streamed bytes when it is absent (chunked). Allows 64 KiB of multipart envelope above the file limit | **Implemented** |
+| Reverse proxy / ingress | Stops the body at the edge, before it reaches the app server at all | **DEPLOYMENT CONFIGURATION REQUIRED** — this repo has no deployment layer (`docker-compose.yml` is Postgres + Redis for local dev only; the API runs as bare `uvicorn`, which has no body-size option) |
+
+Whatever fronts the API in production must cap the request body itself, at the file limit plus
+the 64 KiB envelope. For the defaults above:
+
+```nginx
+location = /api/v1/cfo/ingest   { client_max_body_size 20m; proxy_pass http://api; }   # CFO_MAX_UPLOAD_BYTES + envelope
+location = /api/v1/ci/evidence  { client_max_body_size 10m; proxy_pass http://api; }   # CI_MAX_EVIDENCE_BYTES + envelope
+client_max_body_size 1m;                                                                # everything else
+```
+
+Caddy: `request_body { max_size 21MB }` per route. Traefik: the `buffering` middleware's
+`maxRequestBodyBytes`. Kubernetes ingress-nginx: the `nginx.ingress.kubernetes.io/proxy-body-size`
+annotation. Keep any proxy limit at or above the app limit plus envelope, so the app's own clear
+413 message is what a normal user sees.
+
 ### Webhook (local dev)
 
 Clerk needs a public URL to deliver webhooks to. Use the Clerk CLI's own relay:

@@ -875,6 +875,15 @@ def get_line_status_overrides(tenant_id: UUID, *, sales_line_id: UUID) -> LineSt
 # ---------------------------------------------------------------------------------------
 
 
+def _first_value(
+    adjustments: Mapping[tuple[str, str], list[dict[str, Any]]], target_ref: str, field: str
+) -> object | None:
+    """Newest ACTIVE row's value for one (target_ref, field) from a batched prefetch — the same
+    "take index 0, None when absent" rule `get_line_status_overrides` applies per field."""
+    rows = adjustments.get((target_ref, field))
+    return rows[0]["value"] if rows else None
+
+
 @dataclass(frozen=True, slots=True)
 class CanonicalAssemblyBlockedLine:
     """One `sales_line` this composition could NOT turn into a `CanonicalLine` — never silently
@@ -987,6 +996,15 @@ def assemble_canonical_lines_for_period(
             )
         )
 
+    # Every LINE-grain manual_adjustment this assembly reads, fetched in one batched query per
+    # chunk of lines instead of ~7 queries per line (measured ~13 ms/line before). Each
+    # (target_ref, field) list is exactly what `active_adjustments_for_target` returns (newest
+    # first), so the per-line logic below is unchanged.
+    _line_fields = (*_LINE_STATUS_OVERRIDE_VALUES, *_LINE_COUNT_OVERRIDE_FIELDS, "rto_outcome", "return_refund_amount")
+    line_adjustments = manual_adjustment_repo.active_adjustments_for_targets(
+        tenant_id, target_type="LINE", target_refs=[str(i) for i in sales_line_ids], fields=_line_fields
+    )
+
     lines: list[CanonicalLine] = []
     blocked: list[CanonicalAssemblyBlockedLine] = []
     sku_by_line: dict[str, str] = {}
@@ -1015,7 +1033,14 @@ def assemble_canonical_lines_for_period(
             )
             continue
 
-        overrides = get_line_status_overrides(tenant_id, sales_line_id=sales_line_id)
+        line_ref = str(sales_line_id)
+        overrides = LineStatusOverrides(
+            cancellation_state_override=_first_value(line_adjustments, line_ref, "cancellation_state_override"),
+            return_status_override=_first_value(line_adjustments, line_ref, "return_status_override"),
+            rto_status_override=_first_value(line_adjustments, line_ref, "rto_status_override"),
+            returned_qty_override=_first_value(line_adjustments, line_ref, "returned_qty_override"),  # type: ignore[arg-type]
+            rto_qty_override=_first_value(line_adjustments, line_ref, "rto_qty_override"),  # type: ignore[arg-type]
+        )
         final_return_status = resolve_line_status(row.get("return_status"), overrides.return_status_override)
         final_cancellation_state = resolve_line_status(None, overrides.cancellation_state_override)
         final_rto_status = resolve_line_status(None, overrides.rto_status_override)
@@ -1041,17 +1066,13 @@ def assemble_canonical_lines_for_period(
             )
             continue
 
-        rto_outcome_rows = manual_adjustment_repo.active_adjustments_for_target(
-            tenant_id, target_type="LINE", target_ref=str(sales_line_id), field="rto_outcome"
-        )
+        rto_outcome_rows = line_adjustments.get((line_ref, "rto_outcome"), [])
         rto_outcome = rto_outcome_rows[0]["value"] if rto_outcome_rows else None
         if rto_outcome_rows:
             raw_id = rto_outcome_rows[0]["id"]
             active_adjustment_ids.add(raw_id if isinstance(raw_id, UUID) else UUID(str(raw_id)))
 
-        refund_rows = manual_adjustment_repo.active_adjustments_for_target(
-            tenant_id, target_type="LINE", target_ref=str(sales_line_id), field="return_refund_amount"
-        )
+        refund_rows = line_adjustments.get((line_ref, "return_refund_amount"), [])
         refunded_amount = Paise(int(refund_rows[0]["value"])) if refund_rows else None
         if refund_rows:
             raw_id = refund_rows[0]["id"]
@@ -1128,10 +1149,12 @@ def resolve_cost_history_for_skus(tenant_id: UUID, skus: Iterable[str]) -> dict[
     treats a missing SKU as `Unavailable`, the correct, existing behaviour this function does
     not need to reproduce itself."""
     history: dict[str, list[CostEntry]] = {}
-    for sku in set(skus):
-        rows = manual_adjustment_repo.active_adjustments_for_target(
-            tenant_id, target_type="SKU", target_ref=sku, field="cogs_per_unit"
-        )
+    unique_skus = set(skus)
+    by_sku = manual_adjustment_repo.active_adjustments_for_targets(
+        tenant_id, target_type="SKU", target_refs=list(unique_skus), fields=("cogs_per_unit",)
+    )
+    for sku in unique_skus:
+        rows = by_sku.get((sku, "cogs_per_unit"), [])
         if rows:
             history[sku] = [_parse_cogs_per_unit_row(row) for row in rows]
     return history
@@ -3352,18 +3375,26 @@ def run_leak_shield_reconciliation(
     )
 
     # --- persist every exception-level MetricResult, keyed by the exception id it belongs to -
+    # One bulk write for every exception-level result (was one transaction per exception —
+    # measured at ~38% of a CEO Hub reconcile request).
     engine_result_ref_by_exception_id: dict[str, UUID] = {}
+    metric_result_repo.save_many(
+        tenant_id,
+        [
+            (
+                mr,
+                dict(
+                    grain="LINE",
+                    target_ref=str(mr.input_refs[0]),
+                    period=period_label,
+                    config_version=_LEAK_SHIELD_CONFIG_VERSION,
+                ),
+            )
+            for mr in result.exception_metric_results
+        ],
+    )
     for mr in result.exception_metric_results:
-        exception_id = mr.input_refs[0]
-        metric_result_repo.save(
-            tenant_id,
-            mr,
-            grain="LINE",
-            target_ref=str(exception_id),
-            period=period_label,
-            config_version=_LEAK_SHIELD_CONFIG_VERSION,
-        )
-        engine_result_ref_by_exception_id[str(exception_id)] = mr.id
+        engine_result_ref_by_exception_id[str(mr.input_refs[0])] = mr.id
 
     # --- persist the aggregate LEAK_TOTAL -- its own real engine_result_ref (Section 6.4 rule 5)
     metric_result_repo.save(
@@ -3459,7 +3490,8 @@ def run_leak_shield_reconciliation(
         config_rows=severity_config_rows,
     )
 
-    inserted: list[dict[str, object]] = []
+    finding_rows: list[dict[str, object]] = []
+    finding_templates: list[dict[str, object]] = []
     for composed in composed_findings:
         exc = composed.exception
         source_row = row_by_exception_id[exc.exception_id]
@@ -3471,29 +3503,29 @@ def run_leak_shield_reconciliation(
             # data for this finding; never fabricated, never silently defaulted to LOW.
             severity_value = "UNAVAILABLE"
 
-        leak_finding_id = leak_finding_repo.insert(
-            tenant_id,
-            reconciliation_exception_id=UUID(exc.exception_id),
-            engine_result_ref=UUID(exc.engine_result_ref),
-            marketplace=exc.marketplace,
-            leak_category=composed.leak_category.value,
-            severity=severity_value,
-            amount_paise=exc.amount_paise,
-            affected_line_count=exc.affected_line_count,
-            sku=exc.sku,
-            first_observed_at=exc.first_observed_at,
-            age_days=exc.age_days,
-            claim_window_days=exc.claim_window_days,
-            window_status=composed.window_status.value,
-            explanation=None,
-            recommended_action=None,
-            status="NEW",
-            confidence=str(source_row["confidence"]),
-            formula_version="reconcile.v1",
+        finding_rows.append(
+            dict(
+                reconciliation_exception_id=UUID(exc.exception_id),
+                engine_result_ref=UUID(exc.engine_result_ref),
+                marketplace=exc.marketplace,
+                leak_category=composed.leak_category.value,
+                severity=severity_value,
+                amount_paise=exc.amount_paise,
+                affected_line_count=exc.affected_line_count,
+                sku=exc.sku,
+                first_observed_at=exc.first_observed_at,
+                age_days=exc.age_days,
+                claim_window_days=exc.claim_window_days,
+                window_status=composed.window_status.value,
+                explanation=None,
+                recommended_action=None,
+                status="NEW",
+                confidence=str(source_row["confidence"]),
+                formula_version="reconcile.v1",
+            )
         )
-        inserted.append(
+        finding_templates.append(
             {
-                "leak_finding_id": leak_finding_id,
                 "leak_category": composed.leak_category.value,
                 "severity": severity_value,
                 "window_status": composed.window_status.value,
@@ -3506,14 +3538,20 @@ def run_leak_shield_reconciliation(
                 # real, falsely-zero-reading count, per CLAUDE.md's "missing input is
                 # UNAVAILABLE, never zero" rule.
                 "sku": exc.sku,
-                # This checkpoint (narrate_leak_findings): the SAME confidence already read
-                # from source_row and persisted onto leak_finding.confidence two lines above --
-                # threaded through onto the returned dict too so a caller can map it onto a
-                # §7.4.7 register without a second DB round-trip. Copied unchanged, never
-                # re-derived.
+                # The SAME confidence persisted onto leak_finding.confidence above -- threaded
+                # through onto the returned dict too so a caller can map it onto a §7.4.7
+                # register without a second DB round-trip. Copied unchanged, never re-derived.
                 "confidence": str(source_row["confidence"]),
             }
         )
+
+    # One bulk insert for every finding (was one transaction per finding — measured at ~36% of
+    # a CEO Hub reconcile request). Ids come back in input order.
+    leak_finding_ids = leak_finding_repo.insert_many(tenant_id, finding_rows)
+    inserted: list[dict[str, object]] = [
+        {"leak_finding_id": leak_finding_id, **template}
+        for leak_finding_id, template in zip(leak_finding_ids, finding_templates)
+    ]
 
     return LeakShieldOutcome(
         reconciliation_run_id=result.reconciliation_run_id,

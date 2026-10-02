@@ -15,7 +15,13 @@ from sqlalchemy import text
 from backend.agents import ceo_hub
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CI
-from backend.config import ci_evidence_storage_dir, ci_vision_model, ollama_host
+from backend.config import (
+    ci_evidence_storage_dir,
+    ci_vision_model,
+    ollama_host,
+    ollama_keep_alive,
+    ollama_vision_timeout_seconds,
+)
 from backend.repositories import agent_run_repo
 from backend.services.ci_actions import load_seller_product
 from backend.tenant_context import tenant_scope
@@ -32,7 +38,9 @@ def _vision_extractor() -> OllamaVisionExtractor:
     this). A stateless dataclass, cheap to build per request; no caching needed."""
     return OllamaVisionExtractor(
         image_store=LocalDiskImageStore(ci_evidence_storage_dir()),
-        ollama=HttpOllamaClient(host=ollama_host()),
+        ollama=HttpOllamaClient(
+            host=ollama_host(), timeout_seconds=ollama_vision_timeout_seconds(), keep_alive=ollama_keep_alive()
+        ),
         model=ci_vision_model(),
     )
 

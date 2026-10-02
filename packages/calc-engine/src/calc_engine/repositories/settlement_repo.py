@@ -39,6 +39,18 @@ _SETTLEMENT_LINES_FOR_PERIOD_SQL = text(
     """
 )
 
+_SETTLEMENT_LINES_FOR_PERIOD_AND_MARKETPLACE_SQL = text(
+    """
+    SELECT id AS settlement_line_id, tenant_id, ingestion_run_id, marketplace, order_ref,
+           line_ref, settlement_id, gross_settlement_amount, currency, settlement_date,
+           document_type, source_row_number, source_row_json, confidence
+    FROM settlement_line
+    WHERE tenant_id = :tenant_id
+      AND marketplace = :marketplace
+      AND settlement_date BETWEEN :period_start AND :period_end
+    """
+)
+
 _COMPONENTS_FOR_SETTLEMENT_LINES_SQL = text(
     """
     SELECT id, sales_line_id, settlement_line_id, component_kind, component_code, source_side,
@@ -51,7 +63,9 @@ _COMPONENTS_FOR_SETTLEMENT_LINES_SQL = text(
 )
 
 
-def settlement_lines_in_period(tenant_id: UUID, *, period_start: date, period_end: date) -> list[dict[str, Any]]:
+def settlement_lines_in_period(
+    tenant_id: UUID, *, period_start: date, period_end: date, marketplace: str | None = None
+) -> list[dict[str, Any]]:
     """Fetches raw settlement_line rows for a period, filtered on `settlement_date BETWEEN
     :period_start AND :period_end`.
 
@@ -65,13 +79,19 @@ def settlement_lines_in_period(tenant_id: UUID, *, period_start: date, period_en
 
     Returns raw rows; matching them against sales_line candidates (collision/duplicate/orphan
     handling, data-foundation.md §5.8) is the caller's job, not this repository's — this module
-    only reads data-foundation's own tables as declared."""
+    only reads data-foundation's own tables as declared.
+
+    `marketplace=None` (the default) returns every marketplace's rows, exactly as before — every
+    existing caller is unchanged. Passing a marketplace pushes that filter into SQL, so a
+    per-marketplace caller (`reconcile()`, cash reconciliation) no longer pulls every other
+    marketplace's rows (including their `source_row_json`) across the wire just to discard them."""
+    params: dict[str, Any] = {"tenant_id": str(tenant_id), "period_start": period_start, "period_end": period_end}
+    sql = _SETTLEMENT_LINES_FOR_PERIOD_SQL
+    if marketplace is not None:
+        sql = _SETTLEMENT_LINES_FOR_PERIOD_AND_MARKETPLACE_SQL
+        params["marketplace"] = marketplace
     with tenant_scope(tenant_id) as conn:
-        rows = conn.execute(
-            _SETTLEMENT_LINES_FOR_PERIOD_SQL,
-            {"tenant_id": str(tenant_id), "period_start": period_start, "period_end": period_end},
-        )
-        return [dict(row._mapping) for row in rows]
+        return [dict(row._mapping) for row in conn.execute(sql, params)]
 
 
 def components_for_settlement_lines(tenant_id: UUID, *, settlement_line_ids: list[UUID]) -> list[dict[str, Any]]:

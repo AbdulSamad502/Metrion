@@ -11,6 +11,15 @@ from data_foundation.adapters.meesho_tcs_sales_return_v1 import adapter as meesh
 from data_foundation.types import ColumnBinding, FileSample, RawFile
 
 
+@pytest.mark.parametrize("raw", ["NaN", "Infinity", "-Infinity", "sNaN"])
+def test_rupees_to_paise_rejects_non_finite_as_money_parse_error(raw):
+    # Decimal("NaN")/Decimal("Infinity") parse successfully, so without an explicit check
+    # int() raised a bare ValueError / OverflowError (the latter not even a ValueError) instead
+    # of the MoneyParseError this function documents.
+    with pytest.raises(MoneyParseError):
+        rupees_to_paise(raw)
+
+
 def test_rupees_to_paise_positive():
     assert rupees_to_paise("372.06") == 37_206
 

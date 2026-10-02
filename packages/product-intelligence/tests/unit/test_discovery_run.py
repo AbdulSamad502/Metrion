@@ -343,3 +343,112 @@ def test_niche_brief_exclude_brands_constraint_filters_before_persisting(_patch_
     titles = [row["candidate_title"] for row in _patch_repos]
     assert "Nike Pegasus 41 Review" not in titles
     assert "Acme Runner Pro Launch" in titles
+
+
+# --- Targeted image lookup for candidates the run-wide image pool could not match -----------
+
+
+class _ImageByNameTavily:
+    """Generic niche queries return a niche-level image that names no product (the real shape of the
+    bug); a search by the candidate's own title returns an image that does."""
+
+    def __init__(self, *, product_image: dict | None = None, raises_on_product_query: bool = False) -> None:
+        self._product_image = product_image
+        self._raises = raises_on_product_query
+        self.image_queries: list[str] = []
+
+    def search(self, query, *, include_images=False, max_results=10):
+        return [_tavily_result(url="https://a.com/1", title="Acme Wireless Earbuds Pro", content="acme wireless earbuds pro review")]
+
+    def images_for(self, query, *, max_images=5):
+        self.image_queries.append(query)
+        if "acme" in query.lower():
+            if self._raises:
+                raise TavilyUnavailable("rate limit")
+            return [TavilyImage(**self._product_image)] if self._product_image else []
+        return [TavilyImage(url="https://img.example.com/niche.jpg", source_url="https://img.example.com/niche.jpg", description="headphones on a desk", title="Audio roundup")]
+
+
+_PRODUCT_IMAGE = {
+    "url": "https://img.example.com/acme.jpg",
+    "source_url": "https://img.example.com/acme.jpg",
+    "description": "white earbuds",
+    "title": "Acme Wireless Earbuds Pro — official",
+}
+
+
+def _run(tavily, cache=None):
+    return discovery_run.run_discovery(
+        _TENANT_ID, run_id=_RUN_ID, niche_brief=_fake_niche_brief(), tavily=tavily, youtube=_FakeYoutubeClient(),
+        cache=cache or InProcessQueryCache(), now=_NOW,
+    )
+
+
+def test_candidate_missing_an_image_gets_one_found_by_its_own_name(_patch_repos) -> None:
+    tavily = _ImageByNameTavily(product_image=_PRODUCT_IMAGE)
+    outcome = _run(tavily)
+
+    assert outcome.status == "COMPLETE"
+    assert [r["image_url"] for r in _patch_repos] == ["https://img.example.com/acme.jpg"]
+    assert _patch_repos[0]["image_source_url"] == "https://img.example.com/acme.jpg"
+    # The generic niche image was never borrowed.
+    assert all(r["image_url"] != "https://img.example.com/niche.jpg" for r in _patch_repos)
+
+
+def test_candidate_stays_image_less_when_no_image_names_it(_patch_repos) -> None:
+    outcome = _run(_ImageByNameTavily(product_image=None))
+
+    assert outcome.status == "COMPLETE"
+    assert len(_patch_repos) == 1 and _patch_repos[0]["image_url"] is None
+
+
+def test_image_lookup_failure_does_not_degrade_the_run(_patch_repos) -> None:
+    outcome = _run(_ImageByNameTavily(product_image=_PRODUCT_IMAGE, raises_on_product_query=True))
+
+    assert outcome.status == "COMPLETE"
+    assert outcome.tavily_degraded is False
+    assert _patch_repos[0]["image_url"] is None
+
+
+def test_targeted_image_lookup_is_cached_and_bounded(_patch_repos) -> None:
+    tavily = _ImageByNameTavily(product_image=_PRODUCT_IMAGE)
+    cache = InProcessQueryCache()
+    _run(tavily, cache)
+    first_run_product_queries = [q for q in tavily.image_queries if "acme" in q.lower()]
+    _run(tavily, cache)
+    second_run_product_queries = [q for q in tavily.image_queries if "acme" in q.lower()]
+
+    assert len(first_run_product_queries) == 1
+    assert len(second_run_product_queries) == 1  # second run served from cache
+
+    many = [_tavily_result(url=f"https://a.com/{i}", title=f"Brand{i} Gadget Model{i}", content=f"brand{i} gadget model{i}") for i in range(25)]
+
+    class _Many(_FakeTavilyClient):
+        def __init__(self):
+            super().__init__(results=many)
+            self.name_queries = 0
+
+        def images_for(self, query, *, max_images=5):
+            if "gadget" in query.lower() and "model" in query.lower():
+                self.name_queries += 1
+            return []
+
+    many_client = _Many()
+    _run(many_client)
+    assert many_client.name_queries <= discovery_run._MAX_TARGETED_IMAGE_LOOKUPS
+
+
+def test_no_targeted_lookups_when_tavily_already_failed_this_run(_patch_repos) -> None:
+    tavily = _FakeTavilyClient(raises=True)
+    youtube = _FakeYoutubeClient(videos=[
+        YoutubeVideo(
+            video_id="v1", title="Wireless Earbuds Unboxing", channel_title="c", view_count=5000,
+            comment_count=50, thumbnail_url="https://img.example.com/t.jpg", published_at=_NOW, retrieved_at=_NOW,
+        )
+    ])
+    outcome = discovery_run.run_discovery(
+        _TENANT_ID, run_id=_RUN_ID, niche_brief=_fake_niche_brief(), tavily=tavily, youtube=youtube,
+        cache=InProcessQueryCache(), now=_NOW,
+    )
+    assert outcome.tavily_degraded is True
+    assert tavily.call_count >= 1

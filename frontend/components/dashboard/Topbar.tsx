@@ -1,47 +1,93 @@
-export function Topbar({ title, subtitle }: { title: string; subtitle: string }) {
+"use client";
+
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { Icon } from "@/components/ui/Icon";
+
+/** The page header, laid out as a control surface:
+ *   LEFT    identity — where you are (section eyebrow) and what this page is for
+ *   CENTER  context — only when the page supplies something genuinely useful (never decoration)
+ *   RIGHT   actions — page actions, notifications, and the CEO shortcut (hidden on the CEO Hub itself)
+ * There is deliberately no date-range picker: no dashboard query takes a global range. */
+export function Topbar({
+  title,
+  subtitle,
+  eyebrow,
+  attentionCount,
+  onOpenMenu,
+  context,
+  actions,
+  showCeoShortcut,
+}: {
+  title: string;
+  subtitle: string;
+  eyebrow?: string;
+  attentionCount: number;
+  onOpenMenu: () => void;
+  context?: ReactNode;
+  actions?: ReactNode;
+  showCeoShortcut: boolean;
+}) {
   return (
-    <div
-      className="sticky top-0 z-10 flex flex-shrink-0 items-center justify-between gap-5 px-8 py-5"
-      style={{
-        background: "var(--bg-header)",
-        backdropFilter: "blur(34px) saturate(195%)",
-        borderBottom: "1px solid var(--border-subtle)",
-      }}
+    <header
+      className="mt-topbar sticky top-0 z-10 flex flex-shrink-0 items-center gap-3 px-4 py-3.5 sm:gap-5 sm:px-8"
     >
-      <div className="min-w-0">
-        <div className="text-2xl font-bold" style={{ color: "var(--text-1)" }}>
+      <button
+        type="button"
+        onClick={onOpenMenu}
+        aria-label="Open navigation"
+        className="mt-btn mt-focus flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl lg:hidden"
+        style={{ border: "1px solid var(--border-default)", color: "var(--text-4)" }}
+      >
+        <Icon name="menu" size={18} />
+      </button>
+
+      <div className="min-w-0 flex-shrink">
+        {eyebrow && (
+          <div className="mt-eyebrow hidden truncate sm:block" style={{ color: "var(--text-6)" }}>
+            {eyebrow}
+          </div>
+        )}
+        <h1 className="t-page-title truncate" style={{ color: "var(--text-1)" }}>
           {title}
-        </div>
-        <div className="mt-0.5 text-[13px]" style={{ color: "var(--text-5)" }}>
+        </h1>
+        <p className="t-body-sm mt-0.5 hidden truncate md:block" style={{ color: "var(--text-5)" }}>
           {subtitle}
-        </div>
+        </p>
       </div>
+
+      <div className="hidden min-w-0 flex-1 items-center justify-center lg:flex">{context}</div>
+      <div className="flex-1 lg:hidden" />
+
       <div className="flex flex-shrink-0 items-center gap-2.5">
-        <div
-          className="flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-xs"
+        {actions}
+        <Link
+          href="/dashboard/notifications"
+          aria-label={attentionCount > 0 ? `Notifications — ${attentionCount} need attention` : "Notifications"}
+          title="Notifications"
+          className="mt-btn mt-focus relative flex h-9 w-9 items-center justify-center rounded-xl"
           style={{ border: "1px solid var(--border-default)", color: "var(--text-4)" }}
         >
-          <span>May 10 – May 16, 2025</span>
-        </div>
-        <button
-          type="button"
-          className="flex h-8.5 w-8.5 items-center justify-center rounded-xl"
-          style={{ border: "1px solid var(--border-default)" }}
-          aria-label="Notifications"
-        >
-          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--text-4)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10 2.5C7 2.5 5.5 4.8 5.5 8V11L4 13.5H16L14.5 11V8C14.5 4.8 13 2.5 10 2.5Z" />
-            <path d="M8.2 15.5C8.2 16.6 9 17.5 10 17.5C11 17.5 11.8 16.6 11.8 15.5" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className="whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-bold"
-          style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}
-        >
-          Ask Metrion
-        </button>
+          <Icon name="notifications" size={17} />
+          {attentionCount > 0 && (
+            <span
+              className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full"
+              style={{ background: "var(--accent)", boxShadow: "0 0 0 1.5px var(--bg-base)" }}
+              aria-hidden
+            />
+          )}
+        </Link>
+        {showCeoShortcut && (
+          <Link
+            href="/dashboard/ceo-hub"
+            className="mt-btn mt-btn-secondary mt-focus flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 t-body font-semibold"
+          >
+            <span className="hidden sm:inline">CEO Hub</span>
+            <span className="sm:hidden">CEO</span>
+            <Icon name="arrow" size={13} strokeWidth={1.9} />
+          </Link>
+        )}
       </div>
-    </div>
+    </header>
   );
 }

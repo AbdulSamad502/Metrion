@@ -106,6 +106,7 @@ def _stub_persistence(monkeypatch: pytest.MonkeyPatch) -> None:
     """`metric_result_repo.save` / `leak_finding_repo.insert` open a real DB connection — no
     live Postgres in this session."""
     monkeypatch.setattr(cfo_actions_module.metric_result_repo, "save", lambda *a, **k: None)
+    monkeypatch.setattr(cfo_actions_module.metric_result_repo, "save_many", lambda *a, **k: [])
     monkeypatch.setattr(
         cfo_actions_module.config_repo, "severity_config_rows", lambda *a, **k: []
     )
@@ -149,6 +150,13 @@ def _run_with_exceptions(
         return uuid4()
 
     monkeypatch.setattr(cfo_actions_module.leak_finding_repo, "insert", _fake_insert)
+
+    def _fake_insert_many(tenant_id, rows):
+        # run_leak_shield_reconciliation now bulk-writes findings; record each row in exactly the
+        # shape the single-row stub above does, so every assertion below is unchanged.
+        return [_fake_insert(tenant_id, **row) for row in rows]
+
+    monkeypatch.setattr(cfo_actions_module.leak_finding_repo, "insert_many", _fake_insert_many)
 
     outcome = run_leak_shield_reconciliation(
         uuid4(),

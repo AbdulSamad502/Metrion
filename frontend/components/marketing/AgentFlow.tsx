@@ -170,7 +170,7 @@ export function AgentFlow() {
             <div className="text-[15px] font-bold whitespace-nowrap" style={{ color: "var(--text-1)" }}>
               CEO Agent
             </div>
-            <div className="font-mono text-[10.5px] tracking-[0.04em]" style={{ color: "#5E9970" }}>
+            <div className="font-mono text-[10.5px] tracking-[0.04em]" style={{ color: "var(--text-green-muted)" }}>
               one recommendation, four inputs
             </div>
           </div>

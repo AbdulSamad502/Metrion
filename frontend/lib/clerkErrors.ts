@@ -95,6 +95,13 @@ export function isIdentifierExistsError(error: unknown): boolean {
   return errorCode(error) === "form_identifier_exists";
 }
 
+/** Clerk refuses a sign-in/sign-up while this browser already holds a session — including a
+ * "pending" one (unfinished session task), which `useAuth()` reports as signed-out, so the
+ * page can't detect it up front. The caller should sign the stale session out and restart. */
+export function isSessionExistsError(error: unknown): boolean {
+  return errorCode(error) === "session_exists";
+}
+
 export function isWrongStrategyError(error: unknown): boolean {
   return errorCode(error) === "strategy_for_user_invalid";
 }

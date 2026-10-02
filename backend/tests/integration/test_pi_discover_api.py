@@ -342,3 +342,111 @@ def test_discover_route_denies_403_when_neither_permission_present(app_client, f
         headers=headers,
     )
     assert resp.status_code == 403, resp.text
+
+
+# --- Candidate images: real discovery data -> candidate -> database -> API ---------------------
+
+
+class _ImageSourceTavily(_FakeTavilyClient):
+    """Mirrors the real Tavily shape that caused the missing-image bug: the images returned for the
+    GENERIC niche queries describe the niche and do not name the specific product, while an image
+    search by the product's own name returns an image whose own title names it."""
+
+    def __init__(self, *, product_image: bool) -> None:
+        super().__init__()
+        self._product_image = product_image
+
+    def images_for(self, query, *, max_images=5):
+        if "charging case" in query.lower() and self._product_image:
+            return [
+                TavilyImage(
+                    url="https://img.example.com/product-specific.jpg",
+                    source_url="https://img.example.com/product-specific.jpg",
+                    description="a pair of white earbuds",
+                    title="Wireless Earbuds Charging Case — product page",
+                )
+            ]
+        return [
+            TavilyImage(
+                url="https://img.example.com/generic-niche.jpg",
+                source_url="https://img.example.com/generic-niche.jpg",
+                description="a stock photo of headphones on a desk",
+                title="Audio gear roundup",
+            )
+        ]
+
+
+def _run_discovery(app_client, headers, tenant, monkeypatch, tavily) -> dict:
+    from backend.services import pi_actions
+    from product_intelligence.sources.cache import InProcessQueryCache
+
+    # `_QUERY_CACHE` is a process-wide singleton: use a fresh one so another test's cached niche
+    # images (24h TTL) cannot leak into this one.
+    monkeypatch.setattr(pi_actions, "_QUERY_CACHE", InProcessQueryCache())
+    monkeypatch.setattr(pi_actions, "_tavily_client", lambda: tavily)
+    monkeypatch.setattr(pi_actions, "_youtube_client", lambda: _NoVideosYoutube())
+    monkeypatch.setattr(pi_actions, "_text_extractor", lambda: _FakeTextExtractor())
+    monkeypatch.setattr(pi_actions, "_embedding_client", lambda: _FakeEmbeddingClient())
+
+    resp = app_client.post(
+        "/api/v1/pi/niche-briefs",
+        json={"category_text": "wireless earbuds", "budget_paise": 500_000, "marketplaces": ["AMAZON"]},
+        headers=headers,
+    )
+    brief_id = resp.json()["nicheBriefId"]
+    app_client.post(f"/api/v1/pi/niche-briefs/{brief_id}/mark-ready", headers=headers)
+    resp = app_client.post("/api/v1/pi/discover", json={"niche_brief_id": brief_id, "depth": "SHALLOW"}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+class _NoVideosYoutube:
+    """No YouTube result, so a thumbnail can never be what supplies the image under test."""
+
+    def search_videos(self, query, *, max_results=10):
+        return []
+
+    def top_comments_for(self, video_id, *, max_comments=20):
+        return []
+
+
+def test_candidate_image_found_by_searching_the_product_by_name_reaches_the_api(app_client, fake_clerk, tenant, monkeypatch):
+    headers = _register_owner(fake_clerk, tenant)
+    body = _run_discovery(app_client, headers, tenant, monkeypatch, _ImageSourceTavily(product_image=True))
+
+    candidates = app_client.get(f"/api/v1/pi/report/{body['runId']}", headers=headers).json()["candidates"]
+    images = {c["candidate"]["image_url"] for c in candidates}
+    # The product-specific image is persisted and returned; the generic niche image (which does not
+    # name the product) is NOT borrowed for it.
+    assert images == {"https://img.example.com/product-specific.jpg"}
+    assert candidates[0]["candidate"]["image_source_url"] == "https://img.example.com/product-specific.jpg"
+
+
+def test_candidate_without_a_matching_image_stays_valid_and_image_less(app_client, fake_clerk, tenant, monkeypatch):
+    headers = _register_owner(fake_clerk, tenant)
+    body = _run_discovery(app_client, headers, tenant, monkeypatch, _ImageSourceTavily(product_image=False))
+
+    assert body["status"] == "COMPLETE"
+    candidates = app_client.get(f"/api/v1/pi/report/{body['runId']}", headers=headers).json()["candidates"]
+    assert len(candidates) >= 1
+    assert all(c["candidate"]["image_url"] is None for c in candidates)
+
+
+def test_candidate_images_are_not_visible_to_another_tenant(app_client, fake_clerk, tenant, migrate_engine, monkeypatch):
+    headers = _register_owner(fake_clerk, tenant)
+    body = _run_discovery(app_client, headers, tenant, monkeypatch, _ImageSourceTavily(product_image=True))
+
+    other = uuid.uuid4()
+    with migrate_engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO tenant (id, clerk_org_id, business_name, status, created_at) "
+                "VALUES (:id, :clerk_org_id, 'Test Tenant', 'ACTIVE', now())"
+            ),
+            {"id": str(other), "clerk_org_id": f"org_{other}"},
+        )
+    other_headers = _register_owner(fake_clerk, other)
+
+    resp = app_client.get(f"/api/v1/pi/report/{body['runId']}", headers=other_headers)
+    assert resp.status_code == 404
+    assert "product-specific.jpg" not in resp.text

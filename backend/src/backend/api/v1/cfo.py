@@ -38,6 +38,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from data_foundation.adapters.registry import ADAPTER_REGISTRY
@@ -49,6 +50,7 @@ from data_foundation.repositories import report_file_repo
 from calc_engine.formulas.cost_components import CostEntry
 from calc_engine.types import CanonicalLine, ComponentRow, Confidence, Paise, RecognitionState, Unavailable
 
+from backend.uploads import read_upload_capped
 from backend.agents.ceo_hub import (
     CFO_ANALYZE_GST_LINES,
     CFO_ANOMALY_CHECK,
@@ -65,8 +67,9 @@ from backend.agents.ceo_hub import (
 )
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CFO, FINANCIALS_ADJUST, SERVICE_GST_LOOKUP, has_permission
-from backend.config import cfo_narration_model, cfo_report_storage_dir, ollama_host
+from backend.config import cfo_max_upload_bytes, cfo_narration_model, cfo_report_storage_dir, ollama_host
 from backend.entitlement import resolve_cfo_entitlement, resolve_gst_lookup_entitlement
+from backend.services.cfo_imports import get_import, list_imports
 from backend.services.cfo_actions import (
     AcceptGstLookupRequest,
     AnomalyCheckRequest,
@@ -174,60 +177,92 @@ async def post_ingest(
     evidence`. Deduped by content hash (§3.1: a byte-identical re-upload is reported, not
     re-ingested) and, within `ingest_and_persist`, by natural key (§6 rule 4)."""
     assert ctx.tenant_id is not None
-    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_INGEST)
+    tenant_id = ctx.tenant_id
+    _require_cfo_entitlement(tenant_id, direct_action_code=CFO_INGEST)
 
     adapter = ADAPTER_REGISTRY.get(adapter_id)
     if adapter is None:
         raise HTTPException(status_code=400, detail=f"unknown adapter_id {adapter_id!r}")
 
-    contents = await file.read()
-    content_sha256 = hashlib.sha256(contents).hexdigest()
+    contents = await read_upload_capped(file, max_bytes=cfo_max_upload_bytes(), env_var="CFO_MAX_UPLOAD_BYTES")
+    # Everything below is synchronous (hash, file write, DB calls, CSV parse, ingestion). Run on the
+    # event loop it would stall every other request on this worker for the whole upload, so it is
+    # handed to the threadpool; HTTPException raised inside propagates unchanged.
+    def _ingest_upload() -> dict[str, object]:
+        content_sha256 = hashlib.sha256(contents).hexdigest()
 
-    existing_id = report_file_repo.find_by_content_hash(ctx.tenant_id, content_sha256)
-    if existing_id is not None:
-        return {"reportFileId": str(existing_id), "duplicate": True}
+        existing_id = report_file_repo.find_by_content_hash(tenant_id, content_sha256)
+        if existing_id is not None:
+            return {"reportFileId": str(existing_id), "duplicate": True}
 
-    storage_dir = Path(cfo_report_storage_dir())
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    stored_name = f"{content_sha256}{Path(file.filename or '').suffix or '.csv'}"
-    (storage_dir / stored_name).write_bytes(contents)
+        storage_dir = Path(cfo_report_storage_dir())
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        stored_name = f"{content_sha256}{Path(file.filename or '').suffix or '.csv'}"
+        (storage_dir / stored_name).write_bytes(contents)
 
-    uploaded_at = datetime.now(timezone.utc)
-    report_file_id = report_file_repo.insert_report_file(
-        ctx.tenant_id,
-        marketplace=marketplace,
-        report_category=adapter.report_category,
-        content_sha256=content_sha256,
-        original_filename=file.filename or stored_name,
-        byte_size=len(contents),
-        storage_uri=f"file://{storage_dir / stored_name}",
-        uploaded_by=ctx.app_user_id,
-        uploaded_at=uploaded_at,
-    )
-
-    try:
-        sample, raw_file = read_csv_file(contents)
-        outcome = ingest_and_persist(
-            ctx.tenant_id, report_file_id=report_file_id, adapter_id=adapter_id,
-            sample=sample, raw_file=raw_file, started_at=uploaded_at,
+        uploaded_at = datetime.now(timezone.utc)
+        report_file_id = report_file_repo.insert_report_file(
+            tenant_id,
+            marketplace=marketplace,
+            report_category=adapter.report_category,
+            content_sha256=content_sha256,
+            original_filename=file.filename or stored_name,
+            byte_size=len(contents),
+            storage_uri=f"file://{storage_dir / stored_name}",
+            uploaded_by=ctx.app_user_id,
+            uploaded_at=uploaded_at,
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from None
-    except AdapterMismatchError as exc:
-        raise HTTPException(
-            status_code=400, detail=f"file does not match adapter {adapter_id!r} — missing columns {exc.missing_columns}"
-        ) from None
 
-    return {
-        "reportFileId": str(report_file_id),
-        "duplicate": False,
-        "ingestionRunId": str(outcome.ingestion_run_id),
-        "rowCountRead": outcome.row_count_read,
-        "rowCountAccepted": outcome.row_count_accepted,
-        "rowCountRejected": outcome.row_count_rejected,
-        "rowCountDuplicate": outcome.row_count_duplicate,
-        "persistedSalesLineIds": [str(i) for i in outcome.persisted_sales_line_ids],
-    }
+        try:
+            sample, raw_file = read_csv_file(contents)
+            outcome = ingest_and_persist(
+                tenant_id, report_file_id=report_file_id, adapter_id=adapter_id,
+                sample=sample, raw_file=raw_file, started_at=uploaded_at,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        except AdapterMismatchError as exc:
+            raise HTTPException(
+                status_code=400, detail=f"file does not match adapter {adapter_id!r} — missing columns {exc.missing_columns}"
+            ) from None
+
+        return {
+            "reportFileId": str(report_file_id),
+            "duplicate": False,
+            "ingestionRunId": str(outcome.ingestion_run_id),
+            "rowCountRead": outcome.row_count_read,
+            "rowCountAccepted": outcome.row_count_accepted,
+            "rowCountRejected": outcome.row_count_rejected,
+            "rowCountDuplicate": outcome.row_count_duplicate,
+            "persistedSalesLineIds": [str(i) for i in outcome.persisted_sales_line_ids],
+        }
+
+    return await run_in_threadpool(_ingest_upload)
+
+@router.get("/imports")
+def get_imports(limit: int = 100, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> list[dict[str, object]]:
+    """Import history: this tenant's uploaded reports with their latest ingestion outcome. Read-only —
+    needs only `agent.cfo`, same "viewing is not ingesting" precedent as `GET /cfo/data-requests`."""
+    assert ctx.tenant_id is not None
+    return list_imports(ctx.tenant_id, limit=max(1, min(limit, 200)))
+
+
+@router.get("/imports/{report_file_id}")
+def get_import_detail(
+    report_file_id: UUID,
+    limit: int = 50,
+    offset: int = 0,
+    ctx: AuthContext = require_auth(permission=AGENT_CFO),
+) -> dict[str, object]:
+    """What Metrion actually parsed and persisted for one uploaded report (data-foundation.md §1.3):
+    the report file, its latest ingestion run, and a page of the persisted lines. Works for the
+    `reportFileId` a duplicate upload returns. Never creates an ingestion run and never returns the
+    storage location or the raw seller rows. 404 for a missing OR another tenant's report."""
+    assert ctx.tenant_id is not None
+    detail = get_import(ctx.tenant_id, report_file_id, limit=max(1, min(limit, 200)), offset=max(0, offset))
+    if detail is None:
+        raise HTTPException(status_code=404, detail="import not found")
+    return detail
 
 
 # D7 (cfo-agent.md §6.8 `cfo.preview` table row) — the trigger id string, reused verbatim from

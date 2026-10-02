@@ -1,421 +1,348 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { Sidebar } from "@/components/dashboard/Sidebar";
-import { Topbar } from "@/components/dashboard/Topbar";
-import { useAppSession } from "@/lib/useAppSession";
-import { ApiError, apiFetch, type AgentStatus, type CiSummary } from "@/lib/api";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { HeaderContext } from "@/components/dashboard/HeaderContext";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorNotice } from "@/components/ui/ErrorNotice";
+import { Icon } from "@/components/ui/Icon";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { Section } from "@/components/ui/Section";
+import { Stat } from "@/components/ui/Stat";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { agentMeta, agentTier, useAgentRoster } from "@/lib/agents";
+import { useCiSummary } from "@/lib/useCiSummary";
+import { useShell } from "@/lib/ShellContext";
+import { ALERT_WINDOW_DAYS, isOpenRequest } from "@/lib/useNotifications";
 
-/** The post-auth landing screen (auth.md exit bar + the provided design reference).
- * Static for now, per scope: this proves a signed-in, onboarded user lands somewhere
- * real and reliable — the actual profit-intelligence data wiring is a later step. */
+/** The post-auth landing screen. Reading order is the point:
+ *   1. Business state   — one sentence and four real counts
+ *   2. What matters now — the things that need a decision, each with its next step
+ *   3. Financial impact — where profit lives (there is no honest single number to show here)
+ *   4. Agent activity   — who is working, and what they last did
+ *
+ * Every figure comes from a real response (`/ci/summary`, the shared notifications feed,
+ * `/ceo-hub/agents`). There is deliberately NO headline profit number: the backend has no
+ * portfolio-level profit endpoint, and computing money in the browser breaks the project's hard
+ * rule. Where data does not exist the page says so and points at the screen that produces it. */
 export default function DashboardPage() {
-  const { session, error, displayName, roleLabel } = useAppSession();
-
-  if (error) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center" style={{ color: "var(--negative)" }}>
-        {error}
-      </div>
-    );
-  }
-
-  if (!session) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center" style={{ color: "var(--text-5)" }}>
-        Loading…
-      </div>
-    );
-  }
-
   return (
-    <div className="flex" style={{ background: "var(--bg-base)" }}>
-      <Sidebar userName={displayName} roleLabel={roleLabel} active="Overview" />
-      <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
-        <Topbar title="Overview" subtitle="Profit, drivers, leaks and opportunities" />
-        <div className="flex-1 overflow-y-auto px-8 py-7">
-          <AgentStatusAndCiSummary />
-          <div className="mt-4">
-            <OverviewContent />
-          </div>
+    <DashboardShell
+      title="Overview"
+      subtitle="What is happening, what matters, and what to do next"
+      context={<HeaderContext kind="both" />}
+    >
+      <Overview />
+    </DashboardShell>
+  );
+}
+
+function Overview() {
+  const ci = useCiSummary();
+  return (
+    <div className="mt-content mt-stack">
+      <BusinessState ci={ci} />
+      <div className="grid grid-cols-1 gap-x-12 gap-y-10 xl:grid-cols-12">
+        <div className="xl:col-span-7">
+          <WhatMattersNow />
+        </div>
+        <div className="flex flex-col gap-10 xl:col-span-5">
+          <FinancialImpact />
+          <Opportunities />
         </div>
       </div>
+      <AgentActivity lastResearchAt={ci.summary?.lastResearchAt} />
     </div>
   );
 }
 
-/** Step 4 — minimal, functional Agent Status + CI activity summary for the main dashboard.
- * Deliberately undecorated (no charts, no animation) per scope; navigation into the CEO
- * Hub / CI research flow lives here rather than a separate standalone page. */
-function AgentStatusAndCiSummary() {
-  const { getToken } = useAuth();
-  const [agents, setAgents] = useState<AgentStatus[] | null>(null);
-  const [summary, setSummary] = useState<CiSummary | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const token = await getToken();
-        const [a, s] = await Promise.all([
-          apiFetch<AgentStatus[]>("/api/v1/ceo-hub/agents", token),
-          apiFetch<CiSummary>("/api/v1/ci/summary", token),
-        ]);
-        setAgents(a);
-        setSummary(s);
-      } catch (e) {
-        setLoadError(e instanceof ApiError ? e.message : "Could not reach the backend");
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+function BusinessState({ ci }: { ci: ReturnType<typeof useCiSummary> }) {
+  const { displayName, notifications: n } = useShell();
+  const requests = n.dataRequests.filter(isOpenRequest).length;
+  const alerts = n.alerts.length;
+  const total = requests + alerts;
+  const loading = n.alertsStatus === "loading" || n.dataRequestsStatus === "loading";
+  const { summary } = ci;
 
   return (
-    <Card style={{ padding: "16px 20px" }}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--text-6)" }}>
-            Agents
-          </span>
-          {loadError ? (
-            <span className="text-[12.5px]" style={{ color: "var(--negative)" }}>{loadError}</span>
-          ) : !agents ? (
-            <span className="text-[12.5px]" style={{ color: "var(--text-6)" }}>Loading…</span>
-          ) : (
-            agents.map((a) => (
-              <span key={a.id} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px]" style={{ border: "1px solid var(--border-default)" }}>
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: a.status === "CONNECTED" ? "var(--accent)" : "var(--text-7)" }} />
-                <span style={{ color: "var(--text-3)" }}>{a.name}</span>
-              </span>
-            ))
-          )}
+    <section aria-labelledby="ov-state">
+      <div className="mt-eyebrow">Welcome back, {displayName.split(" ")[0]}</div>
+      <h2 id="ov-state" className="t-headline mt-2" style={{ color: "var(--text-1)" }}>
+        {loading ? (
+          <span className="mt-skeleton inline-block h-8 w-80 max-w-full align-middle" aria-label="Loading your summary" />
+        ) : total === 0 ? (
+          "Nothing needs your attention right now."
+        ) : (
+          `${total} ${total === 1 ? "thing needs" : "things need"} your attention.`
+        )}
+      </h2>
+      {!loading && (
+        <p className="t-body mt-1.5 max-w-[70ch]" style={{ color: "var(--text-4)" }}>
+          {total === 0
+            ? `No competitor alerts in the last ${ALERT_WINDOW_DAYS} days and no open data requests. Upload a settlement or order report in CFO to keep the picture current.`
+            : [
+                requests > 0 ? `${requests} data ${requests === 1 ? "request" : "requests"} from the CFO` : null,
+                alerts > 0 ? `${alerts} competitor ${alerts === 1 ? "alert" : "alerts"} in the last ${ALERT_WINDOW_DAYS} days` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+        </p>
+      )}
+
+      {ci.error ? (
+        <div className="mt-6">
+          <ErrorNotice message={ci.error} />
         </div>
-        <Link href="/dashboard/ceo-hub" className="whitespace-nowrap text-[12.5px] font-bold" style={{ color: "var(--accent)" }}>
-          Open CEO Hub →
-        </Link>
-      </div>
-      {summary && (
-        <div className="mt-3 flex flex-wrap gap-5 text-[12.5px]" style={{ color: "var(--text-4)" }}>
-          <span>
-            <strong style={{ color: "var(--text-2)" }}>{summary.trackedCompetitors}</strong> competitors tracked
-          </span>
-          <span>
-            Last research:{" "}
-            <strong style={{ color: "var(--text-2)" }}>
-              {summary.lastResearchAt ? new Date(summary.lastResearchAt).toLocaleString() : "never"}
-            </strong>
-          </span>
-          <span>
-            <strong style={{ color: "var(--text-2)" }}>{summary.recentPriceEvents7d}</strong> price changes (7d)
-          </span>
-          {summary.pendingManualEntry > 0 && (
-            <span style={{ color: "var(--negative)" }}>
-              <strong>{summary.pendingManualEntry}</strong> competitor(s) need manual entry
-            </span>
-          )}
-          {summary.staleCompetitors > 0 && (
-            <span style={{ color: "var(--negative)" }}>
-              <strong>{summary.staleCompetitors}</strong> competitor(s) stale (&gt;7 days)
-            </span>
+      ) : ci.forbidden ? null : (
+        <div
+          className="mt-6 grid grid-cols-2 lg:grid-cols-4 lg:divide-x"
+          style={{ borderTop: "1px solid var(--border-subtle)", borderBottom: "1px solid var(--border-subtle)", ["--tw-divide-color" as string]: "var(--border-subtle)" }}
+        >
+          <Stat
+            label="Competitors tracked"
+            href="/dashboard/competitors"
+            loading={!summary}
+            value={summary ? String(summary.trackedCompetitors) : null}
+            hint={
+              summary && summary.trackedCompetitors === 0 ? (
+                "Add your first competitor"
+              ) : summary?.lastResearchAt ? (
+                `Last research ${new Date(summary.lastResearchAt).toLocaleDateString()}`
+              ) : (
+                "No research run yet"
+              )
+            }
+          />
+          <Stat label="Price changes · 7 days" href="/dashboard/competitors" loading={!summary} value={summary ? String(summary.recentPriceEvents7d) : null} />
+          <Stat
+            label="Need manual entry"
+            href="/dashboard/competitors"
+            loading={!summary}
+            value={summary ? String(summary.pendingManualEntry) : null}
+            tone={summary && summary.pendingManualEntry > 0 ? "warning" : "default"}
+            hint={summary && summary.pendingManualEntry > 0 ? "Evidence could not be read" : undefined}
+          />
+          <Stat
+            label="Stale competitors"
+            href="/dashboard/competitors"
+            loading={!summary}
+            value={summary ? String(summary.staleCompetitors) : null}
+            tone={summary && summary.staleCompetitors > 0 ? "warning" : "default"}
+            hint="No research in over 7 days"
+          />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function WhatMattersNow() {
+  const { notifications: n } = useShell();
+  const requests = n.dataRequests.filter(isOpenRequest);
+  // Threshold-breaching alerts first: those are the ones the engine itself flagged as alert-worthy.
+  const alerts = [...n.alerts].sort((a, b) => Number(b.thresholdBreached) - Number(a.thresholdBreached));
+  const loading = n.alertsStatus === "loading" || n.dataRequestsStatus === "loading";
+  const failed = [n.alertsError, n.dataRequestsError].filter((e): e is string => Boolean(e));
+  const rows = requests.length + alerts.length;
+
+  return (
+    <Section
+      title="What matters now"
+      panel={false}
+      action={
+        rows > 0 ? (
+          <Link href="/dashboard/notifications" className="t-body-sm font-semibold" style={{ color: "var(--text-3)" }}>
+            See all <Icon name="arrow" size={12} strokeWidth={1.9} />
+          </Link>
+        ) : undefined
+      }
+    >
+      {loading ? (
+        <LoadingState lines={4} label="Loading what needs attention" />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {failed.map((f, i) => (
+            <ErrorNotice key={i} message={f} onRetry={n.reload} />
+          ))}
+          {rows === 0 && failed.length === 0 ? (
+            <EmptyState
+              compact
+              icon="check"
+              title="You're clear"
+              description="When a competitor changes price or the CFO needs an input from you, it appears here with the next step."
+            />
+          ) : (
+            <ul className="m-0 flex list-none flex-col p-0">
+              {requests.slice(0, 4).map((r) => (
+                <li key={r.id} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                  <Link href="/dashboard/cfo#anomalies" className="mt-row mt-focus flex items-center gap-4 rounded-lg px-1 py-3.5">
+                    <StatusBadge tone="warning" dot>
+                      CFO needs input
+                    </StatusBadge>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate t-body-lg font-semibold" style={{ color: "var(--text-2)" }}>
+                        {r.requestedField}
+                      </span>
+                      {r.reason && (
+                        <span className="block truncate t-body-sm" style={{ color: "var(--text-5)" }}>
+                          {r.reason}
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex flex-shrink-0 items-center gap-1 t-body-sm font-semibold" style={{ color: "var(--text-4)" }}>
+                      Provide <Icon name="arrow" size={12} />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+              {alerts.slice(0, 5).map((a) => (
+                <li key={a.priceEventId} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                  <Link href="/dashboard/competitors" className="mt-row mt-focus flex items-center gap-4 rounded-lg px-1 py-3.5">
+                    <StatusBadge tone={a.thresholdBreached ? "negative" : "info"} dot>
+                      {a.thresholdBreached ? "Alert-worthy" : "Competitor"}
+                    </StatusBadge>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate t-body-lg font-semibold" style={{ color: "var(--text-2)" }}>
+                        {a.competitorLabel}
+                      </span>
+                      <span className="block truncate t-body-sm" style={{ color: "var(--text-5)" }}>
+                        {a.message}
+                      </span>
+                    </span>
+                    <span className="flex flex-shrink-0 items-center gap-1 t-body-sm font-semibold" style={{ color: "var(--text-4)" }}>
+                      Review <Icon name="arrow" size={12} />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}
-    </Card>
+    </Section>
   );
 }
 
-function Card({ children, className = "", style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
+function FinancialImpact() {
   return (
-    <div
-      className={`rounded-xl ${className}`}
-      style={{
-        background: "var(--bg-card)",
-        backdropFilter: "blur(34px) saturate(190%)",
-        border: "1px solid var(--border-default)",
-        ...style,
-      }}
+    <Section title="Financial impact" panel={false}>
+      <div className="mt-panel flex flex-col gap-4" style={{ background: "var(--bg-card-elevated)" }}>
+        <p className="t-body-lg leading-relaxed" style={{ color: "var(--text-3)" }}>
+          Contribution profit is computed per period by the CFO engine from the reports you upload, and each figure carries the
+          source it came from. There is no single headline number here, because it would hide which period and which data it
+          came from.
+        </p>
+        <div className="flex flex-wrap gap-2.5">
+          <Link
+            href="/dashboard/cfo#profitability"
+            className="mt-btn mt-focus inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 t-body font-bold"
+            style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}
+          >
+            View profitability <Icon name="arrow" size={13} strokeWidth={1.9} />
+          </Link>
+          <Link
+            href="/dashboard/cfo#import"
+            className="mt-btn mt-focus inline-flex items-center rounded-lg px-3.5 py-2 t-body font-semibold"
+            style={{ color: "var(--text-3)", border: "1px solid var(--border-hover)" }}
+          >
+            Upload reports
+          </Link>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function Opportunities() {
+  return (
+    <Section title="Opportunities" panel={false}>
+      <p className="t-body leading-relaxed" style={{ color: "var(--text-4)" }}>
+        Nothing has been surfaced yet. Product Intelligence finds niches and candidates against your own costs — run a
+        discovery to see what is worth pursuing.
+      </p>
+      <Link
+        href="/dashboard/pi"
+        className="mt-3 inline-flex items-center gap-1.5 t-body font-bold"
+        style={{ color: "var(--text-3)" }}
+      >
+        Open Products <Icon name="arrow" size={12} strokeWidth={1.9} />
+      </Link>
+    </Section>
+  );
+}
+
+function AgentActivity({ lastResearchAt }: { lastResearchAt: string | null | undefined }) {
+  const { agents, error, reload } = useAgentRoster();
+  return (
+    <Section
+      title="Agent activity"
+      panel={false}
+      action={
+        <Link href="/dashboard/ceo-hub" className="t-body-sm font-semibold" style={{ color: "var(--text-3)" }}>
+          Open CEO Hub <Icon name="arrow" size={12} strokeWidth={1.9} />
+        </Link>
+      }
     >
-      {children}
-    </div>
-  );
-}
-
-function OverviewContent() {
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-[1.6fr_1fr] gap-3.5">
-        <Card style={{ background: "var(--bg-card-elevated)", border: "1px solid var(--accent-border-default)", padding: "24px 26px" }}>
-          <div className="flex items-center gap-2">
-            <span className="text-[11.5px] font-bold uppercase tracking-wider" style={{ color: "var(--text-mint)" }}>
-              Net Profit
-            </span>
-            <span className="rounded px-1.5 py-0.5 text-[9.5px] font-bold" style={{ background: "var(--border-subtle)", color: "var(--text-8)" }}>
-              Measured
-            </span>
-          </div>
-          <div className="mt-2 text-[42px] font-bold" style={{ color: "var(--text-hero)" }}>
-            ₹6,24,000
-          </div>
-          <div className="mt-2.5 flex flex-wrap items-center gap-2.5 text-[13.5px]">
-            <span className="font-bold" style={{ color: "var(--accent)" }}>
-              ↑ 15.3%
-            </span>
-            <span style={{ color: "var(--text-7)" }}>vs last month</span>
-            <span style={{ color: "var(--divider-dot)" }}>·</span>
-            <span style={{ color: "var(--text-4)" }}>Margin 28.4%</span>
-            <span className="font-semibold" style={{ color: "var(--accent)" }}>
-              (+2.6 pts)
-            </span>
-          </div>
-        </Card>
-
-        <Card style={{ padding: "18px 22px", display: "flex", flexDirection: "column", justifyContent: "center", gap: "14px" }}>
-          <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-6)" }}>
-            Revenue &amp; Spend
-          </div>
-          <div>
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-xs" style={{ color: "var(--text-4)" }}>
-                Revenue
-              </span>
-              <span className="text-base font-bold" style={{ color: "var(--text-2)" }}>
-                ₹24,85,430
-              </span>
-            </div>
-            <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--accent)" }}>
-              ↑ 10.6% vs last 7 days
-            </div>
-          </div>
-          <div className="h-px" style={{ background: "var(--border-subtle)" }} />
-          <div>
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-xs" style={{ color: "var(--text-4)" }}>
-                Ad Spend
-              </span>
-              <span className="text-base font-bold" style={{ color: "var(--text-2)" }}>
-                ₹3,12,000
-              </span>
-            </div>
-            <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--accent)" }}>
-              ↑ 5.2% vs last month
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <div
-        className="rounded-2xl px-6 py-5"
-        style={{ background: "var(--warning-fill)", border: "1px solid var(--warning-border)", borderLeft: "3px solid var(--warning)" }}
-      >
-        <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--warning)" }}>
-          What Matters Now
+      {error ? (
+        <ErrorNotice message={error} onRetry={reload} />
+      ) : !agents ? (
+        <LoadingState lines={4} label="Loading agents" />
+      ) : (
+        <div className="mt-table-wrap">
+          <table className="mt-table">
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Availability</th>
+                <th>Last activity</th>
+                <th aria-label="Open" />
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((a) => {
+                const meta = agentMeta(a.id);
+                const tier = agentTier(a);
+                // Only CI records activity today (its last research run); the rest say so.
+                const last =
+                  a.id === "CI"
+                    ? lastResearchAt === undefined
+                      ? "…"
+                      : lastResearchAt
+                        ? new Date(lastResearchAt).toLocaleString()
+                        : "No research run yet"
+                    : tier === "unavailable"
+                      ? "—"
+                      : "Not recorded";
+                return (
+                  <tr key={a.id}>
+                    <td>
+                      <span className="flex items-center gap-2.5">
+                        <span style={{ color: tier === "connected" ? "var(--text-2)" : "var(--text-5)" }}>
+                          <Icon name={meta.icon} size={16} />
+                        </span>
+                        {a.name}
+                      </span>
+                    </td>
+                    <td>
+                      <StatusBadge tone={tier === "connected" ? "accent" : "neutral"} dot>
+                        {tier === "connected" ? "Wired to CEO" : tier === "available" ? "Workspace only" : "Not built yet"}
+                      </StatusBadge>
+                    </td>
+                    <td style={{ color: "var(--text-4)" }}>{last}</td>
+                    <td className="text-right">
+                      {meta.href && (
+                        <Link href={meta.href} className="mt-focus t-body-sm font-bold" style={{ color: "var(--text-3)" }}>
+                          Open
+                        </Link>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-        <div className="mt-2 max-w-xl text-lg font-semibold" style={{ color: "var(--text-1)" }}>
-          Profit is up 15.3% this week — but marketplace fees are quietly offsetting part of the gain.
-        </div>
-        <div className="mt-3.5 flex flex-wrap items-end gap-6">
-          <div>
-            <div className="text-2xl font-bold" style={{ color: "var(--warning)" }}>
-              -₹18,420 / mo
-            </div>
-            <div className="mt-0.5 text-[11.5px]" style={{ color: "var(--text-5)" }}>
-              Impact this week (est.)
-            </div>
-          </div>
-          <div className="min-w-0 border-l pl-4" style={{ borderColor: "var(--border-default)" }}>
-            <div className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-6)" }}>
-              Why
-            </div>
-            <div className="mt-0.5 text-[13px]" style={{ color: "var(--text-3)" }}>
-              Amazon referral fees rose 8.4%. 6 SKUs account for 72% of the increase.
-            </div>
-          </div>
-          <div className="min-w-0 border-l pl-4" style={{ borderColor: "var(--border-default)" }}>
-            <div className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-6)" }}>
-              Recommendation
-            </div>
-            <div className="mt-0.5 text-[13px]" style={{ color: "var(--text-3)" }}>
-              Review the affected SKUs.
-            </div>
-          </div>
-          <span className="ml-auto whitespace-nowrap text-[12.5px] font-bold" style={{ color: "var(--warning)" }}>
-            Review SKUs →
-          </span>
-        </div>
-      </div>
-
-      <div>
-        <div className="text-[16.5px] font-bold" style={{ color: "var(--text-2)" }}>
-          Profit Drivers
-        </div>
-        <div className="mb-2.5 mt-0.5 text-xs" style={{ color: "var(--text-6)" }}>
-          What moved profit this week, ranked by impact
-        </div>
-        <Card style={{ padding: "6px 22px" }}>
-          {[
-            { label: "Revenue growth across all channels", value: "+₹52,000", positive: true },
-            { label: "Amazon fee increase", value: "-₹18,420", positive: false },
-            { label: "Lower return rate on Website orders", value: "+₹9,800", positive: true },
-            { label: "Increased ad spend on Flipkart", value: "-₹4,200", positive: false },
-          ].map((row) => (
-            <div
-              key={row.label}
-              className="flex items-center justify-between gap-2.5 py-3"
-              style={{ borderBottom: "1px solid var(--border-subtle)" }}
-            >
-              <span className="text-[13px]" style={{ color: "var(--text-3)" }}>
-                {row.label}
-              </span>
-              <span
-                className="whitespace-nowrap text-[15px] font-bold"
-                style={{ color: row.positive ? "var(--accent)" : "var(--negative)" }}
-              >
-                {row.value}
-              </span>
-            </div>
-          ))}
-          <div className="flex items-center justify-between py-3">
-            <span className="text-[13px] font-bold" style={{ color: "var(--text-2)" }}>
-              Net impact on profit
-            </span>
-            <span className="text-base font-bold" style={{ color: "var(--accent)" }}>
-              +₹39,180
-            </span>
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="text-[16.5px] font-bold" style={{ color: "var(--text-2)" }}>
-            Profit Leaks
-          </div>
-          <div className="mb-2.5 mt-0.5 text-xs" style={{ color: "var(--text-6)" }}>
-            Where money is slipping away
-          </div>
-          <div className="flex flex-col gap-2.5">
-            <LeakOrOpportunityCard
-              title="Marketplace Fees"
-              impact="-₹18,420 / mo"
-              accent="var(--negative)"
-              driver="Amazon referral fees rose 8.4% this week."
-              evidence="6 SKUs account for 72% of the increase."
-              cta="Review SKUs →"
-            />
-            <LeakOrOpportunityCard
-              title="Return & Refund Costs"
-              impact="-₹9,150 / mo"
-              accent="var(--negative)"
-              driver="Return rate increased on Flipkart orders."
-              evidence="Packaging defects flagged on 3 SKUs."
-              cta="Review SKUs →"
-            />
-          </div>
-        </div>
-        <div>
-          <div className="text-[16.5px] font-bold" style={{ color: "var(--text-2)" }}>
-            Profit Opportunities
-          </div>
-          <div className="mb-2.5 mt-0.5 text-xs" style={{ color: "var(--text-6)" }}>
-            Where more profit is available
-          </div>
-          <div className="flex flex-col gap-2.5">
-            <LeakOrOpportunityCard
-              title="Price Optimization"
-              impact="+₹1.82L / mo"
-              accent="var(--accent)"
-              driver="Portable Mini Blender is priced below market."
-              evidence="High demand, low competition on this SKU."
-              cta="Review pricing →"
-            />
-            <LeakOrOpportunityCard
-              title="Ad Spend Reallocation"
-              impact="+₹51,000 / mo"
-              accent="var(--accent)"
-              driver="9 days of ROAS below 1.2x on Flipkart ads."
-              evidence="Budget could shift to higher-performing campaigns."
-              cta="Review campaigns →"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div
-        className="flex flex-wrap items-center gap-6 rounded-2xl px-6 py-4.5"
-        style={{ background: "var(--accent-fill-subtle)", border: "1px solid var(--accent-border-default)", borderLeft: "3px solid var(--accent)" }}
-      >
-        <div className="min-w-0">
-          <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--accent)" }}>
-            Next Decision
-          </div>
-          <div className="mt-2 text-[17px] font-semibold" style={{ color: "var(--text-1)" }}>
-            Review the 6 SKUs driving the marketplace-fee increase.
-          </div>
-        </div>
-        <div>
-          <div className="text-xl font-bold" style={{ color: "var(--accent)" }}>
-            ₹18,420 / mo
-          </div>
-          <div className="text-[11px]" style={{ color: "var(--text-5)" }}>
-            Potential monthly impact
-          </div>
-        </div>
-        <button
-          type="button"
-          className="ml-auto whitespace-nowrap rounded-xl px-4 py-2.5 text-[12.5px] font-bold"
-          style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}
-        >
-          Review SKUs
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function LeakOrOpportunityCard({
-  title,
-  impact,
-  accent,
-  driver,
-  evidence,
-  cta,
-}: {
-  title: string;
-  impact: string;
-  accent: string;
-  driver: string;
-  evidence: string;
-  cta: string;
-}) {
-  return (
-    <Card style={{ borderLeft: `2.5px solid ${accent}`, padding: "16px 18px" }}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="text-[13.5px] font-semibold" style={{ color: "var(--text-2)" }}>
-          {title}
-        </div>
-        <div className="whitespace-nowrap text-base font-bold" style={{ color: accent }}>
-          {impact}
-        </div>
-      </div>
-      <div className="mt-2.5 flex flex-col gap-1.5 pt-2.5" style={{ borderTop: "1px solid var(--border-subtle)" }}>
-        <div className="text-xs" style={{ color: "var(--text-3)" }}>
-          <span className="text-[10.5px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-6)" }}>
-            Driver{"  "}
-          </span>
-          {driver}
-        </div>
-        <div className="text-xs" style={{ color: "var(--text-3)" }}>
-          <span className="text-[10.5px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-6)" }}>
-            Evidence{"  "}
-          </span>
-          {evidence}
-        </div>
-      </div>
-      <div className="mt-3 text-xs font-bold" style={{ color: accent }}>
-        {cta}
-      </div>
-    </Card>
+      )}
+    </Section>
   );
 }

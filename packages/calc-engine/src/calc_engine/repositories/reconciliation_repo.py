@@ -16,6 +16,7 @@ with its counts filled in — never re-inserted, never deleted).
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -146,6 +147,73 @@ def mark_reconciliation_run_finished(
         )
 
 
+def _match_params(
+    new_id: UUID,
+    tenant_id: UUID,
+    *,
+    reconciliation_run_id: UUID,
+    sales_line_id: UUID,
+    settlement_line_id: UUID,
+    component_code: str | None,
+    outcome: str,
+    variance_paise: int,
+    confidence: str,
+    formula_version: str,
+    computed_at: datetime,
+) -> dict[str, Any]:
+    return {
+        "id": str(new_id),
+        "tenant_id": str(tenant_id),
+        "reconciliation_run_id": str(reconciliation_run_id),
+        "sales_line_id": str(sales_line_id),
+        "settlement_line_id": str(settlement_line_id),
+        "component_code": component_code,
+        "outcome": outcome,
+        "variance_paise": variance_paise,
+        "confidence": confidence,
+        "formula_version": formula_version,
+        "computed_at": computed_at,
+    }
+
+
+def _exception_params(
+    new_id: UUID,
+    tenant_id: UUID,
+    *,
+    reconciliation_run_id: UUID,
+    reconciliation_match_id: UUID | None = None,
+    exception_type: str,
+    sales_line_id: UUID | None = None,
+    settlement_line_id: UUID | None = None,
+    candidate_sales_line_ids: list[UUID] | None = None,
+    marketplace: str,
+    component_code: str | None = None,
+    amount_paise: int,
+    confidence: str,
+    formula_version: str,
+    computed_at: datetime,
+) -> dict[str, Any]:
+    candidate_json: str | None = (
+        json.dumps([str(i) for i in candidate_sales_line_ids]) if candidate_sales_line_ids is not None else None
+    )
+    return {
+        "id": str(new_id),
+        "tenant_id": str(tenant_id),
+        "reconciliation_run_id": str(reconciliation_run_id),
+        "reconciliation_match_id": str(reconciliation_match_id) if reconciliation_match_id else None,
+        "exception_type": exception_type,
+        "sales_line_id": str(sales_line_id) if sales_line_id else None,
+        "settlement_line_id": str(settlement_line_id) if settlement_line_id else None,
+        "candidate_sales_line_ids": candidate_json,
+        "marketplace": marketplace,
+        "component_code": component_code,
+        "amount_paise": amount_paise,
+        "confidence": confidence,
+        "formula_version": formula_version,
+        "computed_at": computed_at,
+    }
+
+
 def insert_reconciliation_match(
     tenant_id: UUID,
     *,
@@ -163,19 +231,12 @@ def insert_reconciliation_match(
     with tenant_scope(tenant_id) as conn:
         conn.execute(
             _INSERT_MATCH_SQL,
-            {
-                "id": str(new_id),
-                "tenant_id": str(tenant_id),
-                "reconciliation_run_id": str(reconciliation_run_id),
-                "sales_line_id": str(sales_line_id),
-                "settlement_line_id": str(settlement_line_id),
-                "component_code": component_code,
-                "outcome": outcome,
-                "variance_paise": variance_paise,
-                "confidence": confidence,
-                "formula_version": formula_version,
-                "computed_at": computed_at,
-            },
+            _match_params(
+                new_id, tenant_id, reconciliation_run_id=reconciliation_run_id, sales_line_id=sales_line_id,
+                settlement_line_id=settlement_line_id, component_code=component_code, outcome=outcome,
+                variance_paise=variance_paise, confidence=confidence, formula_version=formula_version,
+                computed_at=computed_at,
+            ),
         )
     return new_id
 
@@ -197,32 +258,38 @@ def insert_reconciliation_exception(
     computed_at: datetime,
 ) -> UUID:
     new_id = uuid4()
-    candidate_json: str | None = (
-        json.dumps([str(i) for i in candidate_sales_line_ids])
-        if candidate_sales_line_ids is not None
-        else None
-    )
     with tenant_scope(tenant_id) as conn:
         conn.execute(
             _INSERT_EXCEPTION_SQL,
-            {
-                "id": str(new_id),
-                "tenant_id": str(tenant_id),
-                "reconciliation_run_id": str(reconciliation_run_id),
-                "reconciliation_match_id": str(reconciliation_match_id) if reconciliation_match_id else None,
-                "exception_type": exception_type,
-                "sales_line_id": str(sales_line_id) if sales_line_id else None,
-                "settlement_line_id": str(settlement_line_id) if settlement_line_id else None,
-                "candidate_sales_line_ids": candidate_json,
-                "marketplace": marketplace,
-                "component_code": component_code,
-                "amount_paise": amount_paise,
-                "confidence": confidence,
-                "formula_version": formula_version,
-                "computed_at": computed_at,
-            },
+            _exception_params(
+                new_id, tenant_id, reconciliation_run_id=reconciliation_run_id,
+                reconciliation_match_id=reconciliation_match_id, exception_type=exception_type,
+                sales_line_id=sales_line_id, settlement_line_id=settlement_line_id,
+                candidate_sales_line_ids=candidate_sales_line_ids, marketplace=marketplace,
+                component_code=component_code, amount_paise=amount_paise, confidence=confidence,
+                formula_version=formula_version, computed_at=computed_at,
+            ),
         )
     return new_id
+
+
+def insert_reconciliation_rows(
+    tenant_id: UUID,
+    *,
+    matches: Sequence[tuple[UUID, dict[str, Any]]],
+    exceptions: Sequence[tuple[UUID, dict[str, Any]]],
+) -> None:
+    """Bulk twin of `insert_reconciliation_match` / `insert_reconciliation_exception`: each
+    entry is `(client_generated_id, the exact keyword arguments the single-row function takes)`.
+    One transaction, one executemany round trip per table. Matches are written first — an
+    exception's `reconciliation_match_id` may reference a match in this same batch."""
+    if not matches and not exceptions:
+        return
+    with tenant_scope(tenant_id) as conn:
+        if matches:
+            conn.execute(_INSERT_MATCH_SQL, [_match_params(i, tenant_id, **kw) for i, kw in matches])
+        if exceptions:
+            conn.execute(_INSERT_EXCEPTION_SQL, [_exception_params(i, tenant_id, **kw) for i, kw in exceptions])
 
 
 _EXCEPTIONS_FOR_RUN_SQL = text(

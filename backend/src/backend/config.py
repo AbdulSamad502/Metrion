@@ -39,6 +39,35 @@ def clerk_jwt_key() -> str:
     return _required("CLERK_JWT_KEY").replace("\\n", "\n")
 
 
+# Leeway (ms) allowed between this machine's clock and Clerk's token timestamps. The SDK's own
+# default (5s) is right for production, where hosts run NTP. A developer workstation's clock can
+# drift further between syncs (Windows polls ~every 17 min and may be several seconds off), which
+# makes Clerk reject a perfectly valid token as "not active yet" / "expired".
+_CLOCK_SKEW_PRODUCTION_MS = 5_000
+_CLOCK_SKEW_DEV_INSTANCE_MS = 30_000
+_CLOCK_SKEW_MAX_MS = 120_000
+
+
+@lru_cache
+def clerk_clock_skew_ms() -> int:
+    """The `clock_skew_in_ms` passed to Clerk's token verification.
+
+    `CLERK_CLOCK_SKEW_MS` overrides everything (bounded to 0..120000 so it can never be turned into
+    "accept stale tokens"). Unset: a Clerk DEVELOPMENT instance (`sk_test_…`) gets 30s, a production
+    instance (`sk_live_…`) keeps the SDK's strict 5s — production verification is never relaxed
+    implicitly. Signature, key, expiry and audience checks are unchanged either way."""
+    raw = os.environ.get("CLERK_CLOCK_SKEW_MS")
+    if raw is not None and raw.strip() != "":
+        try:
+            value = int(raw)
+        except ValueError:
+            raise ValueError(f"CLERK_CLOCK_SKEW_MS must be an integer number of milliseconds, got {raw!r}") from None
+        if not 0 <= value <= _CLOCK_SKEW_MAX_MS:
+            raise ValueError(f"CLERK_CLOCK_SKEW_MS must be between 0 and {_CLOCK_SKEW_MAX_MS}, got {value}")
+        return value
+    return _CLOCK_SKEW_DEV_INSTANCE_MS if clerk_secret_key().startswith("sk_test_") else _CLOCK_SKEW_PRODUCTION_MS
+
+
 @lru_cache
 def frontend_origin() -> str:
     return os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
@@ -59,11 +88,62 @@ def ci_evidence_storage_dir() -> str:
     return os.environ.get("CI_EVIDENCE_DIR", "./data/ci-evidence")
 
 
+def _positive_int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    value = int(raw)
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer number of bytes, got {raw!r}")
+    return value
+
+
+@lru_cache
+def cfo_max_upload_bytes() -> int:
+    """Largest marketplace-report CSV `POST /cfo/ingest` accepts. Ingestion holds the whole
+    file in memory at ~31x its size (measured, 4-column Meesho orders CSV: 15 MB -> ~470 MB
+    peak), so the default 20 MB bounds one concurrent ingestion at roughly 0.6 GB — a memory-
+    budget judgment, not a spec requirement; `CFO_MAX_UPLOAD_BYTES` raises or lowers it."""
+    return _positive_int_env("CFO_MAX_UPLOAD_BYTES", 20 * 1024 * 1024)
+
+
+@lru_cache
+def ci_max_evidence_bytes() -> int:
+    """Largest screenshot `POST /ci/evidence` accepts. A screenshot is read whole, base64'd
+    (+33%) and sent to the local vision model; the default 10 MB is far above a real listing
+    screenshot yet bounds that — a judgment, not a spec requirement; `CI_MAX_EVIDENCE_BYTES`
+    overrides it."""
+    return _positive_int_env("CI_MAX_EVIDENCE_BYTES", 10 * 1024 * 1024)
+
+
 @lru_cache
 def ollama_host() -> str:
     """C15 (local-only derivation): always a local address, never a hosted provider — not a
     secret, so a default is fine. `OLLAMA_HOST` overrides for a non-default local port."""
     return os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+
+
+@lru_cache
+def ollama_vision_timeout_seconds() -> float:
+    """Per-request timeout for the local vision model. Default 60 s (unchanged); on a CPU-only
+    host a real extraction was measured at 13-160 s and the first call after the model unloads
+    at ~140 s, so such a host needs `OLLAMA_VISION_TIMEOUT_SECONDS` raised or a timed-out call
+    silently degrades to manual entry."""
+    raw = os.environ.get("OLLAMA_VISION_TIMEOUT_SECONDS")
+    if raw is None or not raw.strip():
+        return 60.0
+    value = float(raw)
+    if value <= 0:
+        raise ValueError(f"OLLAMA_VISION_TIMEOUT_SECONDS must be positive, got {raw!r}")
+    return value
+
+
+@lru_cache
+def ollama_keep_alive() -> str | None:
+    """Optional Ollama `keep_alive` (e.g. `30m`) sent with vision requests so the model stays
+    loaded between extractions. Unset (the default) leaves Ollama's own default in force."""
+    raw = os.environ.get("OLLAMA_KEEP_ALIVE")
+    return raw.strip() if raw and raw.strip() else None
 
 
 @lru_cache

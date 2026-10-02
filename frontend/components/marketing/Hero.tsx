@@ -52,7 +52,7 @@ export function Hero() {
             className="mt-badge-shimmer inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-[11.5px]"
             style={{
               background: "var(--accent-fill-subtle)",
-              color: "#5E9970",
+              color: "var(--text-green-muted)",
               border: "1px solid var(--accent-border-subtle)",
               opacity: 0,
               animation: "mt-fade-up 0.6s ease-out 0.05s both",

@@ -8,6 +8,8 @@ module does no calculation and no interpretation of the result — it is a thin 
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
@@ -52,6 +54,47 @@ def _json_safe(value: object) -> object:
     return value
 
 
+def _params(
+    tenant_id: UUID,
+    result: MetricResult,
+    *,
+    grain: str,
+    target_ref: str,
+    period: str | None,
+    config_version: str,
+    is_trial: bool = False,
+) -> dict[str, Any]:
+    return {
+        "id": str(result.id),
+        "tenant_id": str(tenant_id),
+        "metric_code": result.metric_code,
+        "grain": grain,
+        "target_ref": target_ref,
+        "period": period,
+        "value_paise": result.value_paise,
+        "value_fraction_numerator": (
+            result.value_fraction.numerator if result.value_fraction is not None else None
+        ),
+        "value_fraction_denominator": (
+            result.value_fraction.denominator if result.value_fraction is not None else None
+        ),
+        "recognition_state": result.recognition_state.value,
+        "confidence": result.confidence,
+        "calculation_basis": result.calculation_basis,
+        "formula_version": result.formula_version,
+        "config_version": config_version,
+        "canonical_data_version": result.canonical_data_version,
+        "manual_adjustment_set": json.dumps(list(result.manual_adjustment_set)),
+        "as_of_date": result.as_of_date,
+        "input_refs": json.dumps([_json_safe(x) for x in result.input_refs]),
+        "exclusions": json.dumps(list(result.exclusions)),
+        "is_trial": is_trial,
+        "is_available": result.is_available,
+        "unavailable_reason": result.unavailable_reason,
+        "computed_at": result.computed_at,
+    }
+
+
 def save(
     tenant_id: UUID,
     result: MetricResult,
@@ -65,37 +108,23 @@ def save(
     with tenant_scope(tenant_id) as conn:
         conn.execute(
             _INSERT_SQL,
-            {
-                "id": str(result.id),
-                "tenant_id": str(tenant_id),
-                "metric_code": result.metric_code,
-                "grain": grain,
-                "target_ref": target_ref,
-                "period": period,
-                "value_paise": result.value_paise,
-                "value_fraction_numerator": (
-                    result.value_fraction.numerator if result.value_fraction is not None else None
-                ),
-                "value_fraction_denominator": (
-                    result.value_fraction.denominator if result.value_fraction is not None else None
-                ),
-                "recognition_state": result.recognition_state.value,
-                "confidence": result.confidence,
-                "calculation_basis": result.calculation_basis,
-                "formula_version": result.formula_version,
-                "config_version": config_version,
-                "canonical_data_version": result.canonical_data_version,
-                "manual_adjustment_set": json.dumps(list(result.manual_adjustment_set)),
-                "as_of_date": result.as_of_date,
-                "input_refs": json.dumps([_json_safe(x) for x in result.input_refs]),
-                "exclusions": json.dumps(list(result.exclusions)),
-                "is_trial": is_trial,
-                "is_available": result.is_available,
-                "unavailable_reason": result.unavailable_reason,
-                "computed_at": result.computed_at,
-            },
+            _params(
+                tenant_id, result, grain=grain, target_ref=target_ref, period=period,
+                config_version=config_version, is_trial=is_trial,
+            ),
         )
     return result.id
+
+
+def save_many(tenant_id: UUID, items: Sequence[tuple[MetricResult, dict[str, Any]]]) -> list[UUID]:
+    """Bulk twin of `save`: each item is `(result, the keyword arguments `save` takes — grain,
+    target_ref, period, config_version[, is_trial])`. One transaction, one executemany round trip
+    (measured: a CEO Hub reconcile spent ~1.8 s of a 4.6 s request on 128 one-row `save` calls)."""
+    if not items:
+        return []
+    with tenant_scope(tenant_id) as conn:
+        conn.execute(_INSERT_SQL, [_params(tenant_id, result, **kw) for result, kw in items])
+    return [result.id for result, _ in items]
 
 
 _LIST_BY_METRIC_CODE_SQL = text(

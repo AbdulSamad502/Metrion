@@ -143,6 +143,14 @@ class _RepoStub:
         self.exceptions.append({"tenant_id": tenant_id, "id": exception_id, **kwargs})
         return exception_id
 
+    def insert_reconciliation_rows(self, tenant_id, *, matches, exceptions):
+        """reconcile() now queues matches/exceptions and bulk-writes them — record each entry in
+        the exact same shape the single-row stubs above use, so every assertion below is unchanged."""
+        for match_id, kwargs in matches:
+            self.matches.append({"tenant_id": tenant_id, "id": match_id, **kwargs})
+        for exception_id, kwargs in exceptions:
+            self.exceptions.append({"tenant_id": tenant_id, "id": exception_id, **kwargs})
+
 
 @pytest.fixture
 def repo_stub(monkeypatch: pytest.MonkeyPatch) -> _RepoStub:
@@ -155,6 +163,7 @@ def repo_stub(monkeypatch: pytest.MonkeyPatch) -> _RepoStub:
     monkeypatch.setattr(
         reconcile_module.reconciliation_repo, "insert_reconciliation_exception", stub.insert_reconciliation_exception
     )
+    monkeypatch.setattr(reconcile_module.reconciliation_repo, "insert_reconciliation_rows", stub.insert_reconciliation_rows)
     return stub
 
 

@@ -15,7 +15,6 @@ from data_foundation.ingestion.dedup import find_natural_key_duplicates
 from data_foundation.ingestion.pipeline import AdapterMismatchError, run_ingestion
 from data_foundation.repositories import (
     ingestion_run_repo,
-    line_component_repo,
     sales_line_repo,
     settlement_line_repo,
 )
@@ -78,32 +77,26 @@ def ingest_and_persist(
         # the real guard against a re-upload today; disclosed simplification, not silent.
         duplicate_row_numbers: set[int] = set()
     else:
-        existing_keys = sales_line_repo.existing_natural_keys(tenant_id)
+        # Only keys sharing an order_ref with this file can collide — don't load the tenant's
+        # whole history on every upload (measured linear: ~0.7 s / 23 MB at 100k lines).
+        existing_keys = sales_line_repo.existing_natural_keys_for_orders(
+            tenant_id, {r.canonical_fields.get("order_ref") for r in accepted_rows}
+        )
         duplicate_row_numbers = set(find_natural_key_duplicates(adapter.marketplace, accepted_rows, existing_keys))
 
-    persisted_ids: list[UUID] = []
-    for row in accepted_rows:
-        if row.source_row_number in duplicate_row_numbers:
-            continue
-        if is_settlement:
-            line_id = settlement_line_repo.insert_settlement_line(
-                tenant_id, ingestion_run_id=run_id, marketplace=adapter.marketplace,
-                canonical_fields=row.canonical_fields, source_row_number=row.source_row_number,
-                source_row_json=row.source_row_json, confidence=Confidence.PROVISIONAL.value,
-            )
-            if row.components:
-                line_component_repo.insert_settlement_components(
-                    tenant_id, settlement_line_id=line_id, components=row.components
-                )
-        else:
-            line_id = sales_line_repo.insert_sales_line(
-                tenant_id, ingestion_run_id=run_id, marketplace=adapter.marketplace,
-                canonical_fields=row.canonical_fields, source_row_number=row.source_row_number,
-                source_row_json=row.source_row_json, confidence=Confidence.PROVISIONAL.value,
-            )
-            if row.components:
-                line_component_repo.insert_components(tenant_id, sales_line_id=line_id, components=row.components)
-        persisted_ids.append(line_id)
+    to_persist = [row for row in accepted_rows if row.source_row_number not in duplicate_row_numbers]
+    # One transaction + bulk inserts for the whole file (see the repos' *_with_components docs) —
+    # not a transaction per row/component. Same rows, same order, same persisted ids contract.
+    if is_settlement:
+        persisted_ids = settlement_line_repo.insert_settlement_lines_with_components(
+            tenant_id, ingestion_run_id=run_id, marketplace=adapter.marketplace,
+            confidence=Confidence.PROVISIONAL.value, rows=to_persist,
+        )
+    else:
+        persisted_ids = sales_line_repo.insert_sales_lines_with_components(
+            tenant_id, ingestion_run_id=run_id, marketplace=adapter.marketplace,
+            confidence=Confidence.PROVISIONAL.value, rows=to_persist,
+        )
 
     ingestion_run_repo.mark_finished(
         tenant_id, run_id, status="VALIDATED", row_count_read=result.row_count_read,

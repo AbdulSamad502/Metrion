@@ -219,6 +219,52 @@ def reconcile(
     # Meesho's VERIFIED line_ref key, false for Amazon/Flipkart's unvalidated order_ref-only key.
     join_key_validated = marketplace == "MEESHO"
 
+    # Tolerance config is resolved for a fixed (tenant, marketplace, as_of_date) throughout one
+    # run, so the answer per component_code (including "no row" = None) cannot change between
+    # rows — look each distinct code up once per run instead of once per matched component and
+    # once per unmatched sales line (measured: 37% of the matching loop's time at 300 pairs,
+    # for 4 distinct keys). Local to this call: nothing is cached across runs, so a config
+    # change is always picked up by the next run.
+    _tolerance_by_code: dict[str, dict[str, Any] | None] = {}
+
+    def _resolve_tolerance_row(component_code: str) -> dict[str, Any] | None:
+        if component_code not in _tolerance_by_code:
+            _tolerance_by_code[component_code] = config_repo.resolve_reconciliation_tolerance(
+                tenant_id, marketplace=marketplace, component_code=component_code, as_of_date=as_of_date
+            )
+        return _tolerance_by_code[component_code]
+
+    # Matches/exceptions are queued and bulk-written (one transaction + executemany per chunk)
+    # instead of one transaction per row — nothing below reads them back before the run is
+    # marked COMPLETE, and ids are client-generated, so the in-memory results are identical.
+    # Chunked so a very large run holds a bounded number of pending rows. Matches always flush
+    # before the exceptions that may reference them.
+    _FLUSH_AT = 2000
+    _pending_matches: list[tuple[UUID, dict[str, Any]]] = []
+    _pending_exceptions: list[tuple[UUID, dict[str, Any]]] = []
+
+    def _flush_pending() -> None:
+        if _pending_matches or _pending_exceptions:
+            reconciliation_repo.insert_reconciliation_rows(
+                tenant_id, matches=list(_pending_matches), exceptions=list(_pending_exceptions)
+            )
+            _pending_matches.clear()
+            _pending_exceptions.clear()
+
+    def _queue_match(**fields: Any) -> UUID:
+        new_id = uuid4()
+        _pending_matches.append((new_id, fields))
+        if len(_pending_matches) + len(_pending_exceptions) >= _FLUSH_AT:
+            _flush_pending()
+        return new_id
+
+    def _queue_exception(**fields: Any) -> UUID:
+        new_id = uuid4()
+        _pending_exceptions.append((new_id, fields))
+        if len(_pending_matches) + len(_pending_exceptions) >= _FLUSH_AT:
+            _flush_pending()
+        return new_id
+
     # --- tolerance_config_version for the run row -------------------------------------------
     # The run's own `tolerance_config_version` column is a single scalar, but tolerance config
     # is resolved per-component throughout the run (potentially several different `version`
@@ -228,9 +274,7 @@ def reconcile(
     # early use of one already required. If no marketplace-wide default row exists at all,
     # `0` is a documented sentinel (never a guessed real version), only there to satisfy the
     # migration's `NOT NULL` constraint on this column.
-    default_tolerance_row = config_repo.resolve_reconciliation_tolerance(
-        tenant_id, marketplace=marketplace, component_code="*", as_of_date=as_of_date
-    )
+    default_tolerance_row = _resolve_tolerance_row("*")
     tolerance_config_version = int(default_tolerance_row["version"]) if default_tolerance_row else 0
 
     run_id = reconciliation_repo.insert_reconciliation_run(
@@ -247,13 +291,16 @@ def reconcile(
     )
 
     # --- fetch + in-memory marketplace filter (neither repo function filters by marketplace) -
+    # The marketplace filter is pushed into SQL (other marketplaces' rows are never fetched); the
+    # Python re-filter stays as a cheap guard so this stays correct against any caller/stub that
+    # returns mixed rows.
     all_settlement_lines = settlement_repo.settlement_lines_in_period(
-        tenant_id, period_start=period_start, period_end=period_end
+        tenant_id, period_start=period_start, period_end=period_end, marketplace=marketplace
     )
     settlement_lines = [row for row in all_settlement_lines if row["marketplace"] == marketplace]
 
     all_sales_lines = canonical_repo.sales_lines_in_period(
-        tenant_id, period_start=period_start, period_end=period_end
+        tenant_id, period_start=period_start, period_end=period_end, marketplace=marketplace
     )
     dated_sales_lines = [row for row in all_sales_lines if row["marketplace"] == marketplace]
 
@@ -324,8 +371,7 @@ def reconcile(
             exception_confidence = combine_confidence(
                 Confidence(settlement_line["confidence"]), join_key_confidence
             )
-            exception_id = reconciliation_repo.insert_reconciliation_exception(
-                tenant_id,
+            exception_id = _queue_exception(
                 reconciliation_run_id=run_id,
                 exception_type="AMBIGUOUS_MATCH",
                 settlement_line_id=settlement_line["settlement_line_id"],
@@ -359,8 +405,7 @@ def reconcile(
             exception_confidence = combine_confidence(
                 Confidence(settlement_line["confidence"]), join_key_confidence
             )
-            exception_id = reconciliation_repo.insert_reconciliation_exception(
-                tenant_id,
+            exception_id = _queue_exception(
                 reconciliation_run_id=run_id,
                 exception_type="ORPHAN_SETTLEMENT",
                 settlement_line_id=settlement_line["settlement_line_id"],
@@ -403,8 +448,7 @@ def reconcile(
             exception_confidence = combine_confidence(
                 Confidence(settlement_line["confidence"]), join_key_confidence
             )
-            exception_id = reconciliation_repo.insert_reconciliation_exception(
-                tenant_id,
+            exception_id = _queue_exception(
                 reconciliation_run_id=run_id,
                 exception_type="DUPLICATE_SETTLEMENT",
                 settlement_line_id=settlement_line["settlement_line_id"],
@@ -439,9 +483,7 @@ def reconcile(
         shared_codes = set(settlement_codes.keys()) & set(invoice_codes.keys())
 
         for component_code in sorted(shared_codes):
-            tolerance_row = config_repo.resolve_reconciliation_tolerance(
-                tenant_id, marketplace=marketplace, component_code=component_code, as_of_date=as_of_date
-            )
+            tolerance_row = _resolve_tolerance_row(component_code)
             tolerance = resolve_tolerance_or_unavailable(tolerance_row)
             if isinstance(tolerance, Unavailable):
                 # No tolerance config for this (marketplace, component_code) — skip, never
@@ -470,8 +512,7 @@ def reconcile(
                 join_key_confidence,
             )
 
-            match_id = reconciliation_repo.insert_reconciliation_match(
-                tenant_id,
+            match_id = _queue_match(
                 reconciliation_run_id=run_id,
                 sales_line_id=sales_line["sales_line_id"],
                 settlement_line_id=settlement_line["settlement_line_id"],
@@ -485,8 +526,7 @@ def reconcile(
             match_count += 1
 
             if outcome == ReconciliationOutcome.VARIANCE_EXCEEDS_TOLERANCE:
-                exception_id = reconciliation_repo.insert_reconciliation_exception(
-                    tenant_id,
+                exception_id = _queue_exception(
                     reconciliation_run_id=run_id,
                     reconciliation_match_id=match_id,
                     exception_type="VARIANCE_EXCEEDS_TOLERANCE",
@@ -528,9 +568,7 @@ def reconcile(
 
         document_date = resolve_document_date(invoice_date, dispatch_date, order_date)
 
-        lag_row = config_repo.resolve_reconciliation_tolerance(
-            tenant_id, marketplace=marketplace, component_code="*", as_of_date=as_of_date
-        )
+        lag_row = _resolve_tolerance_row("*")
         if lag_row is None:
             # No marketplace-wide default config at all — never invent a lag threshold.
             continue
@@ -563,8 +601,7 @@ def reconcile(
         # can produce a false positive collision, so this UNSETTLED_BEYOND_LAG exception's
         # confidence is capped by the same join-key confidence as every Path A outcome.
         path_b_confidence = combine_confidence(Confidence(sales_line["confidence"]), join_key_confidence)
-        exception_id = reconciliation_repo.insert_reconciliation_exception(
-            tenant_id,
+        exception_id = _queue_exception(
             reconciliation_run_id=run_id,
             exception_type="UNSETTLED_BEYOND_LAG",
             sales_line_id=sales_line["sales_line_id"],
@@ -619,6 +656,7 @@ def reconcile(
         is_available=True,
     )
 
+    _flush_pending()
     reconciliation_repo.mark_reconciliation_run_finished(
         tenant_id,
         run_id,

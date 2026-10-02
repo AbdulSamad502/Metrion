@@ -102,7 +102,7 @@ def cash_reconciliation(
 
     # --- CASH_RECEIVED: Σ settlement_line.gross_settlement_amount, real rows only ------------
     all_settlement_lines = settlement_repo.settlement_lines_in_period(
-        tenant_id, period_start=period_start, period_end=period_end
+        tenant_id, period_start=period_start, period_end=period_end, marketplace=marketplace
     )
     settlement_lines = [row for row in all_settlement_lines if row["marketplace"] == marketplace]
 
@@ -185,7 +185,7 @@ def cash_reconciliation(
         dateless_sales_lines: list[dict[str, Any]] = []
     else:
         dated_sales_lines = canonical_repo.sales_lines_in_period(
-            tenant_id, period_start=period_start, period_end=period_end
+            tenant_id, period_start=period_start, period_end=period_end, marketplace=marketplace
         )
         dated_sales_lines = [row for row in dated_sales_lines if row["marketplace"] == marketplace]
         dateless_sales_lines = canonical_repo.sales_lines_without_document_date(tenant_id, marketplace=marketplace)
@@ -236,7 +236,7 @@ def cash_reconciliation(
         # sales_lines were not fetched above (TCS-branch skipped) — fetch them now, independently
         # of TCS support, since timing classification applies to every supported marketplace.
         dated_sales_lines = canonical_repo.sales_lines_in_period(
-            tenant_id, period_start=period_start, period_end=period_end
+            tenant_id, period_start=period_start, period_end=period_end, marketplace=marketplace
         )
         dated_sales_lines = [row for row in dated_sales_lines if row["marketplace"] == marketplace]
         dateless_sales_lines = canonical_repo.sales_lines_without_document_date(tenant_id, marketplace=marketplace)

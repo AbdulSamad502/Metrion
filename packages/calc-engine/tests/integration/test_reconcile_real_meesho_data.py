@@ -27,14 +27,18 @@ and a NULL would silently exclude these real rows from the query the assertions 
 
 from __future__ import annotations
 
+import os
 import uuid
 import warnings
 from datetime import date, datetime, timezone
 
-import openpyxl
-import pandas as pd
 import pytest
 from sqlalchemy import text
+
+# pandas/openpyxl are not declared dependencies of calc-engine — skip this module (rather
+# than fail collection for the whole suite) wherever they aren't installed.
+openpyxl = pytest.importorskip("openpyxl")
+pd = pytest.importorskip("pandas")
 
 from calc_engine.api.reconcile import reconcile
 from calc_engine.repositories.tenant_context import tenant_scope as engine_tenant_scope
@@ -43,8 +47,6 @@ from data_foundation.ingestion.pipeline import run_ingestion
 from data_foundation.repositories import ingestion_run_repo, sales_line_repo
 from data_foundation.repositories.tenant_context import tenant_scope as df_tenant_scope
 from data_foundation.types import FileSample, RawFile
-
-pytestmark = [pytest.mark.usefixtures("_clean_engine_tables")]
 
 _PAYMENTS_PATH = (
     r"C:\Users\ABDULS~1\AppData\Local\Temp\claude\C--Users-ABDUL-SAMAD-Desktop-Metrion"
@@ -55,6 +57,16 @@ _TCS_SALES_PATH = (
     r"C:\Users\ABDULS~1\AppData\Local\Temp\claude\C--Users-ABDUL-SAMAD-Desktop-Metrion"
     r"\db95d1bb-7e64-4a1c-b28d-bbf9f608f9ea\scratchpad\meesho_export\gst\tcs_sales.xlsx"
 )
+
+# The two real Meesho exports live outside the repo (a developer's local scratchpad) —
+# without them this test has nothing to run against, so it skips instead of erroring.
+pytestmark = [
+    pytest.mark.usefixtures("_clean_engine_tables"),
+    pytest.mark.skipif(
+        not (os.path.exists(_PAYMENTS_PATH) and os.path.exists(_TCS_SALES_PATH)),
+        reason="real Meesho export files are not present on this machine",
+    ),
+]
 
 _PERIOD_START = date(2026, 1, 1)
 _PERIOD_END = date(2026, 1, 31)

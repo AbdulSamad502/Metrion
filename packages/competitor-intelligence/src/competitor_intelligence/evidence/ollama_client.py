@@ -37,13 +37,20 @@ class HttpOllamaClient:
 
     host: str
     timeout_seconds: float = 60.0
+    # Ollama unloads an idle model after its own default (5 min) and reloads it on the next call;
+    # that cold start was measured at ~140 s for llava on a CPU host. `None` leaves Ollama's
+    # default untouched; an operator can pass e.g. "30m" to keep the model resident.
+    keep_alive: str | None = None
 
     def generate(self, *, model: str, prompt: str, image_bytes: bytes) -> str:
         image_b64 = base64.b64encode(image_bytes).decode("ascii")
+        payload: dict[str, object] = {"model": model, "prompt": prompt, "images": [image_b64], "stream": False}
+        if self.keep_alive is not None:
+            payload["keep_alive"] = self.keep_alive
         try:
             response = httpx.post(
                 f"{self.host}/api/generate",
-                json={"model": model, "prompt": prompt, "images": [image_b64], "stream": False},
+                json=payload,
                 timeout=self.timeout_seconds,
             )
             response.raise_for_status()

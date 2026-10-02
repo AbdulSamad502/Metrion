@@ -15,8 +15,10 @@ from clerk_backend_api.security.types import AuthenticateRequestOptions
 from fastapi import Depends, HTTPException, Request
 
 from backend.auth.clerk_client import get_clerk_client
+from backend.auth.clock_diagnostics import clock_hint, is_time_related
+from backend.auth.key_diagnostics import key_hint
 from backend.auth.permissions import OWNER_ROLE, PARTNER_ROLE, has_permission
-from backend.config import clerk_jwt_key, clerk_secret_key
+from backend.config import clerk_clock_skew_ms, clerk_jwt_key, clerk_secret_key
 from backend.repositories import app_user_repo, membership_repo, tenant_repo
 
 logger = logging.getLogger(__name__)
@@ -269,9 +271,29 @@ def require_auth(*, permission: str | None = None) -> AuthContext:
         # threadpool case hangs. Confirmed by direct reproduction before this fix.
         state = await get_clerk_client().authenticate_request_async(
             request,
-            AuthenticateRequestOptions(secret_key=clerk_secret_key(), jwt_key=clerk_jwt_key()),
+            AuthenticateRequestOptions(
+                secret_key=clerk_secret_key(), jwt_key=clerk_jwt_key(), clock_skew_in_ms=clerk_clock_skew_ms()
+            ),
         )
         if not state.is_signed_in or state.payload is None:
+            # Server-side only — the client still gets the generic 401 below. Clerk's
+            # `reason` names why (token expired, signature/jwt_key mismatch, pending session…).
+            logger.warning(
+                "Clerk rejected request: status=%s reason=%s message=%s",
+                getattr(state, "status", None),
+                getattr(state, "reason", None),
+                getattr(state, "message", None),
+            )
+            reason = getattr(state, "reason", None)
+            problem = key_hint(reason)
+            if problem:
+                logger.error("Clerk token verification cannot succeed: %s", problem)
+            if is_time_related(reason):
+                # A valid token rejected on timing alone is almost always a skewed system clock —
+                # say so (timing claims only; the token itself is never logged).
+                hint = clock_hint(request.headers.get("Authorization"), leeway_ms=clerk_clock_skew_ms())
+                if hint:
+                    logger.warning("Clerk token timing rejected: %s", hint)
             raise HTTPException(status_code=401, detail="Not authenticated")
         return await resolve_auth_context(
             clerk_user_id=state.payload.get("sub"),

@@ -7,7 +7,8 @@ import { useState } from "react";
 import { AuthCard } from "@/components/ui/AuthCard";
 import { Button, GoogleIcon } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
-import { callClerk, errorText, isStaleResourceError, isWrongStrategyError, tryClerk } from "@/lib/clerkErrors";
+import { callClerk, errorText, isSessionExistsError, isStaleResourceError, isWrongStrategyError, tryClerk } from "@/lib/clerkErrors";
+import { useRedirectIfSignedIn } from "@/lib/useRedirectIfSignedIn";
 import { useSubmitGuard } from "@/lib/useSubmitGuard";
 
 /** Custom sign-in — auth.md I2 (Google + email/password), built against Clerk's
@@ -18,6 +19,7 @@ import { useSubmitGuard } from "@/lib/useSubmitGuard";
  * goes through `errorText()` rather than Clerk's raw text, and why `globalError` is the
  * only place any error is ever rendered (no duplicate inline field message). */
 export default function SignInPage() {
+  useRedirectIfSignedIn();
   const { signIn, fetchStatus } = useSignIn();
   const clerk = useClerk();
   const router = useRouter();
@@ -26,6 +28,7 @@ export default function SignInPage() {
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [wrongStrategy, setWrongStrategy] = useState(false);
   const [staleResource, setStaleResource] = useState(false);
+  const [googleRedirecting, setGoogleRedirecting] = useState(false);
 
   const guard = useSubmitGuard();
   const submitting = fetchStatus === "fetching";
@@ -37,14 +40,25 @@ export default function SignInPage() {
       // redirect params are still ambiguous/incomplete upstream) — see the doc comment
       // on AuthenticateWithRedirectParams: redirectUrl is the callback route that mounts
       // <AuthenticateWithRedirectCallback/>, redirectUrlComplete is where we land after.
-      const { error } = await tryClerk(() =>
-        clerk.client.signIn.authenticateWithRedirect({
-          strategy: "oauth_google",
-          redirectUrl: "/sso-callback",
-          redirectUrlComplete: "/onboarding",
-        }),
-      );
+      setGoogleRedirecting(true);
+      const start = () =>
+        tryClerk(() =>
+          clerk.client.signIn.authenticateWithRedirect({
+            strategy: "oauth_google",
+            redirectUrl: "/sso-callback",
+            redirectUrlComplete: "/onboarding",
+          }),
+        );
+      let { error } = await start();
+      if (error && isSessionExistsError(error)) {
+        // A leftover session in this browser blocks a new sign-in. Clear it and retry in
+        // the same click, so it's still one click for the seller.
+        await tryClerk(() => clerk.signOut());
+        ({ error } = await start());
+      }
+      // On success the browser is already navigating to Google — keep the loading state.
       if (error) {
+        setGoogleRedirecting(false);
         if (isStaleResourceError(error)) setStaleResource(true);
         else setGlobalError(errorText(error));
       }
@@ -57,7 +71,10 @@ export default function SignInPage() {
       setWrongStrategy(false);
       const { error } = await callClerk(() => signIn.password({ identifier: email, password }));
       if (error) {
-        if (isStaleResourceError(error)) {
+        if (isSessionExistsError(error)) {
+          // Leftover session in this browser blocks a new sign-in: clear it and reload clean.
+          await clerk.signOut({ redirectUrl: "/sign-in" });
+        } else if (isStaleResourceError(error)) {
           setStaleResource(true);
         } else if (isWrongStrategyError(error)) {
           setWrongStrategy(true);
@@ -107,7 +124,14 @@ export default function SignInPage() {
         </span>
       }
     >
-      <Button type="button" variant="secondary" onClick={continueWithGoogle} disabled={submitting}>
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={continueWithGoogle}
+        disabled={submitting}
+        loading={googleRedirecting}
+        loadingText="Redirecting to Google…"
+      >
         <GoogleIcon />
         Continue with Google
       </Button>

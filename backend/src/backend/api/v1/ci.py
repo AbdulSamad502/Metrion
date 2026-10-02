@@ -17,8 +17,16 @@ from pydantic import BaseModel, Field
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CI
-from backend.config import ci_evidence_storage_dir, ci_review_vision_model, ollama_host
+from backend.config import (
+    ci_evidence_storage_dir,
+    ci_max_evidence_bytes,
+    ci_review_vision_model,
+    ollama_host,
+    ollama_keep_alive,
+    ollama_vision_timeout_seconds,
+)
 from backend.entitlement import entitlement_check_value, resolve_ci_entitlement
+from backend.uploads import read_upload_capped
 from backend.services.ci_actions import load_seller_product, run_discovery, run_price_scenario
 from calc_engine.api.compute_metric import MetricResult, compute_price_band
 from calc_engine.formulas.price_positioning import CompetitorPrice
@@ -405,14 +413,15 @@ async def upload_evidence(file: UploadFile, ctx: AuthContext = require_auth(perm
     passes to `/api/v1/ceo-hub/research-now`. Local disk is a Step-4 functional stand-in for
     real object storage — swapping the storage backend later doesn't change this endpoint's
     contract (it always returns an opaque `image_ref` string)."""
+    # Size-checked BEFORE anything is created on disk, so an oversized upload leaves no trace.
+    contents = await read_upload_capped(file, max_bytes=ci_max_evidence_bytes(), env_var="CI_MAX_EVIDENCE_BYTES")
+
     storage_dir = Path(ci_evidence_storage_dir())
     storage_dir.mkdir(parents=True, exist_ok=True)
 
     suffix = Path(file.filename or "").suffix or ".bin"
     image_ref = f"{uuid.uuid4()}{suffix}"
     destination = storage_dir / image_ref
-
-    contents = await file.read()
     destination.write_bytes(contents)
 
     return {"imageRef": image_ref}
@@ -437,7 +446,9 @@ def submit_review_research_endpoint(
     entitlement_check = entitlement_check_value(resolve_ci_entitlement(ctx.tenant_id))
     extractor = OllamaReviewVisionExtractor(
         image_store=LocalDiskImageStore(ci_evidence_storage_dir()),
-        ollama=HttpOllamaClient(host=ollama_host()),
+        ollama=HttpOllamaClient(
+            host=ollama_host(), timeout_seconds=ollama_vision_timeout_seconds(), keep_alive=ollama_keep_alive()
+        ),
         model=ci_review_vision_model(),
     )
 

@@ -10,9 +10,10 @@ from the reconciliation exception (AC4) — this module never computes it.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
@@ -82,6 +83,57 @@ def insert(
             },
         ).one()
         return row[0]
+
+
+_INSERT_MANY_SQL = text(
+    """
+    INSERT INTO leak_finding (
+      id, tenant_id, reconciliation_exception_id, engine_result_ref, marketplace,
+      leak_category, severity, amount_paise, affected_line_count, sku,
+      first_observed_at, age_days, claim_window_days, window_status,
+      explanation, recommended_action, status, confidence, formula_version
+    )
+    VALUES (
+      :id, :tenant_id, :reconciliation_exception_id, :engine_result_ref, :marketplace,
+      :leak_category, :severity, :amount_paise, :affected_line_count, :sku,
+      :first_observed_at, :age_days, :claim_window_days, :window_status,
+      :explanation, :recommended_action, :status, :confidence, :formula_version
+    )
+    """
+)
+
+_OPTIONAL_DEFAULTS: dict[str, Any] = {
+    "sku": None, "claim_window_days": None, "window_status": None, "explanation": None, "recommended_action": None,
+}
+
+
+def insert_many(tenant_id: UUID, rows: Sequence[dict[str, Any]]) -> list[UUID]:
+    """Bulk twin of `insert`: each row is the keyword arguments `insert` takes. Ids are generated
+    client-side (so no RETURNING per row is needed) and returned in input order. One transaction,
+    one executemany round trip — measured: 126 one-row inserts cost ~1.6 s of a 4.6 s CEO Hub
+    reconcile request. Rows are written exactly as given — no derivation, no recomputation."""
+    if not rows:
+        return []
+    ids = [uuid4() for _ in rows]
+    params = []
+    for new_id, row in zip(ids, rows):
+        merged = {**_OPTIONAL_DEFAULTS, **row}
+        params.append(
+            {
+                "id": str(new_id),
+                "tenant_id": str(tenant_id),
+                "reconciliation_exception_id": str(merged["reconciliation_exception_id"]),
+                "engine_result_ref": str(merged["engine_result_ref"]),
+                **{k: merged[k] for k in (
+                    "marketplace", "leak_category", "severity", "amount_paise", "affected_line_count", "sku",
+                    "first_observed_at", "age_days", "claim_window_days", "window_status", "explanation",
+                    "recommended_action", "status", "confidence", "formula_version",
+                )},
+            }
+        )
+    with tenant_scope(tenant_id) as conn:
+        conn.execute(_INSERT_MANY_SQL, params)
+    return ids
 
 
 def list_for_tenant(tenant_id: UUID) -> list[dict[str, Any]]:

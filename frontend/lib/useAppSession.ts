@@ -10,7 +10,7 @@ import { apiFetch, ApiError, type SessionResponse } from "@/lib/api";
  * display name/role once. Used by /dashboard and /settings so the redirect rules live in
  * exactly one place. */
 export function useAppSession() {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken } = useAuth({ treatPendingAsSignedOut: false });
   const { user } = useUser();
   const router = useRouter();
   const [session, setSession] = useState<SessionResponse | null>(null);

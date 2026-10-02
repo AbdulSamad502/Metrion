@@ -732,3 +732,98 @@ export type PiReport = {
   candidates: PiReportCandidateEntry[];
   unavailable: { field: string; reason: string }[];
 };
+
+// --- Notifications feed: real alert sources only (no notification service exists) ---------
+// `GET /ci/alerts?days=N` — Layer 1 observational alerts (competitor-intelligence-agent.md §6.17),
+// `alerts/layer1.py::layer1_alert_to_dict`. NOTE: the backend stamps the price fact inside
+// `handoff.validatedFact` with confidence "HIGH" even for a vision-extracted price (spec open
+// question Q18) — the UI therefore never renders that confidence as "verified"; see
+// `components/ui/EvidenceStateBadge.tsx`.
+
+export type Layer1Alert = {
+  priceEventId: string;
+  competitorUrlId: string;
+  competitorLabel: string;
+  findingType: "PRICE_CHANGE" | "AVAILABILITY_CHANGE" | "LISTING_GAP" | "REVIEW_THEME" | "DIFFERENTIATION_OPPORTUNITY" | "MARKET_POSITION";
+  direction: "INCREASE" | "DECREASE" | null;
+  deltaPct: string | null;
+  availabilityChange: string | null;
+  thresholdBreached: boolean;
+  message: string;
+  createdAt: string;
+  handoff: {
+    findingId: string;
+    findingType: string;
+    validatedFact: { fact: string; confidence: string; capturedAt: string; isStale: boolean }[];
+    evidenceRefs: string[];
+    competitorRefs: string[];
+    implication: string;
+    suggestedAction: { targetAgent: string; suggestedQuestion: string } | null;
+    createdAt: string;
+    createdBy: string;
+  };
+};
+
+export type Layer1AlertsResponse = { since: string; until: string; alerts: Layer1Alert[] };
+
+// --- CFO import viewer (GET /cfo/imports, /cfo/imports/{id}) — persisted data only ----------
+
+export type ImportCounts = {
+  read: number | null;
+  accepted: number | null;
+  rejected: number | null;
+  /** Accepted rows skipped as natural-key duplicates of an earlier import. */
+  duplicate: number | null;
+  /** Lines actually persisted for this import. */
+  persisted: number;
+};
+
+export type ImportSummary = {
+  reportFileId: string;
+  ingestionRunId: string | null;
+  filename: string;
+  marketplace: string;
+  reportCategory: string;
+  adapter: string | null;
+  adapterVersion: string | null;
+  uploadedAt: string;
+  status: string | null;
+  counts: ImportCounts;
+};
+
+export type ImportComponent = {
+  kind: string;
+  code: string;
+  side: string;
+  amountPaise: number;
+  taxAmountPaise: number | null;
+  ratePct: string | null;
+};
+
+/** One persisted line. Sales lines carry `salesLineId`; settlement lines carry `settlementLineId`.
+ * Every other field is a real persisted column and may be null. */
+export type ImportRow = {
+  salesLineId?: string;
+  settlementLineId?: string;
+  sourceRowNumber: number;
+  confidence: string;
+  currency: string;
+  components: ImportComponent[];
+  [field: string]: unknown;
+};
+
+export type ImportDetail = ImportSummary & {
+  lineKind: "SALES_LINE" | "SETTLEMENT_LINE";
+  rows: ImportRow[];
+  pagination: { limit: number; offset: number; total: number };
+  rejected: {
+    count: number | null;
+    diagnosticsPersisted: boolean;
+    findingsTotal: number;
+    findings: { ruleId: string; severity: string; message: string; sourceRowNumber: number | null }[];
+  };
+  originalCsv: { available: boolean; reason: string };
+};
+
+/** What `POST /cfo/ingest` returned, plus the filename the browser sent (the API does not echo it). */
+export type UploadOutcome = { reportFileId: string; duplicate: boolean; filename: string };

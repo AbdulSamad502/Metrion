@@ -391,6 +391,24 @@ def _build_web_price_signal(results: list[TavilySearchResult], *, now: datetime)
     }
 
 
+def match_image_for_candidate(candidate_title: str, images: list[TavilyImage]) -> TavilyImage | None:
+    """The same honest rule `synthesize_candidates` applies to the run-wide image pool, for ONE
+    candidate and a pool of images found by searching for that candidate by name: an image is
+    accepted only if its own title/description names EVERY identity token of the candidate, and
+    the candidate has at least 2 identity tokens (a one-word identity is too generic to claim a
+    match — see `test_image_never_matched_via_a_single_generic_identity_token`). Anything else
+    returns None: no image is better than a misattributed one (build plan §0b)."""
+    identity = _tokens_for_similarity(candidate_title)
+    if len(identity) < 2:
+        return None
+    for image in images:
+        image_text = " ".join(part for part in (image.title, image.description) if part)
+        tokens = _tokens_for_similarity(image_text)
+        if tokens and _token_containment(identity, tokens) >= 1.0:
+            return image
+    return None
+
+
 def synthesize_candidates(
     *,
     tavily_results: list[TavilySearchResult],

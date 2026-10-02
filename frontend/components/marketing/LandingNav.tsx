@@ -50,7 +50,7 @@ export function LandingNav() {
     <header
       className="sticky top-0 z-50 transition-colors duration-300"
       style={{
-        background: scrolled ? "rgba(10, 11, 10, 0.72)" : "transparent",
+        background: scrolled ? "var(--bg-nav-scrolled)" : "transparent",
         backdropFilter: scrolled ? "blur(20px) saturate(160%)" : "none",
         borderBottom: `1px solid ${scrolled ? "var(--border-subtle)" : "transparent"}`,
       }}
@@ -71,7 +71,7 @@ export function LandingNav() {
                 key={l.href}
                 href={l.href}
                 onClick={(e) => scrollToSection(e, l.href)}
-                className="relative pb-1 text-[13.5px] font-medium transition-colors hover:text-white"
+                className="relative pb-1 text-[13.5px] font-medium transition-colors hover:text-[var(--text-1)]"
                 style={{ color: active ? "var(--text-1)" : "var(--text-4)" }}
               >
                 {l.label}
@@ -87,7 +87,7 @@ export function LandingNav() {
         </nav>
 
         <div className="hidden items-center gap-4 md:flex">
-          <Link href="/sign-in" className="text-[13.5px] font-semibold transition-colors hover:text-white" style={{ color: "var(--text-4)" }}>
+          <Link href="/sign-in" className="text-[13.5px] font-semibold transition-colors hover:text-[var(--text-1)]" style={{ color: "var(--text-4)" }}>
             Sign in
           </Link>
           <Link
@@ -122,7 +122,7 @@ export function LandingNav() {
       {mobileOpen && (
         <div
           className="flex flex-col gap-1 px-6 pb-5 md:hidden"
-          style={{ borderTop: "1px solid var(--border-subtle)", background: "rgba(10, 11, 10, 0.96)" }}
+          style={{ borderTop: "1px solid var(--border-subtle)", background: "var(--bg-nav-open)" }}
         >
           {LINKS.map((l) => (
             <a

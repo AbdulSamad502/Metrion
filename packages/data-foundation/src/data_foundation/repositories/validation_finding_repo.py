@@ -47,3 +47,37 @@ def counts_by_severity(tenant_id: UUID, ingestion_run_id: UUID) -> dict[str, int
     Composing that sentence is a caller-side concern; this returns only the counts."""
     with tenant_scope(tenant_id) as conn:
         return {row[0]: row[1] for row in conn.execute(_COUNTS_BY_SEVERITY_SQL, {"ingestion_run_id": str(ingestion_run_id)})}
+
+
+_COUNT_FOR_RUN_SQL = text("SELECT count(*) FROM validation_finding WHERE tenant_id = :tenant_id AND ingestion_run_id = :ingestion_run_id")
+
+_PAGE_FOR_RUN_SQL = text(
+    """
+    SELECT rule_id, severity, message, source_row_number
+    FROM validation_finding
+    WHERE tenant_id = :tenant_id AND ingestion_run_id = :ingestion_run_id
+    ORDER BY source_row_number NULLS LAST, rule_id
+    LIMIT :limit OFFSET :offset
+    """
+)
+
+
+def count_for_run(tenant_id: UUID, ingestion_run_id: UUID) -> int:
+    with tenant_scope(tenant_id) as conn:
+        return int(
+            conn.execute(_COUNT_FOR_RUN_SQL, {"tenant_id": str(tenant_id), "ingestion_run_id": str(ingestion_run_id)}).scalar_one()
+        )
+
+
+def page_for_run(tenant_id: UUID, ingestion_run_id: UUID, *, limit: int, offset: int) -> list[dict[str, object]]:
+    """Persisted validation findings of a run. NOTE: the live upload path does not persist
+    findings today (`ingest_and_persist` never calls `insert_findings`), so for a normal upload
+    this is empty — callers must say so rather than imply rejections have no reason."""
+    with tenant_scope(tenant_id) as conn:
+        return [
+            dict(r)
+            for r in conn.execute(
+                _PAGE_FOR_RUN_SQL,
+                {"tenant_id": str(tenant_id), "ingestion_run_id": str(ingestion_run_id), "limit": limit, "offset": offset},
+            ).mappings()
+        ]

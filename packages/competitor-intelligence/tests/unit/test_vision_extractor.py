@@ -135,6 +135,32 @@ def test_invalid_price_string_is_omitted_not_fabricated() -> None:
     assert fields["title"] == "X"
 
 
+@pytest.mark.parametrize("bad_price", [float("nan"), float("inf"), float("-inf"), "NaN", "Infinity", "-Infinity"])
+def test_non_finite_price_is_omitted_not_a_crash(bad_price: object) -> None:
+    # json.dumps emits bare NaN/Infinity (which json.loads accepts), and Decimal("NaN") /
+    # Decimal("Infinity") parse fine — but int() on them raises ValueError/OverflowError, which
+    # extract() does not catch. An unreadable price must be omitted (never zero, never a crash).
+    model_json = json.dumps({"title": "X", "listed_price": bad_price})
+    extractor, _ = _extractor({"img-1": b"img-1"}, {"img-1": model_json})
+    result = extractor.extract("img-1")
+    assert isinstance(result, ExtractionResult)
+    fields = _by_name(result)
+    assert "listed_price_paise" not in fields
+    assert fields["title"] == "X"
+
+
+@pytest.mark.parametrize("bad_rating", [float("nan"), "NaN", "Infinity"])
+def test_non_finite_rating_is_omitted_not_a_crash(bad_rating: object) -> None:
+    # Decimal("NaN") < 0 raises InvalidOperation outside the parser's try block.
+    model_json = json.dumps({"title": "X", "rating": bad_rating})
+    extractor, _ = _extractor({"img-1": b"img-1"}, {"img-1": model_json})
+    result = extractor.extract("img-1")
+    assert isinstance(result, ExtractionResult)
+    fields = _by_name(result)
+    assert "rating" not in fields
+    assert fields["title"] == "X"
+
+
 def test_rating_out_of_range_is_omitted() -> None:
     model_json = json.dumps({"title": "X", "rating": "9.9"})
     extractor, _ = _extractor({"img-1": b"img-1"}, {"img-1": model_json})

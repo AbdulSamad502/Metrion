@@ -13,7 +13,8 @@
  * - "unavailable"  — nothing was obtained; muted, never implies a hidden failure (--text-6)
  * - "gap"          — a hard, seller-visible gap that needs action, e.g. MOQ not published,
  *                    a UNKNOWN cogs_basis batch quantity (--negative)
- * - "available"    — confirmed / seller-entered / computed data (--accent)
+ * - "available"    — computed or entered data, shown in bright neutral text. Deliberately NOT green:
+ *                    most of these are estimates, and green is reserved for confirmed/positive.
  *
  * `reason`, when present, always renders — this component never lets a bare status word
  * stand alone without its disclaimer/explanation, per §0's "never just a bare number" rule.
@@ -27,14 +28,14 @@ export function ConfidenceBadge({
   label: string;
   reason?: string | null;
 }) {
-  const color = status === "available" ? "var(--accent)" : status === "gap" ? "var(--negative)" : "var(--text-6)";
+  const color = status === "available" ? "var(--text-2)" : status === "gap" ? "var(--negative)" : "var(--text-6)";
   return (
     <span className="inline-flex flex-col gap-0.5">
-      <span className="text-[12px] font-semibold" style={{ color }}>
+      <span className="t-body font-semibold" style={{ color }}>
         {label}
       </span>
       {reason && (
-        <span className="text-[11px]" style={{ color: "var(--text-7)" }}>
+        <span className="t-meta" style={{ color: "var(--text-5)" }}>
           {reason}
         </span>
       )}

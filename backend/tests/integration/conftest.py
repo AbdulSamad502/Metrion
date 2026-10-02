@@ -42,10 +42,8 @@ def two_tenants(migrate_engine, _clean_backend_tables):
     """Two fake tenant rows, inserted as the table owner (metrion_migrate) so membership's
     FK to tenant(id) is satisfiable — the RLS tests below then connect as metrion_app to
     verify isolation against those two ids. No teardown here: `_clean_backend_tables`
-    (declared as a dependency, in addition to its own autouse=True) deletes every backend
-    table, including `tenant`, in FK-safe order after every test — doing it there rather
-    than here avoids a "delete parent before child" ordering race between sibling fixtures'
-    own teardowns."""
+    (declared as a dependency, in addition to its own autouse=True) clears platform config;
+    the inserted tenant rows themselves are removed, by id, by `_purge_tenants_created_by_test`."""
     tenant_a, tenant_b = uuid.uuid4(), uuid.uuid4()
     with migrate_engine.begin() as conn:
         for tid in (tenant_a, tenant_b):
@@ -75,26 +73,8 @@ def app_user(migrate_engine, _clean_backend_tables):
     yield user_id
 
 
-_CHILD_TABLES = (
-    "auth_audit",
-    "whatsapp_pending_action",
-    "whatsapp_message",
-    "whatsapp_alert_subscription",
-    "investigation_message",
-    # entitlement.md §5 tenant-owned tables — deleted before agent_run (metered_event's
-    # nullable FK to agent_run(id)) and before tenant/app_user themselves.
-    "member_entitlement_allocation",
-    "metered_event",
-    "tenant_cart_item",
-    "tenant_plan",
-    "agent_run",
-    "investigation",
-    "whatsapp_binding",
-    "membership",
-)
-
 # entitlement.md §5/§7 platform-config tables (nullable tenant_id, no RLS-loop cleanup
-# possible the way _CHILD_TABLES is — a NULL tenant_id row has no tenant to scope through).
+# possible — a NULL tenant_id row has no tenant to scope through).
 # Deleted directly as the table owner (metrion_migrate), mirroring
 # packages/calc-engine/tests/integration/conftest.py's own `_clean_engine_tables` pattern for
 # reconciliation_tolerance_config/severity_config.
@@ -106,40 +86,48 @@ _PLATFORM_CONFIG_TABLES = (
 )
 
 
-def _clean(migrate_engine) -> None:
-    """Deletes every backend table's rows, in FK-safe order. `FORCE ROW LEVEL SECURITY`
-    (auth.md D3) applies even to `metrion_migrate` as table owner, so an unscoped
-    `DELETE FROM <child_table>` run on the owner connection with no tenant context set would
-    silently delete zero rows (the policy predicate is NULL for every row) — this is
-    deliberately NOT how this cleanup works. Instead: read the tenant ids that exist (`tenant`
-    itself carries no RLS policy, so this SELECT is unscoped-safe), then delete each child
-    table's rows *through* `tenant_scope()` per tenant id, so the same RLS policy that
-    protects real requests does the filtering here too. Only once every child row is gone are
-    `tenant`/`app_user` deletable without a FK violation."""
-    with migrate_engine.begin() as conn:
-        tenant_ids = [row[0] for row in conn.execute(text("SELECT id FROM tenant")).fetchall()]
+def _clean_platform_config(migrate_engine) -> None:
+    """Clears the platform-default rows (NULL tenant_id) the tests seed into the entitlement
+    config tables — the only rows an unscoped DELETE can reach under FORCE ROW LEVEL SECURITY,
+    and exactly the row shape every test here seeds.
 
-    for tenant_id in tenant_ids:
-        with tenant_scope(tenant_id) as conn:
-            for t in _CHILD_TABLES:
-                conn.execute(text(f"DELETE FROM {t}"))
-
+    This used to ALSO wipe every tenant's child rows and then run `DELETE FROM tenant` /
+    `DELETE FROM app_user` unscoped, which deleted every real tenant and user in the shared dev
+    database each time the suite ran. Tenant-owned data a test creates is now removed by
+    `_purge_tenants_created_by_test` (below): it tracks the tenant/app_user ids the test
+    actually used and deletes only those, through each tenant's own RLS context."""
     with migrate_engine.begin() as conn:
-        conn.execute(text("DELETE FROM tenant"))
-        conn.execute(text("DELETE FROM app_user"))
-        # Platform-config tables (nullable tenant_id) — an unscoped delete as table owner
-        # only reaches tenant_id IS NULL rows (the RLS predicate's other branch needs
-        # app.current_tenant_id set); that's exactly the row shape every test here seeds
-        # (platform-default rows via migrate_engine, mirroring fee_reference's precedent),
-        # so this is sufficient cleanup, not a gap.
         for t in _PLATFORM_CONFIG_TABLES:
             conn.execute(text(f"DELETE FROM {t}"))
 
 
 @pytest.fixture(autouse=True)
 def _clean_backend_tables(migrate_engine):
-    """Each test starts and ends with empty backend tables — see `_clean()` above for why
-    this can't be a plain unscoped DELETE."""
-    _clean(migrate_engine)
+    """Platform-config rows start and end empty; see `_clean_platform_config`. (Also a declared
+    dependency of `two_tenants`/`app_user`, which insert tenant/user rows that the tenant-scoped
+    purge below removes.)"""
+    _clean_platform_config(migrate_engine)
     yield
-    _clean(migrate_engine)
+    _clean_platform_config(migrate_engine)
+
+
+# --- Tenant-scoped cleanup of everything a test created --------------------------------------
+# The `DELETE FROM <table>` fixtures in this suite never removed tenant-owned rows: every such
+# table is FORCE ROW LEVEL SECURITY, which applies to the table owner too, so a DELETE with no
+# tenant context matches nothing and silently deletes zero rows. This fixture instead purges the
+# tenants the code under test actually touched, through RLS, one tenant at a time — see
+# tools/testkit/tenant_cleanup.py for the mechanism and why it cannot touch another tenant.
+import pathlib  # noqa: E402
+import sys  # noqa: E402
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "tools"))
+from testkit.tenant_cleanup import TRACKER as _tenant_tracker  # noqa: E402
+
+_tenant_tracker.install()
+
+
+@pytest.fixture(autouse=True)
+def _purge_tenants_created_by_test(migrate_engine):
+    _tenant_tracker.reset()
+    yield
+    _tenant_tracker.purge(migrate_engine)

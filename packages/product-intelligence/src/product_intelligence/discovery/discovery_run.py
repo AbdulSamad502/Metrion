@@ -47,6 +47,7 @@ from uuid import UUID
 from product_intelligence.discovery.candidate_synthesis import (
     dedupe_by_normalized_title,
     filter_excluded_brands,
+    match_image_for_candidate,
     synthesize_candidates,
 )
 from product_intelligence.discovery.product_extraction import ProductExtractionClient, ProductExtractionUnavailable
@@ -63,6 +64,7 @@ _MIN_YOUTUBE_MATCHED_SLOTS = 5  # reserved within candidate_cap for candidates w
 # docstring for why a plain source_diversity sort alone still isn't enough.
 _MAX_RESULTS_PER_TAVILY_QUERY = 10
 _MAX_RESULTS_PER_YOUTUBE_QUERY = 10
+_MAX_TARGETED_IMAGE_LOOKUPS = 10  # extra Tavily image searches per run, for candidates left without an image
 _MAX_CONCURRENT_QUERIES = 5  # bounded deliberately — see module docstring's concurrency note
 _MAX_COMMENTS_PER_VIDEO_FOR_ENGAGEMENT = 0  # engagement uses counts only; comments are read
 # separately, only for the post-Stage-1 shortlist, by review_insight/ — never fetched here,
@@ -255,6 +257,57 @@ def _cached_tavily_search(
     )
 
 
+def _cached_images_for_candidate(
+    candidate_title: str, *, tavily: TavilyClient, cache: QueryCache, ttl_hours: int, now: datetime
+) -> list[TavilyImage]:
+    """Images found by searching for ONE candidate by its own name — same cache/throttle discipline
+    as `_cached_tavily_search`, under its own key prefix so it never collides with a niche query."""
+    cache_key = f"images::{normalize_query_text(candidate_title)}"
+    cached = cache.get("tavily", cache_key, now=now)
+    if cached is not None:
+        payload = cached
+    else:
+        with throttle("tavily"):
+            images = tavily.images_for(candidate_title, max_images=5)
+        payload = [_tavily_image_to_dict(i) for i in images]
+        cache.put("tavily", cache_key, payload, ttl_hours=ttl_hours, now=now)
+    return [_dict_to_tavily_image(r) for r in payload]
+
+
+def _attach_targeted_images(
+    rows: list[dict[str, Any]], *, tavily: TavilyClient, cache: QueryCache, ttl_hours: int, now: datetime
+) -> None:
+    """Root-cause fix for candidates that persist with no image.
+
+    The run-wide image pool comes from the GENERIC niche queries (`_cached_tavily_search`), so its
+    images describe the niche, not the specific products later extracted from the articles — and
+    `synthesize_candidates` (correctly) refuses to attach an image unless the image's own text names
+    every identity token of the candidate. Most named products therefore found no match, even though
+    the image field is persisted, returned and rendered end to end.
+
+    For each kept candidate still without an image (bounded by `_MAX_TARGETED_IMAGE_LOOKUPS`), search
+    for images BY THE CANDIDATE'S OWN NAME and accept one only through the same containment rule
+    (`match_image_for_candidate`). No match, or Tavily unavailable, leaves the candidate image-less —
+    never a guessed or borrowed image — and never changes the run's status (an image is not a reason
+    to mark discovery partial). Mutates `rows` in place."""
+    missing = [r for r in rows if not r["image_url"]][:_MAX_TARGETED_IMAGE_LOOKUPS]
+    if not missing:
+        return
+
+    def lookup(row: dict[str, Any]) -> TavilyImage | None:
+        try:
+            images = _cached_images_for_candidate(row["candidate_title"], tavily=tavily, cache=cache, ttl_hours=ttl_hours, now=now)
+        except TavilyUnavailable:
+            return None
+        return match_image_for_candidate(row["candidate_title"], images)
+
+    with ThreadPoolExecutor(max_workers=min(_MAX_CONCURRENT_QUERIES, len(missing))) as executor:
+        for row, image in zip(missing, executor.map(lookup, missing)):
+            if image is not None:
+                row["image_url"] = image.url
+                row["image_source_url"] = image.source_url
+
+
 def _cached_youtube_search(
     query: str, *, youtube: YoutubeClient, cache: QueryCache, ttl_hours: int, now: datetime
 ) -> list[YoutubeVideo]:
@@ -438,6 +491,11 @@ def run_discovery(
     # candidates so they can never be fully crowded out, on top of the source_diversity
     # ordering for everything else — see its own docstring for the confirmed live-data proof.
     rows = _select_candidates_with_cap(rows, candidate_cap=candidate_cap)
+
+    # Only after the cap, so no Tavily call is spent on a candidate that is discarded. Skipped when
+    # Tavily already failed this run: hammering a rate-limited API for a nicety helps no one.
+    if not tavily_degraded:
+        _attach_targeted_images(rows, tavily=tavily, cache=cache, ttl_hours=tavily_ttl, now=now)
 
     candidate_ids: list[UUID] = []
     raw_signals_by_candidate: dict[UUID, CandidateRawSignals] = {}

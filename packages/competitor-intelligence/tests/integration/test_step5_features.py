@@ -172,7 +172,13 @@ def test_digest_aggregates_price_events_across_competitors(two_tenants, fake_ext
     _research(tenant_id, url_b, requested_by, fake_extractor, price=200000, availability="IN_STOCK", when=t0)
     _research(tenant_id, url_b, requested_by, fake_extractor, price=220000, availability="IN_STOCK", when=t1)
 
-    summary = build_digest(tenant_id, since=t0 - timedelta(hours=1), until=datetime.now(timezone.utc))
+    # `created_at` on a price event is stamped by the *database* clock at insert time, while `until`
+    # comes from this process's clock. The two differ by ~1-2 ms (measured), so `until=now()` taken
+    # immediately after the last commit can land just BEFORE that event's created_at and exclude it
+    # (~8% of runs). The test's intent is "everything up to now" — give `until` a clock-skew margin.
+    summary = build_digest(
+        tenant_id, since=t0 - timedelta(hours=1), until=datetime.now(timezone.utc) + timedelta(minutes=1)
+    )
 
     assert summary.competitors_with_activity == 2
     by_url = {e.competitor_url_id: e for e in summary.entries}

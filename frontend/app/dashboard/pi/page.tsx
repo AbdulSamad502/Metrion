@@ -2,10 +2,13 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useState } from "react";
-import { Sidebar } from "@/components/dashboard/Sidebar";
-import { Topbar } from "@/components/dashboard/Topbar";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { Icon } from "@/components/ui/Icon";
 import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
-import { useAppSession } from "@/lib/useAppSession";
+import { PipelineStepper, type FlowStep } from "@/components/ci/EvidenceTrail";
+import { Section } from "@/components/ui/Section";
+import { TabPanel, Tabs } from "@/components/ui/Tabs";
+import { useHashTab } from "@/lib/useHashTab";
 import {
   ApiError,
   apiFetch,
@@ -28,9 +31,31 @@ import {
  * No CEO/CFO agent wiring exists yet (see the PI build plan's Phase 2 scope boundary) —
  * the "final recommendation" section below is therefore an honest, clearly-labeled
  * "not yet available" placeholder, never a faked or partial version of the real thing. */
+const PI_TABS = [
+  { id: "discover", label: "Niche & discovery" },
+  { id: "shortlist", label: "Shortlist & suppliers" },
+  { id: "recommendation", label: "Recommendation" },
+] as const;
+
 export default function PiPage() {
-  const { session, error: sessionError, displayName, roleLabel } = useAppSession();
+  return (
+    <DashboardShell title="Products" subtitle="Find niches and candidates, check feasibility, shortlist suppliers">
+      <PiWorkspace />
+    </DashboardShell>
+  );
+}
+
+const PI_STEPS: FlowStep[] = [
+  { name: "Opportunity", detail: "Describe a niche, budget and price band." },
+  { name: "Candidates", detail: "Discovery proposes products from independent signals." },
+  { name: "Evidence", detail: "Each score shows which signals it rests on — and which are missing." },
+  { name: "Feasibility", detail: "An estimate against your costs. Never confirmed profit." },
+  { name: "Recommendation", detail: "Shortlist and compare suppliers, then decide." },
+];
+
+function PiWorkspace() {
   const { getToken } = useAuth();
+  const [tab, setTab] = useHashTab(PI_TABS.map((t) => t.id), "discover");
 
   const [runId, setRunId] = useState<string | null>(null);
   const [report, setReport] = useState<PiReport | null>(null);
@@ -50,74 +75,44 @@ export default function PiPage() {
     }
   };
 
-  if (sessionError) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center" style={{ color: "var(--negative)" }}>
-        {sessionError}
-      </div>
-    );
-  }
-  if (!session) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center" style={{ color: "var(--text-5)" }}>
-        Loading…
-      </div>
-    );
-  }
-
   return (
-    <div className="flex" style={{ background: "var(--bg-base)" }}>
-      <Sidebar userName={displayName} roleLabel={roleLabel} active="Products" />
-      <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
-        <Topbar title="Products" subtitle="Dashboard → Products → Direct-execution routes → Result" />
-        <div className="flex-1 overflow-y-auto px-8 py-7">
-          <div className="flex flex-col gap-6">
-            <NicheBriefSection getToken={getToken} />
-            <DiscoverSection
-              getToken={getToken}
-              runId={runId}
-              onRunStarted={(id) => {
-                setRunId(id);
-                void reloadReport(id);
-              }}
-              onReload={() => runId && reloadReport(runId)}
-              report={report}
-              reportBusy={reportBusy}
-              reportError={reportError}
-            />
-            <ShortlistSupplierSection
-              getToken={getToken}
-              runId={runId}
-              report={report}
-              onReload={() => runId && reloadReport(runId)}
-            />
-            <FinalRecommendationSection />
-          </div>
+    <div className="mt-content flex flex-col gap-7">
+      <PipelineStepper steps={PI_STEPS} label="Product discovery workflow" />
+      <Tabs tabs={[...PI_TABS]} active={tab} onChange={setTab} label="Product Intelligence workspace" idPrefix="pi" />
+
+      <TabPanel id="discover" active={tab} idPrefix="pi">
+        <div className="mt-stack">
+          <NicheBriefSection getToken={getToken} />
+          <DiscoverSection
+            getToken={getToken}
+            runId={runId}
+            onRunStarted={(id) => {
+              setRunId(id);
+              void reloadReport(id);
+            }}
+            onReload={() => runId && reloadReport(runId)}
+            report={report}
+            reportBusy={reportBusy}
+            reportError={reportError}
+          />
         </div>
-      </div>
+      </TabPanel>
+      <TabPanel id="shortlist" active={tab} idPrefix="pi">
+        <ShortlistSupplierSection getToken={getToken} runId={runId} report={report} onReload={() => runId && reloadReport(runId)} />
+      </TabPanel>
+      <TabPanel id="recommendation" active={tab} idPrefix="pi">
+        <FinalRecommendationSection />
+      </TabPanel>
     </div>
   );
 }
 
 // --- Shared primitives (same inline CSS-variable convention ceo-hub/cfo pages use) ----
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="mb-2.5 text-[16.5px] font-bold" style={{ color: "var(--text-2)" }}>
-        {title}
-      </div>
-      <div className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border-default)" }}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-[12.5px]" style={{ color: "var(--text-6)" }}>
+      <label className="mb-1 block t-body-sm" style={{ color: "var(--text-6)" }}>
         {label}
       </label>
       {children}
@@ -142,8 +137,7 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full rounded-lg px-3 py-2 text-[13px]"
-      style={{ background: "var(--bg-base)", border: "1px solid var(--border-default)", color: "var(--text-2)" }}
+      className="mt-input w-full rounded-lg px-3 py-2 t-body"
     />
   );
 }
@@ -161,8 +155,7 @@ function SelectInput({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-lg px-3 py-2 text-[13px]"
-      style={{ background: "var(--bg-base)", border: "1px solid var(--border-default)", color: "var(--text-2)" }}
+      className="mt-input w-full rounded-lg px-3 py-2 t-body"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -178,19 +171,22 @@ function SubmitButton({
   busy,
   label,
   busyLabel,
+  primary = false,
 }: {
   onClick: () => void;
   busy: boolean;
   label: string;
   busyLabel: string;
+  /** The one green action of a view; every other submit is a neutral secondary button. */
+  primary?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={busy}
-      className="w-fit rounded-lg px-4 py-2 text-[13px] font-bold"
-      style={{ background: "var(--accent)", color: "var(--accent-on-fill)", opacity: busy ? 0.6 : 1 }}
+      className={`mt-btn mt-focus w-fit rounded-lg px-4 py-2 t-body font-bold disabled:cursor-not-allowed ${primary ? "" : "mt-btn-secondary"}`}
+      style={primary ? { background: "var(--accent)", color: "var(--accent-on-fill)", opacity: busy ? 0.6 : 1 } : { opacity: busy ? 0.6 : 1 }}
     >
       {busy ? busyLabel : label}
     </button>
@@ -200,7 +196,7 @@ function SubmitButton({
 function ErrorText({ children }: { children: React.ReactNode }) {
   if (!children) return null;
   return (
-    <div className="text-[12.5px]" style={{ color: "var(--negative)" }}>
+    <div className="t-body-sm" style={{ color: "var(--negative)" }}>
       {children}
     </div>
   );
@@ -317,10 +313,10 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
     <Section title="Niche Brief Intake">
       <div className="flex flex-col gap-6">
         <div>
-          <div className="mb-2 text-[13px] font-semibold" style={{ color: "var(--text-3)" }}>
+          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>
             Create a draft
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Category / product idea">
               <TextInput value={categoryText} onChange={setCategoryText} placeholder="e.g. kitchen storage jars" />
             </Field>
@@ -335,12 +331,12 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
             </Field>
           </div>
           <div className="mt-3">
-            <div className="mb-1 text-[12.5px]" style={{ color: "var(--text-6)" }}>
+            <div className="mb-1 t-body-sm" style={{ color: "var(--text-6)" }}>
               Marketplaces
             </div>
             <div className="flex gap-3">
               {MARKETPLACE_OPTIONS.map((m) => (
-                <label key={m} className="flex items-center gap-1.5 text-[13px]" style={{ color: "var(--text-3)" }}>
+                <label key={m} className="flex items-center gap-1.5 t-body" style={{ color: "var(--text-3)" }}>
                   <input type="checkbox" checked={marketplaces.includes(m)} onChange={() => toggleMarketplace(m)} />
                   {m}
                 </label>
@@ -355,9 +351,9 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
                 placeholder="e.g. Nike, Puma, Adidas — comma-separated, already-dominant brands to skip"
               />
             </Field>
-            <div className="mt-1 text-[11.5px]" style={{ color: "var(--text-7)" }}>
+            <div className="mt-1 t-meta-sm" style={{ color: "var(--text-6)" }}>
               Candidates matching these brand names are filtered out before discovery results are shown — a
-              plain, seller-specified exclusion list, never an automated "too famous" judgement.
+              plain, seller-specified exclusion list, never an automated &quot;too famous&quot; judgement.
             </div>
           </div>
           <div className="mt-3">
@@ -365,7 +361,7 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
           </div>
           <ErrorText>{createError}</ErrorText>
           {createdBriefId && (
-            <div className="mt-1 text-[12.5px]" style={{ color: "var(--accent)" }}>
+            <div className="mt-1 t-body-sm" style={{ color: "var(--accent)" }}>
               Created — niche brief <code>{createdBriefId}</code>. Use it below to mark it READY, then in the
               Discover section.
             </div>
@@ -373,7 +369,7 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
         </div>
 
         <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
-          <div className="mb-2 text-[13px] font-semibold" style={{ color: "var(--text-3)" }}>
+          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>
             Look up a niche brief
           </div>
           <div className="flex gap-2">
@@ -381,9 +377,9 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
             <SubmitButton onClick={loadBrief} busy={lookupBusy} label="Load" busyLabel="Loading…" />
           </div>
           <ErrorText>{lookupError}</ErrorText>
-          {lookupNotFound && <div className="mt-1 text-[12.5px]" style={{ color: "var(--text-6)" }}>Not found for this tenant.</div>}
+          {lookupNotFound && <div className="mt-1 t-body-sm" style={{ color: "var(--text-6)" }}>Not found for this tenant.</div>}
           {lookupBrief && (
-            <div className="mt-3 rounded-lg p-3 text-[12.5px]" style={{ background: "var(--bg-base)", border: "1px solid var(--border-subtle)" }}>
+            <div className="mt-3 rounded-lg p-3 t-body-sm" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
               <div style={{ color: "var(--text-2)" }}>
                 <strong>{lookupBrief.category_text ?? "(no category set)"}</strong> — status {lookupBrief.status}
               </div>
@@ -461,7 +457,7 @@ function DiscoverSection({
   return (
     <Section title="Discover Candidate Opportunities">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Niche brief id (must be READY)">
             <TextInput value={nicheBriefId} onChange={setNicheBriefId} placeholder="UUID" />
           </Field>
@@ -477,11 +473,11 @@ function DiscoverSection({
           </Field>
         </div>
         <div>
-          <SubmitButton onClick={discover} busy={busy} label="Run discovery" busyLabel="Discovering…" />
+          <SubmitButton onClick={discover} busy={busy} label="Run discovery" busyLabel="Discovering…" primary />
         </div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="text-[12.5px]" style={{ color: "var(--text-3)" }}>
+          <div className="t-body-sm" style={{ color: "var(--text-3)" }}>
             Run <code>{result.runId}</code> — status {result.status} · {result.candidateIds.length} candidate(s) found
             {result.partialReason && <div style={{ color: "var(--negative)" }}>Partial: {result.partialReason}</div>}
             {result.failedReason && <div style={{ color: "var(--negative)" }}>Failed: {result.failedReason}</div>}
@@ -491,14 +487,14 @@ function DiscoverSection({
         {runId && (
           <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
             <div className="mb-2 flex items-center justify-between">
-              <div className="text-[13px] font-semibold" style={{ color: "var(--text-3)" }}>
+              <div className="t-body font-semibold" style={{ color: "var(--text-3)" }}>
                 Candidate opportunities — run <code>{runId}</code>
               </div>
               <SubmitButton onClick={onReload} busy={reportBusy} label="Reload report" busyLabel="Loading…" />
             </div>
             <ErrorText>{reportError}</ErrorText>
             {report && report.candidates.length === 0 && (
-              <div className="text-[12.5px]" style={{ color: "var(--text-6)" }}>
+              <div className="t-body-sm" style={{ color: "var(--text-6)" }}>
                 No candidates found for this run yet.
               </div>
             )}
@@ -508,7 +504,7 @@ function DiscoverSection({
                   <CandidateCard key={entry.candidate.id} entry={entry} />
                 ))}
                 {report.unavailable.length > 0 && (
-                  <div className="rounded-lg p-3 text-[12px]" style={{ background: "var(--bg-base)", border: "1px solid var(--border-subtle)" }}>
+                  <div className="rounded-lg p-3 t-meta" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
                     <div className="mb-1 font-semibold" style={{ color: "var(--text-4)" }}>
                       Not available in this report
                     </div>
@@ -528,53 +524,113 @@ function DiscoverSection({
   );
 }
 
+/** A candidate's image, exactly as discovery found it. The source is third-party (a hosting page's
+ * image, or a YouTube thumbnail), so it can be dead, blocked or hotlink-protected: when it fails to
+ * load the image is dropped and the cell falls back to the same neutral empty state as "no image" —
+ * never a broken-image icon. `no-referrer` avoids hotlink protection that keys on our origin; the
+ * fixed 64px box means a late or failed load never shifts the card's layout. */
+function CandidateImage({ url, alt, sourceUrl }: { url: string | null; alt: string; sourceUrl: string | null }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  if (!url || failedUrl === url) {
+    // Neutral empty state: same 64px footprint as a real image so every card's text column lines up.
+    // It claims nothing about the product — there is simply no (loadable) image for it.
+    return (
+      <div
+        className="hidden h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg sm:flex"
+        style={{ background: "var(--fill-hover)", color: "var(--text-7)" }}
+        title="No image available for this candidate"
+        role="img"
+        aria-label="No image available for this candidate"
+      >
+        <Icon name="products" size={20} />
+      </div>
+    );
+  }
+  return (
+    <div className="row-span-2 flex-shrink-0 sm:row-span-1">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt={alt}
+        width={64}
+        height={64}
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setFailedUrl(url)}
+        className="h-16 w-16 rounded-lg object-cover"
+        style={{ background: "var(--fill-hover)" }}
+      />
+      <div className="mt-1 max-w-16 truncate t-micro" style={{ color: "var(--text-6)" }} title={`image from ${imageDomain(sourceUrl)}`}>
+        {imageDomain(sourceUrl)}
+      </div>
+    </div>
+  );
+}
+
 function CandidateCard({ entry }: { entry: PiReportCandidateEntry }) {
   const [expanded, setExpanded] = useState(false);
   const c = entry.candidate;
+  const computed = c.proxy_state === "COMPUTED";
   return (
-    <div className="rounded-lg p-3 text-[12.5px]" style={{ background: "var(--bg-base)", border: "1px solid var(--border-subtle)" }}>
-      <div className="flex gap-3">
-        {c.image_url && (
-          <div className="flex-shrink-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={c.image_url} alt={c.candidate_title} className="h-16 w-16 rounded object-cover" />
-            <div className="mt-1 text-[10.5px]" style={{ color: "var(--text-7)" }}>
-              image from {imageDomain(c.image_source_url)}
-            </div>
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3 py-5 t-body sm:grid-cols-[auto_minmax(0,1fr)_auto]" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+      <CandidateImage url={c.image_url} alt={c.candidate_title} sourceUrl={c.image_source_url} />
+
+      {/* OPPORTUNITY — what it is, and how strong the signal is */}
+      <div className="min-w-0">
+        <div className="t-section font-semibold leading-snug" style={{ color: "var(--text-1)" }}>
+          {c.candidate_title}
+        </div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <ConfidenceBadge status="available" label="Candidate opportunity" reason="signal-based estimate — not a claim of verified marketplace sales rank or current demand spike" />
+          <span style={{ color: "var(--text-5)" }}>{c.source_diversity} independent source(s)</span>
+        </div>
+      </div>
+
+      <div className="col-span-2 flex items-baseline gap-2 sm:col-span-1 sm:flex-col sm:items-end sm:gap-0 sm:text-right">
+        <div className="mt-eyebrow">Proxy score</div>
+        {computed ? (
+          <div className="mt-num t-metric font-bold leading-none" style={{ color: "var(--text-1)" }}>
+            {c.proxy_score}
+            <span className="t-body font-medium" style={{ color: "var(--text-5)" }}>
+              /100
+            </span>
+          </div>
+        ) : (
+          <ConfidenceBadge status="unavailable" label="UNAVAILABLE" reason="no engagement or source-diversity signal available" />
+        )}
+      </div>
+
+      {/* EVIDENCE → FEASIBILITY → RECOMMENDATION, in that order */}
+      <div className="col-span-2 flex flex-col gap-3 sm:col-start-2 sm:col-span-2">
+        <WebPriceSignalRow signal={c.web_price_signal} />
+        <FeasibilityRow candidate={c} />
+
+        {entry.final_score_state === "COMPUTED" && (
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pl-3" style={{ borderLeft: "2px solid var(--glass-border-hover)" }}>
+            <span className="mt-eyebrow">Shortlist score</span>
+            <span className="mt-num t-headline font-bold" style={{ color: "var(--text-1)" }}>
+              {entry.final_score}/100
+            </span>
+            <span style={{ color: "var(--text-4)" }}>{entry.final_score_explanation?.summary ?? ""}</span>
           </div>
         )}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <strong style={{ color: "var(--text-2)" }}>{c.candidate_title}</strong>
-            <ConfidenceBadge status="available" label="Candidate opportunity" reason="signal-based estimate — not a claim of verified marketplace sales rank or current demand spike" />
-          </div>
-          <div className="mt-1" style={{ color: "var(--text-5)" }}>
-            Proxy score:{" "}
-            {c.proxy_state === "COMPUTED" ? (
-              <span>{c.proxy_score}/100</span>
-            ) : (
-              <ConfidenceBadge status="unavailable" label="UNAVAILABLE" reason="no engagement or source-diversity signal available" />
-            )}
-            {" · "}
-            {c.source_diversity} independent source(s)
-          </div>
 
-          <WebPriceSignalRow signal={c.web_price_signal} />
-          <FeasibilityRow candidate={c} />
-
+        <div>
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="mt-1.5 text-[11.5px] font-semibold"
-            style={{ color: "var(--accent)" }}
+            aria-expanded={expanded}
+            className="mt-btn mt-focus rounded-md t-body-sm font-semibold"
+            style={{ color: "var(--text-3)" }}
           >
-            {expanded ? "Hide score explanation" : "Show score explanation"}
+            {expanded ? "Hide how this score was built" : "How was this score built?"}
           </button>
           {expanded && (
-            <div className="mt-1.5 flex flex-col gap-1">
-              <div style={{ color: "var(--text-6)" }}>{c.score_explanation.summary}</div>
+            <div className="mt-fade-up mt-2 flex flex-col gap-1.5">
+              <div style={{ color: "var(--text-4)" }}>{c.score_explanation.summary}</div>
               {c.score_explanation.signals.map((s, i) => (
-                <div key={i} className="flex gap-2" style={{ color: "var(--text-6)" }}>
+                <div key={i} className="flex gap-2" style={{ color: "var(--text-5)" }}>
                   <ConfidenceBadge
                     status={s.status === "AVAILABLE" ? "available" : "unavailable"}
                     label={`${s.signal}: ${s.points}/${s.max_points}`}
@@ -582,13 +638,6 @@ function CandidateCard({ entry }: { entry: PiReportCandidateEntry }) {
                   />
                 </div>
               ))}
-            </div>
-          )}
-
-          {entry.final_score_state === "COMPUTED" && (
-            <div className="mt-1.5" style={{ color: "var(--text-5)" }}>
-              Final shortlist score: {entry.final_score}/100 —{" "}
-              {entry.final_score_explanation?.summary ?? ""}
             </div>
           )}
         </div>
@@ -690,7 +739,7 @@ function ShortlistSupplierSection({
   if (!report) {
     return (
       <Section title="Shortlist Commentary + Supplier Leads">
-        <div className="text-[12.5px]" style={{ color: "var(--text-6)" }}>
+        <div className="t-body-sm" style={{ color: "var(--text-6)" }}>
           Run discovery above first, then select candidates here to look up suppliers and view
           viewer/web commentary.
         </div>
@@ -701,13 +750,13 @@ function ShortlistSupplierSection({
   return (
     <Section title="Shortlist Commentary + Supplier Leads">
       <div className="flex flex-col gap-3">
-        <div className="text-[12.5px]" style={{ color: "var(--text-6)" }}>
+        <div className="t-body-sm" style={{ color: "var(--text-6)" }}>
           Select up to 5 candidates to look up suppliers for.
         </div>
         <div className="flex flex-col gap-2">
           {report.candidates.map((entry) => (
             <div key={entry.candidate.id} className="rounded-lg p-3" style={{ border: "1px solid var(--border-subtle)" }}>
-              <label className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-3)" }}>
+              <label className="flex items-center gap-2 t-body" style={{ color: "var(--text-3)" }}>
                 <input
                   type="checkbox"
                   checked={selected.includes(entry.candidate.id)}
@@ -718,12 +767,12 @@ function ShortlistSupplierSection({
 
               <div className="mt-2 flex flex-col gap-1.5">
                 {entry.review_insights.length === 0 ? (
-                  <div className="text-[12px]" style={{ color: "var(--text-6)" }}>
+                  <div className="t-meta" style={{ color: "var(--text-6)" }}>
                     No viewer or web commentary gathered for this candidate yet.
                   </div>
                 ) : (
                   entry.review_insights.map((ri) => (
-                    <div key={ri.id} className="text-[12px]" style={{ color: "var(--text-5)" }}>
+                    <div key={ri.id} className="t-meta" style={{ color: "var(--text-5)" }}>
                       <ConfidenceBadge
                         status="available"
                         label={ri.insight_source_type === "YOUTUBE_COMMENTARY" ? "Viewer commentary (YouTube)" : "Web editorial commentary"}
@@ -738,12 +787,12 @@ function ShortlistSupplierSection({
                         </div>
                       )}
                       {ri.positive_themes && Object.keys(ri.positive_themes).length > 0 && (
-                        <div className="mt-0.5 ml-1" style={{ color: "var(--positive, var(--text-6))" }}>
+                        <div className="mt-0.5 ml-1" style={{ color: "var(--positive)" }}>
                           Liked: {Object.entries(ri.positive_themes).map(([k, v]) => `${k} (${v})`).join(", ")}
                         </div>
                       )}
                       {ri.complaint_themes && Object.keys(ri.complaint_themes).length > 0 && (
-                        <div className="mt-0.5 ml-1" style={{ color: "var(--negative, var(--text-6))" }}>
+                        <div className="mt-0.5 ml-1" style={{ color: "var(--negative)" }}>
                           Consider addressing: {Object.entries(ri.complaint_themes).map(([k, v]) => `${k} (${v})`).join(", ")}
                         </div>
                       )}
@@ -754,18 +803,18 @@ function ShortlistSupplierSection({
 
               <div className="mt-2 flex flex-col gap-1.5">
                 {entry.supplier_leads.length === 0 ? (
-                  <div className="text-[12px]" style={{ color: "var(--text-6)" }}>
+                  <div className="t-meta" style={{ color: "var(--text-6)" }}>
                     No supplier leads found yet — run supplier lookup below.
                   </div>
                 ) : (
                   entry.supplier_leads.map((lead) => (
-                    <div key={lead.id} className="text-[12px]" style={{ color: "var(--text-3)" }}>
+                    <div key={lead.id} className="t-meta" style={{ color: "var(--text-3)" }}>
                       <strong>{lead.supplier_name}</strong> · {lead.source}
                       {lead.locality && <> · {lead.locality}</>}
                       {lead.source_url && (
                         <>
                           {" · "}
-                          <a href={lead.source_url} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+                          <a href={lead.source_url} target="_blank" rel="noreferrer" style={{ color: "var(--text-3)", textDecoration: "underline" }}>
                             link
                           </a>
                         </>
@@ -774,7 +823,7 @@ function ShortlistSupplierSection({
                       {lead.contact?.website && (
                         <>
                           {" · "}
-                          <a href={lead.contact.website} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+                          <a href={lead.contact.website} target="_blank" rel="noreferrer" style={{ color: "var(--text-3)", textDecoration: "underline" }}>
                             website
                           </a>
                         </>
@@ -799,7 +848,7 @@ function ShortlistSupplierSection({
         </div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="text-[12.5px]" style={{ color: "var(--text-3)" }}>
+          <div className="t-body-sm" style={{ color: "var(--text-3)" }}>
             {result.results.map((r) => (
               <div key={r.candidateId}>
                 Candidate <code>{r.candidateId.slice(0, 8)}</code>: {r.leadIds.length} lead(s) found

@@ -6,6 +6,9 @@ __pycache__/
 .pytest_cache/
 .hypothesis/
 *.egg-info/
+.venv/
 
-# Local runtime data (uploaded evidence screenshots, etc.) — never committed
+# Local runtime data (uploaded evidence screenshots, uploaded CFO reports, etc.) — never committed.
+# The backend writes to ./data/... relative to its working directory, so cover both locations.
 backend/data/
+/data/

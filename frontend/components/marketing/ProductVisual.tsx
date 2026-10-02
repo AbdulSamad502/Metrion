@@ -59,10 +59,10 @@ export function ProductVisual() {
         <div
           className="mt-float absolute -top-5 left-0 z-20 hidden w-[200px] rounded-2xl p-4 lg:block"
           style={{
-            background: "rgba(32,36,30,0.6)",
+            background: "var(--bg-card-glass)",
             backdropFilter: "blur(24px) saturate(180%)",
             border: "1px solid var(--border-default)",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.45)",
+            boxShadow: "var(--shadow-float)",
             animationDelay: "0.2s",
           }}
         >
@@ -85,10 +85,10 @@ export function ProductVisual() {
         <div
           className="mt-float absolute -top-9 right-0 z-20 hidden w-[220px] rounded-2xl p-4 lg:block"
           style={{
-            background: "rgba(32,36,30,0.6)",
+            background: "var(--bg-card-glass)",
             backdropFilter: "blur(24px) saturate(180%)",
             border: "1px solid var(--accent-border-default)",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.45)",
+            boxShadow: "var(--shadow-float)",
             animationDelay: "0.8s",
           }}
         >
@@ -116,10 +116,10 @@ export function ProductVisual() {
         <div
           className="mt-float absolute right-4 -bottom-8 z-20 hidden w-[190px] rounded-2xl p-4 sm:block"
           style={{
-            background: "rgba(32,36,30,0.6)",
+            background: "var(--bg-card-glass)",
             backdropFilter: "blur(24px) saturate(180%)",
             border: "1px solid var(--border-default)",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.45)",
+            boxShadow: "var(--shadow-float)",
             animationDelay: "1.4s",
           }}
         >
@@ -159,7 +159,7 @@ export function ProductVisual() {
                   <div className="text-[13px] leading-none font-bold" style={{ color: "var(--text-1)" }}>
                     Metrion
                   </div>
-                  <div className="mt-1 text-[7px] font-semibold tracking-[0.1em]" style={{ color: "#4E9A66" }}>
+                  <div className="mt-1 text-[7px] font-semibold tracking-[0.1em]" style={{ color: "var(--text-green-muted)" }}>
                     ENGINE OF GROWTH
                   </div>
                 </div>

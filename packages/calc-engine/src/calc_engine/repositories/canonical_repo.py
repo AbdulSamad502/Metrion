@@ -33,6 +33,18 @@ _LINES_FOR_PERIOD_SQL = text(
     """
 )
 
+_LINES_FOR_PERIOD_AND_MARKETPLACE_SQL = text(
+    """
+    SELECT id AS sales_line_id, marketplace, document_type, quantity, invoice_date,
+           dispatch_date, order_date, gross_item_amount, return_status, confidence,
+           order_ref, line_ref, taxable_amount, sku, ingestion_run_id
+    FROM sales_line
+    WHERE tenant_id = :tenant_id
+      AND marketplace = :marketplace
+      AND coalesce(invoice_date, dispatch_date, order_date) BETWEEN :period_start AND :period_end
+    """
+)
+
 _LINES_WITHOUT_DOCUMENT_DATE_SQL = text(
     """
     SELECT id AS sales_line_id, marketplace, document_type, quantity, invoice_date,
@@ -56,7 +68,9 @@ _COMPONENTS_FOR_LINES_SQL = text(
 )
 
 
-def sales_lines_in_period(tenant_id: UUID, *, period_start: date, period_end: date) -> list[dict[str, Any]]:
+def sales_lines_in_period(
+    tenant_id: UUID, *, period_start: date, period_end: date, marketplace: str | None = None
+) -> list[dict[str, Any]]:
     """Fetches raw sales_line rows for a period, keyed by the same invoice->dispatch->order
     fallback dates.py.resolve_document_date() implements — this query and that function must
     stay in agreement, since a mismatch would silently exclude or double-count a line at a
@@ -70,13 +84,19 @@ def sales_lines_in_period(tenant_id: UUID, *, period_start: date, period_end: da
     adapters currently populate) — added specifically for `calc_engine.api.reconcile.reconcile`
     (coordinator-approved widening of this SELECT; all three columns already existed on
     `sales_line` per `20260917_0001_sales_side_tables.py`, this is additive-only, no schema
-    change, same WHERE clause, same signature)."""
+    change, same WHERE clause, same signature).
+
+    `marketplace=None` (the default) returns every marketplace's rows, exactly as before — the
+    P&L/GST callers need that and are unchanged. Passing a marketplace adds `AND marketplace =
+    :marketplace` in SQL, for per-marketplace callers (`reconcile()`, cash reconciliation) that
+    previously fetched every marketplace's lines and filtered in Python."""
+    params: dict[str, Any] = {"tenant_id": str(tenant_id), "period_start": period_start, "period_end": period_end}
+    sql = _LINES_FOR_PERIOD_SQL
+    if marketplace is not None:
+        sql = _LINES_FOR_PERIOD_AND_MARKETPLACE_SQL
+        params["marketplace"] = marketplace
     with tenant_scope(tenant_id) as conn:
-        rows = conn.execute(
-            _LINES_FOR_PERIOD_SQL,
-            {"tenant_id": str(tenant_id), "period_start": period_start, "period_end": period_end},
-        )
-        return [dict(row._mapping) for row in rows]
+        return [dict(row._mapping) for row in conn.execute(sql, params)]
 
 
 def sales_lines_without_document_date(tenant_id: UUID, *, marketplace: str) -> list[dict[str, Any]]:

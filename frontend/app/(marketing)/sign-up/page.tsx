@@ -7,8 +7,9 @@ import { useEffect, useMemo, useState } from "react";
 import { AuthCard } from "@/components/ui/AuthCard";
 import { Button, GoogleIcon } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
-import { callClerk, errorText, isIdentifierExistsError, isStaleResourceError, tryClerk } from "@/lib/clerkErrors";
+import { callClerk, errorText, isIdentifierExistsError, isSessionExistsError, isStaleResourceError, tryClerk } from "@/lib/clerkErrors";
 import { estimatePasswordStrength } from "@/lib/passwordStrength";
+import { useRedirectIfSignedIn } from "@/lib/useRedirectIfSignedIn";
 import { useSubmitGuard } from "@/lib/useSubmitGuard";
 
 /** Custom sign-up — auth.md I2. Two steps: create (password or Google), then the
@@ -21,6 +22,7 @@ import { useSubmitGuard } from "@/lib/useSubmitGuard";
  * `globalError` is the ONLY place any error renders — no field also duplicates it inline,
  * which was the other bug (the same message rendering twice). */
 export default function SignUpPage() {
+  useRedirectIfSignedIn();
   const { signUp, fetchStatus } = useSignUp();
   const clerk = useClerk();
   const router = useRouter();
@@ -31,6 +33,7 @@ export default function SignUpPage() {
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [accountExists, setAccountExists] = useState(false);
   const [staleResource, setStaleResource] = useState(false);
+  const [googleRedirecting, setGoogleRedirecting] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
   const guard = useSubmitGuard();
@@ -56,15 +59,25 @@ export default function SignUpPage() {
   const continueWithGoogle = () =>
     guard(async () => {
       setGlobalError(null);
-      const { error } = await tryClerk(() =>
-        clerk.client.signUp.authenticateWithRedirect({
-          // The stable, documented redirect API — see sign-in's identical comment.
-          strategy: "oauth_google",
-          redirectUrl: "/sso-callback",
-          redirectUrlComplete: "/onboarding",
-        }),
-      );
+      setGoogleRedirecting(true);
+      const start = () =>
+        tryClerk(() =>
+          clerk.client.signUp.authenticateWithRedirect({
+            // The stable, documented redirect API — see sign-in's identical comment.
+            strategy: "oauth_google",
+            redirectUrl: "/sso-callback",
+            redirectUrlComplete: "/onboarding",
+          }),
+        );
+      let { error } = await start();
+      if (error && isSessionExistsError(error)) {
+        // Clear the leftover session and retry in the same click — see sign-in.
+        await tryClerk(() => clerk.signOut());
+        ({ error } = await start());
+      }
+      // On success the browser is already navigating to Google — keep the loading state.
       if (error) {
+        setGoogleRedirecting(false);
         if (isStaleResourceError(error)) setStaleResource(true);
         else setGlobalError(errorText(error));
       }
@@ -77,7 +90,10 @@ export default function SignUpPage() {
       setAccountExists(false);
       const { error } = await callClerk(() => signUp.password({ emailAddress: email, password }));
       if (error) {
-        if (isStaleResourceError(error)) {
+        if (isSessionExistsError(error)) {
+          // Leftover session in this browser blocks a new sign-up: clear it and reload clean.
+          await clerk.signOut({ redirectUrl: "/sign-up" });
+        } else if (isStaleResourceError(error)) {
           setStaleResource(true);
         } else if (isIdentifierExistsError(error)) {
           setAccountExists(true);
@@ -193,7 +209,14 @@ export default function SignUpPage() {
         </span>
       }
     >
-      <Button type="button" variant="secondary" onClick={continueWithGoogle} disabled={submitting}>
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={continueWithGoogle}
+        disabled={submitting}
+        loading={googleRedirecting}
+        loadingText="Redirecting to Google…"
+      >
         <GoogleIcon />
         Continue with Google
       </Button>

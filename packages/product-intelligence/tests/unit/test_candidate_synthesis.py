@@ -571,3 +571,32 @@ def test_image_never_cross_attributed_to_an_unrelated_candidate_group() -> None:
     assert by_title["Wireless Earbuds Pro"].image_url == "https://img.example.com/1.jpg"
     assert by_title["Bluetooth Speaker X1"].image_url is None
     assert by_title["Bluetooth Speaker X1"].image_source_url is None
+
+
+# --- match_image_for_candidate: the single-candidate form of the same honest matching rule -----
+
+
+def test_match_image_for_candidate_accepts_an_image_whose_own_text_names_every_identity_token() -> None:
+    from product_intelligence.discovery.candidate_synthesis import match_image_for_candidate
+
+    images = [
+        TavilyImage(url="https://i.example/other.jpg", source_url="https://i.example/other.jpg", description="a grey running shoe", title="Another brand"),
+        TavilyImage(url="https://i.example/nimbus.jpg", source_url="https://i.example/nimbus.jpg", description="a blue shoe", title="ASICS GEL-NIMBUS 28 — official page"),
+    ]
+    match = match_image_for_candidate("ASICS GEL-NIMBUS 28", images)
+    assert match is not None and match.url == "https://i.example/nimbus.jpg"
+
+
+def test_match_image_for_candidate_returns_none_rather_than_a_look_alike() -> None:
+    from product_intelligence.discovery.candidate_synthesis import match_image_for_candidate
+
+    images = [TavilyImage(url="https://i.example/x.jpg", source_url="https://i.example/x.jpg", description="a running shoe", title="ASICS Novablast")]
+    assert match_image_for_candidate("ASICS GEL-NIMBUS 28", images) is None
+    assert match_image_for_candidate("ASICS GEL-NIMBUS 28", []) is None
+
+
+def test_match_image_for_candidate_refuses_a_one_word_identity() -> None:
+    from product_intelligence.discovery.candidate_synthesis import match_image_for_candidate
+
+    images = [TavilyImage(url="https://i.example/r.jpg", source_url="https://i.example/r.jpg", description="a runner", title="Runner")]
+    assert match_image_for_candidate("Runner", images) is None

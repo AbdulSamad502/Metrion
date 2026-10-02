@@ -10,7 +10,7 @@ import { useEffect } from "react";
  * just gets out of the way of it). Signed-out and still-loading visitors see the landing
  * page normally; loading renders nothing rather than a flash of marketing content. */
 export function LandingGate({ children }: { children: React.ReactNode }) {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
   const router = useRouter();
 
   useEffect(() => {

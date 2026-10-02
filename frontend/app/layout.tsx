@@ -14,6 +14,9 @@ export const metadata: Metadata = {
   description: "AI profit-optimization OS for Indian e-commerce sellers",
 };
 
+// Clerk's theme engine takes literal colors, so these mirror the tokens in globals.css
+// (colorPrimary=--accent, colorBackground=--bg-popover, colorText=--text-2,
+// colorTextSecondary=--text-5). Keep them in sync if those tokens change.
 const clerkAppearance = {
   variables: {
     colorPrimary: "#3ECF74",
@@ -30,8 +33,11 @@ const clerkAppearance = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col" style={{ background: "#0A0B0A" }}>
-        <ClerkProvider appearance={clerkAppearance}>{children}</ClerkProvider>
+      <body className="min-h-full flex flex-col" style={{ background: "var(--bg-base)" }}>
+        {/* Metrion's backend creates the Clerk org during onboarding (auth.md §6.2), so if the
+            Clerk instance leaves a new session "pending" on choose-organization, route it to
+            our own onboarding step instead of Clerk's (unrendered) task UI. */}
+        <ClerkProvider appearance={clerkAppearance} taskUrls={{ "choose-organization": "/onboarding" }}>{children}</ClerkProvider>
       </body>
     </html>
   );

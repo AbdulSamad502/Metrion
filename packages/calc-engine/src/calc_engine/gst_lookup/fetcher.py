@@ -55,7 +55,7 @@ class HttpxGstFetcher:
     """The real fetcher. Generic HTTP I/O only — no GST-specific logic lives here, that's
     `lookup.py`'s (page selection) and the LLM extraction step's job."""
 
-    def __init__(self, *, timeout_seconds: float = 10.0) -> None:
+    def __init__(self, *, timeout_seconds: int = 10) -> None:  # int, not float — no_float lint (AC3) has no allowlist
         self._timeout_seconds = timeout_seconds
 
     def fetch(self, url: str) -> RawPage | FetchError:

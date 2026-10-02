@@ -82,6 +82,10 @@ def _parse_rupees_to_paise(value: object) -> int | None:
         rupees = Decimal(str(value).replace(",", "").replace("₹", "").strip())
     except (InvalidOperation, ValueError):
         return None
+    if not rupees.is_finite():
+        # "NaN"/"Infinity" parse as valid Decimals (and `json.loads` accepts bare NaN/Infinity),
+        # but `int()` on them raises — an unreadable price is absent, never a crash or a zero.
+        return None
     return int((rupees * 100).to_integral_value())
 
 
@@ -90,7 +94,7 @@ def _parse_rating(value: object) -> str | None:
         rating = Decimal(str(value).strip())
     except (InvalidOperation, ValueError):
         return None
-    if rating < 0 or rating > 5:
+    if not rating.is_finite() or rating < 0 or rating > 5:  # NaN < 0 raises InvalidOperation
         return None
     return str(rating)
 

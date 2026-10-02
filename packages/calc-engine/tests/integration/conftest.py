@@ -42,8 +42,10 @@ def two_tenants():
 
 @pytest.fixture(autouse=True)
 def _clean_engine_tables(migrate_engine):
-    """Each test starts and ends with empty engine-owned tables — as the table owner, so
-    RLS itself never gets in the way of test cleanup."""
+    """Clears the PLATFORM-DEFAULT rows (NULL tenant_id) these config tables hold, which are the
+    only rows an unscoped DELETE can reach: FORCE ROW LEVEL SECURITY applies to the table owner
+    too, so for tenant-owned rows this DELETE matches nothing. Tenant-owned rows are removed by
+    `_purge_tenants_created_by_test` below, which deletes through each tenant's RLS context."""
     tables = (
         "metric_result",
         "manual_adjustment",
@@ -61,3 +63,25 @@ def _clean_engine_tables(migrate_engine):
     with migrate_engine.begin() as conn:
         for t in tables:
             conn.execute(text(f"DELETE FROM {t}"))
+
+
+# --- Tenant-scoped cleanup of everything a test created --------------------------------------
+# The `DELETE FROM <table>` fixtures in this suite never removed tenant-owned rows: every such
+# table is FORCE ROW LEVEL SECURITY, which applies to the table owner too, so a DELETE with no
+# tenant context matches nothing and silently deletes zero rows. This fixture instead purges the
+# tenants the code under test actually touched, through RLS, one tenant at a time — see
+# tools/testkit/tenant_cleanup.py for the mechanism and why it cannot touch another tenant.
+import pathlib  # noqa: E402
+import sys  # noqa: E402
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[4] / "tools"))
+from testkit.tenant_cleanup import TRACKER as _tenant_tracker  # noqa: E402
+
+_tenant_tracker.install()
+
+
+@pytest.fixture(autouse=True)
+def _purge_tenants_created_by_test(migrate_engine):
+    _tenant_tracker.reset()
+    yield
+    _tenant_tracker.purge(migrate_engine)

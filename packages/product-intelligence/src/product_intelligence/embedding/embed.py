@@ -70,6 +70,39 @@ class OllamaEmbeddingClient:
             raise EmbeddingUnavailable("Ollama embeddings response had no numeric 'embedding' list")
         return [float(v) for v in embedding]
 
+    def embed_many(self, texts: list[str]) -> list[list[float]]:
+        """Embeds many texts in ONE `/api/embed` request. Measured on a CPU host: ~2.5 s fixed
+        overhead per request, so 30 per-candidate requests cost 17.7 s even across 5 worker
+        threads, vs 3.9 s for one batched request. Vectors are the same direction as the legacy
+        `/api/embeddings` endpoint's (cosine similarity 1.000000) but L2-normalised; the only
+        consumer is pgvector's cosine `<=>`, which is magnitude-invariant. Raises
+        `EmbeddingUnavailable` on any failure or on a wrong count/shape — never partial results."""
+        import httpx
+
+        if not texts:
+            return []
+        try:
+            response = httpx.post(
+                f"{self._host}/api/embed",
+                json={"model": self._model, "input": texts},
+                timeout=self._timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise EmbeddingUnavailable(f"Ollama batch embeddings request failed: {exc}") from exc
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise EmbeddingUnavailable(f"Ollama batch embeddings response was not valid JSON: {exc}") from exc
+        vectors = body.get("embeddings") if isinstance(body, dict) else None
+        if (
+            not isinstance(vectors, list)
+            or len(vectors) != len(texts)
+            or not all(isinstance(v, list) and all(isinstance(x, (int, float)) for x in v) for v in vectors)
+        ):
+            raise EmbeddingUnavailable("Ollama batch embeddings response did not contain one numeric vector per input")
+        return [[float(x) for x in v] for v in vectors]
+
 
 def derived_attribute_text(
     *, title_length: int | None, title_structure: dict[str, Any] | None, keyword_themes: dict[str, Any] | None
@@ -104,11 +137,18 @@ def embed_candidate(
     Raises `EmbeddingUnavailable` (never silently skips) if the model produces a vector whose
     length doesn't match `MODEL_DIM` — a caller may catch this and degrade the run rather than
     write a corrupt row."""
-    now = now or datetime.now(timezone.utc)
     text = derived_attribute_text(
         title_length=title_length, title_structure=title_structure, keyword_themes=keyword_themes
     )
-    vector = client.embed(text)
+    return store_candidate_embedding(tenant_id, candidate_id, client.embed(text), now=now)
+
+
+def store_candidate_embedding(
+    tenant_id: UUID, candidate_id: UUID, vector: list[float], *, now: datetime | None = None
+) -> UUID:
+    """Validates a candidate's vector's dimension and persists it — shared by the per-candidate
+    path (`embed_candidate`) and the batched path, so both enforce the same contract."""
+    now = now or datetime.now(timezone.utc)
     if len(vector) != MODEL_DIM:
         raise EmbeddingUnavailable(
             f"embedding model returned {len(vector)}-dim vector, expected {MODEL_DIM} for {MODEL_NAME}"

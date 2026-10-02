@@ -2,9 +2,12 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
-import { Sidebar } from "@/components/dashboard/Sidebar";
-import { Topbar } from "@/components/dashboard/Topbar";
-import { useAppSession } from "@/lib/useAppSession";
+import { ImportHistory } from "@/components/cfo/ImportHistory";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { Section } from "@/components/ui/Section";
+import { TabPanel, Tabs } from "@/components/ui/Tabs";
+import { isOpenRequest } from "@/lib/useNotifications";
+import { useHashTab } from "@/lib/useHashTab";
 import {
   ApiError,
   apiFetch,
@@ -14,6 +17,7 @@ import {
   type BudgetStatus,
   type CfoPreviewResponse,
   type DataRequestItem,
+  type UploadOutcome,
   type ExpenseListResponse,
   type FundingReadinessResponse,
   type GstLookupResponse,
@@ -30,16 +34,44 @@ import {
   type SupplierRankingResponse,
 } from "@/lib/api";
 
-/** CFO test harness — a real, functional, deliberately undecorated dashboard for
- * clicking through every CFO direct-execution route (`backend/src/backend/api/v1/cfo.py`)
- * against the signed-in tenant's own data. Mirrors `dashboard/ceo-hub/page.tsx`'s exact
- * conventions (Section, per-form busy/error/result state, a fresh Clerk token per call,
- * money entered/rendered in rupees and converted to/from paise at the edge only). No
- * mock data anywhere — every section calls a real backend route and renders exactly what
- * comes back, including genuine UNAVAILABLE/error/empty states. */
+const CFO_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "profitability", label: "Profitability" },
+  { id: "cash", label: "Cash & reconciliation" },
+  { id: "gst", label: "GST" },
+  { id: "anomalies", label: "Anomalies & requests" },
+  { id: "import", label: "Import data" },
+] as const;
+
+const CFO_TAB_BLURBS: Record<(typeof CFO_TABS)[number]["id"], string> = {
+  overview: "Financial health, the strategic briefing, a Leak Shield preview and the goal everything is measured against.",
+  profitability: "True contribution profit, period comparison, price/margin curves, landed cost, suppliers and batch sizing.",
+  cash: "Reconcile settlements to invoices, track expenses against a budget, and check funding readiness.",
+  gst: "Line-level GST analysis, period summaries and HSN/rate lookup. Informational — not tax advice.",
+  anomalies: "Statistical anomaly checks, and the inputs the CFO is asking you for.",
+  import: "Upload marketplace reports. Metrion reads files you upload — it never connects to a marketplace account.",
+};
+
+/** The CFO workspace. Each tab groups the existing, real direct-execution tools
+ * (`backend/src/backend/api/v1/cfo.py`) by the question they answer — nothing here computes or
+ * invents a figure: every section calls a real route and renders exactly what comes back,
+ * including genuine UNAVAILABLE / error / empty states. Money is entered/rendered in rupees and
+ * converted to/from paise at the edge only. */
 export default function CfoPage() {
-  const { session, error: sessionError, displayName, roleLabel } = useAppSession();
+  return (
+    <DashboardShell title="CFO" subtitle="Profit, cash, GST and leaks — computed deterministically from your uploaded data">
+      <CfoWorkspace />
+    </DashboardShell>
+  );
+}
+
+function CfoWorkspace() {
   const { getToken } = useAuth();
+  const [tab, setTab] = useHashTab(CFO_TABS.map((t) => t.id), "overview");
+
+  // The latest upload and a bump counter, so Import history refreshes and can surface a duplicate.
+  const [lastUpload, setLastUpload] = useState<UploadOutcome | null>(null);
+  const [importsTick, setImportsTick] = useState(0);
 
   const [dataRequests, setDataRequests] = useState<DataRequestItem[] | null>(null);
   const [dataRequestsError, setDataRequestsError] = useState<string | null>(null);
@@ -55,78 +87,84 @@ export default function CfoPage() {
   };
 
   useEffect(() => {
-    if (!session) return;
     (async () => {
       await reloadDataRequests();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, []);
 
-  if (sessionError) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center" style={{ color: "var(--negative)" }}>
-        {sessionError}
-      </div>
-    );
-  }
-  if (!session) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center" style={{ color: "var(--text-5)" }}>
-        Loading…
-      </div>
-    );
-  }
+  const openRequests = (dataRequests ?? []).filter(isOpenRequest).length;
+  const tabs = CFO_TABS.map((t) => ({ ...t, count: t.id === "anomalies" ? openRequests : null }));
 
   return (
-    <div className="flex" style={{ background: "var(--bg-base)" }}>
-      <Sidebar userName={displayName} roleLabel={roleLabel} active="CFO" />
-      <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
-        <Topbar title="CFO" subtitle="Dashboard → CFO → Direct-execution routes → Result" />
-        <div className="flex-1 overflow-y-auto px-8 py-7">
-          <div className="flex flex-col gap-6">
-            <ExpenseTrackerSection getToken={getToken} />
-            <PeriodPnlSection getToken={getToken} />
-            <GstLineAnalysisSection getToken={getToken} />
-            <GstPeriodSummarySection getToken={getToken} />
-            <GstLookupSection getToken={getToken} />
-            <PricingCurveSection getToken={getToken} />
-            <LandedCostSection getToken={getToken} />
-            <SupplierRankingSection getToken={getToken} />
-            <BatchSizeSection getToken={getToken} />
-            <FundingReadinessSection getToken={getToken} />
-            <ReconcileSection getToken={getToken} />
-            <CfoPreviewSection getToken={getToken} />
-            <AnomalyCheckSection getToken={getToken} />
-            <PeriodComparisonSection getToken={getToken} />
-            <IngestUploadSection getToken={getToken} />
-            <SellerGoalSection getToken={getToken} />
-            <FinancialHealthSection getToken={getToken} />
-            <StrategicBriefingSection getToken={getToken} />
-            <DataRequestsSection rows={dataRequests} error={dataRequestsError} onReload={reloadDataRequests} />
-          </div>
-        </div>
+    <div className="mt-content flex flex-col gap-7">
+      <div className="flex flex-col gap-3">
+        <Tabs tabs={tabs} active={tab} onChange={setTab} label="CFO workspace" idPrefix="cfo" />
+        <p className="t-body" style={{ color: "var(--text-5)" }}>
+          {CFO_TAB_BLURBS[tab as (typeof CFO_TABS)[number]["id"]]}
+        </p>
       </div>
+
+      <TabPanel id="overview" active={tab} idPrefix="cfo">
+        <div className="grid grid-cols-1 items-start gap-x-10 gap-y-9 xl:grid-cols-2">
+          <FinancialHealthSection getToken={getToken} />
+          <StrategicBriefingSection getToken={getToken} />
+          <CfoPreviewSection getToken={getToken} />
+          <SellerGoalSection getToken={getToken} />
+        </div>
+      </TabPanel>
+      <TabPanel id="profitability" active={tab} idPrefix="cfo">
+        <div className="mt-stack">
+          <PeriodPnlSection getToken={getToken} />
+          <PeriodComparisonSection getToken={getToken} />
+          <PricingCurveSection getToken={getToken} />
+          <LandedCostSection getToken={getToken} />
+          <SupplierRankingSection getToken={getToken} />
+          <BatchSizeSection getToken={getToken} />
+        </div>
+      </TabPanel>
+      <TabPanel id="cash" active={tab} idPrefix="cfo">
+        <div className="mt-stack">
+          <ReconcileSection getToken={getToken} />
+          <ExpenseTrackerSection getToken={getToken} />
+          <FundingReadinessSection getToken={getToken} />
+        </div>
+      </TabPanel>
+      <TabPanel id="gst" active={tab} idPrefix="cfo">
+        <div className="mt-stack">
+          <GstLineAnalysisSection getToken={getToken} />
+          <GstPeriodSummarySection getToken={getToken} />
+          <GstLookupSection getToken={getToken} />
+        </div>
+      </TabPanel>
+      <TabPanel id="anomalies" active={tab} idPrefix="cfo">
+        <div className="mt-stack">
+          <DataRequestsSection rows={dataRequests} error={dataRequestsError} onReload={reloadDataRequests} />
+          <AnomalyCheckSection getToken={getToken} />
+        </div>
+      </TabPanel>
+      <TabPanel id="import" active={tab} idPrefix="cfo">
+        <div className="mt-stack">
+          <IngestUploadSection
+            getToken={getToken}
+            onUploaded={(outcome) => {
+              setLastUpload(outcome);
+              setImportsTick((n) => n + 1);
+            }}
+          />
+          <ImportHistory getToken={getToken} refreshTick={importsTick} lastUpload={lastUpload} />
+        </div>
+      </TabPanel>
     </div>
   );
 }
 
 // --- Shared primitives (same inline CSS-variable convention ceo-hub/page.tsx uses) ----
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="mb-2.5 text-[16.5px] font-bold" style={{ color: "var(--text-2)" }}>{title}</div>
-      <div className="rounded-xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border-default)" }}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-[12.5px]" style={{ color: "var(--text-6)" }}>{label}</label>
+      <label className="mb-1.5 block t-body-sm font-medium" style={{ color: "var(--text-5)" }}>{label}</label>
       {children}
     </div>
   );
@@ -149,8 +187,7 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full rounded-lg px-3 py-2 text-[13px]"
-      style={{ background: "var(--bg-base)", border: "1px solid var(--border-default)", color: "var(--text-2)" }}
+      className="mt-input w-full rounded-lg px-3 py-2 t-body"
     />
   );
 }
@@ -168,8 +205,7 @@ function SelectInput({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-lg px-3 py-2 text-[13px]"
-      style={{ background: "var(--bg-base)", border: "1px solid var(--border-default)", color: "var(--text-2)" }}
+      className="mt-input w-full rounded-lg px-3 py-2 t-body"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -185,19 +221,22 @@ function SubmitButton({
   busy,
   label,
   busyLabel,
+  primary = false,
 }: {
   onClick: () => void;
   busy: boolean;
   label: string;
   busyLabel: string;
+  /** The one green action of a view; every other submit is a neutral secondary button. */
+  primary?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={busy}
-      className="w-fit rounded-lg px-4 py-2 text-[13px] font-bold"
-      style={{ background: "var(--accent)", color: "var(--accent-on-fill)", opacity: busy ? 0.6 : 1 }}
+      className={`mt-btn mt-focus w-fit rounded-lg px-4 py-2 t-body font-bold disabled:cursor-not-allowed ${primary ? "" : "mt-btn-secondary"}`}
+      style={primary ? { background: "var(--accent)", color: "var(--accent-on-fill)", opacity: busy ? 0.6 : 1 } : { opacity: busy ? 0.6 : 1 }}
     >
       {busy ? busyLabel : label}
     </button>
@@ -207,7 +246,7 @@ function SubmitButton({
 function ErrorText({ children }: { children: React.ReactNode }) {
   if (!children) return null;
   return (
-    <div className="text-[12.5px]" style={{ color: "var(--negative)" }}>
+    <div className="t-body-sm" style={{ color: "var(--negative)" }}>
       {children}
     </div>
   );
@@ -227,28 +266,34 @@ function toPaise(rupeesStr: string): number {
  * "populated instead of, never alongside" contract. */
 function CfoMetricResultRow({ label, result }: { label: string; result: MetricResult | PeriodPnlMetricResult }) {
   const fraction = "valueFraction" in result ? result.valueFraction : null;
+  const paise = result.valuePaise;
+  // Colour carries meaning only where the sign does: a loss is always negative; a positive figure
+  // is "positive" (green) only for profit-type metrics — revenue or cost being > 0 is not good news.
+  const isProfit = /PROFIT|MARGIN|DELTA/i.test(result.metricCode ?? "");
+  const moneyColor = paise === null ? "var(--text-1)" : paise < 0 ? "var(--negative)" : paise > 0 && isProfit ? "var(--positive)" : "var(--text-1)";
   return (
-    <div className="rounded-lg px-3 py-2 text-[12.5px]" style={{ background: "var(--bg-base)", border: "1px solid var(--border-subtle)" }}>
-      <div style={{ color: "var(--text-2)" }}>
-        <strong>{label}</strong>
-        {": "}
+    <div className="mt-ledger__row">
+      <div className="t-body" style={{ color: "var(--text-3)" }}>
+        {label}
+      </div>
+      <div className="text-right t-metric" style={{ color: "var(--text-1)" }}>
         {!result.isAvailable ? (
-          <span style={{ color: "var(--text-6)" }}>
-            UNAVAILABLE{result.unavailableReason ? ` — ${result.unavailableReason}` : ""}
+          <span className="t-body font-semibold" style={{ color: "var(--text-5)" }}>
+            Unavailable
           </span>
         ) : fraction !== null ? (
           <span>{fraction}%</span>
-        ) : result.valuePaise !== null ? (
-          <span>
-            {result.valuePaise >= 0 ? "+" : "-"}₹{(Math.abs(result.valuePaise) / 100).toFixed(2)}
+        ) : paise !== null ? (
+          <span style={{ color: moneyColor }}>
+            {paise >= 0 ? "+" : "-"}₹{(Math.abs(paise) / 100).toFixed(2)}
           </span>
         ) : (
-          <span style={{ color: "var(--text-6)" }}>—</span>
+          <span style={{ color: "var(--text-5)" }}>—</span>
         )}
       </div>
-      <div className="mt-0.5" style={{ color: "var(--text-7)" }}>
-        confidence: {result.confidence} · basis: {result.calculationBasis ?? "—"} · ref:{" "}
-        <code>{result.engineResultRef.slice(0, 8)}</code>
+      <div className="mt-ledger__meta">
+        {!result.isAvailable && result.unavailableReason ? <span style={{ color: "var(--warning)" }}>{result.unavailableReason} · </span> : null}
+        confidence {result.confidence} · basis {result.calculationBasis ?? "—"} · ref <code>{result.engineResultRef.slice(0, 8)}</code>
       </div>
     </div>
   );
@@ -287,7 +332,7 @@ function ComponentRowsEditor({
   return (
     <div className="flex flex-col gap-2">
       {rows.map((row, idx) => (
-        <div key={idx} className="grid grid-cols-5 gap-2">
+        <div key={idx} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           <TextInput value={row.component_kind} onChange={(v) => update(idx, { component_kind: v })} placeholder="component_kind" />
           <TextInput value={row.component_code} onChange={(v) => update(idx, { component_code: v })} placeholder="component_code" />
           <TextInput value={row.source_side} onChange={(v) => update(idx, { source_side: v })} placeholder="source_side" />
@@ -295,14 +340,14 @@ function ComponentRowsEditor({
           <button
             type="button"
             onClick={() => remove(idx)}
-            className="rounded-lg px-3 py-2 text-[12.5px] font-semibold"
+            className="rounded-lg px-3 py-2 t-body-sm font-semibold"
             style={{ border: "1px solid var(--border-default)", color: "var(--negative)" }}
           >
             Remove
           </button>
         </div>
       ))}
-      <button type="button" onClick={add} className="w-fit text-[12px] font-semibold" style={{ color: "var(--accent)" }}>
+      <button type="button" onClick={add} className="w-fit t-meta font-semibold" style={{ color: "var(--text-3)" }}>
         + Add component row
       </button>
     </div>
@@ -481,8 +526,8 @@ function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | 
     <Section title="Expense Tracker">
       <div className="flex flex-col gap-6">
         <div>
-          <div className="mb-2 text-[13px] font-semibold" style={{ color: "var(--text-3)" }}>Add expense</div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Add expense</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Category">
               <SelectInput
                 value={addCategory}
@@ -507,15 +552,15 @@ function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | 
           </div>
           <ErrorText>{addError}</ErrorText>
           {addResult && (
-            <div className="mt-1 text-[12.5px]" style={{ color: "var(--accent)" }}>
+            <div className="mt-1 t-body-sm" style={{ color: "var(--accent)" }}>
               Added — manual adjustment <code>{addResult.manualAdjustmentId.slice(0, 8)}</code>
             </div>
           )}
         </div>
 
         <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
-          <div className="mb-2 text-[13px] font-semibold" style={{ color: "var(--text-3)" }}>List expenses</div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>List expenses</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Period start (optional)">
               <TextInput type="date" value={listPeriodStart} onChange={setListPeriodStart} />
             </Field>
@@ -539,7 +584,7 @@ function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | 
               {listResult.entries.length === 0 ? (
                 <div style={{ color: "var(--text-6)" }}>No expenses recorded yet for this filter.</div>
               ) : (
-                <table className="w-full text-left text-[13px]">
+                <div className="mt-table-wrap"><table className="mt-table">
                   <thead>
                     <tr style={{ color: "var(--text-6)" }}>
                       <th className="pb-2 font-semibold">Category</th>
@@ -560,16 +605,16 @@ function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | 
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               )}
-              <div className="mt-2 text-[13px]" style={{ color: "var(--text-2)" }}>Total: {rupees(listResult.totalPaise)}</div>
+              <div className="mt-2 t-body" style={{ color: "var(--text-2)" }}>Total: {rupees(listResult.totalPaise)}</div>
             </div>
           )}
         </div>
 
         <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
-          <div className="mb-2 text-[13px] font-semibold" style={{ color: "var(--text-3)" }}>Set category budget</div>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Set category budget</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Field label="Category">
               <SelectInput
                 value={budgetCategory}
@@ -586,15 +631,15 @@ function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | 
           </div>
           <ErrorText>{budgetError}</ErrorText>
           {budgetResult && (
-            <div className="mt-1 text-[12.5px]" style={{ color: "var(--accent)" }}>
+            <div className="mt-1 t-body-sm" style={{ color: "var(--accent)" }}>
               Saved — manual adjustment <code>{budgetResult.manualAdjustmentId.slice(0, 8)}</code>
             </div>
           )}
         </div>
 
         <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
-          <div className="mb-2 text-[13px] font-semibold" style={{ color: "var(--text-3)" }}>Check budget status</div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Check budget status</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Category">
               <SelectInput
                 value={statusCategory}
@@ -610,7 +655,7 @@ function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | 
           </div>
           <ErrorText>{statusError}</ErrorText>
           {statusResult && (
-            <div className="mt-2 text-[13px]" style={{ color: "var(--text-2)" }}>
+            <div className="mt-2 t-body" style={{ color: "var(--text-2)" }}>
               {statusResult.noBudgetSet ? (
                 <div style={{ color: "var(--text-6)" }}>No budget set for this category/period.</div>
               ) : (
@@ -699,14 +744,14 @@ function PeriodPnlSection({ getToken }: { getToken: () => Promise<string | null>
   return (
     <Section title="Period P&L (quick single-line)">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Sales line id (UUID)">
             <div className="flex gap-2">
               <TextInput value={salesLineId} onChange={setSalesLineId} placeholder="UUID" />
               <button
                 type="button"
                 onClick={generateId}
-                className="rounded-lg px-3 py-2 text-[12px] font-semibold"
+                className="rounded-lg px-3 py-2 t-meta font-semibold"
                 style={{ border: "1px solid var(--border-default)", color: "var(--text-3)" }}
               >
                 Generate
@@ -716,7 +761,7 @@ function PeriodPnlSection({ getToken }: { getToken: () => Promise<string | null>
           <Field label="Marketplace"><TextInput value={marketplace} onChange={setMarketplace} placeholder="AMAZON" /></Field>
           <Field label="Document type"><TextInput value={documentType} onChange={setDocumentType} placeholder="INVOICE" /></Field>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Quantity"><TextInput type="number" value={quantity} onChange={setQuantity} /></Field>
           <Field label="Gross item amount (₹)"><TextInput value={grossAmount} onChange={setGrossAmount} placeholder="e.g. 999" /></Field>
           <Field label="Recognition state">
@@ -732,10 +777,10 @@ function PeriodPnlSection({ getToken }: { getToken: () => Promise<string | null>
           </Field>
         </div>
         <div>
-          <div className="mb-1 text-[12.5px]" style={{ color: "var(--text-6)" }}>Line components</div>
+          <div className="mb-1 t-body-sm" style={{ color: "var(--text-6)" }}>Line components</div>
           <ComponentRowsEditor rows={components} onChange={setComponents} />
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
@@ -745,19 +790,19 @@ function PeriodPnlSection({ getToken }: { getToken: () => Promise<string | null>
         </div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="flex flex-col gap-1.5">
+          <div className="mt-ledger">
             <CfoMetricResultRow label="Net Realized Revenue" result={result.nrr} />
             <CfoMetricResultRow label="Contribution Profit" result={result.contributionProfit} />
             <CfoMetricResultRow label="Contribution Margin %" result={result.marginPct} />
             <CfoMetricResultRow label="Fee Ratio %" result={result.feeRatioPct} />
             <CfoMetricResultRow label="Return Rate %" result={result.returnRatePct} />
             {result.marketplaceFeeFlags.length > 0 && (
-              <div className="text-[12.5px]" style={{ color: "var(--negative)" }}>
+              <div className="t-body-sm" style={{ color: "var(--negative)" }}>
                 Duplicate-fee-candidate warnings: {result.marketplaceFeeFlags.join(", ")}
               </div>
             )}
             {result.dataRequestId && (
-              <div className="text-[12.5px]" style={{ color: "var(--text-6)" }}>
+              <div className="t-body-sm" style={{ color: "var(--text-6)" }}>
                 Data request raised: <code>{result.dataRequestId.slice(0, 8)}</code> (COGS or RTO classification unavailable)
               </div>
             )}
@@ -824,7 +869,7 @@ function GstLineAnalysisSection({ getToken }: { getToken: () => Promise<string |
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-2">
           {lines.map((line, idx) => (
-            <div key={idx} className="grid grid-cols-5 gap-2">
+            <div key={idx} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
               <TextInput value={line.line_ref} onChange={(v) => update(idx, { line_ref: v })} placeholder="line ref" />
               <TextInput value={line.listed_rupees} onChange={(v) => update(idx, { listed_rupees: v })} placeholder="listed ₹" />
               <SelectInput
@@ -839,14 +884,14 @@ function GstLineAnalysisSection({ getToken }: { getToken: () => Promise<string |
               <button
                 type="button"
                 onClick={() => remove(idx)}
-                className="rounded-lg px-3 py-2 text-[12.5px] font-semibold"
+                className="rounded-lg px-3 py-2 t-body-sm font-semibold"
                 style={{ border: "1px solid var(--border-default)", color: "var(--negative)" }}
               >
                 Remove
               </button>
             </div>
           ))}
-          <button type="button" onClick={add} className="w-fit text-[12px] font-semibold" style={{ color: "var(--accent)" }}>
+          <button type="button" onClick={add} className="w-fit t-meta font-semibold" style={{ color: "var(--text-3)" }}>
             + Add line
           </button>
         </div>
@@ -860,8 +905,8 @@ function GstLineAnalysisSection({ getToken }: { getToken: () => Promise<string |
             {result.lines.map((l) => (
               <div
                 key={l.lineRef}
-                className="rounded-lg px-3 py-2 text-[12.5px]"
-                style={{ background: "var(--bg-base)", border: "1px solid var(--border-subtle)" }}
+                className="rounded-lg px-3 py-2 t-body-sm"
+                style={{ borderBottom: "1px solid var(--border-subtle)" }}
               >
                 <div style={{ color: "var(--text-2)" }}><strong>{l.lineRef}</strong></div>
                 {l.isAvailable ? (
@@ -873,7 +918,7 @@ function GstLineAnalysisSection({ getToken }: { getToken: () => Promise<string |
                 ) : (
                   <div style={{ color: "var(--text-6)" }}>UNAVAILABLE{l.unavailableReason ? ` — ${l.unavailableReason}` : ""}</div>
                 )}
-                <div style={{ color: "var(--text-7)" }}>{l.disclaimer}</div>
+                <div style={{ color: "var(--text-6)" }}>{l.disclaimer}</div>
               </div>
             ))}
           </div>
@@ -941,13 +986,13 @@ function GstPeriodSummarySection({ getToken }: { getToken: () => Promise<string 
       <div className="flex flex-col gap-4">
         {lines.map((line, idx) => (
           <div key={idx} className="rounded-lg p-3" style={{ border: "1px solid var(--border-subtle)" }}>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
               <div className="flex gap-2">
                 <TextInput value={line.sales_line_id} onChange={(v) => updateLine(idx, { sales_line_id: v })} placeholder="sales_line_id (UUID)" />
                 <button
                   type="button"
                   onClick={() => generateLineId(idx)}
-                  className="rounded-lg px-2 py-2 text-[11px] font-semibold"
+                  className="rounded-lg px-2 py-2 t-micro font-semibold"
                   style={{ border: "1px solid var(--border-default)", color: "var(--text-3)" }}
                 >
                   Generate
@@ -957,7 +1002,7 @@ function GstPeriodSummarySection({ getToken }: { getToken: () => Promise<string 
               <TextInput value={line.document_type} onChange={(v) => updateLine(idx, { document_type: v })} placeholder="document_type" />
               <TextInput type="number" value={line.quantity} onChange={(v) => updateLine(idx, { quantity: v })} placeholder="quantity" />
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
               <TextInput
                 value={line.gross_item_amount_rupees}
                 onChange={(v) => updateLine(idx, { gross_item_amount_rupees: v })}
@@ -966,23 +1011,23 @@ function GstPeriodSummarySection({ getToken }: { getToken: () => Promise<string 
               <TextInput value={line.confidence} onChange={(v) => updateLine(idx, { confidence: v })} placeholder="confidence (default CONFIRMED)" />
             </div>
             <div className="mt-2">
-              <div className="mb-1 text-[12px]" style={{ color: "var(--text-6)" }}>Components</div>
+              <div className="mb-1 t-meta" style={{ color: "var(--text-6)" }}>Components</div>
               <ComponentRowsEditor rows={line.components} onChange={(rows) => updateLine(idx, { components: rows })} />
             </div>
             <button
               type="button"
               onClick={() => removeLine(idx)}
-              className="mt-2 text-[12px] font-semibold"
+              className="mt-2 t-meta font-semibold"
               style={{ color: "var(--negative)" }}
             >
               Remove line
             </button>
           </div>
         ))}
-        <button type="button" onClick={addLine} className="w-fit text-[12px] font-semibold" style={{ color: "var(--accent)" }}>
+        <button type="button" onClick={addLine} className="w-fit t-meta font-semibold" style={{ color: "var(--text-3)" }}>
           + Add line
         </button>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
@@ -992,11 +1037,11 @@ function GstPeriodSummarySection({ getToken }: { getToken: () => Promise<string 
         </div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="flex flex-col gap-1.5">
+          <div className="mt-ledger">
             {result.results.map((r) => (
               <CfoMetricResultRow key={r.engineResultRef} label={r.metricCode} result={r} />
             ))}
-            <div className="text-[12.5px]" style={{ color: "var(--text-7)" }}>{result.disclaimer}</div>
+            <div className="t-body-sm" style={{ color: "var(--text-6)" }}>{result.disclaimer}</div>
           </div>
         )}
       </div>
@@ -1079,7 +1124,7 @@ function GstLookupSection({ getToken }: { getToken: () => Promise<string | null>
   return (
     <Section title="GST Applicability Lookup">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="Product title"><TextInput value={productTitle} onChange={setProductTitle} placeholder="e.g. Cotton bedsheet set" /></Field>
           <Field label="SKU (optional)"><TextInput value={sku} onChange={setSku} /></Field>
           <Field label="HSN (optional)"><TextInput value={hsn} onChange={setHsn} /></Field>
@@ -1090,17 +1135,17 @@ function GstLookupSection({ getToken }: { getToken: () => Promise<string | null>
         </div>
         <ErrorText>{error}</ErrorText>
         {result?.noMatch && (
-          <div className="text-[12.5px]" style={{ color: "var(--text-6)" }}>No match — {result.noMatch.reason}</div>
+          <div className="t-body-sm" style={{ color: "var(--text-6)" }}>No match — {result.noMatch.reason}</div>
         )}
         {result?.result && (
-          <div className="rounded-lg p-3 text-[12.5px]" style={{ background: "var(--bg-base)", border: "1px solid var(--border-subtle)" }}>
+          <div className="rounded-lg p-3 t-body-sm" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
             <div style={{ color: "var(--text-2)" }}>
               Likely rate: {result.result.likelyRatePct ?? "—"}% · HSN: {result.result.likelyHsn ?? "—"} · category:{" "}
               {result.result.likelyCategory ?? "—"}
             </div>
             {result.result.sourceUrl && <div style={{ color: "var(--text-5)" }}>Source: {result.result.sourceUrl}</div>}
             {result.result.ambiguityNote && <div style={{ color: "var(--negative)" }}>{result.result.ambiguityNote}</div>}
-            <div style={{ color: "var(--text-7)" }}>{result.result.disclaimer}</div>
+            <div style={{ color: "var(--text-6)" }}>{result.result.disclaimer}</div>
             {result.result.alternatives.length > 0 && (
               <ul className="ml-4 list-disc" style={{ color: "var(--text-5)" }}>
                 {result.result.alternatives.map((a, i) => (
@@ -1109,8 +1154,8 @@ function GstLookupSection({ getToken }: { getToken: () => Promise<string | null>
               </ul>
             )}
             <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
-              <div className="mb-2 text-[12.5px] font-semibold" style={{ color: "var(--text-3)" }}>Accept this rate for a SKU</div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="mb-2 t-body-sm font-semibold" style={{ color: "var(--text-3)" }}>Accept this rate for a SKU</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 <TextInput value={acceptSku} onChange={setAcceptSku} placeholder="SKU" />
                 <TextInput value={acceptReason} onChange={setAcceptReason} placeholder="reason (optional)" />
                 <TextInput type="date" value={acceptEffectiveFrom} onChange={setAcceptEffectiveFrom} />
@@ -1207,14 +1252,14 @@ function PricingCurveSection({ getToken }: { getToken: () => Promise<string | nu
   return (
     <Section title="Pricing Curve">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="SKU"><TextInput value={sku} onChange={setSku} /></Field>
           <Field label="Marketplace"><TextInput value={marketplace} onChange={setMarketplace} /></Field>
           <Field label="Category"><TextInput value={category} onChange={setCategory} /></Field>
           <Field label="Fee type"><TextInput value={feeType} onChange={setFeeType} /></Field>
         </div>
         <div>
-          <div className="mb-1 text-[12.5px]" style={{ color: "var(--text-6)" }}>Candidate prices (₹)</div>
+          <div className="mb-1 t-body-sm" style={{ color: "var(--text-6)" }}>Candidate prices (₹)</div>
           <div className="flex flex-col gap-2">
             {candidatePrices.map((p, idx) => (
               <div key={idx} className="flex gap-2">
@@ -1222,19 +1267,19 @@ function PricingCurveSection({ getToken }: { getToken: () => Promise<string | nu
                 <button
                   type="button"
                   onClick={() => removePrice(idx)}
-                  className="rounded-lg px-3 py-2 text-[12.5px] font-semibold"
+                  className="rounded-lg px-3 py-2 t-body-sm font-semibold"
                   style={{ border: "1px solid var(--border-default)", color: "var(--negative)" }}
                 >
                   Remove
                 </button>
               </div>
             ))}
-            <button type="button" onClick={addPrice} className="w-fit text-[12px] font-semibold" style={{ color: "var(--accent)" }}>
+            <button type="button" onClick={addPrice} className="w-fit t-meta font-semibold" style={{ color: "var(--text-3)" }}>
               + Add candidate price
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Basis">
             <SelectInput
               value={basis}
@@ -1248,14 +1293,14 @@ function PricingCurveSection({ getToken }: { getToken: () => Promise<string | nu
           <Field label="GST rate % (optional)"><TextInput value={gstRatePct} onChange={setGstRatePct} placeholder="e.g. 18" /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Shipping/logistics (₹)"><TextInput value={shipping} onChange={setShipping} /></Field>
           <Field label="Advertising (₹)"><TextInput value={advertising} onChange={setAdvertising} /></Field>
           <Field label="Other allocated costs (₹)"><TextInput value={other} onChange={setOther} /></Field>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="mb-1 flex items-center gap-2 text-[12.5px]" style={{ color: "var(--text-6)" }}>
+            <label className="mb-1 flex items-center gap-2 t-body-sm" style={{ color: "var(--text-6)" }}>
               <input type="checkbox" checked={cogsUnavailable} onChange={(e) => setCogsUnavailable(e.target.checked)} />
               COGS unavailable
             </label>
@@ -1266,7 +1311,7 @@ function PricingCurveSection({ getToken }: { getToken: () => Promise<string | nu
             )}
           </div>
           <div>
-            <label className="mb-1 flex items-center gap-2 text-[12.5px]" style={{ color: "var(--text-6)" }}>
+            <label className="mb-1 flex items-center gap-2 t-body-sm" style={{ color: "var(--text-6)" }}>
               <input type="checkbox" checked={rtoUnavailable} onChange={(e) => setRtoUnavailable(e.target.checked)} />
               Return/RTO losses unavailable
             </label>
@@ -1286,12 +1331,12 @@ function PricingCurveSection({ getToken }: { getToken: () => Promise<string | nu
         </div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="flex flex-col gap-1.5">
+          <div className="mt-ledger">
             {result.curve.map((r) => (
               <CfoMetricResultRow key={r.engineResultRef} label={r.calculationBasis ?? r.metricCode} result={r} />
             ))}
             {result.dataRequestId && (
-              <div className="text-[12.5px]" style={{ color: "var(--text-6)" }}>
+              <div className="t-body-sm" style={{ color: "var(--text-6)" }}>
                 Data request raised: <code>{result.dataRequestId.slice(0, 8)}</code>
               </div>
             )}
@@ -1344,7 +1389,7 @@ function LandedCostSection({ getToken }: { getToken: () => Promise<string | null
   return (
     <Section title="Landed Cost">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="SKU"><TextInput value={sku} onChange={setSku} /></Field>
           <Field label="Supplier quote target type">
             <SelectInput
@@ -1366,7 +1411,7 @@ function LandedCostSection({ getToken }: { getToken: () => Promise<string | null
         </div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="flex flex-col gap-1.5">
+          <div className="mt-ledger">
             {result.result ? (
               <CfoMetricResultRow label="Landed cost" result={result.result} />
             ) : (
@@ -1415,7 +1460,7 @@ function SupplierRankingSection({ getToken }: { getToken: () => Promise<string |
   return (
     <Section title="Supplier Ranking">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="SKU"><TextInput value={sku} onChange={setSku} /></Field>
           <Field label="Quantity"><TextInput type="number" value={quantity} onChange={setQuantity} /></Field>
           <Field label="As-of date (optional)"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
@@ -1432,11 +1477,11 @@ function SupplierRankingSection({ getToken }: { getToken: () => Promise<string |
             {result.ranked.length === 0 ? (
               <div style={{ color: "var(--text-6)" }}>No active supplier quotes found for this SKU.</div>
             ) : (
-              <div className="flex flex-col gap-1.5">
+              <div className="mt-ledger">
                 {result.ranked.map((r) => (
                   <div key={r.result.engineResultRef}>
                     <CfoMetricResultRow label={r.supplierName ?? "Supplier"} result={r.result} />
-                    <div className="text-[12px]" style={{ color: "var(--text-6)" }}>
+                    <div className="t-meta" style={{ color: "var(--text-6)" }}>
                       lead time: {r.leadTimeDays ?? "—"} days · MOQ: {r.moq ?? "—"} · terms: {r.paymentTerms ?? "—"} ·{" "}
                       {r.reliabilityNote ?? ""}
                     </div>
@@ -1446,16 +1491,16 @@ function SupplierRankingSection({ getToken }: { getToken: () => Promise<string |
             )}
             {result.quarantined.length > 0 && (
               <div>
-                <div className="mb-1 text-[12.5px] font-semibold" style={{ color: "var(--negative)" }}>Quarantined quotes</div>
+                <div className="mb-1 t-body-sm font-semibold" style={{ color: "var(--negative)" }}>Quarantined quotes</div>
                 {result.quarantined.map((q) => (
-                  <div key={q.adjustmentId} className="text-[12.5px]" style={{ color: "var(--text-5)" }}>
+                  <div key={q.adjustmentId} className="t-body-sm" style={{ color: "var(--text-5)" }}>
                     {q.supplierName ?? "Unknown supplier"} — {q.reason}
                   </div>
                 ))}
               </div>
             )}
             {result.dataRequestId && (
-              <div className="text-[12.5px]" style={{ color: "var(--text-6)" }}>
+              <div className="t-body-sm" style={{ color: "var(--text-6)" }}>
                 Data request raised: <code>{result.dataRequestId.slice(0, 8)}</code>
               </div>
             )}
@@ -1531,7 +1576,7 @@ function BatchSizeSection({ getToken }: { getToken: () => Promise<string | null>
   return (
     <Section title="Batch Size Estimate">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="SKU"><TextInput value={sku} onChange={setSku} /></Field>
           <Field label="Supplier quote target type">
             <SelectInput
@@ -1558,13 +1603,13 @@ function BatchSizeSection({ getToken }: { getToken: () => Promise<string | null>
         </div>
         <Field label="Budget target ref"><TextInput value={budgetTargetRef} onChange={setBudgetTargetRef} /></Field>
         <div>
-          <div className="mb-1 text-[12.5px]" style={{ color: "var(--text-6)" }}>
+          <div className="mb-1 t-body-sm" style={{ color: "var(--text-6)" }}>
             Sales history lines (optional — leaving this empty is a valid real case, &quot;never sold&quot;)
           </div>
           <div className="flex flex-col gap-3">
             {lines.map((line, idx) => (
               <div key={idx} className="rounded-lg p-3" style={{ border: "1px solid var(--border-subtle)" }}>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                   <div className="flex gap-2">
                     <TextInput
                       value={line.sales_line_id}
@@ -1574,7 +1619,7 @@ function BatchSizeSection({ getToken }: { getToken: () => Promise<string | null>
                     <button
                       type="button"
                       onClick={() => generateLineId(idx)}
-                      className="rounded-lg px-2 py-2 text-[11px] font-semibold"
+                      className="rounded-lg px-2 py-2 t-micro font-semibold"
                       style={{ border: "1px solid var(--border-default)", color: "var(--text-3)" }}
                     >
                       Generate
@@ -1584,7 +1629,7 @@ function BatchSizeSection({ getToken }: { getToken: () => Promise<string | null>
                   <TextInput value={line.document_type} onChange={(v) => updateLine(idx, { document_type: v })} placeholder="document_type" />
                   <TextInput type="number" value={line.quantity} onChange={(v) => updateLine(idx, { quantity: v })} placeholder="quantity" />
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <TextInput
                     value={line.gross_item_amount_rupees}
                     onChange={(v) => updateLine(idx, { gross_item_amount_rupees: v })}
@@ -1602,19 +1647,19 @@ function BatchSizeSection({ getToken }: { getToken: () => Promise<string | null>
                 <button
                   type="button"
                   onClick={() => removeLine(idx)}
-                  className="mt-2 text-[12px] font-semibold"
+                  className="mt-2 t-meta font-semibold"
                   style={{ color: "var(--negative)" }}
                 >
                   Remove line
                 </button>
               </div>
             ))}
-            <button type="button" onClick={addLine} className="w-fit text-[12px] font-semibold" style={{ color: "var(--accent)" }}>
+            <button type="button" onClick={addLine} className="w-fit t-meta font-semibold" style={{ color: "var(--text-3)" }}>
               + Add line
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
@@ -1624,7 +1669,7 @@ function BatchSizeSection({ getToken }: { getToken: () => Promise<string | null>
         </div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="flex flex-col gap-1.5">
+          <div className="mt-ledger">
             {result.result ? (
               <CfoMetricResultRow label="Batch size estimate" result={result.result} />
             ) : (
@@ -1632,17 +1677,17 @@ function BatchSizeSection({ getToken }: { getToken: () => Promise<string | null>
                 No estimate — data request raised{result.dataRequestId ? `: ${result.dataRequestId.slice(0, 8)}` : ""}.
               </div>
             )}
-            <div className="text-[12.5px]" style={{ color: "var(--text-5)" }}>
+            <div className="t-body-sm" style={{ color: "var(--text-5)" }}>
               Velocity: {result.velocityStatus}
               {result.velocityUnavailableReason ? ` (${result.velocityUnavailableReason})` : ""} · observed units sold:{" "}
               {result.observedUnitsSold ?? "—"}
             </div>
-            <div className="text-[12.5px]" style={{ color: "var(--text-5)" }}>
+            <div className="t-body-sm" style={{ color: "var(--text-5)" }}>
               Reference quantity: {result.referenceQuantity ?? "—"} ({result.referenceQuantityBasis ?? "—"}) · lead time:{" "}
               {result.leadTimeDays ?? "—"} days · MOQ: {result.moq ?? "—"}
             </div>
             {result.referenceQuantityCaveatApplies && (
-              <div className="text-[12.5px]" style={{ color: "var(--negative)" }}>{result.referenceQuantityCaveat}</div>
+              <div className="t-body-sm" style={{ color: "var(--negative)" }}>{result.referenceQuantityCaveat}</div>
             )}
           </div>
         )}
@@ -1694,7 +1739,7 @@ function FundingReadinessSection({ getToken }: { getToken: () => Promise<string 
   return (
     <Section title="Funding Readiness">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
@@ -1709,11 +1754,11 @@ function FundingReadinessSection({ getToken }: { getToken: () => Promise<string 
         {result && (
           <div className="flex flex-col gap-3">
             <div>
-              <div className="mb-1 text-[12.5px] font-semibold" style={{ color: "var(--text-3)" }}>Contribution profit history</div>
+              <div className="mb-1 t-body-sm font-semibold" style={{ color: "var(--text-3)" }}>Contribution profit history</div>
               {result.contributionProfitHistory.length === 0 ? (
                 <div style={{ color: "var(--text-6)" }}>No history available.</div>
               ) : (
-                <div className="flex flex-col gap-1.5">
+                <div className="mt-ledger">
                   {result.contributionProfitHistory.map((r) => (
                     <CfoMetricResultRow key={r.engineResultRef} label={r.asOfDate ?? r.metricCode} result={r} />
                   ))}
@@ -1721,11 +1766,11 @@ function FundingReadinessSection({ getToken }: { getToken: () => Promise<string 
               )}
             </div>
             <div>
-              <div className="mb-1 text-[12.5px] font-semibold" style={{ color: "var(--text-3)" }}>Trend</div>
+              <div className="mb-1 t-body-sm font-semibold" style={{ color: "var(--text-3)" }}>Trend</div>
               {result.trend.length === 0 ? (
                 <div style={{ color: "var(--text-6)" }}>No trend available.</div>
               ) : (
-                <div className="flex flex-col gap-1.5">
+                <div className="mt-ledger">
                   {result.trend.map((r) => (
                     <CfoMetricResultRow key={r.engineResultRef} label={r.calculationBasis ?? r.metricCode} result={r} />
                   ))}
@@ -1734,9 +1779,9 @@ function FundingReadinessSection({ getToken }: { getToken: () => Promise<string 
             </div>
             {result.gaps.length > 0 && (
               <div>
-                <div className="mb-1 text-[12.5px] font-semibold" style={{ color: "var(--negative)" }}>Gaps</div>
+                <div className="mb-1 t-body-sm font-semibold" style={{ color: "var(--negative)" }}>Gaps</div>
                 {result.gaps.map((g, i) => (
-                  <div key={i} className="text-[12.5px]" style={{ color: "var(--text-5)" }}>
+                  <div key={i} className="t-body-sm" style={{ color: "var(--text-5)" }}>
                     {g.kind}
                     {g.period ? ` (${g.period})` : ""}: {g.reason}
                   </div>
@@ -1744,15 +1789,15 @@ function FundingReadinessSection({ getToken }: { getToken: () => Promise<string 
               </div>
             )}
             <div>
-              <div className="mb-1 text-[12.5px] font-semibold" style={{ color: "var(--text-3)" }}>
+              <div className="mb-1 t-body-sm font-semibold" style={{ color: "var(--text-3)" }}>
                 Deferred sections (never a score/rating — AC19)
               </div>
               {result.deferredSections.map((s, i) => (
-                <div key={i} className="text-[12.5px]" style={{ color: "var(--text-6)" }}>{s.name}: {s.reason}</div>
+                <div key={i} className="t-body-sm" style={{ color: "var(--text-6)" }}>{s.name}: {s.reason}</div>
               ))}
             </div>
             {result.dataRequestId && (
-              <div className="text-[12.5px]" style={{ color: "var(--text-6)" }}>
+              <div className="t-body-sm" style={{ color: "var(--text-6)" }}>
                 Data request raised: <code>{result.dataRequestId.slice(0, 8)}</code>
               </div>
             )}
@@ -1798,7 +1843,7 @@ function ReconcileSection({ getToken }: { getToken: () => Promise<string | null>
   return (
     <Section title="Leak Shield / Reconciliation">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="Marketplace"><TextInput value={marketplace} onChange={setMarketplace} placeholder="AMAZON / FLIPKART / MEESHO" /></Field>
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
@@ -1810,14 +1855,14 @@ function ReconcileSection({ getToken }: { getToken: () => Promise<string | null>
         <ErrorText>{error}</ErrorText>
         {result && (
           <div className="flex flex-col gap-2">
-            <div className="text-[12.5px]" style={{ color: "var(--text-5)" }}>
+            <div className="t-body-sm" style={{ color: "var(--text-5)" }}>
               run <code>{result.reconciliationRunId.slice(0, 8)}</code> · matches: {result.matchCount} · exceptions:{" "}
               {result.exceptionCount} · ambiguous: {result.ambiguousMatchCount} · missing dates: {result.datesMissingCount}
             </div>
             {result.findings.length === 0 ? (
               <div style={{ color: "var(--text-6)" }}>No leak findings for this period.</div>
             ) : (
-              <table className="w-full text-left text-[13px]">
+              <div className="mt-table-wrap"><table className="mt-table">
                 <thead>
                   <tr style={{ color: "var(--text-6)" }}>
                     <th className="pb-2 font-semibold">Category</th>
@@ -1838,7 +1883,7 @@ function ReconcileSection({ getToken }: { getToken: () => Promise<string | null>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </div>
         )}
@@ -1882,7 +1927,7 @@ function CfoPreviewSection({ getToken }: { getToken: () => Promise<string | null
   return (
     <Section title="CFO Preview (free-tier)">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="Marketplace"><TextInput value={marketplace} onChange={setMarketplace} /></Field>
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
@@ -1893,11 +1938,11 @@ function CfoPreviewSection({ getToken }: { getToken: () => Promise<string | null
         </div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="flex flex-col gap-2 text-[13px]" style={{ color: "var(--text-2)" }}>
+          <div className="flex flex-col gap-2 t-body" style={{ color: "var(--text-2)" }}>
             <div>
               Headline total: {rupees(result.headlineTotalPaise)}
               {result.headlineEngineResultRef && (
-                <span style={{ color: "var(--text-7)" }}> (ref: <code>{result.headlineEngineResultRef.slice(0, 8)}</code>)</span>
+                <span style={{ color: "var(--text-6)" }}> (ref: <code>{result.headlineEngineResultRef.slice(0, 8)}</code>)</span>
               )}
             </div>
             <div>
@@ -1908,8 +1953,8 @@ function CfoPreviewSection({ getToken }: { getToken: () => Promise<string | null
             </div>
             {result.revealedFinding ? (
               <div
-                className="rounded-lg px-3 py-2 text-[12.5px]"
-                style={{ background: "var(--bg-base)", border: "1px solid var(--border-subtle)" }}
+                className="rounded-lg px-3 py-2 t-body-sm"
+                style={{ borderBottom: "1px solid var(--border-subtle)" }}
               >
                 {result.revealedFinding.leakCategory} · {result.revealedFinding.severity} ·{" "}
                 {rupees(result.revealedFinding.amountPaise)} · SKU: {result.revealedFinding.sku ?? "—"}
@@ -1967,13 +2012,13 @@ function AnomalyCheckSection({ getToken }: { getToken: () => Promise<string | nu
   return (
     <Section title="Anomaly Check">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="Target ref (SKU/ACCOUNT/MARKETPLACE)"><TextInput value={targetRef} onChange={setTargetRef} /></Field>
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
         </div>
-        <label className="flex items-center gap-2 text-[12.5px]" style={{ color: "var(--text-6)" }}>
+        <label className="flex items-center gap-2 t-body-sm" style={{ color: "var(--text-6)" }}>
           <input type="checkbox" checked={includeNarration} onChange={(e) => setIncludeNarration(e.target.checked)} />
           Include narration (calls the local LLM — slower)
         </label>
@@ -1983,14 +2028,14 @@ function AnomalyCheckSection({ getToken }: { getToken: () => Promise<string | nu
         <ErrorText>{error}</ErrorText>
         {result && (
           <div className="flex flex-col gap-2">
-            <div className="text-[12.5px]" style={{ color: "var(--text-5)" }}>
+            <div className="t-body-sm" style={{ color: "var(--text-5)" }}>
               metric: {result.metric} · series length: {result.seriesLength}
             </div>
             {result.methods.map((m) => (
               <div
                 key={m.method}
-                className="rounded-lg px-3 py-2 text-[12.5px]"
-                style={{ background: "var(--bg-base)", border: "1px solid var(--border-subtle)" }}
+                className="rounded-lg px-3 py-2 t-body-sm"
+                style={{ borderBottom: "1px solid var(--border-subtle)" }}
               >
                 <div style={{ color: "var(--text-2)" }}><strong>{m.method}</strong></div>
                 {m.flag && (
@@ -2007,7 +2052,7 @@ function AnomalyCheckSection({ getToken }: { getToken: () => Promise<string | nu
             ))}
             {result.narration && (
               <div
-                className="rounded-lg px-3 py-2 text-[12.5px]"
+                className="rounded-lg px-3 py-2 t-body-sm"
                 style={{ background: "var(--bg-base)", border: "1px solid var(--border-subtle)", color: "var(--text-2)" }}
               >
                 {result.narration}
@@ -2054,11 +2099,11 @@ function PeriodComparisonSection({ getToken }: { getToken: () => Promise<string 
   return (
     <Section title="Period Comparison (Brain-3 narration)">
       <div className="flex flex-col gap-3">
-        <div className="text-[12.5px]" style={{ color: "var(--text-6)" }}>
+        <div className="t-body-sm" style={{ color: "var(--text-6)" }}>
           Both ids must be real, already-persisted <code>engineResultRef</code> values for the same metric code — e.g.
           two different periods&apos; Contribution Profit refs copied from the Period P&amp;L section above.
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Result A id (engineResultRef)"><TextInput value={resultAId} onChange={setResultAId} placeholder="UUID" /></Field>
           <Field label="Result B id (engineResultRef)"><TextInput value={resultBId} onChange={setResultBId} placeholder="UUID" /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
@@ -2068,7 +2113,7 @@ function PeriodComparisonSection({ getToken }: { getToken: () => Promise<string 
         </div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="flex flex-col gap-2">
+          <div className="mt-ledger">
             {result.delta ? (
               <CfoMetricResultRow label="Delta" result={result.delta} />
             ) : (
@@ -2078,7 +2123,7 @@ function PeriodComparisonSection({ getToken }: { getToken: () => Promise<string 
             )}
             {result.narration && (
               <div
-                className="rounded-lg px-3 py-2 text-[12.5px]"
+                className="rounded-lg px-3 py-2 t-body-sm"
                 style={{ background: "var(--bg-base)", border: "1px solid var(--border-subtle)", color: "var(--text-2)" }}
               >
                 {result.narration}
@@ -2105,16 +2150,16 @@ function DataRequestsSection({
   return (
     <Section title="Data Requests">
       <div className="flex flex-col gap-3">
-        <button type="button" onClick={onReload} className="w-fit text-[12px] font-semibold" style={{ color: "var(--accent)" }}>
+        <button type="button" onClick={onReload} className="w-fit t-meta font-semibold" style={{ color: "var(--text-3)" }}>
           Refresh
         </button>
-        {error && <div className="text-[12.5px]" style={{ color: "var(--negative)" }}>{error}</div>}
+        {error && <div className="t-body-sm" style={{ color: "var(--negative)" }}>{error}</div>}
         {rows === null ? (
           <div style={{ color: "var(--text-6)" }}>Loading…</div>
         ) : rows.length === 0 ? (
           <div style={{ color: "var(--text-6)" }}>No data requests raised yet.</div>
         ) : (
-          <table className="w-full text-left text-[13px]">
+          <div className="mt-table-wrap"><table className="mt-table">
             <thead>
               <tr style={{ color: "var(--text-6)" }}>
                 <th className="pb-2 font-semibold">Requested field</th>
@@ -2135,7 +2180,7 @@ function DataRequestsSection({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
     </Section>
@@ -2144,7 +2189,13 @@ function DataRequestsSection({
 
 // --- Ingestion, seller goal, financial health, strategic briefing (cfo-agent.md §6.16/§7.5) --
 
-function IngestUploadSection({ getToken }: { getToken: () => Promise<string | null> }) {
+function IngestUploadSection({
+  getToken,
+  onUploaded,
+}: {
+  getToken: () => Promise<string | null>;
+  onUploaded: (outcome: UploadOutcome) => void;
+}) {
   const [file, setFile] = useState<File | null>(null);
   const [marketplace, setMarketplace] = useState("MEESHO");
   const [adapterId, setAdapterId] = useState("meesho.orders.v1");
@@ -2173,6 +2224,9 @@ function IngestUploadSection({ getToken }: { getToken: () => Promise<string | nu
       const json = await res.json();
       if (!res.ok) throw new Error(json?.detail ? JSON.stringify(json.detail) : "Upload failed");
       setResult(json);
+      if (typeof json.reportFileId === "string") {
+        onUploaded({ reportFileId: json.reportFileId, duplicate: Boolean(json.duplicate), filename: file.name });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not upload the file");
     } finally {
@@ -2183,16 +2237,22 @@ function IngestUploadSection({ getToken }: { getToken: () => Promise<string | nu
   return (
     <Section title="Upload marketplace report (CSV)">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Marketplace"><TextInput value={marketplace} onChange={setMarketplace} /></Field>
           <Field label="Adapter id (e.g. meesho.orders.v1)"><TextInput value={adapterId} onChange={setAdapterId} /></Field>
           <Field label="File">
-            <input type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            <input type="file" accept=".csv" className="t-body-sm w-full min-w-0 max-w-full" style={{ color: "var(--text-4)" }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </Field>
         </div>
-        <div><SubmitButton onClick={submit} busy={busy} label="Upload & ingest" busyLabel="Ingesting…" /></div>
+        <div><SubmitButton onClick={submit} busy={busy} label="Upload & ingest" busyLabel="Ingesting…" primary /></div>
         <ErrorText>{error}</ErrorText>
-        {result && <pre className="text-[12px]" style={{ color: "var(--text-5)" }}>{JSON.stringify(result, null, 2)}</pre>}
+        {result && (
+          <div className="t-body-sm" role="status" style={{ color: "var(--text-3)" }}>
+            {result.duplicate
+              ? "This exact file was already imported — nothing was ingested again. See it in Import history below."
+              : `Ingested. ${String(result.rowCountAccepted ?? "?")} of ${String(result.rowCountRead ?? "?")} rows accepted, ${String(result.rowCountRejected ?? 0)} rejected, ${String(result.rowCountDuplicate ?? 0)} duplicates skipped. Open it in Import history below to inspect what was saved.`}
+          </div>
+        )}
       </div>
     </Section>
   );
@@ -2230,14 +2290,14 @@ function SellerGoalSection({ getToken }: { getToken: () => Promise<string | null
   return (
     <Section title="Seller goal (context for Strategic Briefing narration only)">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Target margin % (optional)"><TextInput value={targetMarginPct} onChange={setTargetMarginPct} placeholder="15.00" /></Field>
           <Field label="Priority category (optional)"><TextInput value={priorityCategory} onChange={setPriorityCategory} placeholder="reduce_fees" /></Field>
           <Field label="Note (optional)"><TextInput value={note} onChange={setNote} /></Field>
         </div>
         <div><SubmitButton onClick={submit} busy={busy} label="Save goal" busyLabel="Saving…" /></div>
         <ErrorText>{error}</ErrorText>
-        {saved && <div className="text-[12.5px]" style={{ color: "var(--accent)" }}>Saved.</div>}
+        {saved && <div className="t-body-sm" style={{ color: "var(--accent)" }}>Saved.</div>}
       </div>
     </Section>
   );
@@ -2275,7 +2335,7 @@ function FinancialHealthSection({ getToken }: { getToken: () => Promise<string |
   return (
     <Section title="Financial Health Band">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
@@ -2283,10 +2343,10 @@ function FinancialHealthSection({ getToken }: { getToken: () => Promise<string |
         <div><SubmitButton onClick={submit} busy={busy} label="Compute" busyLabel="Computing…" /></div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="text-[13px]" style={{ color: "var(--text-3)" }}>
+          <div className="t-body" style={{ color: "var(--text-3)" }}>
             Overall band: <strong>{String(result.overallBand ?? "UNAVAILABLE")}</strong>
             {result.unavailableReason ? <span style={{ color: "var(--text-6)" }}> — {String(result.unavailableReason)}</span> : null}
-            <pre className="mt-2 text-[12px]" style={{ color: "var(--text-5)" }}>{JSON.stringify(result.perMetricBands, null, 2)}</pre>
+            <pre className="mt-2 t-meta" style={{ color: "var(--text-5)" }}>{JSON.stringify(result.perMetricBands, null, 2)}</pre>
           </div>
         )}
       </div>
@@ -2333,12 +2393,12 @@ function StrategicBriefingSection({ getToken }: { getToken: () => Promise<string
   return (
     <Section title="Strategic Briefing (deterministic signals + one narration call)">
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
         </div>
-        <label className="flex items-center gap-2 text-[12.5px]" style={{ color: "var(--text-6)" }}>
+        <label className="flex items-center gap-2 t-body-sm" style={{ color: "var(--text-6)" }}>
           <input type="checkbox" checked={includeNarration} onChange={(e) => setIncludeNarration(e.target.checked)} />
           Include narration (calls the local LLM — slower)
         </label>
@@ -2350,12 +2410,12 @@ function StrategicBriefingSection({ getToken }: { getToken: () => Promise<string
               <div style={{ color: "var(--text-6)" }}>No signals for this period.</div>
             ) : (
               result.signals.map((s, i) => (
-                <div key={i} className="text-[12.5px]" style={{ color: "var(--text-3)" }}>
+                <div key={i} className="t-body-sm" style={{ color: "var(--text-3)" }}>
                   [{String(s.severityLabel)}] {String(s.headline)} — {String(s.recommendedActionType)}
                 </div>
               ))
             )}
-            {result.narrative && <div className="mt-2 text-[13px]" style={{ color: "var(--text-3)" }}>{result.narrative}</div>}
+            {result.narrative && <div className="mt-2 t-body" style={{ color: "var(--text-3)" }}>{result.narrative}</div>}
           </div>
         )}
       </div>

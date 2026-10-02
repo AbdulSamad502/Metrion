@@ -28,7 +28,7 @@ import { useSubmitGuard } from "@/lib/useSubmitGuard";
  * org and auto-activate it — the form only renders for users who genuinely have none.
  */
 export default function OnboardingPage() {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken } = useAuth({ treatPendingAsSignedOut: false });
   const { user } = useUser();
   const { setActive } = useClerk();
   const { isLoaded: orgsLoaded, userMemberships } = useOrganizationList({

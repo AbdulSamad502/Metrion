@@ -76,6 +76,10 @@ def rupees_to_paise(raw_value: str) -> int:
         rupees = Decimal(raw_value.strip())
     except (InvalidOperation, AttributeError) as exc:
         raise MoneyParseError(f"{raw_value!r} is not a valid decimal money value") from exc
+    if not rupees.is_finite():
+        # "NaN"/"Infinity" are valid Decimals but not money — without this, int() below raises a
+        # bare ValueError/OverflowError instead of the MoneyParseError this function promises.
+        raise MoneyParseError(f"{raw_value!r} is not a finite money value")
     return int((rupees * 100).to_integral_value())
 
 

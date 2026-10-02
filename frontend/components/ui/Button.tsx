@@ -5,14 +5,19 @@ type Variant = "primary" | "secondary";
 export function Button({
   variant = "primary",
   loading,
+  loadingText = "Please wait…",
   children,
   className = "",
   ...props
 }: {
   variant?: Variant;
   loading?: boolean;
+  loadingText?: string;
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
-  const base = "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-opacity disabled:opacity-60";
+  const base =
+    "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition duration-150 " +
+    "hover:brightness-110 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 " +
+    "focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:brightness-100 disabled:active:scale-100";
   const style =
     variant === "primary"
       ? { background: "var(--accent)", color: "var(--accent-on-fill)" }
@@ -20,7 +25,7 @@ export function Button({
 
   return (
     <button {...props} disabled={props.disabled || loading} className={`${base} ${className}`} style={style}>
-      {loading ? "Please wait…" : children}
+      {loading ? loadingText : children}
     </button>
   );
 }

@@ -10,6 +10,7 @@ is a new row whose `supersedes_id` points at the row it replaces.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -32,6 +33,17 @@ _ACTIVE_FOR_TARGET_SQL = text(
     SELECT id, target_type, target_ref, field, value, reason, created_by, created_at, supersedes_id, status
     FROM manual_adjustment
     WHERE target_type = :target_type AND target_ref = :target_ref AND field = :field AND status = 'ACTIVE'
+    ORDER BY created_at DESC
+    """
+)
+
+_ACTIVE_FOR_TARGETS_SQL = text(
+    """
+    SELECT id, target_type, target_ref, field, value, reason, created_by, created_at, supersedes_id, status
+    FROM manual_adjustment
+    WHERE tenant_id = :tenant_id AND target_type = :target_type
+      AND target_ref = ANY(CAST(:target_refs AS text[])) AND field = ANY(CAST(:fields AS text[]))
+      AND status = 'ACTIVE'
     ORDER BY created_at DESC
     """
 )
@@ -101,6 +113,40 @@ def active_adjustments_for_target(
             {"target_type": target_type, "target_ref": target_ref, "field": field},
         )
         return [dict(row._mapping) for row in rows]
+
+
+_TARGETS_CHUNK = 5000
+
+
+def active_adjustments_for_targets(
+    tenant_id: UUID, *, target_type: str, target_refs: Sequence[str], fields: Sequence[str]
+) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    """Batch form of `active_adjustments_for_target`: ACTIVE rows for many `target_ref`s and
+    several `field`s of ONE `target_type` in one round trip per chunk of refs, instead of one
+    query per (target_ref, field). Returns `{(target_ref, field): [rows, newest first]}` — each
+    list is exactly what `active_adjustments_for_target` returns for that pair, and a pair with
+    no ACTIVE row is simply absent (callers use `.get(key, [])`). Same `manual_adjustment_
+    tenant_target_idx` access path; `tenant_id` is also filtered explicitly (RLS still applies)."""
+    result: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    refs = list(dict.fromkeys(target_refs))
+    field_list = list(dict.fromkeys(fields))
+    if not refs or not field_list:
+        return result
+    with tenant_scope(tenant_id) as conn:
+        for i in range(0, len(refs), _TARGETS_CHUNK):
+            rows = conn.execute(
+                _ACTIVE_FOR_TARGETS_SQL,
+                {
+                    "tenant_id": str(tenant_id),
+                    "target_type": target_type,
+                    "target_refs": refs[i : i + _TARGETS_CHUNK],
+                    "fields": field_list,
+                },
+            )
+            for row in rows:
+                d = dict(row._mapping)
+                result.setdefault((d["target_ref"], d["field"]), []).append(d)
+    return result
 
 
 def active_adjustments_by_field(
