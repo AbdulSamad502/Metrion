@@ -58,7 +58,12 @@ OFFICIAL_MARKETPLACE_DOMAINS = "official_marketplace_domains"
 NICHE_STOPWORDS_EXTRA = "niche_stopwords_extra"
 NICHE_STOPWORDS_EXCLUDE = "niche_stopwords_exclude"
 
+HASHTAG_SET_SIZE = "hashtag_set_size"
+
 GENERATION_REQUIRED_KEYS: tuple[str, ...] = (FORMAT_CONSTRAINT_MAX_AGE_DAYS, INTERNAL_RETRY_BOUND)
+# Required ONLY for `cmo.generate_hashtags` (P3 decision 8): a missing value blocks hashtags with
+# CONFIG_MISSING and never blocks titles or listing copy.
+HASHTAG_REQUIRED_KEYS: tuple[str, ...] = (HASHTAG_SET_SIZE,)
 
 TREND_REQUIRED_KEYS: tuple[str, ...] = (
     MAX_QUERIES_PER_REPORT, SECTION_QUERY_BUDGETS, SECTION_PRIORITY, MAX_RESULTS_PER_QUERY,
@@ -92,6 +97,11 @@ class ConfigMissing:
 class GenerationConfig:
     format_constraint_max_age_days: int
     internal_retry_bound: int  # 0 is a legitimate, explicit choice: no internal retries
+
+
+@dataclass(frozen=True, slots=True)
+class HashtagConfig:
+    hashtag_set_size: int  # the MAXIMUM number of hashtags in one suggestion set
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,6 +274,16 @@ def load_generation_config(values: Mapping[str, object]) -> GenerationConfig | C
         return failed
     assert max_age is not None and retries is not None
     return GenerationConfig(format_constraint_max_age_days=max_age, internal_retry_bound=retries)
+
+
+def load_hashtag_config(values: Mapping[str, object]) -> HashtagConfig | ConfigMissing:
+    problems = _Problems()
+    size = _int(values, HASHTAG_SET_SIZE, problems, minimum=1)
+    failed = problems.result()
+    if failed is not None:
+        return failed
+    assert size is not None
+    return HashtagConfig(hashtag_set_size=size)
 
 
 def load_trend_config(values: Mapping[str, object]) -> TrendConfig | ConfigMissing:

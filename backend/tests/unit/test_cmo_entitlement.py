@@ -166,9 +166,10 @@ def test_blank_image_limit_is_treated_as_unset(monkeypatch, fresh_config):
     assert config.cmo_image_max_bytes() is None
 
 
-def test_llm_model_default_is_the_locked_dev_model_and_overridable(monkeypatch, fresh_config):
+def test_llm_model_is_required_with_no_default_and_read_from_the_environment(monkeypatch, fresh_config):
+    # P5 decision 3 (supersedes the earlier dev default): a model is an operator decision, never a hidden fallback.
     monkeypatch.delenv("CMO_LLM_MODEL", raising=False)
-    assert config.cmo_llm_model() == "qwen3:8b"
-    config.cmo_llm_model.cache_clear()
+    with pytest.raises(config.MissingConfig):
+        config.cmo_llm_model()
     monkeypatch.setenv("CMO_LLM_MODEL", "qwen3:4b")
     assert config.cmo_llm_model() == "qwen3:4b"

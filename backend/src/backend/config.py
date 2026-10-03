@@ -90,17 +90,87 @@ def ci_evidence_storage_dir() -> str:
 
 @lru_cache
 def cmo_llm_model() -> str:
-    """The Ollama model Slim CMO generates listing copy with. `qwen3:8b` is the dev
-    "correctness" model already locked in readiness §1 (Engineering — Dev LLM); a configurable
-    default, not a spec decision, so an operator can swap models without a code change."""
-    return os.environ.get("CMO_LLM_MODEL", "qwen3:8b")
+    """The Ollama model Slim CMO generates listing text with. REQUIRED, no default (P5): a model is
+    an operator decision, and a silent fallback would hide a misconfigured deployment. Unset ->
+    `MissingConfig`; the CMO routes then answer `503 CMO_NOT_CONFIGURED` before doing any work."""
+    return _required("CMO_LLM_MODEL")
+
+
+@lru_cache
+def cmo_ollama_host() -> str:
+    """The Ollama endpoint Slim CMO calls. REQUIRED, no default (P5) - deliberately separate from the
+    shared `ollama_host()` (which other agents still default to localhost), so CMO never runs
+    against an address nobody chose."""
+    return _required("CMO_OLLAMA_HOST")
+
+
+def _required_positive_int(name: str) -> int:
+    raw = _required(name).strip()
+    if not raw.isdigit() or int(raw) <= 0:
+        raise ValueError(f"{name} must be a positive integer, got {raw!r}")
+    return int(raw)
+
+
+@lru_cache
+def cmo_llm_timeout_seconds() -> int:
+    """Per-request timeout, whole seconds, for the CMO model call. REQUIRED, no default (P5)."""
+    return _required_positive_int("CMO_LLM_TIMEOUT_SECONDS")
+
+
+@lru_cache
+def cmo_quota_reservation_ttl_seconds() -> int:
+    """How long an in-flight CMO quota reservation counts against a cap before it is treated as
+    abandoned (spec §8.4 amendment, P5). REQUIRED when a cap is configured, no code default: if it
+    is missing a capped request answers `503 CMO_NOT_CONFIGURED` instead of guessing."""
+    return _required_positive_int("CMO_QUOTA_RESERVATION_TTL_SECONDS")
 
 
 @lru_cache
 def cmo_image_storage_dir() -> str:
-    """Local-disk storage for seller product images (spec §5 `seller_image_asset`) — the same
-    functional-only, real-object-storage-is-later posture as `ci_evidence_storage_dir`."""
-    return os.environ.get("CMO_IMAGE_DIR", "./data/cmo-images")
+    """Local-disk storage for seller product images (spec §5 `seller_image_asset`). REQUIRED, no default (P6): seller
+    photos are tenant data and must never land in a directory nobody chose. Unset -> `MissingConfig`; the CMO image
+    routes then answer `503 CMO_NOT_CONFIGURED` before reading the upload."""
+    return _required("CMO_IMAGE_DIR")
+
+
+@lru_cache
+def cmo_image_max_pixels() -> int | None:
+    """Largest decoded picture (width x height) the upload route accepts - the decompression-bomb limit. **No default**
+    (P6): `None` when `CMO_IMAGE_MAX_PIXELS` is unset, and the image routes then refuse (`503`)."""
+    return _optional_positive_int_env("CMO_IMAGE_MAX_PIXELS")
+
+
+@lru_cache
+def cmo_vision_model() -> str:
+    """The Ollama VISION model used for photo analysis. REQUIRED, no default (P6). With the provider name it is part of
+    the trust identity an evaluation is recorded against."""
+    return _required("CMO_VISION_MODEL")
+
+
+@lru_cache
+def cmo_vision_ollama_host() -> str:
+    """The local Ollama endpoint for photo analysis. REQUIRED, no default (P6; local only - no hosted vision provider)."""
+    return _required("CMO_VISION_OLLAMA_HOST")
+
+
+@lru_cache
+def cmo_vision_timeout_seconds() -> int:
+    """Per-request timeout, whole seconds, for the vision model. REQUIRED, no default (P6): a CPU host measured 13-160 s
+    per call, so this is an operator decision."""
+    return _required_positive_int("CMO_VISION_TIMEOUT_SECONDS")
+
+
+@lru_cache
+def cmo_vision_rate_max() -> int:
+    """Per-tenant cap on analyses (model calls) per rate window. REQUIRED, no default (P6): analysis is 0 units, so this
+    is the only guard on an expensive endpoint."""
+    return _required_positive_int("CMO_VISION_ANALYSES_PER_WINDOW")
+
+
+@lru_cache
+def cmo_vision_rate_window_seconds() -> int:
+    """Length of the per-tenant analysis rate window, whole seconds. REQUIRED, no default (P6)."""
+    return _required_positive_int("CMO_VISION_RATE_WINDOW_SECONDS")
 
 
 def _optional_positive_int_env(name: str) -> int | None:

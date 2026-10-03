@@ -10,9 +10,10 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.v1 import ceo_hub, cfo, ci, onboarding, pi, ping, session
+from backend.api.v1 import ceo_hub, cfo, ci, cmo, onboarding, pi, ping, session
 from backend.config import (
     ci_max_evidence_bytes,
+    cmo_image_max_bytes,
     cfo_max_upload_bytes,
     clerk_jwt_key,
     clerk_secret_key,
@@ -43,13 +44,14 @@ def create_app() -> FastAPI:
     # Registered FIRST so it is the innermost middleware: CORS and the security headers below still
     # wrap its 413 (a browser can read the error). Rejects an oversized upload before Starlette
     # parses/spools it — see request_limits.py; the routes' own exact-size check stays authoritative.
-    app.add_middleware(
-        RequestBodyLimitMiddleware,
-        limits={
-            "/api/v1/cfo/ingest": cfo_max_upload_bytes(),
-            "/api/v1/ci/evidence": ci_max_evidence_bytes(),
-        },
-    )
+    upload_limits = {
+        "/api/v1/cfo/ingest": cfo_max_upload_bytes(),
+        "/api/v1/ci/evidence": ci_max_evidence_bytes(),
+    }
+    image_limit = cmo_image_max_bytes()  # no default (P6): unset -> no entry here, and the route itself refuses with 503
+    if image_limit is not None:
+        upload_limits["/api/v1/cmo/images"] = image_limit
+    app.add_middleware(RequestBodyLimitMiddleware, limits=upload_limits)
 
     # Named explicitly rather than "*" — this is the auth-adjacent boundary of the app;
     # a wildcard here would let any origin ride the browser's credentialed CORS preflight.
@@ -80,6 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(ci.router)
     app.include_router(cfo.router)
     app.include_router(pi.router)
+    app.include_router(cmo.router)
     app.include_router(ceo_hub.router)
 
     return app

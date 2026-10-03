@@ -27,7 +27,7 @@ def spec() -> str:
 
 
 def test_every_config_key_is_documented_in_the_spec(spec):
-    for key in (*config.TREND_REQUIRED_KEYS, *config.TREND_OPTIONAL_KEYS, *config.GENERATION_REQUIRED_KEYS):
+    for key in (*config.TREND_REQUIRED_KEYS, *config.TREND_OPTIONAL_KEYS, *config.GENERATION_REQUIRED_KEYS, *config.HASHTAG_REQUIRED_KEYS):
         assert f"`{key}`" in spec, f"config key {key} is not named in slim-cmo-agent.md"
 
 

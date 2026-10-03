@@ -20,8 +20,12 @@ import pytest
 
 SRC = pathlib.Path(__file__).resolve().parents[2] / "src" / "slim_cmo"
 
-# Everything except the DB plumbing (repositories/) is the deterministic core.
-P2_FILES = sorted(p for p in SRC.rglob("*.py") if "repositories" not in p.parts)
+# Everything except the I/O layers is the deterministic core. `generation/` (P3) stays INSIDE the
+# set: prompts, parsing and retry loops take an `LlmProvider` Protocol and never import a model,
+# network, database or clock themselves. `repositories/` (SQL), `providers/` (HTTP clients) and
+# `service/` (orchestration over the DB) are the only places allowed to do I/O.
+IO_PACKAGES = {"repositories", "providers", "service", "imaging", "storage", "evaluation"}
+P2_FILES = sorted(p for p in SRC.rglob("*.py") if not (IO_PACKAGES & set(p.parts)))
 
 FORBIDDEN_MODULES = {
     "httpx", "requests", "urllib3", "aiohttp", "socket", "ssl", "http", "urllib.request", "ftplib", "smtplib", "websockets",
@@ -50,9 +54,12 @@ def _id(path: pathlib.Path) -> str:
 def test_the_deterministic_core_is_what_we_think_it_is():
     names = {_id(p) for p in P2_FILES}
     for expected in ("config.py", "constraints.py", "validators.py", "forbidden.py", "claims.py", "billing.py", "narration.py",
-                     "textnorm.py", "types.py", "trends/evidence.py", "trends/sources.py", "trends/screening.py", "trends/risk.py"):
+                     "textnorm.py", "types.py", "generation/titles.py", "generation/copy.py", "generation/standalone.py",
+                     "generation/engine.py", "generation/prompts.py", "generation/parse.py", "generation/safety.py",
+                     "generation/facts.py", "generation/provider.py", "catalog/attributes.py", "catalog/estimates.py", "catalog/resolve.py",
+                     "vision/schema.py", "vision/provider.py", "vision/prompts.py", "vision/parse.py", "vision/trust.py", "vision/eval.py", "trends/evidence.py", "trends/sources.py", "trends/screening.py", "trends/risk.py"):
         assert expected in names
-    assert not any("repositories" in n for n in names)
+    assert not any(set(n.split("/")) & IO_PACKAGES for n in names)
 
 
 @pytest.mark.parametrize("path", P2_FILES, ids=_id)
@@ -96,3 +103,52 @@ def test_only_the_psl_dependency_is_third_party():
             if root not in stdlib:
                 third_party.add(root)
     assert third_party == {"publicsuffixlist"}
+
+
+# ---- P6: the I/O layers that are NOT in the pure set still have a hard import boundary ------------------------
+
+NETWORK_AND_MODEL_MODULES = {
+    "httpx", "requests", "urllib3", "aiohttp", "socket", "ssl", "http", "urllib.request", "ollama", "openai", "anthropic",
+    "langchain", "langchain_core", "transformers", "torch", "sqlalchemy", "psycopg", "psycopg2", "alembic", "redis",
+}
+
+
+def _layer_imports(layer: str) -> set[str]:
+    found: set[str] = set()
+    for path in (SRC / layer).rglob("*.py"):
+        for module in _imports(ast.parse(path.read_text(encoding="utf-8"))):
+            found.add(module.split(".")[0])
+    return found
+
+
+def test_imaging_touches_no_network_database_or_model_and_only_pillow_is_third_party():
+    imported = _layer_imports("imaging")
+    assert not imported & {m.split(".")[0] for m in NETWORK_AND_MODEL_MODULES}
+    import sys
+
+    third_party = {m for m in imported if m not in set(sys.stdlib_module_names) | {"slim_cmo", "__future__"}}
+    assert third_party == {"PIL"}
+
+
+def test_storage_is_stdlib_only_and_has_no_network_or_database():
+    import sys
+
+    imported = _layer_imports("storage")
+    assert not imported & {m.split(".")[0] for m in NETWORK_AND_MODEL_MODULES}
+    assert imported <= set(sys.stdlib_module_names) | {"slim_cmo", "__future__"}
+
+
+def test_the_vision_core_has_no_image_library_file_or_network_access():
+    imported = _layer_imports("vision")
+    assert not imported & ({m.split(".")[0] for m in NETWORK_AND_MODEL_MODULES} | {"PIL", "os", "pathlib", "tempfile", "io", "base64"})
+
+
+def test_only_the_vision_provider_and_the_evaluation_db_writer_reach_the_network_or_database():
+    for layer in ("imaging", "storage", "service", "evaluation"):
+        for path in (SRC / layer).rglob("*.py"):
+            imported = {m.split(".")[0] for m in _imports(ast.parse(path.read_text(encoding="utf-8")))}
+            assert "httpx" not in imported, (layer, path.name)
+    for path in (SRC / "evaluation").rglob("*.py"):
+        imported = {m.split(".")[0] for m in _imports(ast.parse(path.read_text(encoding="utf-8")))}
+        if path.name != "db.py":
+            assert "sqlalchemy" not in imported, path.name

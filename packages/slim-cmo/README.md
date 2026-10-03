@@ -20,8 +20,11 @@ floats anywhere under `src/`.
 |---|---|
 | **P1 — scaffolding** | done: package, migration #1 (all spec §5 tables), `tenant_scope`, shared enums, RLS / constraint / grant / concurrency tests (152) |
 | **P2 — deterministic core** (this checkpoint) | done: constraint resolver, validators, forbidden-content scan, claim eligibility & grounding, billing & idempotency rules, trend evidence (independence, syndication, recency, corroboration), budgets, term screening, tactic risk, interpretation & report checks, narration safety. No LLM, no network, no DB, no clock (enforced by `tests/unit/test_p2_purity.py`) |
-| P3 generators · P4 catalog Q&A · P5 routes & metering | not started |
-| P6 images & `VisionProvider` · P7 trends · P8 CEO wiring · P9 UI · P10 evals · P11 CI-informed | not started |
+| **P3 generators** | done: pure `generation/` core, `LlmProvider`, repositories, `GenerationService`, approval (spec §6.4.2) |
+| **P4 catalog Q&A** | done: pure `catalog/` resolver, `CatalogService`, `confirm_image_hint` (spec §6.5.1) |
+| **P5 routes & metering** | done in `backend/` (`api/v1/cmo.py`, quota reservations, settlement) |
+| **P6 images & `VisionProvider`** | done: `vision/` (pure schema/parser/trust/eval maths), `imaging/` (normalise, strip EXIF), `storage/`, `ImageService`, Ollama vision provider, `scripts/vision_eval.py`, read-time trust revocation (spec §6.2.2) |
+| P7 trends · P8 CEO wiring · P9 UI · P10 evals · P11 CI-informed | not started |
 
 The deterministic core (P2) exists; **nothing yet calls a model** (P3). No `format_constraint` row, trend-config key or entitlement cap is
 seeded by any migration: absent configuration fails closed (spec C13/C16), it is never defaulted.

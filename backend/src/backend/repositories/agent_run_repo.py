@@ -57,8 +57,11 @@ def insert_run(
     output_refs: list[str] | None = None,
     error_reason: str | None = None,
     parent_run_id: UUID | None = None,
+    run_id: UUID | None = None,
 ) -> UUID:
-    run_id = uuid4()
+    # `run_id` lets a caller that must stamp the id on other rows BEFORE the run row exists (CMO: the
+    # artefacts carry it, the run row is written only once a request is actually accepted) choose it.
+    run_id = run_id or uuid4()
     with tenant_scope(tenant_id) as conn:
         conn.execute(
             _INSERT_SQL,

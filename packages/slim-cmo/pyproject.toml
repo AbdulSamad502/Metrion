@@ -12,6 +12,9 @@ dependencies = [
     # (bbc.co.uk, not co.uk; a.blogspot.com and b.blogspot.com are different sites). Hand-rolled
     # suffix logic is a classic source of silent errors, so this is a deliberate dependency.
     "publicsuffixlist>=1.0",
+    # Image intake (P6): decode + re-encode so EXIF/GPS and every other metadata block is stripped, and the
+    # decoded size is checked from the header. Used only in `slim_cmo.imaging`, never in the pure core.
+    "Pillow>=10.0",
     # NOTE: no other Metrion package is declared here. Later phases may import
     # `competitor_intelligence` (a read-only listing-insight query, P11) or the shared
     # market-signals package (P7), but for the same reason `packages/cfo/pyproject.toml` and

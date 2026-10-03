@@ -424,10 +424,11 @@ def test_trust_gate_rejects_malformed_and_type_confused_payloads(two_tenants, na
 
 def test_trust_gate_still_accepts_well_formed_payloads(two_tenants):
     tenant, _ = two_tenants
-    asset = _seed.insert_asset(tenant)
-    _seed.insert_analysis(tenant, asset, attributes=[])
-    _seed.insert_analysis(tenant, asset, attributes=[_attr(), _attr(basis="UNKNOWN", value=None)])
-    _seed.insert_analysis(tenant, asset, attributes=[_attr(value=12), _attr(value={"nested": True}, confidence="low")])  # extra keys are fine
+    # One COMPLETE analysis per (asset, provider, model, schema_version) since P6's partial unique index, so each
+    # well-formed payload goes on its own asset.
+    _seed.insert_analysis(tenant, _seed.insert_asset(tenant), attributes=[])
+    _seed.insert_analysis(tenant, _seed.insert_asset(tenant), attributes=[_attr(), _attr(basis="UNKNOWN", value=None)])
+    _seed.insert_analysis(tenant, _seed.insert_asset(tenant), attributes=[_attr(value=12), _attr(value={"nested": True}, confidence="low")])  # extra keys are fine
 
 
 def test_attributes_must_be_a_json_array(two_tenants):
@@ -702,4 +703,4 @@ def test_mutable_tables_allow_update_but_not_delete(two_tenants):
 def test_migration_head_is_recorded(migrate_engine):
     with migrate_engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version_slim_cmo")).scalar_one()
-    assert version == "20261003_0001"
+    assert version == "20261005_0002"  # P6 added the vision indexes on top of the P1 schema (20261003_0001)
