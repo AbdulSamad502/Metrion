@@ -1,6 +1,6 @@
 # Metrion — CEO Agent Orchestration Specification
 
-**Status:** Draft for review
+**Status:** Draft for review — **CP0 amendment 2026-10-03, rounds 2 and 3 applied** (multimodal intake §6.9; CMO workflow routing; GST Route A/B; catalog-seeded niche confirmation and seven-section trend reports)
 **Prerequisites:** `auth.md` (execution paths, permission/entitlement chain) · `deterministic-engine.md` (Brain 1) · `competitor-intelligence-agent.md` · `cfo-agent.md` · `product-intelligence-agent.md` · `slim-cmo-agent.md` — this spec is the integration layer over all four and invents no new agent capability of its own.
 
 **CEO routes and composes. It never computes, and it never bypasses another agent's own authorization chain.** Every number in a CEO response still traces to an `engine_result_ref` or `estimate_ref` produced by Brain 1 or a named agent. CEO's own LLM work is intent classification and natural-language composition — nothing else.
@@ -20,6 +20,8 @@
 | C7 | **`agent_run` is the single audit and flow-visualization artifact for every agent invocation**, direct or conversational. This is the concrete table every agent spec's "Audit: Yes" column writes to — it did not exist before this spec. | resolves `competitor-intelligence-agent.md` Q9 |
 | C8 | **CEO's own routing decision is advisory, never authoritative.** Selecting an agent action does not grant access to it. The target action's own six-step chain (`auth.md` §7.1) runs regardless of how the request arrived, and can still deny it. | `auth.md` §7.1; C4 |
 | C9 | **CEO holds no financial formula, no fee rate, and no agent-specific business logic.** Everything numeric in a CEO answer is copied from a Brain 1 result or a named agent's structured report. | Brain-boundary rule, all specs |
+| C10 | **Multimodal intake is a CEO surface, vision is not CEO's job.** CEO accepts a product image, product details, target price and marketplace selections as a structured intake (§6.9). The image is stored and handed to CMO by reference; **CEO's classification and composition LLM calls remain text-only and never see image bytes.** | 2026-10-03 decision 1; OP8, OP11 |
+| C11 | **Product GST questions are never answered by CMO; CEO handles them by permission, in one of two routes.** **Route A:** member holds `agent.cfo` + `service.gst_lookup` → CEO delegates `cfo.gst_lookup` (CFO's OP13 resolution unchanged). **Route B:** member holds `service.gst_lookup` but not `agent.cfo` → CEO calls the shared GST Applicability Lookup service itself (a shared service per C1/OP9, not delegation), tier 3 only, under safety conditions G1–G7 of `slim-cmo-agent.md` §6.9. The route is chosen by the member's permissions, never by the model. | 2026-10-03 decision 4 + round 2; `slim-cmo-agent.md` C4/§6.9 |
 
 ---
 
@@ -150,6 +152,38 @@ Every invocation — direct or conversational, successful or denied — writes o
 
 CEO's own turn-level row is written first, with `parent_run_id = NULL`. Every row that turn fans out to — each Brain 1 bundle call, or the one delegated named-agent call (§6.4) — is written with `parent_run_id` set to that CEO row's `id`. This is the reliable grouping key `agent-flow-visualization.md` D1 needed; that spec's diagram is built by selecting the CEO anchor row plus every row where `parent_run_id = anchor_run_id`, not by inferring the group from `investigation_id` and overlapping timestamps.
 
+### 6.9 Multimodal intake and the CMO workflows (C10, C11 — CP0 amendment 2026-10-03)
+
+This section adds **no new agent capability to CEO** (the spec's opening rule stands). It defines how CEO accepts an image and slots, and how it routes the CMO and GST turns without breaking C3/C4.
+
+**Intake.** A seller may attach a product image to a chat message and state product details, a target price and one or more of Amazon / Flipkart / Meesho.
+- The attachment goes through an upload endpoint (`files.upload`-gated) that stores it in CMO's `seller_image_asset` (`slim-cmo-agent.md` §5) and returns an `image_asset_id`. **Image bytes never enter an `investigation_message`, the rolling summary, or any CEO LLM prompt** — only the opaque `image_asset_id` and its metadata do. CEO's classification and composition calls therefore stay text-only and need no vision-capable model.
+- Classification (§6.3) extracts the declared slots as text: `marketplaces[]`, `niche_text`, `product_name`, `brand`, `category_hint`, `attributes[]`, `target_price_paise`, `image_asset_id`. A price stated in rupees is converted to integer paise **by deterministic parsing, not by the LLM**, and echoed back to the seller for confirmation. **Missing `marketplaces` → CEO asks (D4/OP1); CEO never defaults a marketplace.** Missing optional slots do not block.
+
+**Routing table (each row is ONE registered action — C4 holds):**
+
+| Seller intent | CEO delegates exactly one of | Notes |
+|---|---|---|
+| "titles for my product" (1–3 marketplaces) | `cmo.generate_title_sets` | One action, N marketplaces → N artefacts, N units. This is *one invocation* with an enumerated list, not N delegations, so C4's one-action-per-turn rule is preserved (`slim-cmo-agent.md` §8.1). |
+| "I choose option 3 for Flipkart" | `cmo.approve_title` | 0 units, no LLM in CMO. Option ids come **only** from the seller's message or click; CEO may not choose, default or infer one. |
+| "now write the description/bullets/keywords" | `cmo.generate_listing_copy` (or one individual copy trigger) | Needs an approval or a seller-supplied title; otherwise CEO asks (E13). Approval and copy are **separate turns**, each one action, each with its own CEO unit (D5). A UI "Approve & generate copy" button may call the two registered direct paths in sequence — that is the client making two explicit calls, not CEO chaining. |
+| "hashtags" | `cmo.generate_hashtags` | Presented as separate marketing suggestions. |
+| "what colour / weight / category is this?" | `cmo.catalog_answer` | Basis labels preserved in the composed answer (E15). |
+| "what's trending right now?" / "what's happening in e-commerce?" | `cmo.market_trends` (after niche confirmation) | Needs `agent.ceo` + `agent.cmo` + `research.market_trends`. **Niche confirmation is its own step, over separate turns, each one action (C4):** `cmo.suggest_niche_terms` (deterministic catalog-title suggestions, needs `files.view`) → seller confirms/edits/rejects via `cmo.confirm_niche_terms` → `cmo.market_trends`. If confirmed terms already exist, CEO goes straight to the report. **CEO never sends an unconfirmed term, a raw report or any financial/customer data to research** (CMO C15) and shows the exact outbound queries before the first send. A report with no confirmed niche still runs its broader sections (news, tactics, new products); niche-dependent sections show "confirm a niche" (E19 of the CMO spec, E18 here). Seven sections are returned (CMO §6.8.2). |
+| "what GST applies to this product?" | **Route A:** `cfo.gst_lookup` · **Route B:** CEO's call to the shared GST lookup | **CMO not invoked.** CEO supplies product name and category text plus each one's basis (`SELLER_PROVIDED` / `ESTIMATED`; an `UNVERIFIED_HINT` image attribute is never passed as a category) read from the stored `cmo_generation` / `product_image_analysis` records. Route A needs `agent.ceo` + `agent.cfo` + `service.gst_lookup` (CFO's full OP13 resolution). Route B needs `agent.ceo` + `service.gst_lookup`, returns a `PROVISIONAL` tier-3 result only, meters the shared GST meter + CEO's turn unit, and can never become a `gst_rate_override` without `agent.cfo` + `financials.adjust` (G1–G7). Neither key → wall (E2/E17). **Neither a `dispatch_cfo_gst_lookup` nor a CEO shared-lookup entry point exists in `agents/ceo_hub.py` today** — both must be built, and Route B must not ship unless G1–G7 are demonstrated by test. |
+| "publish this to my listing" / out-of-C3 | none | Declined and explained (recommend-only; V1 scope). |
+
+**Optional CI attachment.** When the seller is discussing listing optimisation, CEO may read the tenant's `competitor_listing_insight` rows through a read-only CI repository function and attach them to the CMO request. This is a **data read, not a CI invocation** — no `agent_run` for CI, no CI unit — and it requires **both** `agent.ci` and a passing CI entitlement check (evaluated, not consumed). CEO never attaches CI data to a request whose subject is not listing optimisation (E4 of the CMO spec). Missing CI data never blocks the CMO call.
+
+**Composition rules (extend §6.5).**
+1. Title options, descriptions, bullets, keywords and hashtags are shown **verbatim** from CMO's structured report — CEO may format but must not reword, merge, re-rank or "improve" them. Rewriting approved copy would be an LLM silently changing seller-facing output with provenance attached to the original.
+2. Catalog answers keep each attribute's basis label (`SELLER_PROVIDED | IMAGE_OBSERVED | ESTIMATED | SOURCE_DERIVED | UNKNOWN`) in the composed text; an `ESTIMATED` or `UNKNOWN` attribute is never stated as fact.
+3. Trend reports keep **all seven sections**, their source links, publication/retrieval dates, corroboration labels and the evidence-and-limitations section. CEO must not convert "attracting attention" into "trending" or "in demand", must not drop the *"CMO's interpretation — not a verified market fact"* label, must not promote a **reported tactic** to advice (tactics with a policy-risk flag stay in the caution group with no suggested action), and must not restate numbers the report deliberately omits (CMO AC33).
+4. GST answers carry the rate, source, retrieval date, uncertainty note and L5 disclaimer **copied from the `gst_lookup_result`**, never "verified" unless the record's status is `SELLER_VERIFIED`.
+5. Workflow state (current `image_asset_id`, `cmo_generation` ids, approval ids) is carried by `agent_run.output_refs` and the CMO tables, **not** by LLM context or the rolling summary — the summary may mention that titles were generated and which option was approved, but the ids come from the records (resolves the risk in D2).
+
+**Entitlement note.** A three-turn workflow (titles → approval/copy → GST) consumes three CEO turn units (D5) in addition to the CMO artefact units and the CFO/GST meters. This is intended and must be visible to the seller in the usage view; whether it is acceptable at the CEO's free cap is a pricing question (Q6).
+
 ---
 
 ## 7. AI requirements
@@ -189,6 +223,16 @@ CEO's own turn-level row is written first, with `parent_run_id = NULL`. Every ro
 | E9 | An agent's structured report cannot be summarised in one LLM call (very large PI report) | CEO composes a summary-of-the-report plus a pointer to the full structured data, never a truncated silent drop |
 | E10 | Inbound WhatsApp message, no open investigation exists | One `investigation` row is created and the message appended before the reply is otherwise processed (§6.7, resolved via `whatsapp-integration.md` C7) |
 | E11 | Inbound WhatsApp message, an investigation is already open | Routes into that investigation's pipeline (§6.7) — no new row created |
+| E12 | **(CP0)** Seller attaches an image but names no marketplace | CEO asks which of Amazon / Flipkart / Meesho (D4/OP1); no CMO run, no unit, until answered |
+| E13 | **(CP0)** Seller asks for description/bullets/keywords with no approved title and no supplied title | CEO asks for a title or offers a title set first; no copy generated (`slim-cmo-agent.md` E9) |
+| E14 | **(CP0)** Trend request needing a niche, none stated or on record | CEO asks for the niche; a `BROAD`-only report may be offered instead |
+| E15 | **(CP0)** Composed answer would state an `ESTIMATED`/`UNKNOWN` attribute, or "trending", as fact | Composition must preserve the label / the attention-vs-demand wording (§6.9 rules 2–3); a violating draft fails the narration check rather than being shipped |
+| E16 | **(CP0)** Seller's message is both a selection and a copy request ("go with option 2 and write the description") | Two actions are needed; CEO performs the selection (`cmo.approve_title`) this turn and offers the copy next turn — it never chains two delegations (C4). A UI button may call both direct paths in sequence instead |
+| E17 | **(CP0)** GST question when the member lacks `service.gst_lookup` (with or without `agent.cfo`) | Explained as a permission wall; `agent_run.status = DENIED` (E2); no fallback to a CMO or model-knowledge answer. A member with `service.gst_lookup` but no `agent.cfo` takes Route B, not a wall |
+| E18 | **(Round 3)** Trend request, no confirmed niche terms | CEO offers `cmo.suggest_niche_terms` output (or asks the seller to type a niche); nothing is sent to research until terms are confirmed. Broader sections may run |
+| E19 | **(Round 3)** Seller asks CEO to "research my sales report" or to include customer/financial data in a trend search | Refused: only confirmed niche terms leave Metrion (CMO C15, AC30) |
+| E20 | **(Round 3)** Marketplace constraint missing/stale for one of the requested marketplaces | CEO reports which marketplace is blocked and why; the other marketplaces' artefacts are delivered and billed per the CMO spec (E5/E16) |
+| E21 | **(Round 3)** Required trend configuration missing | CEO relays `CONFIG_MISSING` in plain terms (operator action needed); no unit, no provider call |
 
 ---
 
@@ -218,6 +262,15 @@ CEO's own turn-level row is written first, with `parent_run_id = NULL`. Every ro
 | AC9 | LLM context for any turn never contains the full raw message history — only the summary plus messages since `summary_covers_through`. |
 | AC10 | Every agent invocation, direct or conversational, produces exactly one `agent_run` row. |
 | AC11 | A denied run is logged with the same fields as a completed one. |
+| AC12 | **(CP0)** Title options, copy, hashtags and trend sources in a composed answer are verbatim from the agent's structured report; CEO never rewrites, re-ranks or merges them. |
+| AC13 | **(CP0)** No image bytes appear in any `investigation_message`, summary, or CEO LLM prompt — only an opaque `image_asset_id`. |
+| AC14 | **(CP0)** CEO never selects a title option on the seller's behalf; every `cmo.approve_title` call carries an option id that originated from the seller. |
+| AC15 | **(CP0)** A product GST question is handled by Route A (`cfo.gst_lookup`) or Route B (shared lookup) according to the member's permissions, and never by CMO; the composed answer shows source, retrieval date and uncertainty, and never says "verified" unless the lookup record is `SELLER_VERIFIED`. Route B satisfies G1–G7. |
+| AC16 | **(CP0)** A multi-marketplace CMO request is exactly one delegated action (`cmo.generate_title_sets`), not one delegation per marketplace. |
+| AC17 | **(CP0)** Rupee amounts stated by the seller are converted to integer paise by deterministic code, not by the LLM. |
+| AC18 | **(Round 3)** CEO never forwards an unconfirmed niche term, raw report, customer datum or financial figure to a research provider; niche confirmation, suggestion and report are separate single-action turns. |
+| AC19 | **(Round 3)** A composed trend answer preserves all seven sections, source dates, corroboration labels, the interpretation label and the policy-risk caution grouping. |
+| AC20 | **(Round 3)** A composed copy-pack answer is verbatim from the structured `LISTING_COPY` report, shown per marketplace, with no cross-marketplace blending. |
 
 ---
 
@@ -240,6 +293,20 @@ CEO's own turn-level row is written first, with `parent_run_id = NULL`. Every ro
 | T13 | WhatsApp confirmation with an investigation already open for the tenant | Routed into it via §6.3–6.5, same as a chat message (E11) |
 | T13b | Inbound WhatsApp message, no `ACTIVE` investigation exists for the tenant | Exactly one `investigation` row created, `created_by = bound_by`; message appended; then routed via §6.3–6.5 (AC8, E10) |
 | T14 | Profit question matching no named bundle | Falls back to one `compute_metric` call; still one classification, one synthesis (D3) |
+| T15 | **(CP0)** Image + "titles for Amazon, Flipkart and Meesho" | One classification, one `cmo.generate_title_sets` call with 3 marketplaces, one synthesis; image bytes absent from every prompt (AC13, AC16) |
+| T16 | **(CP0)** Seller replies "option 3 for Flipkart" | One `cmo.approve_title` call with the seller's option id; no generation, 0 CMO units (AC14) |
+| T17 | **(CP0)** "Go with option 2 and write the description" | Selection performed, copy offered next turn; no two-action chain (E16) |
+| T18 | **(CP0)** "What GST applies to this product?" with a CMO-analysed product in the investigation, member holds `agent.cfo` | Route A: delegated to `cfo.gst_lookup` with product name, category and basis labels; CMO not invoked; answer carries source/date/disclaimer, not "verified" (AC15) |
+| T18b | **(CP0)** Same, member holds `service.gst_lookup` but not `agent.cfo` | Route B: `PROVISIONAL` shared-lookup result; only the shared GST meter + CEO turn unit consumed; attempt to apply it to a calculation refused (AC15, G1–G7) |
+| T19 | **(CP0)** Same GST question from a member without `service.gst_lookup` | `403`, wall explained; `agent_run.status = DENIED`; no model-knowledge answer (E17) |
+| T20 | **(CP0)** Seller says "target price 499 rupees" | Parsed deterministically to 49900 paise, echoed for confirmation, never in generated copy (AC17) |
+| T21 | **(CP0)** Composition of a catalog answer containing an `ESTIMATED` weight | Label and range preserved; draft that states a point weight fails the narration check (E15) |
+| T22 | **(CP0)** Image attached, no marketplace named | CEO asks; no CMO run (E12) |
+| T23 | **(Round 3)** "What's trending?" with no confirmed niche, catalog available | Turn 1: suggestions shown; no provider call. Turn 2 (seller confirms): `cmo.confirm_niche_terms`. Turn 3: `cmo.market_trends` with the confirmed terms and the displayed outbound queries (AC18) |
+| T24 | **(Round 3)** Composed trend answer where a tactic has a policy-risk flag | Caution group, no suggested action, "check the marketplace's current seller policy" line preserved (AC19) |
+| T25 | **(Round 3)** Seller asks to include the sales report in the research | Refused (E19, AC18) |
+| T26 | **(Round 3)** Three marketplaces, one with a missing constraint | Two packs delivered, one blocked with reason; units billed for two (E20) |
+| T27 | **(Round 3)** Composed copy pack answer | Verbatim per marketplace; no blending (AC20) |
 
 ---
 
@@ -252,6 +319,12 @@ CEO's own turn-level row is written first, with `parent_run_id = NULL`. Every ro
 | Q3 | **Intent-classification model and prompt strategy** on local Ollama models — accuracy at the hardware ceiling is unmeasured (A1, V1). | §6.3 |
 | Q4 | **CEO's own metering unit** (D5) — one run per turn regardless of sub-agent use — is a recommendation, not yet confirmed by the entitlement spec. | Entitlement spec |
 | Q5 | **Summary regeneration model** — same model as classification/synthesis, or a cheaper one, given it is a bounded, well-defined task? | §6.6, cost |
+| Q6 | **(CP0) Cost of a multi-turn CMO workflow at the free caps.** CEO 30/month and CMO 10/month (both provisional) interact: titles (1 turn) + approve/copy (2 turns) + GST (1 turn) = 4 CEO turns for one product on one marketplace. Is that acceptable, or should a CMO workflow's approval turn be exempt from CEO's per-turn unit? | Pricing / entitlement spec |
+| Q7 | ~~CMO-only sellers and GST~~ | **Resolved, round 2 — Route B (C11), conditional on G1–G7.** |
+| Q8 | **(CP0) Upload surface for the image.** Is the image upload a dedicated CEO-chat attachment endpoint or the existing file-upload surface? `files.upload` is proposed as the gate; the spec set does not say how a chat attachment is authorised relative to report uploads. | `auth.md` §5.2; frontend |
+| Q9 | **(CP0) Workflow state in the investigation summary** (`slim-cmo-agent.md` Q12): is ids-via-`output_refs` sufficient, or does D2's summary need a structured "current CMO workflow" field? | §6.6 |
+| Q10 | **(Round 3) Niche-confirmation UX in chat vs workspace.** Three single-action turns (suggest → confirm → report) is correct under C4 but slow in conversation. Is a UI-only confirmation panel (direct paths) acceptable as the primary route, with chat falling back to the three-turn flow? | §6.9 |
+| Q11 | **(Round 3) Who may confirm niche terms** — any member holding `agent.cmo`, or OWNER only (the terms are derived from tenant catalog data)? | `auth.md` grid |
 
 ### Resolved — do not re-flag
 

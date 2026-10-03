@@ -45,7 +45,7 @@ My recommendations. Each is a mechanism decision — none asserts a number.
 |---|---|---|
 | A1 | `tenant.timezone` (`auth.md` §5.1, default `Asia/Kolkata`) is the correct basis for calendar-period caps (e.g. a "monthly" cap resets on tenant-local month boundaries, not UTC). | Low — affects only exact reset timing, not correctness of the mechanism. |
 | A2 | `agent_run` (`auth.md`/orchestration schema) remains the canonical record of one agent invocation, and a `metered_event` may reference it via `agent_run_id` where one exists. | Medium — if orchestration's `agent_run` shape changes materially, this spec's FK needs revisiting. |
-| A3 | Shared services (`service.gst_lookup`, OP9) are metered under their own `meter_code`, independently of the owning agent's cap, exactly as `auth.md` §5.2 already states they carry their own entitlement caps. | Low — already confirmed upstream; this spec only needs to represent it, not decide it. |
+| A3 | Shared services (`service.gst_lookup`, `research.niche_run`, `research.market_trends` — the last added 2026-10-03 for the Market Signal Retrieval service, `slim-cmo-agent.md` §6.8) are metered under their own `meter_code`, independently of the owning agent's cap, exactly as `auth.md` §5.2 already states they carry their own entitlement caps. | Low — already confirmed upstream; this spec only needs to represent it, not decide it. |
 | A4 | No self-serve purchase flow exists in V1 (N3); `tenant_plan`/`tenant_cart_item` rows above `FREE` are written by an internal, non-application process until Razorpay wiring lands. | Low — explicitly a non-goal; stated so nobody infers a checkout flow from this schema. |
 
 ---
@@ -120,7 +120,7 @@ metered_event (                           -- what consumed a unit of entitlement
   id                 uuid primary key default gen_random_uuid(),
   tenant_id          uuid not null references tenant,
   member_id          uuid references app_user,     -- nullable; who triggered it (D2/Q5 per-member basis)
-  agent_code         text not null,                -- CFO | CI | PI | CMO | SHARED (shared services, A3)
+  agent_code         text not null,                -- CFO | CI | PI | CMO | SHARED (shared services, A3). CMO event_kinds are the trigger ids enumerated in slim-cmo-agent.md §8.1 (cmo.generate_title_sets, cmo.generate_listing_copy, ... cmo.market_trends); one delivered artefact = one event (idempotency_key = the CMO request_key). Shared meter for trends: 'research.market_trends'. No metered_event_meter_map row and no cap value is seeded by this amendment.
   event_kind         text not null,                -- structural trigger id, e.g. 'cfo.reconcile', 'ci.discover',
                                                      -- 'ci.evidence_upload', 'service.gst_lookup' — mirrors the
                                                      -- direct-execution-path trigger ids already enumerated in

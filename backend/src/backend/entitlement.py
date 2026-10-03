@@ -42,6 +42,15 @@ unchanged. Exactly like CFO, nothing about the outcome changes until a real
 `entitlement_cap_config` row is seeded for `agent_code="PI"` — every call today resolves
 `NO_CAP_CONFIGURED`/`passed=True`.
 
+**CMO (`resolve_cmo_entitlement`) and its shared trend meter (`resolve_market_trends_entitlement`)
+reuse the same real F2 mechanism** (`docs/specs/slim-cmo-agent.md` §8, `entitlement.md` A3) —
+deliberately NOT the always-pass scaffold `resolve_gst_lookup_entitlement` /
+`resolve_niche_run_entitlement` use. Nothing about the outcome changes until a cap row is seeded
+(`NO_CAP_CONFIGURED`/`passed=True`, stated honestly), but once one is, it binds. That is only
+meaningful because CMO is also the first agent to WRITE `metered_event` rows after delivery:
+`record_metered_event` below. (Before it, only tests wrote them, so no cap could ever have
+bound.)
+
 **`research.niche_run` (`resolve_niche_run_entitlement`) is PI's addition and stays a
 TEMPORARY, always-pass scaffold, for the identical reason `resolve_gst_lookup_entitlement`
 does.** `product-intelligence-agent.md`/the PI build plan require this shared-service action
@@ -70,6 +79,7 @@ from day one rather than needing its own telemetry added later.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from uuid import UUID
@@ -82,6 +92,8 @@ from competitor_intelligence.repositories import competitor_url_repo
 
 from backend.db import engine
 from backend.repositories import entitlement_repo
+
+logger = logging.getLogger(__name__)
 
 _GET_TENANT_TIMEZONE_SQL = "SELECT timezone FROM tenant WHERE id = :tenant_id"
 
@@ -321,6 +333,122 @@ def resolve_pi_entitlement(
         occurred_at=occurred_at,
         as_of_date=as_of_date,
     )
+
+
+# --- Slim CMO (docs/specs/slim-cmo-agent.md §8, entitlement.md A3) -------------------------
+
+# The shared Market Signal Retrieval service meters under agent_code SHARED with its own
+# meter_code — independently of CMO's own cap (OP9; entitlement.md rule 7, A3).
+MARKET_TRENDS_AGENT_CODE = "SHARED"
+MARKET_TRENDS_EVENT_KIND = "research.market_trends"
+
+
+def resolve_cmo_entitlement(
+    tenant_id: UUID,
+    *,
+    direct_action_code: str,
+    agent_code: str = "CMO",
+    occurred_at: datetime | None = None,
+    as_of_date: date | None = None,
+) -> EntitlementResult:
+    """CMO's entitlement chokepoint: a thin wrapper over `resolve_cfo_entitlement`'s already
+    generic mechanism (PI precedent). `direct_action_code` is the CMO trigger id actually
+    being performed (`cmo.generate_title_sets`, `cmo.generate_listing_copy`, ...). The
+    multi-artefact up-front pre-check (spec §8.4) is built on this in P5; it is not part of
+    this resolver."""
+    return resolve_cfo_entitlement(
+        tenant_id,
+        direct_action_code=direct_action_code,
+        agent_code=agent_code,
+        occurred_at=occurred_at,
+        as_of_date=as_of_date,
+    )
+
+
+def resolve_market_trends_entitlement(
+    tenant_id: UUID,
+    *,
+    occurred_at: datetime | None = None,
+    as_of_date: date | None = None,
+) -> EntitlementResult:
+    """The shared `research.market_trends` meter — second of the two independent meters a
+    trend report is checked against (spec §6.8.9). Real F2 resolution under `agent_code =
+    "SHARED"`, so seeding a cap for it later needs no code change."""
+    return resolve_cfo_entitlement(
+        tenant_id,
+        direct_action_code=MARKET_TRENDS_EVENT_KIND,
+        agent_code=MARKET_TRENDS_AGENT_CODE,
+        occurred_at=occurred_at,
+        as_of_date=as_of_date,
+    )
+
+
+def cmo_metering_key(generation_id: UUID) -> str:
+    """`metered_event.idempotency_key` is unique per tenant across ALL agents, so CMO's keys are
+    namespaced. One delivered artefact (`cmo_generation.id`) is exactly one unit; re-recording
+    the same artefact is a no-op (entitlement.md rule 4)."""
+    return f"cmo:{generation_id}"
+
+
+def record_metered_event(
+    tenant_id: UUID,
+    *,
+    agent_code: str,
+    event_kind: str,
+    idempotency_key: str,
+    member_id: UUID | None = None,
+    quantity: int = 1,
+    agent_run_id: UUID | None = None,
+    source_ref: UUID | None = None,
+    occurred_at: datetime | None = None,
+    as_of_date: date | None = None,
+) -> UUID | None:
+    """Record one unit of usage AFTER an action reached a terminal state (entitlement.md rule 3).
+
+    Best-effort by design (D4, rule 5): a failure here is logged and swallowed — it must never
+    block or roll back a result the seller already received. Returns the stored event id (the
+    ORIGINAL id on an idempotent retry), or `None` if the write failed and needs out-of-band
+    reconciliation. The entitlement CHECK (read path, before the action) is the opposite: it
+    fails closed. Callers decide which terminal states consume a unit (D5) — CMO records only
+    `COMPLETE` artefacts — and never call this for a failed one.
+
+    `meter_code` is never chosen by the caller (rule 6): it is resolved through
+    `metered_event_meter_map` here, falling back to `event_kind` itself (E5). `period_key` uses
+    the same unit the live cap check uses (the resolved cap's `period_unit`, else MONTH), so
+    recorded usage and the entitlement check always count the same bucket.
+    """
+    try:
+        now = occurred_at or datetime.now(timezone.utc)
+        resolved_as_of = as_of_date or now.date()
+
+        meter_row = entitlement_repo.resolve_meter_map(tenant_id, event_kind=event_kind, as_of_date=resolved_as_of)
+        meter_code = str(meter_row["meter_code"]) if meter_row is not None else event_kind
+
+        cap_row = entitlement_repo.resolve_cap_config(
+            tenant_id, agent_code=agent_code, meter_code=meter_code, scope="TENANT", as_of_date=resolved_as_of
+        )
+        period_unit = str(cap_row.get("period_unit") or "MONTH") if cap_row is not None else "MONTH"
+        period_key = _period_key(now, tz_name=_tenant_timezone(tenant_id), period_unit=period_unit)
+
+        return entitlement_repo.insert_metered_event(
+            tenant_id,
+            member_id=member_id,
+            agent_code=agent_code,
+            event_kind=event_kind,
+            meter_code=meter_code,
+            quantity=quantity,
+            agent_run_id=agent_run_id,
+            source_ref=source_ref,
+            idempotency_key=idempotency_key,
+            occurred_at=now,
+            period_key=period_key,
+        )
+    except Exception:  # noqa: BLE001 - metering must degrade gracefully, never block delivery (D4)
+        logger.exception(
+            "metered_event write failed; needs reconciliation (tenant=%s agent=%s kind=%s key=%s)",
+            tenant_id, agent_code, event_kind, idempotency_key,
+        )
+        return None
 
 
 @dataclass(frozen=True, slots=True)

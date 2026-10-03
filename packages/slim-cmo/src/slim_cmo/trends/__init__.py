@@ -1,0 +1,1 @@
+"""Deterministic trend-evidence logic: source independence, syndication, recency, corroboration,\nbudgets, outbound-term screening, tactic risk, numeric-claim detection, interpretation checks and\nreport completeness. No network, no LLM (spec §6.8)."""

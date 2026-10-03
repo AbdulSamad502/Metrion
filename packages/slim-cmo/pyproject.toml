@@ -1,0 +1,47 @@
+[project]
+name = "slim-cmo"
+version = "0.1.0"
+description = "Metrion Slim CMO agent — see docs/specs/slim-cmo-agent.md"
+requires-python = ">=3.12"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",
+    "httpx>=0.27",
+    # Public Suffix List, bundled and offline: source-independence needs the REGISTRABLE domain
+    # (bbc.co.uk, not co.uk; a.blogspot.com and b.blogspot.com are different sites). Hand-rolled
+    # suffix logic is a classic source of silent errors, so this is a deliberate dependency.
+    "publicsuffixlist>=1.0",
+    # NOTE: no other Metrion package is declared here. Later phases may import
+    # `competitor_intelligence` (a read-only listing-insight query, P11) or the shared
+    # market-signals package (P7), but for the same reason `packages/cfo/pyproject.toml` and
+    # `packages/product-intelligence/pyproject.toml` document — a relative `file:` specifier
+    # resolves against the *installer's* cwd, not this file's directory, and this monorepo has
+    # no workspace-aware build tool yet — they are installed explicitly, in order, by the
+    # README and by `.github/workflows/ci.yml`, never declared here.
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "hypothesis>=6.100", "mypy>=1.10"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+slim_cmo = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = "publicsuffixlist"
+ignore_missing_imports = true  # the wheel ships no type stubs

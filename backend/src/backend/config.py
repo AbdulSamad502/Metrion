@@ -88,6 +88,49 @@ def ci_evidence_storage_dir() -> str:
     return os.environ.get("CI_EVIDENCE_DIR", "./data/ci-evidence")
 
 
+@lru_cache
+def cmo_llm_model() -> str:
+    """The Ollama model Slim CMO generates listing copy with. `qwen3:8b` is the dev
+    "correctness" model already locked in readiness §1 (Engineering — Dev LLM); a configurable
+    default, not a spec decision, so an operator can swap models without a code change."""
+    return os.environ.get("CMO_LLM_MODEL", "qwen3:8b")
+
+
+@lru_cache
+def cmo_image_storage_dir() -> str:
+    """Local-disk storage for seller product images (spec §5 `seller_image_asset`) — the same
+    functional-only, real-object-storage-is-later posture as `ci_evidence_storage_dir`."""
+    return os.environ.get("CMO_IMAGE_DIR", "./data/cmo-images")
+
+
+def _optional_positive_int_env(name: str) -> int | None:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return None
+    value = int(raw)
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer, got {raw!r}")
+    return value
+
+
+@lru_cache
+def cmo_image_max_bytes() -> int | None:
+    """Largest product image the CMO upload route will accept. **No default** (spec H4/Q7): an
+    upload limit is a decision (memory, vision latency, storage), not a convention, so until
+    `CMO_IMAGE_MAX_BYTES` is set this returns `None` and the upload route refuses rather than
+    guessing."""
+    return _optional_positive_int_env("CMO_IMAGE_MAX_BYTES")
+
+
+@lru_cache
+def cmo_image_allowed_types() -> frozenset[str]:
+    """MIME types accepted for product images, from `CMO_IMAGE_ALLOWED_TYPES` (comma-separated,
+    e.g. `image/jpeg,image/png`). **No default** (spec H4): empty means "not configured", and
+    the upload route refuses."""
+    raw = os.environ.get("CMO_IMAGE_ALLOWED_TYPES", "")
+    return frozenset(part.strip().lower() for part in raw.split(",") if part.strip())
+
+
 def _positive_int_env(name: str, default: int) -> int:
     raw = os.environ.get(name)
     if raw is None or not raw.strip():

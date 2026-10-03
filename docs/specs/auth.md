@@ -220,6 +220,7 @@ Stored on `membership.permissions`. **An absent key means denied** (D4).
 | `financials.adjust` | **Create or supersede manual financial adjustments** — every field in the `deterministic-engine.md` §7.2.1 field registry, without exception. At time of writing that covers COGS override, discount-bearer override, RTO outcome, cancellation flag, fee-GST treatment toggle, return refund amounts, seller-supplied logistics costs, the `expense.*` pools (advertising, packaging, storage, logistics, other), `settlement.receipt` corrections and `supplier.quote` data. Also governs responses to OP1 agent-initiated data requests. **The registry is authoritative — a field added there is covered automatically.** These inputs change Contribution Profit. |
 | `service.gst_lookup` | Trigger the shared GST Applicability Lookup (OP9) |
 | `research.niche_run` | Trigger a paid niche-discovery research run |
+| `research.market_trends` | Trigger the shared Market Signal Retrieval service (web/video trend signals) used by `cmo.market_trends` (OP17, `slim-cmo-agent.md` §6.8). *Added 2026-10-03.* |
 | `whatsapp.use` | WhatsApp access |
 | `usage.view` | Usage visibility |
 | `billing.view` | Billing visibility |
@@ -229,7 +230,7 @@ Stored on `membership.permissions`. **An absent key means denied** (D4).
 
 **`financials.adjust` is deny-by-default for PARTNER** and must be granted explicitly by the OWNER. A partner without it may still upload files and view figures, but cannot alter any input that moves Contribution Profit. Every adjustment records `created_by` (`deterministic-engine.md` §7.1), so authorship is always attributable.
 
-**Shared-service keys** (`service.gst_lookup`, `research.niche_run`) are granted independently of `agent.*`. Per OP9 these services carry their own entitlement caps, so permission and entitlement are evaluated separately here exactly as in §7.2.
+**Shared-service keys** (`service.gst_lookup`, `research.niche_run`, `research.market_trends`) are granted independently of `agent.*`. Per OP9 these services carry their own entitlement caps, so permission and entitlement are evaluated separately here exactly as in §7.2.
 
 ### 5.3 Request interface
 

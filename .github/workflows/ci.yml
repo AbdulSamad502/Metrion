@@ -70,11 +70,17 @@ jobs:
       - name: Install product-intelligence
         run: pip install -e "packages/product-intelligence[dev]"
 
+      - name: Install slim-cmo
+        run: pip install -e "packages/slim-cmo[dev]"
+
       - name: calc-engine — no-float lint
         run: python packages/calc-engine/scripts/lint_no_float.py
 
       - name: data-foundation — no-float lint
         run: python packages/data-foundation/scripts/lint_no_float.py
+
+      - name: slim-cmo — no-float lint
+        run: python packages/slim-cmo/scripts/lint_no_float.py
 
       - name: calc-engine — migrate (upgrade, downgrade, re-upgrade)
         working-directory: packages/calc-engine
@@ -111,6 +117,13 @@ jobs:
           python -m alembic downgrade base
           python -m alembic upgrade head
 
+      - name: slim-cmo — migrate (upgrade, downgrade, re-upgrade)
+        working-directory: packages/slim-cmo
+        run: |
+          python -m alembic upgrade head
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+
       - name: calc-engine — pytest (unit + integration)
         working-directory: packages/calc-engine
         run: python -m pytest tests/ -v
@@ -129,6 +142,10 @@ jobs:
 
       - name: product-intelligence — pytest (unit + integration)
         working-directory: packages/product-intelligence
+        run: python -m pytest tests/ -v
+
+      - name: slim-cmo — pytest (unit + integration)
+        working-directory: packages/slim-cmo
         run: python -m pytest tests/ -v
 
       # backend depends on competitor-intelligence, cfo and product-intelligence at import time (api/v1/ci.py,
