@@ -173,3 +173,21 @@ def test_llm_model_is_required_with_no_default_and_read_from_the_environment(mon
         config.cmo_llm_model()
     monkeypatch.setenv("CMO_LLM_MODEL", "qwen3:4b")
     assert config.cmo_llm_model() == "qwen3:4b"
+
+
+def test_catalog_view_is_a_dedicated_key_owner_implicit_and_denied_to_partners_by_default():
+    key = permissions.CATALOG_VIEW
+    assert key == "catalog.view" and key in permissions.ALL_KEYS and key != permissions.FILES_VIEW
+    assert permissions.has_permission(role=permissions.OWNER_ROLE, permissions={}, key=key) is True
+    assert permissions.has_permission(role=permissions.PARTNER_ROLE, permissions={}, key=key) is False
+    # neither agent.cmo nor files.view implies it, and it implies neither of them
+    assert permissions.has_permission(role=permissions.PARTNER_ROLE, permissions={"agent.cmo": True, "files.view": True}, key=key) is False
+    assert permissions.has_permission(role=permissions.PARTNER_ROLE, permissions={key: True}, key="agent.cmo") is False
+
+
+def test_auth_md_documents_catalog_view():
+    import pathlib
+
+    doc = (pathlib.Path(__file__).resolve().parents[3] / "docs" / "specs" / "auth.md").read_text(encoding="utf-8")
+    assert "| `catalog.view` |" in doc and "OWNER holds it implicitly" in doc
+

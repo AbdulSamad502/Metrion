@@ -27,6 +27,7 @@ class OllamaLlmProvider:
     host: str
     timeout_seconds: int
     transport: httpx.BaseTransport | None = None  # tests inject a mock transport
+    think: bool | None = None  # None: field omitted (model default). False turns off a reasoning model's thinking pass (qwen3: ~70 s -> ~2 s per call)
 
     def __post_init__(self) -> None:
         if not self.host.strip():
@@ -37,10 +38,10 @@ class OllamaLlmProvider:
     def complete(self, *, model: str, prompt: str) -> str:
         try:
             with httpx.Client(transport=self.transport, timeout=self.timeout_seconds) as client:
-                response = client.post(
-                    f"{self.host.rstrip('/')}/api/generate",
-                    json={"model": model, "prompt": prompt, "stream": False},
-                )
+                payload: dict[str, object] = {"model": model, "prompt": prompt, "stream": False}
+                if self.think is not None:
+                    payload["think"] = self.think
+                response = client.post(f"{self.host.rstrip('/')}/api/generate", json=payload)
                 response.raise_for_status()
                 body = response.json()
         except (httpx.HTTPError, ValueError) as exc:

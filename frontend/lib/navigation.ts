@@ -30,6 +30,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: "products", label: "Products", icon: "products", href: "/dashboard/pi" },
       { id: "competitors", label: "Competitors", icon: "competitors", href: "/dashboard/competitors" },
       { id: "cfo", label: "CFO", icon: "finance", href: "/dashboard/cfo" },
+      { id: "cmo", label: "Marketing", icon: "marketing", href: "/dashboard/cmo" },
     ],
   },
 ];

@@ -44,14 +44,15 @@ def _vision_extractor() -> OllamaVisionExtractor:
         model=ci_vision_model(),
     )
 
-# Static for Step 4 — PI/CFO/CMO have no implementation to report a real status for yet.
+# Static for Step 4. CMO is CONNECTED as of P8 (`agents/ceo_hub_cmo.py` dispatch functions + its direct paths). PI/CFO are still
+# listed NOT_CONNECTED here even though both are implemented (pre-existing; deliberately not touched in the CMO build).
 # This list itself is the "Agent Status" the dashboard renders; it becomes a real registry
 # once more agents exist.
 _AGENT_STATUSES: list[dict[str, str]] = [
     {"id": "CI", "name": "Competitor Intelligence", "status": "CONNECTED"},
     {"id": "PI", "name": "Product Intelligence", "status": "NOT_CONNECTED"},
     {"id": "CFO", "name": "CFO", "status": "NOT_CONNECTED"},
-    {"id": "CMO", "name": "CMO", "status": "NOT_CONNECTED"},
+    {"id": "CMO", "name": "CMO", "status": "CONNECTED"},
 ]
 
 

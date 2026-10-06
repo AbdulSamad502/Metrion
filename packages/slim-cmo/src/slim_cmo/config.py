@@ -53,12 +53,18 @@ MAX_CONFIRMED_NICHE_TERMS = "max_confirmed_niche_terms"
 MAX_TERM_CHARS = "max_term_chars"
 CATALOG_TITLES_READ_CAP = "catalog_titles_read_cap"
 PROVIDER_CALL_TIMEOUT_SECONDS = "provider_call_timeout_seconds"
+PROVIDER_CACHE_TTL_HOURS = "provider_cache_ttl_hours"
+PROVIDER_DAILY_SEARCH_CEILING = "provider_daily_search_ceiling"
 TACTIC_RISK_PATTERN_SET_REF = "tactic_risk_pattern_set_ref"
 OFFICIAL_MARKETPLACE_DOMAINS = "official_marketplace_domains"
 NICHE_STOPWORDS_EXTRA = "niche_stopwords_extra"
 NICHE_STOPWORDS_EXCLUDE = "niche_stopwords_exclude"
 
 HASHTAG_SET_SIZE = "hashtag_set_size"
+
+# Required ONLY for the niche flow (`cmo.suggest_niche_terms` / `cmo.confirm_niche_terms`, P7d): the three
+# niche keys of the trend set. A missing value blocks the niche actions and never blocks anything else.
+NICHE_REQUIRED_KEYS: tuple[str, ...] = ("max_confirmed_niche_terms", "max_term_chars", "catalog_titles_read_cap")
 
 GENERATION_REQUIRED_KEYS: tuple[str, ...] = (FORMAT_CONSTRAINT_MAX_AGE_DAYS, INTERNAL_RETRY_BOUND)
 # Required ONLY for `cmo.generate_hashtags` (P3 decision 8): a missing value blocks hashtags with
@@ -70,6 +76,7 @@ TREND_REQUIRED_KEYS: tuple[str, ...] = (
     MAX_SOURCES_PER_REPORT, MAX_FINDINGS_PER_SECTION, FRESH_WINDOW_DAYS, RECENT_WINDOW_DAYS,
     NEWS_WINDOW_DAYS, MODERATE_MIN_INDEPENDENT_SOURCES, STRONG_MIN_INDEPENDENT_SOURCES,
     MAX_CONFIRMED_NICHE_TERMS, MAX_TERM_CHARS, CATALOG_TITLES_READ_CAP, PROVIDER_CALL_TIMEOUT_SECONDS,
+    PROVIDER_CACHE_TTL_HOURS, PROVIDER_DAILY_SEARCH_CEILING,
 )
 TREND_OPTIONAL_KEYS: tuple[str, ...] = (
     TACTIC_RISK_PATTERN_SET_REF, OFFICIAL_MARKETPLACE_DOMAINS, NICHE_STOPWORDS_EXTRA, NICHE_STOPWORDS_EXCLUDE,
@@ -121,6 +128,8 @@ class TrendConfig:
     max_term_chars: int
     catalog_titles_read_cap: int
     provider_call_timeout_seconds: int
+    provider_cache_ttl_hours: int
+    provider_daily_search_ceiling: int  # COMBINED CMO provider searches per Asia/Kolkata day, all tenants (does not see PI's use of the shared keys)
     tactic_risk_pattern_set_ref: str | None
     official_marketplace_domains: frozenset[str]
     niche_stopwords_extra: tuple[str, ...]
@@ -145,6 +154,8 @@ class TrendConfig:
             MAX_TERM_CHARS: self.max_term_chars,
             CATALOG_TITLES_READ_CAP: self.catalog_titles_read_cap,
             PROVIDER_CALL_TIMEOUT_SECONDS: self.provider_call_timeout_seconds,
+            PROVIDER_CACHE_TTL_HOURS: self.provider_cache_ttl_hours,
+            PROVIDER_DAILY_SEARCH_CEILING: self.provider_daily_search_ceiling,
             TACTIC_RISK_PATTERN_SET_REF: self.tactic_risk_pattern_set_ref,
             OFFICIAL_MARKETPLACE_DOMAINS: sorted(self.official_marketplace_domains),
             NICHE_STOPWORDS_EXTRA: list(self.niche_stopwords_extra),
@@ -276,6 +287,17 @@ def load_generation_config(values: Mapping[str, object]) -> GenerationConfig | C
     return GenerationConfig(format_constraint_max_age_days=max_age, internal_retry_bound=retries)
 
 
+def load_retry_bound(values: Mapping[str, object]) -> int | ConfigMissing:
+    """`internal_retry_bound` alone: the trend pipeline's model calls need only this one generation key (0 = no retries)."""
+    problems = _Problems()
+    retries = _int(values, INTERNAL_RETRY_BOUND, problems, minimum=0)
+    failed = problems.result()
+    if failed is not None:
+        return failed
+    assert retries is not None
+    return retries
+
+
 def load_hashtag_config(values: Mapping[str, object]) -> HashtagConfig | ConfigMissing:
     problems = _Problems()
     size = _int(values, HASHTAG_SET_SIZE, problems, minimum=1)
@@ -284,6 +306,31 @@ def load_hashtag_config(values: Mapping[str, object]) -> HashtagConfig | ConfigM
         return failed
     assert size is not None
     return HashtagConfig(hashtag_set_size=size)
+
+
+@dataclass(frozen=True, slots=True)
+class NicheConfig:
+    max_confirmed_niche_terms: int
+    max_term_chars: int
+    catalog_titles_read_cap: int
+    niche_stopwords: frozenset[str]
+
+
+def load_niche_config(values: Mapping[str, object]) -> NicheConfig | ConfigMissing:
+    problems = _Problems()
+    max_terms = _int(values, MAX_CONFIRMED_NICHE_TERMS, problems, minimum=1)
+    max_chars = _int(values, MAX_TERM_CHARS, problems, minimum=1)
+    cap = _int(values, CATALOG_TITLES_READ_CAP, problems, minimum=1)
+    extra = _stopword_list(values, NICHE_STOPWORDS_EXTRA, problems)
+    exclude = _stopword_list(values, NICHE_STOPWORDS_EXCLUDE, problems)
+    failed = problems.result()
+    if failed is not None:
+        return failed
+    assert max_terms is not None and max_chars is not None and cap is not None
+    return NicheConfig(
+        max_confirmed_niche_terms=max_terms, max_term_chars=max_chars, catalog_titles_read_cap=cap,
+        niche_stopwords=build_stopwords(extra, exclude),
+    )
 
 
 def load_trend_config(values: Mapping[str, object]) -> TrendConfig | ConfigMissing:
@@ -305,6 +352,8 @@ def load_trend_config(values: Mapping[str, object]) -> TrendConfig | ConfigMissi
     max_term_chars = _int(values, MAX_TERM_CHARS, problems, minimum=1)
     titles_cap = _int(values, CATALOG_TITLES_READ_CAP, problems, minimum=1)
     timeout = _int(values, PROVIDER_CALL_TIMEOUT_SECONDS, problems, minimum=1)
+    cache_ttl = _int(values, PROVIDER_CACHE_TTL_HOURS, problems, minimum=1)
+    daily_ceiling = _int(values, PROVIDER_DAILY_SEARCH_CEILING, problems, minimum=1)
 
     domains = _domains(values, problems)
     ref_raw = values.get(TACTIC_RISK_PATTERN_SET_REF)
@@ -330,7 +379,7 @@ def load_trend_config(values: Mapping[str, object]) -> TrendConfig | ConfigMissi
     if failed is not None:
         return failed
     assert None not in (max_queries, budgets, priority, max_results, max_sources, max_findings, fresh, recent,
-                        news, moderate, strong, max_terms, max_term_chars, titles_cap, timeout)
+                        news, moderate, strong, max_terms, max_term_chars, titles_cap, timeout, cache_ttl, daily_ceiling)
     return TrendConfig(
         max_queries_per_report=max_queries,  # type: ignore[arg-type]
         section_query_budgets=budgets,  # type: ignore[arg-type]
@@ -347,6 +396,8 @@ def load_trend_config(values: Mapping[str, object]) -> TrendConfig | ConfigMissi
         max_term_chars=max_term_chars,  # type: ignore[arg-type]
         catalog_titles_read_cap=titles_cap,  # type: ignore[arg-type]
         provider_call_timeout_seconds=timeout,  # type: ignore[arg-type]
+        provider_cache_ttl_hours=cache_ttl,  # type: ignore[arg-type]
+        provider_daily_search_ceiling=daily_ceiling,  # type: ignore[arg-type]
         tactic_risk_pattern_set_ref=ref,
         official_marketplace_domains=domains,
         niche_stopwords_extra=stop_extra,

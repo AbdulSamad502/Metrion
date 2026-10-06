@@ -29,6 +29,18 @@ def test_posts_text_only_and_returns_the_response():
     assert seen["body"] == {"model": "m", "prompt": "hello", "stream": False}  # no image/option fields
 
 
+@pytest.mark.parametrize("think", [False, True])
+def test_think_flag_is_sent_only_when_set(think):
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"response": "x"})
+
+    provider(handler, think=think).complete(model="m", prompt="p")
+    assert seen["body"]["think"] is think
+
+
 def test_think_blocks_are_stripped_but_an_unclosed_one_is_left_alone():
     ok = provider(lambda r: httpx.Response(200, json={"response": "<think>plan\nmore</think>\n{\"a\": 1}"}))
     assert ok.complete(model="m", prompt="p") == '{"a": 1}'

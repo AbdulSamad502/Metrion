@@ -36,12 +36,16 @@ from slim_cmo.service.errors import GroundingRequired, InvalidApproval, InvalidC
 from slim_cmo.imaging.normalize import ImageRejected
 from slim_cmo.service.generate import GroundingRequest, Intake
 from slim_cmo.service.models import Actor
+from slim_cmo.service.trends import PlanChanged, RequestKeyReused, TrendConfigMissing
+from slim_cmo.service.niche import (
+    Decision, DecisionKind, InvalidNicheRequest, InvalidNicheTerms, NicheConfigMissing, TooManyConfirmedTerms,
+)
 from slim_cmo.service.vision import VisionNotConfigured
-from slim_cmo.types import Marketplace, OutputType
+from slim_cmo.types import Marketplace, OutputType, TrendSection
 
 from backend.auth.context import AuthContext, require_auth
-from backend.auth.permissions import AGENT_CMO, FILES_UPLOAD, has_permission
-from backend.services import cmo_actions, cmo_images, cmo_runtime
+from backend.auth.permissions import AGENT_CMO, CATALOG_VIEW, FILES_UPLOAD, RESEARCH_MARKET_TRENDS, has_permission
+from backend.services import cmo_actions, cmo_images, cmo_runtime, cmo_trends
 from backend.services.cmo_actions import Principal, QuotaDenied, RequestInProgress
 from backend.services.cmo_runtime import CmoNotConfigured
 from backend.uploads import read_upload_capped
@@ -53,7 +57,7 @@ router = APIRouter(prefix="/api/v1/cmo")
 _TEXT = 500
 _NAME = 200
 
-NonNegInt = Annotated[int, Field(strict=True, ge=0)]
+NonNegInt = Annotated[int, Field(strict=True, ge=0, le=2**63 - 1)]  # le: the database column is BIGINT (a technical bound, not a business rule)
 
 
 class _Body(BaseModel):
@@ -151,6 +155,29 @@ def _guarded(fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail={"code": "GROUNDING_REQUIRED", "detail": str(exc)}) from None
     except InvalidApproval as exc:
         raise HTTPException(status_code=422, detail={"code": "INVALID_APPROVAL", "detail": str(exc)}) from None
+    except TrendConfigMissing as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "CONFIG_MISSING", "missing": list(exc.problem.missing), "invalid": [{"key": k, "reason": why} for k, why in exc.problem.invalid]},
+        ) from None
+    except RequestKeyReused:
+        raise HTTPException(status_code=409, detail={"code": "REQUEST_KEY_REUSED", "detail": "That request key already produced a report for a different plan; use a new key."}) from None
+    except PlanChanged:
+        raise HTTPException(status_code=409, detail={"code": "PLAN_CHANGED", "detail": "The confirmed niche terms or the configuration changed since the preview; review the new preview."}) from None
+    except NicheConfigMissing as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "CONFIG_MISSING", "missing": list(exc.problem.missing), "invalid": [{"key": k, "reason": why} for k, why in exc.problem.invalid]},
+        ) from None
+    except InvalidNicheTerms as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "NICHE_TERM_REFUSED", "terms": [{"term": t, "reasons": [r.value for r in why]} for t, why in exc.rejected]},
+        ) from None
+    except TooManyConfirmedTerms as exc:
+        raise HTTPException(status_code=422, detail={"code": "TOO_MANY_CONFIRMED_TERMS", "maximum": exc.maximum}) from None
+    except InvalidNicheRequest as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_NICHE_REQUEST", "detail": str(exc)}) from None
     except InvalidConfirmation as exc:
         raise HTTPException(status_code=422, detail={"code": "INVALID_CONFIRMATION", "detail": str(exc)}) from None
     except NotFound:
@@ -359,3 +386,168 @@ def post_image_analysis(body: AnalyzeBody, ctx: AuthContext = require_auth(permi
 
     return _guarded(go)
 
+
+
+# ---- catalog-seeded niche (P7d, spec §6.8.3): zero-unit, no model, no provider call -----------------------------------
+
+
+class NicheDecisionBody(_Body):
+    term_id: UUID
+    decision: DecisionKind
+    new_text: str | None = Field(default=None, max_length=_NAME)
+
+
+class NicheConfirmBody(_Body):
+    decisions: list[NicheDecisionBody] = Field(default_factory=list, max_length=100)
+    new_terms: list[Annotated[str, Field(max_length=_NAME)]] = Field(default_factory=list, max_length=50)
+
+
+def _term_json(t: Any) -> dict[str, Any]:
+    return {
+        "id": str(t.id), "term": t.term, "origin": t.origin.value, "originNote": t.origin_note, "status": t.status.value,
+        **({"documentFrequency": t.document_frequency} if hasattr(t, "document_frequency") else {}),
+    }
+
+
+@router.post("/niche-terms/suggest")
+def post_suggest_niche_terms(ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """`cmo.suggest_niche_terms` - deterministic suggestions from the member's own catalog item titles. Needs `agent.cmo`
+    AND `catalog.view` (auth.md §5.2: the member must be allowed to have their catalog titles read). 0 units. Suggestions are stored
+    `SUGGESTED` and are NOT sent anywhere; only terms the seller later confirms may leave Metrion (C15)."""
+    p = _principal(ctx)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=CATALOG_VIEW):
+        raise HTTPException(status_code=403, detail="Missing permission: catalog.view")
+
+    def go() -> dict[str, Any]:
+        service = cmo_runtime.build_niche_service()
+        started, run_id = service.clock(), uuid4()
+        out = service.suggest(_actor(p))
+        cmo_actions.record_free_run(p, service, billing.Action.SUGGEST_NICHE_TERMS, run_id, started)
+        return {
+            "status": out.status, "reason": out.reason, "titlesRead": out.titles_read,
+            "suggestions": [_term_json(s) for s in out.suggestions], "confirmed": [_term_json(t) for t in out.confirmed],
+            "unitsBilled": 0, "agentRunId": str(run_id),
+        }
+
+    return _guarded(go)
+
+
+@router.get("/niche-terms")
+def get_niche_terms(ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The tenant's niche terms with their status. Read-only; no agent run, no units."""
+    p = _principal(ctx)
+
+    may_see_catalog_terms = ctx.role is not None and has_permission(role=ctx.role, permissions=ctx.permissions, key=CATALOG_VIEW)
+
+    def go() -> dict[str, Any]:
+        terms = cmo_runtime.build_niche_service().list_terms(_actor(p))
+        if not may_see_catalog_terms:  # suggestions come from catalog titles: without catalog.view only the seller's CONFIRMED terms are shown
+            terms = tuple(t for t in terms if t.status.value == "CONFIRMED")
+        return {"terms": [_term_json(t) for t in terms]}
+
+    return _guarded(go)
+
+
+@router.post("/niche-terms/confirm")
+def post_confirm_niche_terms(body: NicheConfirmBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """`cmo.confirm_niche_terms` - the seller confirms, rejects or edits terms and may type their own. 0 units. All or
+    nothing: any refused term, unknown id, or confirmed-term cap breach changes nothing."""
+    p = _principal(ctx)
+
+    def go() -> dict[str, Any]:
+        service = cmo_runtime.build_niche_service()
+        started, run_id = service.clock(), uuid4()
+        out = service.confirm(
+            _actor(p), [Decision(d.decision, d.term_id, d.new_text) for d in body.decisions], tuple(body.new_terms),
+        )
+        cmo_actions.record_free_run(p, service, billing.Action.CONFIRM_NICHE_TERMS, run_id, started)
+        return {
+            "confirmed": [_term_json(t) for t in out.confirmed], "suggestions": [_term_json(t) for t in out.suggestions],
+            "rejectedCount": out.rejected_count, "unitsBilled": 0, "agentRunId": str(run_id),
+        }
+
+    return _guarded(go)
+
+
+# ---- market trends (P7f, spec §6.8): preview (zero-unit) -> execute (1 CMO unit + 1 shared unit) -----------------------------
+
+
+class TrendPreviewBody(_Body):
+    sections: list[TrendSection] = Field(default_factory=list, max_length=len(TrendSection))
+    marketplaces: list[Marketplace] = Field(default_factory=list, max_length=3)
+
+
+class TrendRunBody(TrendPreviewBody):
+    request_key: str = Field(min_length=1, max_length=128)
+    plan_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+def _trend_principal(ctx: AuthContext) -> Principal:
+    """`agent.cmo` is the route key (require_auth); the shared service's own key is checked here, server-side."""
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=RESEARCH_MARKET_TRENDS):
+        raise HTTPException(status_code=403, detail="Missing permission: research.market_trends")
+    return _principal(ctx)
+
+
+@router.post("/market-trends/preview")
+def post_market_trends_preview(body: TrendPreviewBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The exact outbound searches (and the digest the run must be bound to) - shown to the seller BEFORE anything is sent.
+    Zero units, no provider call, no model call. Needs `agent.cmo` AND `research.market_trends`."""
+    p = _trend_principal(ctx)
+
+    def go() -> dict[str, Any]:
+        rt = cmo_runtime.build_trend_runtime()
+        pv = rt.service.preview(_actor(p), sections=tuple(body.sections) or tuple(TrendSection), marketplaces=tuple(body.marketplaces))
+        return {
+            "digest": pv.digest, "queries": pv.plan.preview(), "sections": [s.value for s in pv.sections],
+            "marketplaces": [m.value for m in pv.marketplaces], "unavailableSections": dict(pv.unavailable_reason),
+            "unresearchedTerms": list(pv.plan.unresearched_terms), "skippedByBudget": [[s.section.value, s.reason] for s in pv.plan.skipped],
+            "budget": dict(pv.plan.budget_usage), "byProvider": pv.plan.by_provider(), "config": dict(pv.config_snapshot),
+            "notice": "Only these fixed searches, containing only your confirmed niche terms and marketplace names, will be sent to the search providers.",
+        }
+
+    return _guarded(go)
+
+
+@router.post("/market-trends")
+def post_market_trends(body: TrendRunBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """`cmo.market_trends` - one trend report: 1 CMO unit plus 1 unit on the shared `research.market_trends` meter, only if
+    COMPLETE. Bound to a preview by `plan_digest` (409 if it changed). Needs `agent.cmo` AND `research.market_trends`."""
+    p = _trend_principal(ctx)
+
+    def go() -> dict[str, Any]:
+        rt = cmo_runtime.build_trend_runtime()
+        return cmo_trends.run_trend_report(
+            p, rt.service, request_key=body.request_key, plan_digest=body.plan_digest,
+            sections=tuple(body.sections) or tuple(TrendSection), marketplaces=tuple(body.marketplaces),
+        )
+
+    return _guarded(go)
+
+
+@router.get("/market-trends")
+def get_market_trends(ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The tenant's recent trend reports (summary only). Read-only."""
+    p = _trend_principal(ctx)
+
+    def go() -> dict[str, Any]:
+        rt = cmo_runtime.build_trend_runtime()
+        rows = rt.service.recent(_actor(p), 20)
+        return {"reports": [
+            {"generationId": str(r.generation_id), "status": r.status.value, "failureReason": r.failure_reason, "createdAt": r.created_at.isoformat(), "summary": r.report}
+            for r in rows
+        ]}
+
+    return _guarded(go)
+
+
+@router.get("/market-trends/{generation_id}")
+def get_market_trend(generation_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """One stored report. Unknown and cross-tenant ids are an identical 404."""
+    p = _trend_principal(ctx)
+
+    def go() -> dict[str, Any]:
+        rt = cmo_runtime.build_trend_runtime()
+        return cmo_trends.report_json(rt.service.get(_actor(p), generation_id), reused=False, units=0, run_id=None)
+
+    return _guarded(go)

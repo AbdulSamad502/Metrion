@@ -9,6 +9,9 @@ dependencies = [
     "psycopg[binary]>=3.1",
     "httpx>=0.27",
     "pgvector>=0.3",
+    # NOTE: `market-signals` (packages/market-signals) is likewise a real runtime dependency —
+    # `product_intelligence.sources.*` are shims that alias its modules — and is not listed here for the
+    # same path-dependency reason. Install it BEFORE product-intelligence.
     # NOTE: `calc-engine` (packages/calc-engine) is a real runtime dependency — PI's
     # `discovery/feasibility.py` calls `calc_engine.api.estimate_product_feasibility` directly
     # (PI build plan §1/§6.7) — but it is deliberately NOT listed here, for the same reason

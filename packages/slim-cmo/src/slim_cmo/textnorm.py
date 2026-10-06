@@ -129,6 +129,40 @@ def utf8_bytes(text: str) -> int:
     return len(unicodedata.normalize("NFC", text).encode("utf-8"))
 
 
+_BIDI_CONTROLS = frozenset(chr(c) for c in (*range(0x202A, 0x202F), *range(0x2066, 0x206A), 0x200E, 0x200F, 0x061C))
+
+
+def has_bidi_controls(text: str) -> bool:
+    """True if `text` carries a bidirectional override / isolate / mark. Generated text for Indian marketplaces has no use for them,
+    and an override (U+202E) makes reversed letters DISPLAY as a banned word while the stored string looks harmless."""
+    return any(ch in _BIDI_CONTROLS for ch in text)
+
+
+def squash_spaced_characters(folded: str, *, min_run: int = 3) -> str:
+    """Join runs of at least `min_run` consecutive single-character words ('t r e n d i n g', 'h t t p s : / / x . c o m') so a
+    letter-spaced word cannot hide from a word-boundary match. Applied as an ADDITIONAL matching variant, never to stored text."""
+    out: list[str] = []
+    run: list[str] = []
+    for token in folded.split(" "):
+        if len(token) == 1:
+            run.append(token)
+            continue
+        out.extend(["".join(run)] if len(run) >= min_run else run)
+        run = []
+        out.append(token)
+    out.extend(["".join(run)] if len(run) >= min_run else run)
+    return " ".join(out)
+
+
+_AT = re.compile(r"\s*[\[({]\s*at\s*[\])}]\s*")
+_DOT = re.compile(r"\s*[\[({]\s*dot\s*[\])}]\s*")
+
+
+def deobfuscate_contact(folded: str) -> str:
+    """'name [at] example [dot] com' -> 'name@example.com' (a matching variant for contact details; stored text is untouched)."""
+    return _DOT.sub(".", _AT.sub("@", folded))
+
+
 def has_control_characters(text: str, *, allow_newlines: bool = False) -> bool:
     """True if `text` contains any C0/C1 control character (tabs and newlines included unless
     `allow_newlines`, which permits only \\n and \\r\\n - a description may have paragraphs, a
@@ -138,7 +172,7 @@ def has_control_characters(text: str, *, allow_newlines: bool = False) -> bool:
             if allow_newlines and ch in ("\n", "\r"):
                 continue
             return True
-    return False
+    return has_bidi_controls(text)
 
 
 def clean_generated_text(text: str) -> str:

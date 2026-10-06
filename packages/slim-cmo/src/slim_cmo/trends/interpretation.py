@@ -22,8 +22,10 @@ from dataclasses import dataclass
 from enum import Enum
 
 from slim_cmo.claims import find_unsupported_numbers
+from slim_cmo.forbidden import scan_forbidden
 from slim_cmo.narration import check_trend_prose
-from slim_cmo.textnorm import clean_generated_text
+from slim_cmo.textnorm import clean_generated_text, has_bidi_controls
+from slim_cmo.trends.numeric import find_numeric_claims
 from slim_cmo.trends.risk import SAFE_TACTIC_ACTIONS, PolicyRisk
 from slim_cmo.types import TrendSection
 
@@ -56,6 +58,8 @@ class Problem(str, Enum):
     BAD_ACTION = "BAD_ACTION"
     UNSUPPORTED_NUMBER = "UNSUPPORTED_NUMBER"
     BANNED_CLAIM = "BANNED_CLAIM"
+    FORBIDDEN_CONTENT = "FORBIDDEN_CONTENT"
+    NUMERIC_CLAIM = "NUMERIC_CLAIM"
     TACTIC_ACTION_NOT_ALLOWED = "TACTIC_ACTION_NOT_ALLOWED"
 
 
@@ -96,8 +100,12 @@ def check_interpretation(
         if statement and cited:
             if find_unsupported_numbers(statement, [c.text for c in cited]):
                 problems.append(Problem.UNSUPPORTED_NUMBER)
-        if statement and check_trend_prose(statement):
+        if statement and (check_trend_prose(statement) or has_bidi_controls(item.statement)):
             problems.append(Problem.BANNED_CLAIM)
+        if statement and scan_forbidden(statement):  # price / tax / contact / URL wording, exactly as for findings
+            problems.append(Problem.FORBIDDEN_CONTENT)
+        if statement and find_numeric_claims(statement) and not any(find_numeric_claims(c.text) for c in cited):  # a figure with no source in the cited findings
+            problems.append(Problem.NUMERIC_CLAIM)
         if item.action_type in ACTION_TYPES and item.action_type != "NO_ACTION":
             for c in cited:
                 if c.section is TrendSection.REPORTED_TACTICS:

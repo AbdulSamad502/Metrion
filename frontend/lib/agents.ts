@@ -10,7 +10,7 @@ import { ApiError, apiFetch, type AgentStatus } from "@/lib/api";
  * agent does and where its workspace lives is UI knowledge, kept here in one place.
  *
  * `href` is set only when a real workspace page exists. An agent without one (CMO) renders as
- * "no workspace yet" — never as a screen that pretends to work. */
+ * "no workspace yet" — never as a screen that pretends to work. (CMO has one since P9.) */
 export type AgentMeta = {
   role: string;
   description: string;
@@ -43,8 +43,10 @@ const AGENT_META: Record<string, AgentMeta> = {
   },
   CMO: {
     role: "Marketing",
-    description: "Not built yet. There is no marketing agent or workspace in this version.",
+    description: "Writes marketplace titles and listing copy, answers catalog questions and researches your niche — as text for you to copy; it never publishes anything.",
     icon: "marketing",
+    href: "/dashboard/cmo",
+    workspaceLabel: "Open Marketing",
   },
 };
 

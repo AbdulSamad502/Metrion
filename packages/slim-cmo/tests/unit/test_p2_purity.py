@@ -24,7 +24,7 @@ SRC = pathlib.Path(__file__).resolve().parents[2] / "src" / "slim_cmo"
 # set: prompts, parsing and retry loops take an `LlmProvider` Protocol and never import a model,
 # network, database or clock themselves. `repositories/` (SQL), `providers/` (HTTP clients) and
 # `service/` (orchestration over the DB) are the only places allowed to do I/O.
-IO_PACKAGES = {"repositories", "providers", "service", "imaging", "storage", "evaluation"}
+IO_PACKAGES = {"repositories", "providers", "service", "imaging", "storage", "evaluation", "retrieval"}
 P2_FILES = sorted(p for p in SRC.rglob("*.py") if not (IO_PACKAGES & set(p.parts)))
 
 FORBIDDEN_MODULES = {
@@ -57,7 +57,7 @@ def test_the_deterministic_core_is_what_we_think_it_is():
                      "textnorm.py", "types.py", "generation/titles.py", "generation/copy.py", "generation/standalone.py",
                      "generation/engine.py", "generation/prompts.py", "generation/parse.py", "generation/safety.py",
                      "generation/facts.py", "generation/provider.py", "catalog/attributes.py", "catalog/estimates.py", "catalog/resolve.py",
-                     "vision/schema.py", "vision/provider.py", "vision/prompts.py", "vision/parse.py", "vision/trust.py", "vision/eval.py", "trends/evidence.py", "trends/sources.py", "trends/screening.py", "trends/risk.py"):
+                     "vision/schema.py", "vision/provider.py", "vision/prompts.py", "vision/parse.py", "vision/trust.py", "vision/eval.py", "trends/evidence.py", "trends/sources.py", "trends/screening.py", "trends/risk.py", "trends/queries.py"):
         assert expected in names
     assert not any(set(n.split("/")) & IO_PACKAGES for n in names)
 
@@ -152,3 +152,14 @@ def test_only_the_vision_provider_and_the_evaluation_db_writer_reach_the_network
         imported = {m.split(".")[0] for m in _imports(ast.parse(path.read_text(encoding="utf-8")))}
         if path.name != "db.py":
             assert "sqlalchemy" not in imported, path.name
+
+
+def test_retrieval_calls_providers_only_through_market_signals_and_touches_no_llm_database_or_raw_http():
+    """The retrieval layer is deterministic: no model of any kind, no direct DB or HTTP (the slot counter is injected, the
+    provider clients come from market_signals), and no catalog / niche / generation code that could feed it seller data."""
+    imported = _layer_imports("retrieval")
+    assert not imported & {m.split(".")[0] for m in NETWORK_AND_MODEL_MODULES}
+    assert imported <= {"__future__", "logging", "collections", "contextlib", "dataclasses", "datetime", "enum", "typing", "market_signals", "slim_cmo"}
+    internal = {m for path in (SRC / "retrieval").rglob("*.py") for m in _imports(ast.parse(path.read_text(encoding="utf-8"))) if m.startswith("slim_cmo")}
+    assert not {m for m in internal if m.split(".")[1:2] in (["generation"], ["providers"], ["catalog"], ["service"], ["repositories"], ["vision"])}
+

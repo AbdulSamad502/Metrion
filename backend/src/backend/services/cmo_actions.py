@@ -23,6 +23,7 @@ RESERVED until its TTL so the unmetered units keep counting against the cap.
 
 from __future__ import annotations
 
+import contextvars
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -46,6 +47,11 @@ logger = logging.getLogger(__name__)
 
 AGENT_CODE = "CMO"
 AGENT_ID = "CMO"
+
+# Set ONLY by the CEO hub's `dispatch_cmo_*` functions for the duration of one dispatched call: every `agent_run` a CMO action
+# records then carries the CEO turn's run id as `parent_run_id` (agent-orchestration: parent/child linkage). Direct-path HTTP
+# calls never set it, so their runs have no parent. A context variable keeps the action signatures unchanged.
+PARENT_RUN_ID: contextvars.ContextVar[UUID | None] = contextvars.ContextVar("cmo_parent_run_id", default=None)
 
 # Failures that mean "this request was never accepted": nothing is persisted, no run row is written.
 REQUEST_ERRORS = (billing.InvalidRequest, GroundingRequired, InvalidApproval, InvalidConfirmation, NotFound)
@@ -121,7 +127,7 @@ def _record_run(
         agent_run_repo.insert_run(
             principal.tenant_id, agent_id=AGENT_ID, trigger_type="DIRECT", trigger_ref=trigger,
             requested_by=principal.user_id, permission_check="PASS", entitlement_check="PASS", status=status,
-            started_at=started, finished_at=finished, error_reason=error, run_id=run_id,
+            started_at=started, finished_at=finished, error_reason=error, run_id=run_id, parent_run_id=PARENT_RUN_ID.get(),
         )
         return True
     except Exception:  # noqa: BLE001

@@ -67,6 +67,11 @@ jobs:
       - name: Install cfo
         run: pip install -e "packages/cfo[dev]"
 
+      # market-signals MUST be installed before product-intelligence and slim-cmo (shared source layer;
+      # a path dependency cannot be declared in this monorepo - see packages/product-intelligence/pyproject.toml).
+      - name: Install market-signals
+        run: pip install -e "packages/market-signals[dev]"
+
       - name: Install product-intelligence
         run: pip install -e "packages/product-intelligence[dev]"
 
@@ -138,6 +143,10 @@ jobs:
 
       - name: cfo — pytest (unit + integration)
         working-directory: packages/cfo
+        run: python -m pytest tests/ -v
+
+      - name: market-signals — pytest
+        working-directory: packages/market-signals
         run: python -m pytest tests/ -v
 
       - name: product-intelligence — pytest (unit + integration)

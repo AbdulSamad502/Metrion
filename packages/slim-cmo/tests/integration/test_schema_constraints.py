@@ -703,4 +703,4 @@ def test_mutable_tables_allow_update_but_not_delete(two_tenants):
 def test_migration_head_is_recorded(migrate_engine):
     with migrate_engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version_slim_cmo")).scalar_one()
-    assert version == "20261005_0002"  # P6 added the vision indexes on top of the P1 schema (20261003_0001)
+    assert version == "20261006_0003"  # P7e added the provider-usage counter on top of P6 (20261005_0002) and P1 (20261003_0001)

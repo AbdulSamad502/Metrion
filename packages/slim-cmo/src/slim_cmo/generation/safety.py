@@ -27,7 +27,7 @@ from slim_cmo.validators import Violation
 @dataclass(frozen=True, slots=True)
 class ProseFinding:
     field: str
-    kind: str  # FORBIDDEN | UNSUPPORTED_NUMBER | INELIGIBLE_ATTRIBUTE
+    kind: str  # FORBIDDEN | UNSUPPORTED_NUMBER | INELIGIBLE_ATTRIBUTE | UNSUPPORTED_CLAIM
     rule: str  # rule id / number token / attribute NAME - never the model's text
 
 
@@ -49,6 +49,30 @@ def ineligible_names(findings: Iterable[ProseFinding]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(f.rule for f in findings if f.kind == "INELIGIBLE_ATTRIBUTE"))
 
 
+# Fixed retry instructions per claim rule. Static text: never the model's own words, never a seller fact.
+_CLAIM_HINTS = {
+    "duration": "states how long something lasts or works (hours, days, long-lasting) - remove every duration or longevity claim",
+    "temperature": "says something about keeping or maintaining hot/cold or temperature - remove every temperature claim; just describe the listed facts",
+    "energy": "makes an energy or power-saving claim - remove it",
+    "resistance": "claims proofing or resistance (leak, water, rust, scratch...) - remove it",
+    "safety_grade": "makes a safety, material-grade or care claim (BPA-free, food-safe, washable...) - remove it",
+    "feature": "names a feature or physical property (portable, compact, lightweight, plug-and-play, rechargeable...) that is not in the facts - remove it",
+    "contents": "says what is included, contained or comes with the product - delete every sentence about contents or inclusions",
+}
+
+
+# Very short per-category repair instructions (retry #2 of a listing pack). Static text only.
+REPAIR_HINTS = {
+    "duration": "no durations or longevity (hours, days, long-lasting)",
+    "temperature": "nothing about keeping or maintaining hot, cold or temperature",
+    "energy": "no energy, power-saving or efficiency statements",
+    "resistance": "no leak, water, rust, scratch or similar proofing or resistance",
+    "safety_grade": "no safety, material-grade or care claims (BPA-free, food-safe, washable)",
+    "feature": "no features or physical properties not in the facts (portable, compact, lightweight, plug-and-play...)",
+    "contents": "nothing about what is included, contained or comes with the product",
+}
+
+
 def feedback_lines(violations: Iterable[Violation], findings: Iterable[ProseFinding]) -> tuple[str, ...]:
     """Lines sent back to the model on a retry. They carry field names, rule ids and counts ONLY.
     They deliberately never echo a number token or an attribute name from the findings: an
@@ -62,12 +86,14 @@ def feedback_lines(violations: Iterable[Violation], findings: Iterable[ProseFind
             lines.append(f"{f.field}: contains a number that is not in the confirmed facts")
         elif f.kind == "INELIGIBLE_ATTRIBUTE":
             lines.append(f"{f.field}: states a detail that is not a confirmed fact")
+        elif f.kind == "UNSUPPORTED_CLAIM":
+            lines.append(f"{f.field}: {_CLAIM_HINTS.get(f.rule, 'makes a claim the confirmed facts do not state - remove it')}")
     return tuple(dict.fromkeys(lines))[:MAX_FEEDBACK_LINES]
 
 
 def rule_ids(violations: Iterable[Violation], findings: Iterable[ProseFinding]) -> tuple[str, ...]:
     ids = [v.code.value for v in violations]
-    ids += [f"{f.kind}:{f.rule}" if f.kind == "FORBIDDEN" else f.kind for f in findings]
+    ids += [f"{f.kind}:{f.rule}" if f.kind in ("FORBIDDEN", "UNSUPPORTED_CLAIM") else f.kind for f in findings]
     return tuple(ids)
 
 

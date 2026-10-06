@@ -33,8 +33,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 
-from slim_cmo.identifiers import contains_phone_number
-from slim_cmo.textnorm import skeleton
+from slim_cmo.identifiers import contains_phone_number, contains_spelled_digit_run
+from slim_cmo.textnorm import deobfuscate_contact, skeleton, squash_spaced_characters
 
 
 class ForbiddenCategory(str, Enum):
@@ -141,17 +141,18 @@ def scan_forbidden(
     wanted = frozenset(categories) if categories is not None else frozenset(ForbiddenCategory)
     folded = skeleton(text)
     split = _split_letters_digits(folded)  # 'rs499' -> 'rs 499', 'gst18' -> 'gst 18'
+    variants = (folded, split, squash_spaced_characters(folded), deobfuscate_contact(folded))  # evasion-resistant matching forms
     context = skeleton(allowed_context) if allowed_context else ""
     context_split = _split_letters_digits(context)
     findings: list[ForbiddenFinding] = []
     for category, rule, pattern, waivable in _RULES:
         if category not in wanted:
             continue
-        if pattern.search(folded) is None and pattern.search(split) is None:
+        if not any(pattern.search(v) for v in variants):
             continue
         if waivable and context and (pattern.search(context) or pattern.search(context_split)):
             continue
         findings.append(ForbiddenFinding(category, rule))
-    if ForbiddenCategory.CONTACT in wanted and contains_phone_number(text):
+    if ForbiddenCategory.CONTACT in wanted and (contains_phone_number(text) or contains_spelled_digit_run(text)):
         findings.append(ForbiddenFinding(ForbiddenCategory.CONTACT, "phone_digits"))
     return tuple(findings)

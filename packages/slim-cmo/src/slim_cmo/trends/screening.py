@@ -33,9 +33,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 
-from slim_cmo.identifiers import contains_long_digit_run, contains_phone_number
+from slim_cmo.identifiers import contains_long_digit_run, contains_phone_number, contains_spelled_digit_run
 from slim_cmo.stopwords import DEFAULT_STOPWORDS, ENGLISH_FUNCTION_WORDS, HINDI_FUNCTION_WORDS, HINGLISH_FUNCTION_WORDS, LISTING_FILLER_WORDS, build_stopwords  # noqa: F401  (re-exported)
-from slim_cmo.textnorm import collapse_whitespace, count_chars, dedupe_key, skeleton, strip_invisible, tokens
+from slim_cmo.textnorm import (
+    collapse_whitespace, count_chars, dedupe_key, deobfuscate_contact, has_bidi_controls, skeleton, squash_spaced_characters, strip_invisible, tokens,
+)
 
 
 class ScreenReason(str, Enum):
@@ -83,7 +85,7 @@ def screen_term(term: object, *, max_chars: int) -> ScreenResult:
     if not isinstance(term, str):
         return ScreenResult(False, "", (ScreenReason.EMPTY,))
     reasons: list[ScreenReason] = []
-    if any(unicodedata.category(ch) == "Cc" for ch in term):
+    if any(unicodedata.category(ch) == "Cc" for ch in term) or has_bidi_controls(term):
         reasons.append(ScreenReason.CONTROL_CHARACTERS)
     normalised = normalise_term(term)
     if not normalised:
@@ -91,14 +93,15 @@ def screen_term(term: object, *, max_chars: int) -> ScreenResult:
     if count_chars(normalised) > max_chars:
         reasons.append(ScreenReason.TOO_LONG)
     folded = skeleton(normalised)
+    variants = (folded, squash_spaced_characters(folded), deobfuscate_contact(folded))  # evasion-resistant matching forms
     for reason, pattern in _PATTERNS:
-        if pattern.search(folded):
+        if any(pattern.search(v) for v in variants):
             reasons.append(reason)
     if "@" in folded and ScreenReason.EMAIL not in reasons:
         reasons.append(ScreenReason.HANDLE)  # '@someone': a social handle is an identifier too
     if contains_phone_number(folded) and ScreenReason.PHONE_NUMBER not in reasons:
         reasons.append(ScreenReason.PHONE_NUMBER)
-    if contains_long_digit_run(folded) and ScreenReason.PHONE_NUMBER not in reasons:
+    if (contains_long_digit_run(folded) or contains_spelled_digit_run(folded)) and ScreenReason.PHONE_NUMBER not in reasons:
         reasons.append(ScreenReason.DIGIT_RUN)  # 8+ digits: an identifier-sized number, refused outbound
     if not any(ch.isalpha() for ch in folded):
         reasons.append(ScreenReason.NUMERIC_ONLY)

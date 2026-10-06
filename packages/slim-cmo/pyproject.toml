@@ -15,9 +15,9 @@ dependencies = [
     # Image intake (P6): decode + re-encode so EXIF/GPS and every other metadata block is stripped, and the
     # decoded size is checked from the header. Used only in `slim_cmo.imaging`, never in the pure core.
     "Pillow>=10.0",
-    # NOTE: no other Metrion package is declared here. Later phases may import
-    # `competitor_intelligence` (a read-only listing-insight query, P11) or the shared
-    # market-signals package (P7), but for the same reason `packages/cfo/pyproject.toml` and
+    # NOTE: no other Metrion package is declared here. `slim_cmo.retrieval` (P7e) imports the shared
+    # `market_signals` package, which MUST be installed first; a later phase may import
+    # `competitor_intelligence` (a read-only listing-insight query, P11). For the same reason `packages/cfo/pyproject.toml` and
     # `packages/product-intelligence/pyproject.toml` document — a relative `file:` specifier
     # resolves against the *installer's* cwd, not this file's directory, and this monorepo has
     # no workspace-aware build tool yet — they are installed explicitly, in order, by the

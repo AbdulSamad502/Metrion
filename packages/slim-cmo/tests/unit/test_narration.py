@@ -105,3 +105,42 @@ class TestTrendProse:
     def test_all_matching_rules_are_returned(self):
         rules = {f.rule for f in nr.check_trend_prose("A popular, profitable bestseller")}
         assert rules == {"popularity", "profit_promise", "bestseller"}
+
+
+# ---- unsupported plain-language claims (found by the real-model run: performance / feature / contents the seller never stated)
+FACTS = "material stainless steel capacity 750 ml type insulated water bottle AquaKeep Insulated Water Bottle pieces 3 double bed"
+
+
+@pytest.mark.parametrize("text,rule", [
+    ("keeps drinks cool for hours", "duration"), ("perfect for keeping drinks at the right temperature", "temperature"), ("Insulated design to keep drinks cold", "temperature"),
+    ("Energy-efficient LED technology reduces power consumption", "energy"), ("100% leak-proof lid", "resistance"),
+    ("BPA-free and food grade", "safety_grade"), ("a portable, rechargeable design", "feature"),
+    ("Includes a bedspread and two pillow covers", "contents"), ("k e e p s  d r i n k s  c o l d", None),
+])
+def test_unsupported_claims_are_found_when_the_facts_do_not_state_them(text, rule):
+    from slim_cmo.narration import find_unsupported_claims
+    found = find_unsupported_claims(text, FACTS)
+    if rule is None:
+        return  # KNOWN LIMIT: letter-spaced multi-word claims are not recognised
+    assert rule in found
+
+
+@pytest.mark.parametrize("text", [
+    "Crafted from durable stainless steel", "750 ml capacity for daily needs", "Perfect for gym, office or travel", "includes a stainless steel bottle",
+    "Includes 3 pieces suitable for a double bed setup", "This set includes three pieces for a double bed",
+])
+def test_ordinary_descriptive_wording_and_fact_backed_text_are_not_flagged(text):
+    from slim_cmo.narration import find_unsupported_claims
+    assert find_unsupported_claims(text, FACTS) == ()
+
+
+def test_a_claim_the_seller_stated_is_allowed():
+    from slim_cmo.narration import find_unsupported_claims
+    assert find_unsupported_claims("keeps drinks cold for 12 hours", FACTS + " keeps cold 12 hours") == ()
+    assert find_unsupported_claims("includes a spare cap", FACTS + " includes a spare cap") == ()
+
+
+def test_check_copy_prose_reports_the_claim_as_a_finding_without_echoing_text():
+    from slim_cmo.narration import check_copy_prose
+    out = check_copy_prose("keeps drinks cool for hours", eligible=())
+    assert {(f.kind, f.rule) for f in out} >= {("UNSUPPORTED_CLAIM", "duration")}

@@ -32,6 +32,11 @@ import re
 
 from slim_cmo.textnorm import skeleton
 
+_DIGIT_WORDS = frozenset(
+    "zero oh one two three four five six seven eight nine shunya ek do teen char chaar paanch panch chhe saat aath nau".split()
+)
+_MULTIPLIERS = {"double": 2, "triple": 3, "dabal": 2}
+
 # >= 7 digits, up to two separator characters between digit groups ('(98765) 43210'). Group-aligned sub-sequences are examined
 # afterwards, so a phone number preceded by years or other digit groups is still found.
 _CANDIDATE = re.compile(r"\(?\+?\(?\d(?:[\s.\-()]{0,2}\d){6,}")
@@ -101,4 +106,25 @@ def contains_long_digit_run(text: str, *, min_digits: int = 8) -> bool:
         groups = [g for g in _GROUP.findall(match.group(0)) if not _is_year(g)]
         if sum(len(g) for g in groups) >= min_digits:
             return True
+    return False
+
+
+def contains_spelled_digit_run(text: str, *, min_digits: int = 8) -> bool:
+    """True if `text` SPELLS OUT a long number ('nine eight seven six five four three two one zero', English or romanised Hindi,
+    'double'/'triple' counted) - the way a phone number is written to dodge a digit check. A run of `min_digits` or more
+    consecutive digit words is refused: ordinary prose never contains one."""
+    if type(min_digits) is not int or min_digits < 7:
+        raise ValueError("min_digits must be an integer >= 7")
+    run = 0
+    pending = 1
+    for token in re.split(r"[\s,.\-/]+", skeleton(text)):
+        if token in _MULTIPLIERS:
+            pending = _MULTIPLIERS[token]
+        elif token in _DIGIT_WORDS:
+            run += pending
+            pending = 1
+            if run >= min_digits:
+                return True
+        else:
+            run, pending = 0, 1
     return False

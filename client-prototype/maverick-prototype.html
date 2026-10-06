@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maverick — Construction Materials & Real Estate</title>
+<meta name="description" content="Maverick supplies quality construction materials and lists verified real-estate properties. Design prototype.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#172126;--navy:#142C3A;--navy2:#21475A;--brass:#B87545;--brass2:#D49A70;
+  --ivory:#F4F0E6;--paper:#fff;--line:rgba(23,33,38,.1);--mut:#5B6870;--soft:#8F9AA0;
+  --ok:#5E7D6E;--bad:#B5503A;
+  --card:linear-gradient(150deg,rgba(255,255,255,.82),rgba(255,255,255,.5));
+  --gb:1px solid rgba(255,255,255,.75);
+  --gs:0 10px 36px rgba(23,33,38,.10),inset 0 1px 0 rgba(255,255,255,.95),inset 0 -1px 0 rgba(23,33,38,.04);
+  --blur:blur(20px) saturate(1.6);
+  --serif:'Fraunces','Cormorant Garamond',Georgia,'Times New Roman',serif;
+  --sans:'Inter','Segoe UI',system-ui,-apple-system,Roboto,Arial,sans-serif;
+  --sh:0 1px 2px rgba(23,33,38,.04),0 12px 32px rgba(23,33,38,.07);
+  --sh2:0 2px 4px rgba(23,33,38,.05),0 28px 60px rgba(23,33,38,.16);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scrollbar-gutter:stable;-webkit-text-size-adjust:100%}
+body{font-family:var(--sans);background:var(--ivory);color:var(--ink);line-height:1.6;font-size:16px;overflow-x:hidden}
+body.lock{overflow:hidden}
+svg,img{display:block;max-width:100%}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+a{color:inherit;text-decoration:none}
+input,select,textarea{font:inherit}
+.ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic.f{fill:currentColor;stroke:none}
+
+/* ---- backdrop ---- */
+.bp{position:fixed;inset:0;z-index:0;background:
+  radial-gradient(700px 520px at 82% 28%,rgba(212,154,112,.34),transparent 70%),
+  radial-gradient(760px 600px at 8% 80%,rgba(33,71,90,.22),transparent 70%),
+  radial-gradient(520px 420px at 45% 8%,rgba(184,117,69,.14),transparent 70%),
+  linear-gradient(180deg,#F7F3E9,#EDE7D8)}
+.bp::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(23,33,38,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(23,33,38,.045) 1px,transparent 1px);background-size:56px 56px;-webkit-mask-image:radial-gradient(ellipse at 70% 40%,#000 10%,transparent 75%);mask-image:radial-gradient(ellipse at 70% 40%,#000 10%,transparent 75%)}
+#site{position:fixed;inset:0;z-index:1;pointer-events:none}
+.mobdim #site{opacity:.4}
+main,header.top,footer{position:relative;z-index:2}
+#prog{position:fixed;top:0;left:0;right:0;height:3px;z-index:90;background:linear-gradient(90deg,var(--brass),var(--brass2));transform:scaleX(0);transform-origin:0 50%}
+
+/* ---- preloader & curtain ---- */
+.pre{position:fixed;inset:0;z-index:999;background:var(--navy);display:grid;place-items:center;animation:preOut .9s 1.5s cubic-bezier(.7,0,.2,1) forwards}
+@keyframes preOut{to{transform:translateY(-100%);visibility:hidden}}
+.pre-in{display:flex;flex-direction:column;align-items:center;gap:18px;color:#fff;animation:preIn .8s ease both}
+@keyframes preIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.pre-in b{font-family:var(--serif);font-weight:500;font-size:34px;letter-spacing:.5px}
+.pre-in i{display:block;width:150px;height:2px;background:rgba(255,255,255,.18);position:relative;overflow:hidden}
+.pre-in i::after{content:"";position:absolute;inset:0;background:var(--brass2);transform:translateX(-100%);animation:ld 1.2s .25s ease forwards}
+@keyframes ld{to{transform:none}}
+.curtain{position:fixed;inset:0;z-index:300;background:var(--navy);transform:translateY(101%);pointer-events:none;display:grid;place-items:center;color:#fff;font-family:var(--serif);font-size:30px}
+.curtain.cover{transform:none;transition:transform .5s cubic-bezier(.7,0,.2,1);pointer-events:auto}
+.curtain.cover.leave{transform:translateY(-101%)}
+
+/* ---- header ---- */
+header.top{position:fixed;top:0;left:0;right:0;z-index:50}
+.util{background:var(--navy);color:#D3DDE0;font-size:12.5px;max-height:38px;overflow:hidden;transition:max-height .35s}
+header.top.sc .util{max-height:0}
+.util .wrap{display:flex;justify-content:space-between;align-items:center;height:38px;gap:16px}
+.util a,.util span{display:inline-flex;align-items:center;gap:7px;color:#D3DDE0}
+.util a:hover{color:var(--brass2)}
+.util .ic{width:14px;height:14px;color:var(--brass2)}
+.util .l{display:flex;gap:24px}
+.hdw{padding:12px 0 0;transition:.3s}
+.wrap{width:min(1200px,100% - 56px);margin-inline:auto}
+.hd{display:flex;align-items:center;justify-content:space-between;height:68px;gap:16px;padding:0 14px 0 18px;border-radius:20px;background:linear-gradient(150deg,rgba(255,255,255,.8),rgba(255,255,255,.55));border:var(--gb);box-shadow:var(--gs);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);transition:.35s}
+header.top.sc .hd{background:linear-gradient(150deg,rgba(255,255,255,.92),rgba(255,255,255,.78));box-shadow:0 14px 40px rgba(23,33,38,.14),inset 0 1px 0 #fff}
+.logo{display:flex;align-items:center;gap:12px;cursor:pointer;color:var(--ink)}
+.logo-t{font-family:var(--serif);font-weight:600;font-size:23px;letter-spacing:-.01em;line-height:1}
+.logo-t small{white-space:nowrap;display:block;font-family:var(--sans);font-size:9.5px;font-weight:600;letter-spacing:2.6px;color:var(--brass);text-transform:uppercase;margin-top:5px}
+.logo-m{width:42px;height:42px;border-radius:11px;background:linear-gradient(145deg,var(--navy2),var(--navy));display:grid;place-items:center;box-shadow:0 8px 20px rgba(20,44,58,.3);position:relative}
+.logo-m::after{content:"";position:absolute;inset:3px;border-radius:8px;border:1px solid rgba(212,154,112,.45)}
+.logo-m svg{width:22px;height:22px}
+nav.m{display:flex;align-items:center;gap:2px}
+nav.m a{padding:10px 15px;font-weight:500;font-size:14.5px;color:#3E4D56;transition:.2s;cursor:pointer;position:relative;border-radius:8px}
+nav.m a:hover{color:var(--ink)}
+nav.m a::after{content:"";position:absolute;left:15px;right:15px;bottom:5px;height:2px;background:var(--brass);transform:scaleX(0);transform-origin:0 50%;transition:transform .3s}
+nav.m a:hover::after,nav.m a.on::after{transform:scaleX(1)}
+nav.m a.on{color:var(--ink);font-weight:600}
+.hd-r{display:flex;align-items:center;gap:10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:13px 24px;border-radius:10px;font-weight:600;font-size:14.5px;transition:transform .25s,box-shadow .25s,background .25s,border-color .25s,color .25s;white-space:nowrap;letter-spacing:.1px;position:relative}
+.btn:active{transform:scale(.97)}
+.btn-p{background:linear-gradient(150deg,var(--navy2),var(--navy));color:#fff;box-shadow:0 10px 22px rgba(20,44,58,.28),inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 0 rgba(0,0,0,.18)}
+.btn-p:hover{background:linear-gradient(150deg,#2A5870,var(--navy2));transform:translateY(-2px);box-shadow:0 16px 30px rgba(20,44,58,.36),inset 0 1px 0 rgba(255,255,255,.28)}
+.btn-b{background:linear-gradient(160deg,#DCA57F,var(--brass));color:#2a1d06;box-shadow:0 10px 22px rgba(184,117,69,.32),inset 0 1px 0 rgba(255,255,255,.55),inset 0 -2px 0 rgba(0,0,0,.12)}
+.btn-b:hover{transform:translateY(-2px);box-shadow:0 16px 30px rgba(184,117,69,.45),inset 0 1px 0 rgba(255,255,255,.6)}
+.btn-o{border:1px solid rgba(255,255,255,.85);color:var(--ink);background:linear-gradient(150deg,#fff,#EFEADD);box-shadow:5px 5px 12px rgba(23,33,38,.09),-4px -4px 10px rgba(255,255,255,.9)}
+.btn-o:hover{background:#fff;transform:translateY(-2px);box-shadow:8px 10px 20px rgba(23,33,38,.12),-4px -4px 10px rgba(255,255,255,.95)}
+.btn-o:active,.btn-p:active,.btn-b:active{box-shadow:inset 3px 3px 8px rgba(0,0,0,.14)}
+:focus-visible{outline:2.5px solid var(--brass);outline-offset:3px;border-radius:8px}
+.btn-s{padding:10px 16px;font-size:13.5px;border-radius:9px}
+.btn-w{width:100%}
+.cartb{position:relative;width:46px;height:46px;border-radius:11px;border:1.5px solid #D3D6CC;display:grid;place-items:center;transition:.2s;background:rgba(255,255,255,.7)}
+.cartb:hover{border-color:var(--navy);background:#fff}
+.cartb .n{position:absolute;top:-7px;right:-7px;min-width:20px;height:20px;border-radius:10px;background:var(--brass);color:#fff;font-size:11.5px;font-weight:700;display:grid;place-items:center;padding:0 5px;transform:scale(0);transition:transform .3s cubic-bezier(.3,1.6,.5,1)}
+.cartb .n.show{transform:scale(1)}
+.burger{display:none;width:46px;height:46px;border-radius:11px;border:1.5px solid #D3D6CC;place-items:center;background:rgba(255,255,255,.7)}
+
+/* ---- views / reveal ---- */
+.view{display:none}
+.view.on{display:block}
+.rv{opacity:0;transform:translateY(30px);transition:opacity .9s ease,transform .9s cubic-bezier(.2,.7,.2,1)}
+.rv.in{opacity:1;transform:none}
+.d1{transition-delay:.1s}.d2{transition-delay:.2s}.d3{transition-delay:.3s}.d4{transition-delay:.4s}
+section{scroll-margin-top:96px}
+.sec{padding:112px 0}
+.eyebrow{display:inline-flex;align-items:center;gap:12px;font-size:12px;font-weight:600;letter-spacing:2.6px;text-transform:uppercase;color:var(--brass)}
+.eyebrow b{font-family:var(--serif);font-weight:500;font-size:14px;color:var(--ink);letter-spacing:0}
+.eyebrow::before{content:"";width:34px;height:1px;background:var(--brass)}
+h1,h2,h3{font-family:var(--serif);font-weight:500;line-height:1.06;letter-spacing:-.022em;color:var(--ink)}
+h1{font-size:clamp(42px,5.6vw,78px);line-height:1.01}
+h2{font-size:clamp(32px,4.2vw,54px);margin:16px 0 16px}
+h1 em,h2 em{font-style:italic;color:var(--brass);font-weight:400}
+.lead{font-size:clamp(16px,1.35vw,18.5px);color:var(--mut);max-width:540px}
+.sh{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:44px;flex-wrap:wrap}
+.sh h2{margin-bottom:0}
+
+/* ---- hero ---- */
+.hero{min-height:100vh;display:flex;align-items:center;padding:140px 0 100px}
+.hero .in{max-width:650px}
+.hero h1{margin:22px 0 24px}
+.hero .lead{font-size:clamp(16.5px,1.5vw,19.5px)}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:40px}
+.choice{display:flex;flex-direction:column;text-align:left;padding:24px 24px 22px;border-radius:16px;background:var(--card);border:var(--gb);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);transition:transform .35s,box-shadow .35s,background .35s,border-color .35s,color .35s;position:relative;overflow:hidden;box-shadow:var(--gs)}
+.choice .no{font-family:var(--serif);font-size:15px;color:var(--brass);margin-bottom:26px;transition:.3s}
+.choice b{font-family:var(--serif);font-weight:500;font-size:22px;line-height:1.15;letter-spacing:-.01em;margin-bottom:6px;transition:.3s}
+.choice .t{color:var(--mut);font-size:13.5px;transition:.3s}
+.choice .go{display:flex;align-items:center;justify-content:space-between;margin-top:26px;font-weight:600;font-size:13.5px}
+.choice .arr{width:40px;height:40px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;transition:.35s}
+.choice:hover{background:var(--navy);border-color:var(--navy);transform:translateY(-6px);box-shadow:var(--sh2)}
+.choice:hover b{color:#fff}.choice:hover .t{color:#C5D1D5}.choice:hover .go{color:#fff}
+.choice:hover .arr{background:var(--brass);border-color:var(--brass);color:#fff;transform:rotate(-45deg)}
+.choice:hover .no{color:var(--brass2)}
+.scrollhint{display:flex;align-items:center;gap:14px;margin-top:44px;color:var(--mut);font-size:13px}
+.mouse{width:24px;height:38px;border:1.6px solid #a3a89c;border-radius:13px;position:relative;flex:none}
+.mouse::after{content:"";position:absolute;left:50%;top:7px;width:3px;height:8px;margin-left:-1.5px;border-radius:3px;background:var(--brass);animation:wheel 1.7s infinite}
+@keyframes wheel{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(13px)}}
+.mq{border-block:1px solid var(--line);background:rgba(255,255,255,.7);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);overflow:hidden;padding:20px 0}
+.mq-t{display:flex;gap:44px;width:max-content;animation:mq 38s linear infinite;font-family:var(--serif);font-size:22px;color:#30414B;white-space:nowrap}
+.mq-t span{display:inline-flex;align-items:center;gap:44px}
+.mq-t span::after{content:"";width:7px;height:7px;transform:rotate(45deg);background:var(--brass)}
+@keyframes mq{to{transform:translateX(-50%)}}
+
+/* ---- who ---- */
+.who{display:grid;grid-template-columns:1.05fr .95fr;gap:70px;align-items:start}
+.who .big{font-family:var(--serif);font-size:clamp(22px,2.3vw,30px);line-height:1.4;color:#25343C;letter-spacing:-.01em;margin-bottom:22px}
+.who .big em{color:var(--brass)}
+.who p{color:var(--mut);max-width:520px;margin-bottom:12px}
+.tl{display:grid;border-top:1px solid #CFC8B6}
+.tl .it{display:grid;grid-template-columns:54px 1fr;gap:18px;padding:26px 6px;border-bottom:1px solid #CFC8B6;align-items:start;transition:.3s;background:linear-gradient(90deg,rgba(255,255,255,.0),rgba(255,255,255,0))}
+.tl .it:hover{background:linear-gradient(90deg,rgba(255,255,255,.7),rgba(255,255,255,0));padding-left:16px}
+.tl .ti{width:50px;height:50px;border-radius:13px;background:var(--navy);color:var(--brass2);display:grid;place-items:center}
+.tl b{font-family:var(--serif);font-weight:500;font-size:21px;display:block;letter-spacing:-.01em}
+.tl span{font-size:14.5px;color:var(--mut)}
+
+/* ---- bento ---- */
+.bento{display:grid;grid-template-columns:1.25fr 1fr 1fr;grid-template-rows:270px 270px;gap:18px}
+.bt{position:relative;border-radius:20px;overflow:hidden;cursor:pointer;box-shadow:var(--sh);background:#E8E1D0;isolation:isolate}
+.bt.big{grid-row:span 2}.bt.wide{grid-column:span 2}
+.bt-art{position:absolute;inset:0;z-index:-2}
+.bt-art svg{width:100%;height:100%;transition:transform 1s cubic-bezier(.2,.7,.2,1)}
+.bt:hover .bt-art svg{transform:scale(1.08)}
+.bt-ov{position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(16,30,40,0) 25%,rgba(16,30,40,.88))}
+.bt-c{position:absolute;left:0;right:0;bottom:0;padding:26px;color:#fff}
+.bt-n{text-shadow:0 1px 6px rgba(0,0,0,.5);font-size:11.5px;letter-spacing:2px;text-transform:uppercase;color:var(--brass2);font-weight:600}
+.bt h3{color:#fff;font-size:30px;margin:6px 0 4px}
+.bt p{font-size:14px;color:#DDE5E4}
+.bt-go{display:inline-flex;align-items:center;gap:8px;margin-top:12px;font-weight:600;font-size:13.5px;color:#fff;opacity:0;transform:translateY(8px);transition:.4s}
+.bt:hover .bt-go{opacity:1;transform:none}
+
+/* ---- cards ---- */
+.grid{display:grid;gap:24px}
+.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.card{background:var(--card);border:var(--gb);border-radius:18px;overflow:hidden;backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);display:flex;flex-direction:column;transition:transform .4s,box-shadow .4s,border-color .4s;box-shadow:var(--gs);position:relative}
+.card::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,var(--brass),var(--brass2));transform:scaleX(0);transform-origin:0 50%;transition:transform .5s;z-index:3}
+.card:hover{transform:translateY(-8px);box-shadow:var(--sh2);border-color:#d9d2bf}
+.card:hover::before{transform:scaleX(1)}
+.card .art{aspect-ratio:10/7;overflow:hidden;position:relative;background:#EAE3D3;cursor:pointer}
+.card .art svg{width:100%;height:100%;transition:transform .8s cubic-bezier(.2,.7,.2,1)}
+.card:hover .art svg{transform:scale(1.07)}
+.card .body{padding:20px 20px 22px;display:flex;flex-direction:column;gap:11px;flex:1}
+.card h3{font-size:21px;letter-spacing:-.012em}
+.meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.8px;color:var(--soft)}
+.meta b{color:#3E4D56;font-weight:600}
+.price{font-family:var(--serif);font-size:25px;font-weight:500;color:var(--ink);letter-spacing:-.01em}
+.price small{font-family:var(--sans);font-size:12.5px;font-weight:500;color:var(--soft)}
+.price.rq{font-family:var(--sans);font-size:15px;font-weight:600;color:var(--brass)}
+.acts{display:flex;gap:10px;margin-top:auto;padding-top:8px}
+.acts .btn{flex:1;padding:11px 12px;font-size:13.5px}
+.tag{position:absolute;top:14px;left:14px;z-index:2;padding:6px 12px;border-radius:7px;background:rgba(255,255,255,.92);font-size:11px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--navy);box-shadow:0 4px 14px rgba(23,33,38,.12)}
+.tag.ok::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:7px}
+.sold{position:absolute;inset:0;z-index:3;display:grid;place-items:center;background:rgba(23,33,38,.5)}
+.sold span{transform:rotate(-12deg);border:2.5px solid #fff;color:#fff;font-family:var(--serif);letter-spacing:7px;font-size:32px;padding:4px 24px;border-radius:6px}
+.pstats{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:#3E4D56}
+.pstats span{display:inline-flex;align-items:center;gap:6px}
+.pstats .ic{width:16px;height:16px;color:var(--brass)}
+.loc{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mut)}
+.loc .ic{width:15px;height:15px;color:var(--brass)}
+
+/* featured property (overlay) */
+.pf{position:relative;min-height:420px;border-radius:20px;overflow:hidden;cursor:pointer;box-shadow:var(--sh);isolation:isolate;display:flex;flex-direction:column;justify-content:flex-end;color:#fff}
+.pf-art{position:absolute;inset:0;z-index:-2}
+.pf-art svg{width:100%;height:100%;transition:transform 1.1s cubic-bezier(.2,.7,.2,1)}
+.pf:hover .pf-art svg{transform:scale(1.08)}
+.pf::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(16,30,40,0) 48%,rgba(16,30,40,.9))}
+.pf .tag{top:18px;left:18px}
+.pf-c{padding:26px}
+.pf .loc{color:#DDE5E4}.pf .loc .ic{color:var(--brass2)}
+.pf h3{color:#fff;font-size:27px;margin:8px 0 12px}
+.pf-row{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.pf-price{font-family:var(--serif);font-size:30px;color:var(--brass2)}
+.pf-st{font-size:13px;color:#DDE5E4;text-align:right}
+.pf-go{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.2);max-height:0;opacity:0;overflow:hidden;transition:.45s;padding-top:0;border-color:transparent}
+.pf:hover .pf-go{max-height:48px;opacity:1;padding-top:14px;border-color:rgba(255,255,255,.2)}
+
+/* process */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:26px;position:relative;margin-top:50px}
+.steps::before{content:"";position:absolute;left:28px;right:28px;top:28px;height:1px;background:repeating-linear-gradient(90deg,#B9B09A 0 6px,transparent 6px 12px)}
+.stp{position:relative}
+.stp .c{width:56px;height:56px;border-radius:50%;background:var(--paper);border:1.5px solid var(--brass);display:grid;place-items:center;font-family:var(--serif);font-size:20px;color:var(--brass);margin-bottom:22px;position:relative;z-index:1;transition:.4s;box-shadow:0 0 0 8px var(--ivory)}
+.stp:hover .c{background:var(--brass);color:#fff;transform:scale(1.08)}
+.stp b{font-family:var(--serif);font-weight:500;font-size:22px;display:block;margin-bottom:6px}
+.stp p{font-size:14.5px;color:var(--mut)}
+
+/* why (navy panel) */
+.panel{background:rgba(20,44,58,.96);border-radius:28px;padding:64px;color:#fff;position:relative;overflow:hidden;box-shadow:var(--sh2)}
+.panel::before{content:"";position:absolute;right:-120px;top:-120px;width:380px;height:380px;border-radius:50%;border:1px solid rgba(212,154,112,.25);box-shadow:0 0 0 60px rgba(212,154,112,.04),0 0 0 120px rgba(212,154,112,.03)}
+.panel h2{color:#fff}.panel h2 em{color:var(--brass2)}.panel .eyebrow{color:var(--brass2)}.panel .eyebrow b{color:#fff}.panel .eyebrow::before{background:var(--brass2)}
+.why{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:44px;position:relative}
+.wy{padding:8px 28px 8px 0;border-right:1px solid rgba(255,255,255,.12);margin-right:28px}
+.wy:last-child{border:0;margin:0}
+.wy .no{font-family:var(--serif);font-size:54px;color:var(--brass2);line-height:1;margin-bottom:16px;font-weight:400;font-style:italic}
+.wy b{display:block;font-family:var(--serif);font-weight:500;font-size:22px;margin-bottom:8px}
+.wy p{font-size:14.5px;color:#C5D1D5}
+
+/* cta */
+.ctab{padding:64px 54px;border-radius:28px;background:var(--card);border:var(--gb);text-align:center;backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:var(--gs);position:relative;overflow:hidden}
+.ctab::before,.ctab::after{content:"";position:absolute;width:260px;height:260px;border:1px solid rgba(184,117,69,.25);border-radius:50%}
+.ctab::before{left:-90px;bottom:-130px}.ctab::after{right:-90px;top:-130px}
+.ctab h2{max-width:720px;margin:14px auto 14px}
+.ctab p{color:var(--mut);max-width:520px;margin:0 auto 30px}
+.ctab .row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+/* catalogue */
+.phead{padding:170px 0 40px}
+.phead h1{font-size:clamp(38px,5.4vw,70px);margin:18px 0 18px;max-width:880px}
+.ctrl{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:24px;padding:14px;border-radius:16px;background:var(--card);border:var(--gb);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:var(--gs)}
+.sbox{flex:1 1 260px;position:relative}
+.sbox .ic{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--soft)}
+.sbox input{width:100%;padding:13px 14px 13px 46px;border-radius:10px;border:1.5px solid #DAD4C4;background:#fff;color:var(--ink);outline:none;transition:.2s}
+.sbox input:focus,.sel:focus{border-color:var(--brass);box-shadow:0 0 0 4px rgba(184,117,69,.15)}
+.sel{padding:13px 14px;border-radius:10px;border:1.5px solid #DAD4C4;background:#fff;color:var(--ink);outline:none;min-width:150px;transition:.2s}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
+.chip{padding:10px 18px;border-radius:999px;border:1.5px solid #D5CEBC;font-size:14px;font-weight:500;color:#3E4D56;transition:.25s;background:rgba(255,255,255,.7)}
+.chip:hover{border-color:var(--navy);color:var(--ink)}
+.chip.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.count{color:var(--mut);font-size:14px;margin-bottom:20px}
+.empty{padding:64px 20px;text-align:center;color:var(--mut);border:1.5px dashed #CFC8B6;border-radius:16px;background:var(--card)}
+.note{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:#7A5638;background:rgba(184,117,69,.08);border:1px solid rgba(184,117,69,.28);padding:11px 15px;border-radius:12px;margin-top:22px}
+.note .ic{width:16px;height:16px;margin-top:2px;color:var(--brass)}
+
+/* contact */
+.contact{display:grid;grid-template-columns:.9fr 1.1fr;gap:28px;align-items:stretch}
+.cinfo{padding:40px;border-radius:24px;background:var(--navy);color:#fff;display:flex;flex-direction:column;gap:20px;box-shadow:var(--sh2)}
+.crow{display:flex;gap:16px;align-items:flex-start}
+.crow .ci{width:44px;height:44px;border-radius:12px;background:rgba(212,154,112,.14);color:var(--brass2);display:grid;place-items:center;flex:none}
+.crow small{display:block;color:#A9B9BE;font-size:12px;letter-spacing:.6px;text-transform:uppercase}
+.crow b{font-weight:500;font-size:15.5px}
+.mapph{height:150px;border-radius:14px;overflow:hidden;margin-top:auto;position:relative;opacity:.95}
+.mapph a{position:absolute;right:10px;bottom:10px}
+.lcard{background:var(--paper);padding:40px;border-radius:24px;border:1px solid var(--line);box-shadow:var(--sh)}
+.lcard h3{font-size:28px;margin-bottom:4px}
+.lcard>p{color:var(--mut);font-size:14.5px;margin-bottom:22px}
+
+/* forms */
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fld{display:flex;flex-direction:column;gap:6px}.fld.full{grid-column:1/-1}
+.fld label{font-size:12.5px;font-weight:600;color:#3E4D56;letter-spacing:.2px}
+.fld label i{color:var(--bad);font-style:normal}
+.fld input,.fld select,.fld textarea{padding:13px 14px;border-radius:10px;border:1.5px solid #D5CEBC;background:#fff;color:var(--ink);outline:none;transition:.2s;width:100%}
+.fld textarea{resize:vertical;min-height:92px}
+.fld input:focus,.fld select:focus,.fld textarea:focus{border-color:var(--brass);box-shadow:0 0 0 4px rgba(184,117,69,.16)}
+.fld.err input,.fld.err select,.fld.err textarea{border-color:var(--bad);box-shadow:0 0 0 4px rgba(181,80,58,.12)}
+.fld .em{display:none;color:var(--bad);font-size:12px;font-weight:600}.fld.err .em{display:block}
+.radios{display:flex;gap:10px;flex-wrap:wrap}
+.radios label{display:flex;align-items:center;gap:8px;padding:11px 15px;border:1.5px solid #D5CEBC;border-radius:10px;font-weight:500;font-size:14px;cursor:pointer;background:#fff;color:var(--ink);transition:.2s}
+.radios input{accent-color:var(--navy);width:auto}
+.radios label:has(input:checked){border-color:var(--navy);background:#ECEFEA}
+.hp{position:absolute;left:-9999px;opacity:0}
+.reqbox{padding:12px 16px;border-radius:12px;background:#FBF9F4;border:1.5px dashed #D5CEBC;font-size:14px}
+.reqbox li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #EEE9DC;list-style:none}
+.reqbox li:last-child{border:0}
+
+/* modal + drawer */
+.ov{position:fixed;inset:0;z-index:100;background:rgba(12,24,32,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:20px;opacity:0;transition:opacity .3s}
+.ov.on{display:flex}.ov.show{opacity:1}
+.modal{background:var(--paper);color:var(--ink);border-radius:24px;width:min(1000px,100%);max-height:calc(100vh - 40px);overflow:auto;position:relative;transform:translateY(30px) scale(.97);transition:transform .45s cubic-bezier(.2,.8,.2,1);box-shadow:0 50px 120px rgba(0,0,0,.45)}
+.ov.show .modal{transform:none}
+.modal.sm{width:min(640px,100%)}
+.mx{position:absolute;top:16px;right:16px;z-index:8;width:42px;height:42px;border-radius:50%;background:#fff;color:var(--ink);display:grid;place-items:center;box-shadow:0 6px 18px rgba(23,33,38,.22);transition:.3s}
+.mx:hover{transform:rotate(90deg);background:var(--brass);color:#fff}
+.mpad{padding:38px}
+.mgrid{display:grid;grid-template-columns:1fr 1fr}
+.mart{background:#EAE3D3;min-height:360px;position:relative}
+.mart svg{width:100%;height:100%;position:absolute;inset:0}
+.minfo{padding:38px 38px 34px}
+.minfo h2{font-size:32px;margin:8px 0 12px}
+.mini{display:inline-block;font-size:11.5px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--brass)}
+table.sp{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0 18px}
+table.sp td{padding:9px 0;border-bottom:1px solid #EEE9DC}
+table.sp td:first-child{color:var(--soft);width:42%}
+table.sp td:last-child{font-weight:600}
+.ul{list-style:none;display:grid;gap:8px;margin:8px 0 18px}
+.ul li{display:flex;gap:10px;font-size:14.5px;color:#3E4D56}
+.ul li .ic{width:17px;height:17px;color:var(--brass);margin-top:3px}
+.h4{font-size:11.5px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--soft);margin-top:8px}
+.bigp{font-family:var(--serif);font-size:36px;font-weight:500;letter-spacing:-.015em}
+.bigp small{font-family:var(--sans);font-size:13.5px;color:var(--soft);font-weight:500}
+.bigp.rq{font-family:var(--sans);font-size:20px;color:var(--brass);font-weight:600}
+.qty{display:inline-flex;align-items:center;border:1.5px solid #D5CEBC;border-radius:11px;background:#fff;overflow:hidden}
+.qty button{width:44px;height:46px;font-size:20px;font-weight:600;transition:.15s}
+.qty button:hover{background:#F1ECDF}
+.qty input{width:66px;text-align:center;border:0;outline:0;font-weight:700;font-size:16px;height:46px;background:transparent;color:var(--ink)}
+.prow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0}
+
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(450px,100%);z-index:110;background:var(--paper);color:var(--ink);transform:translateX(105%);transition:transform .5s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;box-shadow:-30px 0 80px rgba(12,24,32,.35)}
+.drawer.on{transform:none}
+.dscrim{position:fixed;inset:0;z-index:105;background:rgba(12,24,32,.5);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:.35s}
+.dscrim.on{opacity:1;pointer-events:auto}
+.dh{display:flex;align-items:center;justify-content:space-between;padding:24px;border-bottom:1px solid var(--line)}
+.dh h3{font-size:24px}
+.db{flex:1;overflow:auto;padding:8px 24px}
+.df{padding:20px 24px 24px;border-top:1px solid var(--line);display:grid;gap:10px;background:#FBF9F4}
+.ci-row{display:flex;gap:14px;align-items:center;padding:16px 0;border-bottom:1px solid #EEE9DC}
+.ci-art{width:68px;height:68px;border-radius:12px;overflow:hidden;flex:none;background:#EAE3D3}
+.ci-art svg{width:100%;height:100%}
+.ci-i{flex:1;min-width:0}
+.ci-i b{display:block;font-size:15px;line-height:1.3;font-weight:600}
+.ci-i small{color:var(--soft);font-size:12.5px}
+.qty.s button{width:32px;height:34px;font-size:17px}.qty.s input{width:46px;height:34px;font-size:14px}
+.rm{width:36px;height:36px;border-radius:9px;color:var(--soft);display:grid;place-items:center;transition:.2s}
+.rm:hover{background:#FBE7E2;color:var(--bad)}
+.dempty{text-align:center;padding:80px 10px;color:var(--mut)}
+.dempty .ic{width:48px;height:48px;margin:0 auto 14px;color:#C5BEA9}
+
+/* gallery */
+.gal{position:relative;background:#0F1C25;aspect-ratio:16/10;overflow:hidden}
+.gal .sl{position:absolute;inset:0;opacity:0;transition:opacity .6s}
+.gal .sl.on{opacity:1}
+.gal .sl>svg{width:100%;height:100%}
+.gnav{position:absolute;top:50%;transform:translateY(-50%);width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.94);color:var(--ink);display:grid;place-items:center;z-index:4;transition:.25s;box-shadow:0 8px 22px rgba(0,0,0,.28)}
+.gnav:hover{background:var(--brass);color:#fff}
+.gnav.l{left:16px}.gnav.r{right:16px}
+.gtools{position:absolute;left:16px;bottom:16px;display:flex;gap:8px;z-index:4;flex-wrap:wrap}
+.gtools button{display:inline-flex;align-items:center;gap:8px;padding:10px 15px;border-radius:10px;background:rgba(23,33,38,.82);color:#fff;font-weight:600;font-size:13px;backdrop-filter:blur(8px);transition:.25s}
+.gtools button:hover{background:var(--brass)}
+.gcount{position:absolute;right:16px;bottom:16px;z-index:4;padding:7px 13px;border-radius:9px;background:rgba(23,33,38,.82);color:#fff;font-size:12.5px;font-weight:600}
+.thumbs{display:flex;gap:10px;padding:14px 38px 0}
+.thumbs button{width:92px;aspect-ratio:16/10;border-radius:10px;overflow:hidden;border:2.5px solid transparent;opacity:.6;transition:.25s;flex:none}
+.thumbs button.on{border-color:var(--brass);opacity:1}
+.thumbs svg{width:100%;height:100%}
+.vid{position:absolute;inset:0;z-index:5;background:radial-gradient(circle at 50% 40%,#21475A,#0C1A22);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#fff;text-align:center;padding:20px}
+.vid.on{display:flex}
+.vid .pl{width:78px;height:78px;border-radius:50%;background:var(--brass);color:#fff;display:grid;place-items:center;animation:pulse 1.9s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(212,154,112,.6)}100%{box-shadow:0 0 0 28px rgba(212,154,112,0)}}
+.vid .bar{width:min(380px,70%);height:4px;background:rgba(255,255,255,.18);border-radius:4px;overflow:hidden}
+.vid .bar i{display:block;height:100%;width:0;background:var(--brass2);animation:vp 7s linear infinite}
+@keyframes vp{to{width:100%}}
+.vid b{font-family:var(--serif);font-weight:500;font-size:22px}
+.vid small{color:#A9B9BE;max-width:380px}
+.vid .vx{position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.14);display:grid;place-items:center;color:#fff}
+.dgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 18px}
+.dg{background:#FBF9F4;border:1px solid var(--line);padding:13px 15px;border-radius:12px}
+.dg small{display:block;font-size:11px;color:var(--soft);letter-spacing:1px;text-transform:uppercase;font-weight:600}
+.dg b{font-size:15px;font-weight:600}
+.amen{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 18px}
+.amen span{padding:8px 14px;border-radius:999px;background:#FBF9F4;border:1px solid var(--line);font-size:13.5px;font-weight:500;color:#3E4D56}
+.mapbox{height:150px;border-radius:14px;overflow:hidden;border:1px solid var(--line);position:relative;margin:10px 0 18px}
+.mapbox a{position:absolute;right:10px;bottom:10px}
+.ctas{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.ctas .btn{flex:1 1 150px}
+
+.succ{text-align:center;padding:42px 36px 36px}
+.succ .ok{width:76px;height:76px;border-radius:50%;background:#E8EEEA;color:var(--ok);display:grid;place-items:center;margin:0 auto 16px}
+.succ .ok .ic{width:38px;height:38px;stroke-width:2.6;stroke-dasharray:30;stroke-dashoffset:30;animation:draw .6s .15s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.succ h3{font-size:28px;margin-bottom:8px}
+.succ p{color:var(--mut);font-size:14.5px}
+.mail{margin:20px 0 22px;text-align:left;background:#172126;color:#D6E2E4;border-radius:14px;padding:18px 20px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.65;white-space:pre-wrap;max-height:230px;overflow:auto}
+.mail .hd2{color:#93A6AE;display:block;margin-bottom:8px}
+.toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,30px);z-index:200;background:var(--ink);color:#fff;padding:14px 22px;border-radius:12px;font-weight:500;font-size:14.5px;display:flex;gap:10px;align-items:center;opacity:0;pointer-events:none;transition:.4s;box-shadow:0 20px 44px rgba(0,0,0,.35)}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.toast .ic{color:var(--brass2)}
+
+/* HUD + FAB */
+.hud{position:fixed;left:22px;bottom:22px;z-index:30;width:230px;padding:13px 16px;border-radius:14px;background:linear-gradient(150deg,rgba(255,255,255,.88),rgba(255,255,255,.6));border:var(--gb);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);font-size:12px;color:var(--mut);pointer-events:none;box-shadow:var(--gs)}
+.hud b{display:block;color:var(--ink);font-size:13.5px;font-weight:600}
+.hud.brk b{color:var(--bad)}
+.hud-bar{height:4px;border-radius:4px;background:#E4DFD3;margin:9px 0 7px;overflow:hidden}
+.hud-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--brass),var(--brass2));border-radius:4px}
+.hud.brk .hud-bar i{background:var(--bad)}
+.fab{position:fixed;right:22px;bottom:22px;z-index:40;width:58px;height:58px;border-radius:50%;background:linear-gradient(145deg,#5A8C77,#46705F);color:#fff;display:grid;place-items:center;box-shadow:0 12px 30px rgba(70,112,95,.4);transition:transform .3s}
+.fab:hover{transform:scale(1.1) rotate(-6deg)}
+.fab::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid #5A8C77;animation:ring 2.2s infinite}
+@keyframes ring{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.6);opacity:0}}
+.fab .ic{width:28px;height:28px}
+
+/* footer */
+footer{background:var(--navy);color:#C5D1D5;padding:80px 0 30px;margin-top:20px;position:relative;overflow:hidden}
+footer::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,var(--brass),var(--brass2),var(--brass))}
+.fgrid{display:grid;grid-template-columns:1.5fr 1fr 1.2fr 1fr;gap:40px}
+footer h4{font-size:12px;letter-spacing:2.2px;text-transform:uppercase;color:var(--brass2);margin-bottom:18px;font-weight:600}
+footer p,footer li,footer a{font-size:14.5px;color:#C5D1D5}
+footer ul{list-style:none;display:grid;gap:11px}
+footer a{cursor:pointer;transition:.25s}footer a:hover{color:#fff}
+footer .logo{color:#fff}footer .logo-t small{color:var(--brass2)}
+.soc{display:flex;gap:10px;margin-top:20px}
+.soc a{width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.2);display:grid;place-items:center;font-weight:600;font-size:12.5px}
+.soc a:hover{border-color:var(--brass2);color:var(--brass2)}
+.copy{margin-top:54px;padding-top:24px;border-top:1px solid rgba(255,255,255,.12);display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:13px;color:#8FA3AB}
+
+/* ===== v3: glass + soft-depth refinements ===== */
+.fld input,.fld select,.fld textarea,.sbox input,.sel{background:linear-gradient(180deg,#F4F0E4,#FBF9F3);border:1px solid rgba(23,33,38,.1);box-shadow:inset 2px 3px 7px rgba(23,33,38,.07),inset -2px -2px 6px rgba(255,255,255,.9)}
+.fld input:focus,.fld select:focus,.fld textarea:focus,.sbox input:focus,.sel:focus{background:#fff;border-color:var(--brass);box-shadow:0 0 0 4px rgba(184,117,69,.18),inset 1px 2px 5px rgba(23,33,38,.05)}
+.chip{background:linear-gradient(150deg,#fff,#EFEADD);border:1px solid rgba(255,255,255,.9);box-shadow:4px 4px 10px rgba(23,33,38,.08),-3px -3px 8px rgba(255,255,255,.9)}
+.chip.on{background:linear-gradient(150deg,var(--navy2),var(--navy));color:#fff;border-color:var(--navy);box-shadow:inset 2px 3px 8px rgba(0,0,0,.25),0 0 0 3px rgba(184,117,69,.25)}
+.chip small{opacity:.6;margin-left:6px;font-weight:600}
+.panel{background:linear-gradient(145deg,rgba(33,71,90,.96),rgba(20,44,58,.97) 60%,rgba(12,28,38,.98));border:1px solid rgba(255,255,255,.14);box-shadow:var(--sh2),inset 0 1px 0 rgba(255,255,255,.18)}
+.cinfo{background:linear-gradient(150deg,#264F63,#142C3A 70%);border:1px solid rgba(255,255,255,.14);box-shadow:var(--sh2),inset 0 1px 0 rgba(255,255,255,.2);position:relative;overflow:hidden}
+.cinfo::before{content:"";position:absolute;right:-90px;top:-90px;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(212,154,112,.35),transparent 70%)}
+.cinfo>*{position:relative}
+.lcard{background:var(--card);border:var(--gb);box-shadow:var(--gs);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+.tl .it{border-radius:14px}
+.tl .ti{background:linear-gradient(150deg,var(--navy2),var(--navy));box-shadow:0 8px 18px rgba(20,44,58,.25),inset 0 1px 0 rgba(255,255,255,.25)}
+.logo-m{background:linear-gradient(150deg,var(--navy2),var(--navy));box-shadow:0 8px 20px rgba(20,44,58,.35),inset 0 1px 0 rgba(255,255,255,.25)}
+.mq{background:linear-gradient(150deg,rgba(255,255,255,.75),rgba(255,255,255,.45));backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+.pre,.curtain{background:radial-gradient(circle at 50% 40%,#264F63,#0C1C26)}
+.modal{border:1px solid rgba(255,255,255,.8);box-shadow:0 50px 120px rgba(0,0,0,.45),inset 0 1px 0 #fff}
+.dg,.amen span,.reqbox{box-shadow:inset 1px 2px 5px rgba(23,33,38,.04)}
+.choice:hover{background:linear-gradient(150deg,var(--navy2),var(--navy))}
+.hero h1{text-shadow:0 1px 0 rgba(255,255,255,.7)}
+.tag{background:linear-gradient(150deg,rgba(255,255,255,.95),rgba(255,255,255,.75));backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+
+/* hero trust badges */
+.badges{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
+.badges span{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:999px;background:linear-gradient(150deg,rgba(255,255,255,.85),rgba(255,255,255,.55));border:var(--gb);box-shadow:0 6px 16px rgba(23,33,38,.07),inset 0 1px 0 #fff;font-size:13px;font-weight:600;color:#25343C;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.badges .ic{width:16px;height:16px;color:var(--brass)}
+
+/* quick quote bar */
+.qqw{position:relative;z-index:5;margin-top:-34px;margin-bottom:34px}
+.qq{display:grid;grid-template-columns:.9fr 1.25fr 1fr 1fr auto;gap:14px;align-items:end;padding:22px 24px;border-radius:24px;background:var(--card);border:var(--gb);box-shadow:var(--gs),0 30px 60px rgba(23,33,38,.12);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+.qq-t b{display:block;font-family:var(--serif);font-weight:500;font-size:22px;line-height:1.1}
+.qq-t span{font-size:12.5px;color:var(--mut)}
+.qq .btn{height:48px}
+
+/* breadcrumb + sticky filters */
+.bc{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--mut);margin-bottom:6px}
+.bc a{cursor:pointer;color:var(--brass);font-weight:600}.bc a:hover{text-decoration:underline}
+.ctrl.stk{position:sticky;top:96px;z-index:20}
+
+/* sticky CTA inside modals */
+.ctas.stick{position:sticky;bottom:-34px;margin:18px -38px -34px;padding:16px 38px 20px;background:linear-gradient(180deg,rgba(255,255,255,.7),rgba(255,255,255,.96));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);z-index:5}
+
+/* floating enquiry pill + mobile action bar */
+.cpill{position:fixed;left:50%;bottom:26px;z-index:60;transform:translate(-50%,260px);opacity:0;pointer-events:none;display:flex;align-items:center;gap:14px;padding:10px 10px 10px 22px;border-radius:999px;background:linear-gradient(150deg,var(--navy2),var(--navy));color:#fff;box-shadow:0 20px 44px rgba(20,44,58,.45),inset 0 1px 0 rgba(255,255,255,.25);transition:transform .5s cubic-bezier(.2,.9,.3,1.2);font-weight:600;font-size:14.5px}
+.cpill.on{transform:translate(-50%,0);opacity:1;pointer-events:auto}
+.cpill b{background:var(--brass2);color:#2a1d06;border-radius:999px;padding:9px 18px;font-size:13.5px}
+.mbar{display:none}
+.hdw .hd-r .cartb{width:auto;padding:0 14px;gap:9px;display:flex;align-items:center;font-weight:600;font-size:13.5px;color:var(--ink)}
+.cartb .n{top:-8px;right:-6px}
+
+/* responsive */
+@media (max-width:1020px){
+  .g3{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(2,1fr)}
+  .who,.contact{grid-template-columns:1fr;gap:40px}
+  .fgrid{grid-template-columns:1fr 1fr}
+  .mgrid{grid-template-columns:1fr}.mart{min-height:260px;aspect-ratio:16/9}
+  .bento{grid-template-columns:1fr 1fr;grid-template-rows:260px 260px 260px}
+  .bt.big{grid-row:span 1}.bt.wide{grid-column:span 2}
+  .steps{grid-template-columns:1fr 1fr;row-gap:40px}.steps::before{display:none}
+  .why{grid-template-columns:1fr 1fr;row-gap:36px}.wy:nth-child(2){border:0;margin:0}
+  .panel{padding:44px 34px}
+}
+@media (max-width:860px){
+  .util .l span.hrs{display:none}
+  nav.m{position:fixed;top:128px;left:0;right:0;flex-direction:column;align-items:stretch;gap:2px;padding:14px 22px 22px;background:rgba(250,248,243,.98);border-bottom:1px solid var(--line);transform:translateY(-130%);transition:transform .4s;z-index:-1;box-shadow:0 20px 40px rgba(23,33,38,.12)}
+  header.top.sc nav.m{top:90px}
+  nav.m{visibility:hidden;opacity:0;transition:transform .4s,opacity .3s,visibility 0s .4s}
+  nav.m.open{transform:none;visibility:visible;opacity:1;transition-delay:0s}
+  nav.m a{padding:15px 12px}nav.m a::after{display:none}
+  nav.m a.on{background:rgba(184,117,69,.1);color:var(--brass)}
+  .burger{display:grid}.hd-r .btn{display:none}
+  .hud{display:none}
+  .sec{padding:80px 0}
+  .hero{padding-top:160px;align-items:flex-start}
+  .phead{padding-top:150px}
+  .qq{grid-template-columns:1fr 1fr}.qq-t{grid-column:1/-1}.qq .btn{grid-column:1/-1}
+  .ctrl.stk{top:84px}
+  .fab{display:none}
+  .mbar{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:8px;position:fixed;left:12px;right:12px;bottom:12px;z-index:70;padding:8px;border-radius:20px;background:linear-gradient(150deg,rgba(255,255,255,.92),rgba(255,255,255,.75));border:var(--gb);box-shadow:0 18px 40px rgba(23,33,38,.25),inset 0 1px 0 #fff;backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+  .mbar .btn{padding:12px 8px;font-size:13.5px;gap:7px}
+  .cpill{bottom:86px}.toast{bottom:92px}
+  body{padding-bottom:80px}
+  .ctas.stick{margin:18px -22px -26px;padding:14px 22px 16px;bottom:-26px}
+}
+@media (max-width:620px){
+  .wrap{width:calc(100% - 32px)}
+  .util .r{display:none}
+  .qq{grid-template-columns:1fr}
+  .g3,.g4,.trust,.choices,.fgrid,.fg,.steps,.why{grid-template-columns:1fr}
+  .bento{grid-template-columns:1fr;grid-template-rows:none;grid-auto-rows:250px}.bt.wide{grid-column:span 1}
+  .wy{border:0;margin:0;padding:0 0 4px}
+  .mpad,.minfo,.lcard,.cinfo{padding:26px 22px}
+  .dgrid{grid-template-columns:1fr 1fr}
+  .thumbs{padding:14px 22px 0;overflow:auto}
+  .ctab{padding:42px 24px}.panel{padding:36px 24px}
+  .sold span{font-size:24px}
+  .fab{width:52px;height:52px;right:16px;bottom:16px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  .rv{opacity:1;transform:none}.pre{display:none}.mq-t{animation:none}
+}
+
+/* ===== v4: controlled typography + mobile refinements (no vh/vw-unbounded sizes, no scale growth) ===== */
+h1{font-size:clamp(32px,4.8vw,66px)}
+h2{font-size:clamp(26px,3.2vw,44px)}
+.phead h1{font-size:clamp(30px,4.2vw,56px)}
+.lead{font-size:clamp(15px,1.2vw,17.5px)}
+/* category cards */
+.bento .bt h3{font-size:clamp(28px,2.5vw,40px);line-height:1.1;letter-spacing:-.015em;max-width:78%;margin:6px 0 4px}
+.bento .bt p{font-size:clamp(13px,1vw,15px);line-height:1.45;max-width:78%;color:#E4EAEC}
+.bento .bt .bt-n{font-size:11px;letter-spacing:1.8px;color:#F2CBAE;text-shadow:0 1px 8px rgba(12,24,32,.7)}
+.bento .bt .bt-go{font-size:12.5px;margin-top:10px}
+.bt-c{padding:22px 24px}
+.bt-ov{background:linear-gradient(180deg,rgba(20,44,58,0) 30%,rgba(20,44,58,.62) 62%,rgba(20,44,58,.92))}
+.bt:hover .bt-art svg,.card:hover .art svg,.pf:hover .pf-art svg{transform:scale(1.03)}
+/* featured property + product cards */
+.pf h3{font-size:clamp(20px,1.8vw,25px);line-height:1.15;max-width:82%;margin:6px 0 10px}
+.pf-price{font-size:clamp(20px,1.8vw,25px)}
+.pf-st{font-size:12.5px}
+.pf .loc{font-size:12.5px}
+.pf::after{background:linear-gradient(180deg,rgba(20,44,58,0) 34%,rgba(20,44,58,.6) 62%,rgba(20,44,58,.92))}
+.pf-price{color:#F4D3B8}
+.pf-c{padding:22px}
+.card h3{font-size:clamp(17px,1.4vw,20px);line-height:1.2}
+.card .price{font-size:clamp(20px,1.7vw,24px)}
+.choice b{font-size:clamp(18px,1.6vw,21px)}
+.stp b,.wy b,.tl b{font-size:clamp(18px,1.5vw,21px)}
+.wy .no{font-size:clamp(38px,3.6vw,50px)}
+.qq-t b{font-size:20px}
+.mq-t{font-size:clamp(17px,1.5vw,21px)}
+/* tablet */
+@media (min-width:621px) and (max-width:1020px){
+  .bento .bt h3{font-size:clamp(32px,4vw,36px)}
+}
+/* mobile — the client reviews on a phone */
+@media (max-width:620px){
+  html,body{max-width:100%;overflow-x:hidden}
+  h1{font-size:clamp(30px,8.6vw,38px);line-height:1.06}
+  .phead h1{font-size:clamp(28px,8vw,34px)}
+  h2{font-size:clamp(25px,7vw,29px);margin:12px 0}
+  .eyebrow{font-size:10.5px;letter-spacing:2px}.eyebrow::before{width:22px}
+  .lead,.hero .lead{font-size:15.5px}
+  .sec{padding:64px 0}
+  .hero{padding:132px 0 70px}
+  .choices{gap:12px;margin-top:28px}
+  .choice{padding:18px}
+  .choice .no{margin-bottom:14px}
+  .choice b{font-size:19px}
+  .scrollhint{display:none}
+  .sh{margin-bottom:26px}
+  .who .big,p.big{font-size:19px!important}
+  .bento{grid-auto-rows:232px;gap:14px}
+  .bento .bt{border-radius:18px}
+  .bento .bt h3{font-size:28px;max-width:80%}
+  .bento .bt p{font-size:13.5px;max-width:80%}
+  .bento .bt .bt-n{font-size:10.5px}
+  .bt-c{padding:18px 18px 20px}
+  .bt-go{opacity:1;transform:none;font-size:12px!important}
+  .pf{min-height:350px;border-radius:18px}
+  .pf h3{font-size:21px}.pf-price{font-size:22px}
+  .pf-go{max-height:48px;opacity:1;padding-top:12px;border-color:rgba(255,255,255,.2)}
+  .card .body{padding:16px 16px 18px}
+  .card h3{font-size:18px}.card .price{font-size:22px}
+  .acts .btn{font-size:13px;padding:11px 8px}
+  .panel{padding:30px 22px;border-radius:22px}
+  .wy .no{font-size:36px;margin-bottom:8px}
+  .stp .c{width:46px;height:46px;font-size:17px;margin-bottom:14px}
+  .ctab{padding:34px 20px}.ctab h2{font-size:25px}
+  .qq{padding:18px}.qq-t b{font-size:19px}
+  .lcard h3{font-size:23px}
+  .minfo h2,.mpad h2{font-size:24px!important}
+  .bigp{font-size:28px}
+  .modal{border-radius:20px}
+  .succ h3{font-size:22px}
+  .badges span{font-size:12px;padding:8px 12px}
+  .mq-t{font-size:17px;gap:30px}.mq-t span{gap:30px}
+  .logo-t{font-size:20px}.logo-t small{font-size:8.5px;letter-spacing:2px}
+  .logo-m{width:38px;height:38px}
+  .hd{padding:0 10px 0 12px;height:62px}
+  .hdw .hd-r .cartb{padding:0 10px;font-size:12.5px}
+}
+</style>
+</head>
+<body>
+<div class="bp"></div>
+<canvas id="site" aria-hidden="true"></canvas>
+<div id="prog"></div>
+
+<div class="pre" aria-hidden="true"><div class="pre-in"><span class="logo-m"><svg viewBox="0 0 24 24" fill="none" stroke="#D49A70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-7h6v7"/></svg></span><b>Maverick</b><i></i></div></div>
+<div class="curtain" id="curtain" aria-hidden="true">Maverick</div>
+
+<header class="top" id="top">
+  <div class="util"><div class="wrap">
+    <div class="l"><a id="uPhone"></a><a id="uMail"></a><span class="hrs" id="uHours"></span></div>
+    <div class="r"><a id="uWa" target="_blank" rel="noopener"></a></div>
+  </div></div>
+  <div class="hdw"><div class="wrap hd">
+    <a class="logo" data-act="view" data-id="home" aria-label="Maverick home">
+      <span class="logo-m"><svg viewBox="0 0 24 24" fill="none" stroke="#D49A70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-7h6v7"/></svg></span>
+      <span class="logo-t">Maverick<small>Supplies &amp; Realty</small></span>
+    </a>
+    <nav class="m" id="nav">
+      <a data-act="view" data-id="home" data-nav="home">Home</a>
+      <a data-act="view" data-id="materials" data-nav="materials">Construction Materials</a>
+      <a data-act="view" data-id="properties" data-nav="properties">Real Estate</a>
+      <a data-act="scroll" data-id="about">About</a>
+      <a data-act="scroll" data-id="contact">Contact</a>
+    </nav>
+    <div class="hd-r">
+      <button class="cartb" data-act="cart" aria-label="Open enquiry list" id="cartBtn"></button>
+      <button class="btn btn-p btn-s" data-act="scroll" data-id="contact">Get in Touch</button>
+      <button class="burger" id="burger" aria-label="Menu"></button>
+    </div>
+  </div></div>
+</header>
+
+<div class="hud" id="hud"><b id="hudStage">Site ready</b><div class="hud-bar"><i id="hudFill"></i></div><span id="hudSub">Scroll to start building</span></div>
+<a class="fab" id="fab" target="_blank" rel="noopener" aria-label="Chat on WhatsApp"></a>
+
+<main>
+<!-- HOME -->
+<div class="view on" id="v-home">
+  <section class="hero"><div class="wrap"><div class="in">
+    <span class="eyebrow rv">Materials · Real Estate · Trusted Solutions</span>
+    <h1 class="rv d1">Building Materials. Real Estate. <em>Trusted Solutions.</em></h1>
+    <p class="lead rv d2">One dependable partner for everything you build and everywhere you'll live — quality construction supplies delivered to your site, and verified properties ready to call home.</p>
+    <div class="choices rv d3">
+      <button class="choice" data-act="view" data-id="materials"><span class="no">01</span><b>Construction Materials</b><span class="t">Cement, steel, sand, bricks &amp; more</span><span class="go">Explore Materials <span class="arr" data-ic="arrow"></span></span></button>
+      <button class="choice" data-act="view" data-id="properties"><span class="no">02</span><b>Real Estate Properties</b><span class="t">Villas, apartments, plots &amp; commercial</span><span class="go">Explore Properties <span class="arr" data-ic="arrow"></span></span></button>
+    </div>
+    <div class="badges rv d4"><span id="b1"></span><span id="b2"></span><span id="b3"></span></div>
+    <div class="scrollhint rv d4" style="margin-top:30px"><span class="mouse"></span><span>Scroll to watch the site take shape.<br>Scroll back up… and see what happens.</span></div>
+  </div></div></section>
+
+  <div class="wrap qqw rv"><form class="qq" data-form="quick" novalidate>
+    <div class="qq-t"><b>Quick quote</b><span>Tell us what you need</span></div>
+    <div class="fld"><label>Material</label><select name="mat" id="qqMat"></select></div>
+    <div class="fld"><label>Quantity</label><input name="qty" placeholder="e.g. 100 bags"></div>
+    <div class="fld"><label>Phone <i>*</i></label><input name="phone" type="tel" data-req="1" placeholder="10-digit mobile"><span class="em">Please enter a valid phone</span></div>
+    <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <button class="btn btn-b">Get Quote</button></form></div>
+  <div class="mq"><div class="mq-t" id="mq"></div></div>
+
+  <section class="sec" id="about"><div class="wrap who">
+    <div>
+      <span class="eyebrow rv"><b>01</b> Who we are</span>
+      <h2 class="rv d1">A local partner you can <em>build on.</em></h2>
+      <p class="big rv d2" style="font-family:var(--serif);font-size:clamp(20px,2vw,26px);line-height:1.45;color:#25343C;max-width:560px">We supply construction materials to builders, contractors and homeowners — and list carefully selected properties for buyers who want clarity, not noise.</p>
+      <p class="rv d3">Tell us what you need and we respond with clear availability and pricing. No accounts, no checkout — just a straightforward enquiry and a real conversation. <i style="color:var(--soft)">(Placeholder copy — final text will use the company's own story.)</i></p>
+      <button class="btn btn-o rv d3" data-act="scroll" data-id="contact" style="margin-top:16px">Talk to our team</button>
+    </div>
+    <div class="tl" id="trust"></div>
+  </div></section>
+
+  <section class="sec" style="padding-top:20px"><div class="wrap">
+    <div class="sh"><div><span class="eyebrow rv"><b>02</b> Construction materials</span><h2 class="rv d1">Everything your site <em>needs.</em></h2></div>
+      <button class="btn btn-o rv" data-act="view" data-id="materials">View All Materials</button></div>
+    <div class="bento" id="bento"></div>
+  </div></section>
+
+  <section class="sec" style="padding-top:20px"><div class="wrap">
+    <div class="sh"><div><span class="eyebrow rv"><b>03</b> Featured properties</span><h2 class="rv d1">Homes &amp; plots, <em>ready to see.</em></h2></div>
+      <button class="btn btn-o rv" data-act="view" data-id="properties">Explore All Properties</button></div>
+    <div class="grid g3" id="featProp"></div>
+  </div></section>
+
+  <section class="sec" style="padding-top:20px"><div class="wrap">
+    <span class="eyebrow rv"><b>04</b> How it works</span>
+    <h2 class="rv d1">From enquiry to delivery, <em>simply.</em></h2>
+    <div class="steps" id="steps"></div>
+  </div></section>
+
+  <section class="sec" style="padding-top:20px"><div class="wrap"><div class="panel rv">
+    <span class="eyebrow"><b>05</b> Why choose us</span>
+    <h2>Solid foundations, <em>every time.</em></h2>
+    <div class="why" id="why"></div>
+  </div></div></section>
+
+  <section class="sec" style="padding-top:20px"><div class="wrap"><div class="ctab rv">
+    <span class="eyebrow">Let's build together</span>
+    <h2>Looking for construction materials or your next property?</h2>
+    <p>Send us a quick enquiry — our team will get back to you with availability and the best quote.</p>
+    <div class="row">
+      <button class="btn btn-p" data-act="enq-general">Send an Enquiry</button>
+      <a class="btn btn-o" id="ctaCall" href="#"></a>
+      <a class="btn btn-o" id="ctaWa" href="#" target="_blank" rel="noopener"></a>
+    </div>
+  </div></div></section>
+</div>
+
+<!-- MATERIALS -->
+<div class="view" id="v-materials">
+  <section class="phead"><div class="wrap">
+    <div class="bc"><a data-act="view" data-id="home">Home</a> / <span>Construction Materials</span></div>
+    <span class="eyebrow">Construction Materials</span>
+    <h1>Everything you need for your <em>construction requirements.</em></h1>
+    <p class="lead">Browse by category, compare brands and grades, then add items to your enquiry list. We'll send a quote — no online payment.</p>
+  </div></section>
+  <section class="wrap" style="padding-bottom:100px">
+    <div class="chips" id="matChips"></div>
+    <div class="ctrl stk">
+      <div class="sbox"><span id="icSearch"></span><input id="matQ" type="search" placeholder="Search materials… (try “UltraTech”)" aria-label="Search materials"></div>
+      <select class="sel" id="matBrand" aria-label="Brand"></select>
+      <select class="sel" id="matSort" aria-label="Sort"><option value="">Sort: Featured</option><option value="lo">Price: Low to High</option><option value="hi">Price: High to Low</option></select>
+    </div>
+    <div class="count" id="matCount"></div>
+    <div class="grid g4" id="matGrid"></div>
+    <div class="note"><span data-ic="info"></span><span>Prototype data: product names, prices and illustrations are placeholders. Final catalogue, real photos and indicative prices will be supplied by the company.</span></div>
+  </section>
+</div>
+
+<!-- PROPERTIES -->
+<div class="view" id="v-properties">
+  <section class="phead"><div class="wrap">
+    <div class="bc"><a data-act="view" data-id="home">Home</a> / <span>Real Estate</span></div>
+    <span class="eyebrow">Real Estate</span>
+    <h1>Properties <em>currently for sale.</em></h1>
+    <p class="lead">Photos, video, full details and pricing for every listing. Found one you like? Call, WhatsApp, send an enquiry — or book a visit.</p>
+  </div></section>
+  <section class="wrap" style="padding-bottom:100px">
+    <div class="ctrl stk">
+      <select class="sel" id="pType" aria-label="Property type"></select>
+      <select class="sel" id="pLoc" aria-label="Location"></select>
+      <select class="sel" id="pBud" aria-label="Budget"><option value="">Any budget</option><option value="0-40">Under ₹40 Lakhs</option><option value="40-80">₹40 – 80 Lakhs</option><option value="80-150">₹80 Lakhs – 1.5 Cr</option><option value="150-9999">Above ₹1.5 Cr</option></select>
+      <select class="sel" id="pBed" aria-label="Bedrooms"><option value="">Any bedrooms</option><option value="1">1 BHK</option><option value="2">2 BHK</option><option value="3">3 BHK</option><option value="4">4+ BHK</option></select>
+      <button class="btn btn-o btn-s" id="pReset">Reset</button>
+    </div>
+    <div class="count" id="pCount"></div>
+    <div class="grid g3" id="propGrid"></div>
+    <div class="note"><span data-ic="info"></span><span>Prototype data: listings, prices and illustrations are placeholders. Real photos, videos and details will replace these.</span></div>
+  </section>
+</div>
+
+<!-- CONTACT (shared) -->
+<section class="sec" id="contact" style="padding-top:30px"><div class="wrap">
+  <span class="eyebrow">Contact</span><h2>Let's talk about your <em>project.</em></h2>
+  <div class="contact" style="margin-top:30px">
+    <div class="cinfo">
+      <div class="crow"><span class="ci" data-ic="phone"></span><div><small>Phone</small><b id="cPhone"></b></div></div>
+      <div class="crow"><span class="ci" data-ic="wa"></span><div><small>WhatsApp</small><b id="cWa"></b></div></div>
+      <div class="crow"><span class="ci" data-ic="mail"></span><div><small>Email</small><b id="cMail"></b></div></div>
+      <div class="crow"><span class="ci" data-ic="pin"></span><div><small>Address</small><b id="cAddr"></b></div></div>
+      <div class="crow"><span class="ci" data-ic="clock"></span><div><small>Business hours</small><b id="cHours"></b></div></div>
+      <div class="mapph" id="cMap"></div>
+    </div>
+    <div class="lcard"><h3>Send an enquiry</h3><p>Tell us what you need — we'll reply by phone, WhatsApp or email.</p><div id="contactForm"></div></div>
+  </div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <div class="fgrid">
+    <div>
+      <a class="logo" data-act="view" data-id="home"><span class="logo-m"><svg viewBox="0 0 24 24" fill="none" stroke="#D49A70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-7h6v7"/></svg></span><span class="logo-t">Maverick<small>Supplies &amp; Realty</small></span></a>
+      <p style="margin-top:18px;max-width:300px">Quality construction materials and verified real-estate listings, with a simple enquiry process and personal support.</p>
+      <div class="soc"><a aria-label="Facebook">f</a><a aria-label="Instagram">ig</a><a aria-label="YouTube">yt</a><a aria-label="LinkedIn">in</a></div>
+    </div>
+    <div><h4>Quick Links</h4><ul>
+      <li><a data-act="view" data-id="materials">Construction Materials</a></li><li><a data-act="view" data-id="properties">Real Estate</a></li>
+      <li><a data-act="scroll" data-id="about">About</a></li><li><a data-act="scroll" data-id="contact">Contact</a></li></ul></div>
+    <div><h4>Get in Touch</h4><ul id="fContact"></ul></div>
+    <div><h4>Legal</h4><ul><li><a>Privacy Policy</a></li><li><a>Terms of Use</a></li></ul></div>
+  </div>
+  <div class="copy"><span>© 2026 Maverick Supplies &amp; Realty. All rights reserved.</span><span>Design prototype — name, logo, contacts &amp; content are placeholders.</span></div>
+</div></footer>
+
+<div class="dscrim" id="dscrim"></div>
+<aside class="drawer" id="drawer" aria-label="Material enquiry"></aside>
+<div class="ov" id="ov"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+<button class="cpill" id="cpill" data-act="cart"><span id="cpillT"></span><b>Review enquiry</b></button>
+<div class="mbar"><a class="btn btn-o" id="mCall"></a><a class="btn btn-o" id="mWa" target="_blank" rel="noopener"></a><button class="btn btn-p" data-act="enq-general">Enquire</button></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   Maverick — design prototype (single file, no dependencies)
+   All company / product / property data is PLACEHOLDER.
+   ========================================================= */
+const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
+const RMQ=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const CO={name:'Maverick Supplies & Realty',phone:'+91 98765 43210',tel:'+919876543210',wa:'919876543210',email:'sales@maverick.example',addr:'Plot 12, Industrial Estate, Hyderabad – 500 001',hours:'Mon – Sat · 8:00 AM – 7:00 PM'};
+let _u=0;const U=()=>'u'+(++_u);
+
+const IC={
+ arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>',phone:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>',
+ mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',pin:'<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
+ close:'<path d="M18 6 6 18M6 6l12 12"/>',check:'<path d="M20 6 9 17l-5-5"/>',bed:'<path d="M2 18v-8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8M2 14h20M6 8V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v3"/>',
+ bath:'<path d="M4 12h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4zM6 12V6a2 2 0 0 1 4 0M6 19l-1 2M18 19l1 2"/>',area:'<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
+ play:'<path d="M6 4l14 8-14 8z"/>',left:'<path d="m15 18-6-6 6-6"/>',right:'<path d="m9 18 6-6-6-6"/>',
+ wa:'<path d="M21 12a9 9 0 0 1-13.4 7.8L3 21l1.3-4.4A9 9 0 1 1 21 12z"/><path d="M9 9c0 3 3 6 6 6l1-2-2-1-1 .8c-.8-.4-1.5-1.1-1.9-1.9L12 10l-1-2z"/>',
+ cal:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+ shield:'<path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="m9 12 2 2 4-4"/>',tag:'<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/>',
+ truck:'<path d="M1 3h13v13H1zM14 8h5l3 3v5h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',help:'<path d="M3 14v-2a9 9 0 0 1 18 0v2"/><rect x="2" y="14" width="5" height="7" rx="2"/><rect x="17" y="14" width="5" height="7" rx="2"/>',
+ list:'<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 12h6M9 16h6"/>',
+ trash:'<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',info:'<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>'
+};
+const ic=(n,c='')=>`<svg class="ic ${c}" viewBox="0 0 24 24">${IC[n]}</svg>`;
+const inr=n=>'₹ '+Number(n).toLocaleString('en-IN');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const lakhs=n=>n<100?`₹${n} Lakhs`:`₹${(n/100).toFixed(2).replace(/\.?0+$/,'')} Cr`;
+function hydrateIcons(root=document){$$('[data-ic]',root).forEach(e=>{if(!e.dataset.done){e.innerHTML=ic(e.dataset.ic);e.dataset.done=1}})}
+
+/* ---------- placeholder data ---------- */
+const CATS=['Cement','Steel','Sand','Bricks','Aggregates','Blocks','Pipes'];
+const PRODUCTS=[
+ {id:'ut-ppc',name:'UltraTech PPC Cement',cat:'Cement',brand:'UltraTech',type:'PPC',unit:'50 kg bag',per:'bag',qu:'bags',price:390,tint:'#2C5568',label:'PPC',spec:{Brand:'UltraTech',Type:'Portland Pozzolana (PPC)',Weight:'50 kg',Grade:'—',Unit:'Bag'},qual:['Good workability and smooth finish','Lower heat of hydration','Suitable for plaster, masonry and general RCC'],feat:['Consistent bag weight','Moisture-protected packing','Bulk loads to site available'],moq:'10 bags'},
+ {id:'ut-opc',name:'UltraTech OPC 53 Cement',cat:'Cement',brand:'UltraTech',type:'OPC 53',unit:'50 kg bag',per:'bag',qu:'bags',price:420,tint:'#B5382B',label:'OPC 53',spec:{Brand:'UltraTech',Type:'Ordinary Portland (OPC)',Weight:'50 kg',Grade:'53',Unit:'Bag'},qual:['High early strength','Suited to high-strength concrete','Fast setting for structural work'],feat:['Ideal for columns, beams and slabs','Moisture-protected packing','Bulk loads to site available'],moq:'10 bags'},
+ {id:'acc-ppc',name:'ACC PPC Cement',cat:'Cement',brand:'ACC',type:'PPC',unit:'50 kg bag',per:'bag',qu:'bags',price:385,tint:'#B87545',label:'PPC',spec:{Brand:'ACC',Type:'Portland Pozzolana (PPC)',Weight:'50 kg',Grade:'—',Unit:'Bag'},qual:['Durable, dense finish','Good resistance in aggressive soils','Reliable for everyday construction'],feat:['Consistent quality','Easy to handle 50 kg bag','Bulk loads to site available'],moq:'10 bags'},
+ {id:'tmt-12',name:'TMT Steel Bars Fe 500D — 12 mm',cat:'Steel',brand:'Sample Steel Co.',type:'Fe 500D',unit:'Tonne',per:'tonne',qu:'tonnes',price:58000,tint:'#6B7068',spec:{Brand:'Sample Steel Co.',Type:'TMT Fe 500D',Size:'12 mm',Length:'12 m',Unit:'Tonne'},qual:['High yield strength','Good ductility and bendability','Corrosion-resistant ribbing'],feat:['Cut and bent on request','Bundle-tagged for traceability','Direct delivery to site'],moq:'1 tonne'},
+ {id:'tmt-16',name:'TMT Steel Bars Fe 500D — 16 mm',cat:'Steel',brand:'Sample Steel Co.',type:'Fe 500D',unit:'Tonne',per:'tonne',qu:'tonnes',price:58500,tint:'#585D56',spec:{Brand:'Sample Steel Co.',Type:'TMT Fe 500D',Size:'16 mm',Length:'12 m',Unit:'Tonne'},qual:['High yield strength','Good ductility and bendability','Corrosion-resistant ribbing'],feat:['Suited for beams and columns','Bundle-tagged for traceability','Direct delivery to site'],moq:'1 tonne'},
+ {id:'msand',name:'M-Sand (Manufactured Sand)',cat:'Sand',brand:'Local Quarry',type:'Zone II',unit:'Cubic foot',per:'cu.ft',qu:'cu.ft',price:55,tint:'#C9A25E',spec:{Brand:'Local Quarry',Type:'Manufactured sand',Zone:'II',Grade:'Washed',Unit:'Cu.ft'},qual:['Uniform grain size','Low silt content','Consistent for plaster and concrete'],feat:['Washed and screened','Truck-load delivery','Alternative to river sand'],moq:'500 cu.ft'},
+ {id:'rsand',name:'River Sand (Filtered)',cat:'Sand',brand:'Local Supplier',type:'Fine',unit:'Cubic foot',per:'cu.ft',qu:'cu.ft',price:null,tint:'#D8B878',spec:{Brand:'Local Supplier',Type:'River sand',Grade:'Filtered',Unit:'Cu.ft'},qual:['Smooth fine texture','Ideal for plastering','Clean and filtered'],feat:['Seasonal availability','Price varies by supply','Request a live quote'],moq:'On request'},
+ {id:'redbrick',name:'Red Clay Bricks (First Class)',cat:'Bricks',brand:'Local Kiln',type:'Clay',unit:'1000 nos',per:'1000',qu:'×1000',price:8500,tint:'#B5502F',spec:{Brand:'Local Kiln',Type:'Burnt clay',Size:'9 × 4 × 3 in',Class:'First',Unit:'1000 nos'},qual:['Uniform burning and colour','Good compressive strength','Low water absorption'],feat:['Traditional load-bearing walls','Stacked delivery','Bulk discounts on request'],moq:'2000 nos'},
+ {id:'flyash',name:'Fly Ash Bricks',cat:'Bricks',brand:'EcoBrick',type:'Fly ash',unit:'1000 nos',per:'1000',qu:'×1000',price:6200,tint:'#8A8F94',spec:{Brand:'EcoBrick',Type:'Fly ash',Size:'9 × 4 × 3 in',Class:'First',Unit:'1000 nos'},qual:['Smooth, even surface','Lighter than clay bricks','Eco-friendly material'],feat:['Less plaster needed','Consistent dimensions','Bulk delivery'],moq:'2000 nos'},
+ {id:'agg20',name:'Crushed Aggregate 20 mm',cat:'Aggregates',brand:'Local Quarry',type:'20 mm',unit:'Cubic foot',per:'cu.ft',qu:'cu.ft',price:38,tint:'#80857b',spec:{Brand:'Local Quarry',Type:'Crushed stone',Size:'20 mm',Grade:'Graded',Unit:'Cu.ft'},qual:['Angular, well-graded','Strong bond with cement','Clean, low dust'],feat:['Concrete and RCC use','Truck-load delivery','Multiple sizes available'],moq:'500 cu.ft'},
+ {id:'aac',name:'AAC Blocks 600×200×200',cat:'Blocks',brand:'Sample AAC Co.',type:'AAC',unit:'Cubic metre',per:'cu.m',qu:'cu.m',price:4200,tint:'#BDBFB4',spec:{Brand:'Sample AAC Co.',Type:'Autoclaved aerated',Size:'600×200×200 mm',Density:'Light',Unit:'Cu.m'},qual:['Lightweight, easy to handle','Good thermal insulation','Fast wall construction'],feat:['Accurate dimensions','Less mortar needed','Palletised delivery'],moq:'5 cu.m'},
+ {id:'pvc',name:'PVC Pipes 4" (Plumbing)',cat:'Pipes',brand:'Sample Pipes Ltd.',type:'PVC',unit:'3 m length',per:'length',qu:'lengths',price:null,tint:'#8A9AA0',spec:{Brand:'Sample Pipes Ltd.',Type:'PVC',Diameter:'4 inch',Length:'3 m',Unit:'Length'},qual:['Smooth bore for good flow','Corrosion-resistant','Durable, lightweight'],feat:['Fittings available','Bulk project pricing','Delivery with materials'],moq:'On request'}
+];
+const PROPS=[
+ {id:'villa',title:'Luxury 3 BHK Villa',type:'Villa',loc:'Kokapet',city:'Hyderabad',price:85,bed:3,bath:3,area:'2400 sq.ft',plot:'300 sq.yd',face:'East',status:'Available',pal:{wall:'#F3EFE6',roof:'#34454F',ground:'#8A9C8E',acc:'#9A6038'},kind:'villa',desc:'A spacious contemporary villa with double-height living area, modular kitchen and a private garden — in a quiet gated community with quick access to the main road.',amen:['Covered parking','Private garden','24×7 security','Power backup','Rainwater harvesting','Gated community']},
+ {id:'apt2',title:'2 BHK Apartment',type:'Apartment',loc:'Miyapur',city:'Hyderabad',price:48,bed:2,bath:2,area:'1250 sq.ft',plot:'—',face:'North',status:'Available',pal:{wall:'#E9E6DC',roof:'#4A5C68',ground:'#94A597',acc:'#2C5568'},kind:'apartment',desc:'Well-planned apartment on a mid-level floor with good ventilation, a modern kitchen and a balcony. Close to schools, metro and shopping.',amen:['Lift','Parking','Children’s play area','Security','Power backup','Clubhouse']},
+ {id:'plot',title:'Residential Plot',type:'Plot',loc:'Shamshabad',city:'Hyderabad',price:32,bed:0,bath:0,area:'200 sq.yd',plot:'200 sq.yd',face:'West',status:'Available',pal:{wall:'#E9DFC6',roof:'#566873',ground:'#A3B09A',acc:'#B5382B'},kind:'plot',desc:'Clear-title corner-adjacent plot in a developing layout with internal roads and utilities available. A good opportunity for a custom-built home or long-term investment.',amen:['Wide roads','Water connection','Electricity','Drainage','Corner access','Fenced layout']},
+ {id:'shop',title:'Commercial Shop',type:'Commercial',loc:'Kukatpally',city:'Hyderabad',price:120,bed:0,bath:1,area:'900 sq.ft',plot:'—',face:'South',status:'Available',pal:{wall:'#EAE5D8',roof:'#34454F',ground:'#a0a398',acc:'#142C3A'},kind:'shop',desc:'Ground-floor commercial space on a busy main road with excellent footfall, large glass frontage and ample customer parking.',amen:['Main-road frontage','Parking','Power backup','Washroom','Signage space','CCTV']},
+ {id:'house',title:'Independent 4 BHK House',type:'House',loc:'Secunderabad',city:'Hyderabad',price:145,bed:4,bath:4,area:'3000 sq.ft',plot:'250 sq.yd',face:'North-East',status:'Sold',pal:{wall:'#F1E3CC',roof:'#8C3B2A',ground:'#8FA092',acc:'#8C3B2A'},kind:'house',desc:'Elegant independent house with a large lawn, pooja room and a terrace garden. Recently sold — similar listings available on request.',amen:['Lawn','Terrace garden','Parking for 3','Modular kitchen','Power backup','Security']},
+ {id:'apt3',title:'3 BHK Premium Apartment',type:'Apartment',loc:'Kondapur',city:'Hyderabad',price:72,bed:3,bath:3,area:'1750 sq.ft',plot:'—',face:'East',status:'Available',pal:{wall:'#ECE8DD',roof:'#2C3F4B',ground:'#90A294',acc:'#9A6038'},kind:'apartment',desc:'Premium 3 BHK in a gated high-rise with open views, a clubhouse and fitness amenities — minutes from IT corridors and top schools.',amen:['Gym','Swimming pool','Clubhouse','Lift','Covered parking','24×7 security']}
+];
+
+/* ---------- illustrations (placeholders for real photos) ---------- */
+function prodArt(p){
+  const i=U(),t=p.tint;
+  let s=`<svg viewBox="0 0 200 140" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><defs>
+  <linearGradient id="bg${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F8F5EE"/><stop offset="1" stop-color="#E2DAC7"/></linearGradient>
+  <radialGradient id="gl${i}" cx=".5" cy=".45" r=".6"><stop offset="0" stop-color="${t}" stop-opacity=".30"/><stop offset="1" stop-color="${t}" stop-opacity="0"/></radialGradient>
+  <linearGradient id="bag${i}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#D2CAB6"/><stop offset=".35" stop-color="#FFFFFF"/><stop offset="1" stop-color="#CFC6B0"/></linearGradient>
+  <linearGradient id="lb${i}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${t}"/><stop offset=".4" stop-color="${t}" stop-opacity=".82"/><stop offset="1" stop-color="${t}"/></linearGradient>
+  <linearGradient id="mt${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EFEFEA"/><stop offset=".45" stop-color="#AAAEA5"/><stop offset="1" stop-color="#5E625B"/></linearGradient>
+  <linearGradient id="sd${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EDD6A0"/><stop offset="1" stop-color="#B98F4C"/></linearGradient>
+  <linearGradient id="br${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D4714A"/><stop offset="1" stop-color="#9A3F24"/></linearGradient>
+  <linearGradient id="bk${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F7F6F1"/><stop offset="1" stop-color="#c9cbbf"/></linearGradient>
+  <radialGradient id="pp${i}" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#CFD3C8"/></radialGradient>
+  <linearGradient id="st${i}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#bfc2b7"/><stop offset="1" stop-color="#777c72"/></linearGradient>
+  </defs><rect width="200" height="140" fill="url(#bg${i})"/><rect width="200" height="140" fill="url(#gl${i})"/><rect y="116" width="200" height="24" fill="rgba(23,33,38,.07)"/>`;
+  switch(p.cat){
+   case'Cement':s+=`<ellipse cx="100" cy="122" rx="62" ry="7" fill="rgba(23,33,38,.22)"/><g transform="rotate(-9 52 100)"><path d="M26 52 Q52 44 78 52 L80 118 Q52 124 24 118Z" fill="url(#bag${i})" opacity=".92"/><rect x="25" y="66" width="54" height="24" fill="url(#lb${i})" opacity=".8"/></g>
+    <path d="M62 24 Q100 12 138 24 L144 118 Q100 130 56 118Z" fill="url(#bag${i})"/><path d="M62 24 Q100 12 138 24" fill="none" stroke="#BFB6A0" stroke-width="2"/><path d="M60 32 Q100 22 140 32" fill="none" stroke="#D5CDB8" stroke-width="1.5"/><path d="M58 52 Q100 44 142 52 L143 86 Q100 94 57 86Z" fill="url(#lb${i})"/><text x="100" y="76" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="19" fill="#fff" letter-spacing="1">${p.label}</text><rect x="76" y="98" width="48" height="4" rx="2" fill="#CFC6B0"/><rect x="84" y="106" width="32" height="4" rx="2" fill="#DDD5C1"/><path d="M70 28 L66 114" stroke="rgba(255,255,255,.6)" stroke-width="3"/>`;break;
+   case'Steel':s+=`<ellipse cx="100" cy="122" rx="84" ry="6" fill="rgba(23,33,38,.2)"/>`;for(let r=0;r<6;r++){const y=34+r*14;s+=`<rect x="12" y="${y-4}" width="176" height="9" rx="4.5" fill="url(#mt${i})"/><line x1="16" y1="${y}" x2="184" y2="${y}" stroke="rgba(23,33,38,.28)" stroke-width="7" stroke-dasharray="1.2 5.5"/>`}s+=`<rect x="56" y="26" width="9" height="86" rx="3" fill="${t}" opacity=".85"/><rect x="138" y="26" width="9" height="86" rx="3" fill="${t}" opacity=".85"/>`;break;
+   case'Sand':s+=`<ellipse cx="100" cy="122" rx="86" ry="6" fill="rgba(23,33,38,.18)"/><path d="M-6 122 Q46 38 100 74 Q146 40 206 122Z" fill="url(#sd${i})"/><path d="M-6 122 Q56 66 104 92 Q150 72 206 122Z" fill="rgba(255,255,255,.22)"/>`+[...Array(34)].map((_,k)=>`<circle cx="${14+((k*37)%172)}" cy="${96+((k*19)%22)}" r="1.2" fill="rgba(255,255,255,.55)"/>`).join('');break;
+   case'Bricks':s+=`<ellipse cx="100" cy="122" rx="78" ry="6" fill="rgba(23,33,38,.22)"/>`;for(let r=0;r<5;r++)for(let c=0;c<4;c++){const off=r%2?-20:0,x=24+c*42+off;if(x<-10||x>170)continue;s+=`<rect x="${x}" y="${28+r*17}" width="40" height="15" rx="2" fill="url(#br${i})"/><rect x="${x+3}" y="${30+r*17}" width="14" height="3" rx="1.5" fill="rgba(255,255,255,.22)"/>`}break;
+   case'Aggregates':s+=`<ellipse cx="100" cy="122" rx="76" ry="6" fill="rgba(23,33,38,.2)"/>`;[[40,102,22],[80,108,19],[116,100,24],[152,106,20],[60,84,17],[98,80,20],[134,84,17],[88,62,15],[118,62,13],[68,66,11]].forEach((q,k)=>{s+=`<polygon points="${[0,1,2,3,4,5].map(m=>{const a=m*Math.PI/3+k,rr=q[2]*(.8+((m*7+k)%4)*.08);return(q[0]+Math.cos(a)*rr).toFixed(1)+','+(q[1]+Math.sin(a)*rr*.8).toFixed(1)}).join(' ')}" fill="url(#st${i})" stroke="rgba(23,33,38,.25)"/>`});break;
+   case'Blocks':s+=`<ellipse cx="100" cy="122" rx="82" ry="6" fill="rgba(23,33,38,.2)"/>`;for(let r=0;r<3;r++)for(let c=0;c<3;c++){const x=30+c*47,y=32+r*30;s+=`<rect x="${x}" y="${y}" width="44" height="27" rx="3" fill="url(#bk${i})" stroke="rgba(23,33,38,.14)"/><circle cx="${x+9}" cy="${y+9}" r="1.5" fill="#a3a69b"/><circle cx="${x+25}" cy="${y+17}" r="1.8" fill="#a3a69b"/><circle cx="${x+35}" cy="${y+8}" r="1.2" fill="#a3a69b"/>`}break;
+   case'Pipes':s+=`<ellipse cx="100" cy="124" rx="70" ry="6" fill="rgba(23,33,38,.2)"/>`;[[58,86],[100,86],[142,86],[79,50],[121,50],[100,114]].forEach(q=>{s+=`<circle cx="${q[0]}" cy="${q[1]}" r="20" fill="url(#pp${i})" stroke="rgba(23,33,38,.22)"/><circle cx="${q[0]}" cy="${q[1]}" r="13" fill="#1B2B34"/><circle cx="${q[0]}" cy="${q[1]}" r="13" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="2"/><path d="M${q[0]-9} ${q[1]-6}a11 11 0 0 1 8-6" stroke="rgba(255,255,255,.55)" stroke-width="2" fill="none" stroke-linecap="round"/>`});break;
+  }
+  return s+'</svg>';
+}
+function trees(x,y,sc=1){return `<g transform="translate(${x} ${y}) scale(${sc})"><ellipse cx="0" cy="4" rx="26" ry="5" fill="rgba(23,33,38,.18)"/><rect x="-4" y="-30" width="8" height="34" fill="#6b4a2f"/><circle cx="0" cy="-48" r="26" fill="#5E7A6C"/><circle cx="-14" cy="-36" r="16" fill="#6C8678"/><circle cx="15" cy="-38" r="16" fill="#51695C"/></g>`}
+function winEl(x,y,w,h,dusk,g){return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="${dusk?'#F2C48D':'url(#'+g+')'}" stroke="rgba(23,33,38,.3)"/><path d="M${x+w/2} ${y}v${h}M${x} ${y+h/2}h${w}" stroke="rgba(23,33,38,.22)"/>`}
+function exterior(p,dusk){
+  const P=p.pal,u=U(),gl='gl'+u;
+  let s=`<svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="sk${u}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${dusk?'#34303F':'#D9E0DC'}"/><stop offset="1" stop-color="${dusk?'#D98F63':'#FBF6E8'}"/></linearGradient><linearGradient id="${gl}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D5DFDC"/><stop offset="1" stop-color="#6F8A94"/></linearGradient><linearGradient id="gr${u}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${P.ground}"/><stop offset="1" stop-color="#5C6E66"/></linearGradient></defs><rect width="800" height="500" fill="url(#sk${u})"/>`;
+  s+=dusk?`<circle cx="640" cy="150" r="60" fill="#fff3d6" opacity=".25"/><circle cx="640" cy="150" r="32" fill="#fff3d6" opacity=".9"/>`:`<circle cx="660" cy="100" r="70" fill="#fff6c9" opacity=".35"/><circle cx="660" cy="100" r="38" fill="#fff6c9"/><ellipse cx="180" cy="90" rx="70" ry="20" fill="#fff" opacity=".85"/><ellipse cx="230" cy="78" rx="46" ry="16" fill="#fff" opacity=".85"/>`;
+  s+=`<rect y="380" width="800" height="120" fill="url(#gr${u})"/><rect y="440" width="800" height="60" fill="#4a4f49"/><path d="M0 470h800" stroke="#E4DCC8" stroke-width="3" stroke-dasharray="26 18"/><ellipse cx="400" cy="392" rx="270" ry="12" fill="rgba(23,33,38,.18)"/>`;
+  switch(p.kind){
+   case'villa':s+=`<rect x="190" y="250" width="420" height="140" fill="${P.wall}"/><rect x="250" y="176" width="300" height="80" fill="${P.wall}" stroke="rgba(0,0,0,.06)"/><rect x="180" y="240" width="440" height="14" fill="${P.roof}"/><rect x="240" y="166" width="320" height="14" fill="${P.roof}"/>${winEl(280,196,60,44,dusk,gl)}${winEl(370,196,60,44,dusk,gl)}${winEl(460,196,60,44,dusk,gl)}${winEl(220,282,70,64,dusk,gl)}${winEl(500,282,90,64,dusk,gl)}<rect x="345" y="296" width="60" height="94" rx="3" fill="${P.acc}"/><rect x="300" y="262" width="150" height="6" fill="${P.roof}"/>`+trees(150,396,1.1)+trees(660,396,1);break;
+   case'apartment':s+=`<rect x="280" y="60" width="250" height="330" fill="${P.wall}"/><rect x="270" y="52" width="270" height="12" fill="${P.roof}"/>`+[0,1,2,3,4,5].map(r=>[0,1,2].map(c=>winEl(296+c*76,80+r*50,52,30,dusk,gl)+`<rect x="${290+c*76}" y="${112+r*50}" width="64" height="4" fill="rgba(23,33,38,.28)"/>`).join('')).join('')+`<rect x="375" y="346" width="60" height="44" rx="3" fill="${P.acc}"/><rect x="560" y="200" width="120" height="190" fill="${P.wall}" opacity=".75"/>`+[0,1,2,3].map(r=>winEl(576,214+r*42,34,22,dusk,gl)+winEl(626,214+r*42,34,22,dusk,gl)).join('')+trees(200,396,1.1)+trees(720,396,.9);break;
+   case'plot':s+=`<polygon points="150,420 650,420 600,330 200,330" fill="rgba(255,255,255,.16)" stroke="#fff" stroke-width="3" stroke-dasharray="14 10"/>`+[[150,420],[650,420],[600,330],[200,330]].map(q=>`<rect x="${q[0]-7}" y="${q[1]-16}" width="14" height="18" fill="#d6d1c4" stroke="rgba(0,0,0,.3)"/>`).join('')+`<rect x="388" y="290" width="6" height="90" fill="#6b4a2f"/><rect x="330" y="236" width="140" height="62" rx="6" fill="#fff"/><rect x="330" y="236" width="140" height="62" rx="6" fill="none" stroke="${P.acc}" stroke-width="4"/><text x="400" y="263" text-anchor="middle" font-family="Arial" font-weight="800" font-size="19" fill="${P.acc}">FOR SALE</text><text x="400" y="286" text-anchor="middle" font-family="Arial" font-weight="700" font-size="13" fill="#3F4F58">${p.area}</text>`+trees(100,400,1.2)+trees(710,396,1.1);break;
+   case'shop':s+=`<rect x="170" y="190" width="460" height="200" fill="${P.wall}"/><rect x="160" y="180" width="480" height="14" fill="${P.roof}"/><rect x="200" y="206" width="400" height="44" rx="6" fill="${P.acc}"/><text x="400" y="236" text-anchor="middle" font-family="Arial" font-weight="800" font-size="22" fill="#fff" letter-spacing="3">YOUR BUSINESS HERE</text>`+[0,1,2,3,4,5,6,7].map(k=>`<path d="M${200+k*50} 256h50l-6 26h-38z" fill="${k%2?'#fff':P.acc}"/>`).join('')+`<rect x="200" y="290" width="190" height="100" fill="url(#${gl})" stroke="rgba(0,0,0,.25)"/><rect x="410" y="290" width="190" height="100" fill="url(#${gl})" stroke="rgba(0,0,0,.25)"/><rect x="385" y="290" width="30" height="100" fill="${P.roof}"/>`+trees(110,400,1)+trees(700,400,1);break;
+   case'house':s+=`<rect x="210" y="250" width="380" height="140" fill="${P.wall}"/><polygon points="190,252 400,130 610,252" fill="${P.roof}"/><rect x="490" y="150" width="30" height="60" fill="#7a4a3a"/>${winEl(250,286,70,60,dusk,gl)}${winEl(480,286,70,60,dusk,gl)}<rect x="360" y="296" width="80" height="94" rx="3" fill="${P.acc}"/><circle cx="400" cy="214" r="18" fill="${dusk?'#F2C48D':'url(#'+gl+')'}" stroke="rgba(0,0,0,.25)"/>`+trees(140,400,1.2)+trees(690,398,1);break;
+  }
+  return s+'</svg>';
+}
+function interior(p,v){
+  const P=p.pal;let s=`<svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><rect width="800" height="500" fill="#EFE9DC"/><rect y="360" width="800" height="140" fill="#C9A97E"/><path d="M0 360h800" stroke="rgba(0,0,0,.15)" stroke-width="3"/><rect x="520" y="70" width="220" height="190" rx="6" fill="#DCE4E2" stroke="#fff" stroke-width="10"/><path d="M630 70v190M520 165h220" stroke="#fff" stroke-width="6"/><path d="M520 70l90 190" stroke="rgba(255,255,255,.4)" stroke-width="14"/>`;
+  if(v===0){s+=`<rect x="90" y="270" width="340" height="100" rx="18" fill="${P.acc}"/><rect x="70" y="300" width="60" height="80" rx="14" fill="${P.acc}" opacity=".9"/><rect x="390" y="300" width="60" height="80" rx="14" fill="${P.acc}" opacity=".9"/><rect x="100" y="230" width="320" height="64" rx="16" fill="${P.acc}" opacity=".85"/><rect x="150" y="262" width="70" height="40" rx="10" fill="#fff" opacity=".35"/><ellipse cx="290" cy="420" rx="190" ry="26" fill="rgba(0,0,0,.12)"/><rect x="110" y="90" width="150" height="100" fill="#fff" stroke="#c9bfa8" stroke-width="6"/><circle cx="170" cy="140" r="26" fill="${P.acc}" opacity=".6"/><rect x="470" y="300" width="12" height="70" fill="#7a5a3a"/><path d="M450 300h52l-10-44h-32z" fill="#EBCB9C"/><circle cx="700" cy="330" r="28" fill="#6C8678"/><rect x="684" y="340" width="32" height="40" rx="4" fill="#a86a3e"/>`}
+  else if(v===1){s+=`<rect x="120" y="240" width="330" height="130" rx="14" fill="${P.acc}"/><rect x="120" y="200" width="330" height="60" rx="14" fill="#fff"/><rect x="140" y="214" width="120" height="40" rx="12" fill="#f3efe6"/><rect x="290" y="214" width="120" height="40" rx="12" fill="#f3efe6"/><rect x="90" y="170" width="30" height="200" rx="6" fill="#7a5a3a"/><rect x="460" y="300" width="60" height="70" rx="6" fill="#7a5a3a"/><rect x="480" y="262" width="20" height="40" fill="#EBCB9C"/><rect x="560" y="300" width="160" height="70" rx="6" fill="#d8cdb6"/>`}
+  return s+'</svg>';
+}
+function planArt(p){
+  const a=p.kind==='plot'?`<rect x="150" y="90" width="500" height="320" fill="#e8f0df" stroke="#3F4F58" stroke-width="5"/><path d="M150 250h500M400 90v320" stroke="#3F4F58" stroke-width="2" stroke-dasharray="8 8"/><text x="400" y="62" text-anchor="middle" font-family="Arial" font-weight="700" font-size="16" fill="#3F4F58">${p.area} · ${p.face} facing</text><text x="275" y="180" text-anchor="middle" font-family="Arial" font-size="15" fill="#6B7A82">Open land</text><text x="525" y="340" text-anchor="middle" font-family="Arial" font-size="15" fill="#6B7A82">Road access</text>`
+  :`<rect x="130" y="90" width="540" height="320" fill="#fff" stroke="#3F4F58" stroke-width="6"/><path d="M130 250h250M380 90v320M380 220h290M520 220v190" stroke="#3F4F58" stroke-width="4"/><text x="255" y="175" text-anchor="middle" font-family="Arial" font-weight="700" font-size="16" fill="#3F4F58">Living</text><text x="255" y="335" text-anchor="middle" font-family="Arial" font-weight="700" font-size="16" fill="#3F4F58">Bedroom</text><text x="525" y="160" text-anchor="middle" font-family="Arial" font-weight="700" font-size="16" fill="#3F4F58">Kitchen</text><text x="450" y="325" text-anchor="middle" font-family="Arial" font-weight="700" font-size="16" fill="#3F4F58">Bath</text><text x="595" y="325" text-anchor="middle" font-family="Arial" font-weight="700" font-size="16" fill="#3F4F58">Bedroom</text><text x="400" y="62" text-anchor="middle" font-family="Arial" font-weight="700" font-size="16" fill="#3F4F58">${p.area}</text>`;
+  return `<svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><rect width="800" height="500" fill="#f4f1e8"/><path d="M0 0h800M0 50h800M0 100h800M0 150h800M0 200h800M0 250h800M0 300h800M0 350h800M0 400h800M0 450h800" stroke="#e5e0d0"/>${a}<text x="400" y="470" text-anchor="middle" font-family="Arial" font-size="13" fill="#919BA0">Illustrative layout — real plan to be supplied</text></svg>`;
+}
+const slidesFor=p=>p.kind==='plot'?[exterior(p,false),exterior(p,true),planArt(p)]:[exterior(p,false),interior(p,0),interior(p,1),exterior(p,true),planArt(p)];
+function mapArt(){return `<svg viewBox="0 0 400 150" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg"><rect width="400" height="150" fill="#EAE6D8"/><path d="M-10 100 Q120 60 220 90T420 60" stroke="#fff" stroke-width="14" fill="none"/><path d="M90 -10 L130 160" stroke="#fff" stroke-width="10"/><path d="M280 -10 L240 160" stroke="#fff" stroke-width="8"/><rect x="150" y="14" width="70" height="40" fill="#D8DCCF"/><rect x="300" y="100" width="70" height="40" fill="#D8DCCF"/><path d="M200 60c0 18-18 34-18 34s-18-16-18-34a18 18 0 0 1 36 0z" fill="#B87545"/><circle cx="182" cy="60" r="7" fill="#fff"/></svg>`}
+
+/* ---------- state ---------- */
+let CART=[],VIEW='home',matCat='All';
+const mat=id=>PRODUCTS.find(p=>p.id===id),prop=id=>PROPS.find(p=>p.id===id);
+
+/* ---------- renderers ---------- */
+function matCard(p){
+  const pr=p.price?`<div class="price">${inr(p.price)} <small>/ ${p.per}</small></div>`:`<div class="price rq">Price on Request</div>`;
+  return `<article class="card rv"><div class="art" data-act="open-mat" data-id="${p.id}"><span class="tag">${p.cat}</span>${prodArt(p)}</div><div class="body"><h3>${esc(p.name)}</h3>
+  <div class="meta"><span>Brand: <b>${esc(p.brand)}</b></span><span>Type: <b>${esc(p.type)}</b></span><span>Unit: <b>${esc(p.unit)}</b></span></div>${pr}
+  <div class="acts"><button class="btn btn-o btn-s" data-act="open-mat" data-id="${p.id}">View Details</button><button class="btn btn-p btn-s" data-act="add" data-id="${p.id}">Add to Enquiry</button></div></div></article>`;
+}
+function propCard(p){
+  const sold=p.status==='Sold';
+  return `<article class="card rv"><div class="art" data-act="open-prop" data-id="${p.id}"><span class="tag ${sold?'':'ok'}">${p.type} · ${p.status}</span>${sold?'<div class="sold"><span>SOLD</span></div>':''}${exterior(p,false)}</div><div class="body"><h3>${esc(p.title)}</h3>
+  <div class="loc">${ic('pin')}${esc(p.loc)}, ${esc(p.city)}</div><div class="price">${lakhs(p.price)}</div>
+  <div class="pstats">${p.bed?`<span>${ic('bed')}${p.bed} BHK</span>`:''}${p.bath&&p.bed?`<span>${ic('bath')}${p.bath} Bath</span>`:''}<span>${ic('area')}${p.area}</span></div>
+  <div class="acts"><button class="btn btn-o btn-s" data-act="enq-prop" data-id="${p.id}" ${sold?'disabled style="opacity:.5;pointer-events:none"':''}>Enquire</button><button class="btn btn-p btn-s" data-act="open-prop" data-id="${p.id}">View Property</button></div></div></article>`;
+}
+function propFeat(p,i){
+  return `<article class="pf rv d${i+1}" data-act="open-prop" data-id="${p.id}"><div class="pf-art">${exterior(p,false)}</div><span class="tag ok">${p.type} · ${p.status}</span>
+  <div class="pf-c"><div class="loc">${ic('pin')}${esc(p.loc)}, ${esc(p.city)}</div><h3>${esc(p.title)}</h3>
+  <div class="pf-row"><div class="pf-price">${lakhs(p.price)}</div><div class="pf-st">${p.bed?p.bed+' BHK · ':''}${p.area}</div></div><div class="pf-go">View Property ${ic('arrow')}</div></div></article>`;
+}
+function renderHome(){
+  $('#mq').innerHTML=[...['Cement','Steel','Sand','Bricks','Aggregates','Blocks','Pipes','Villas','Apartments','Plots','Commercial'],...['Cement','Steel','Sand','Bricks','Aggregates','Blocks','Pipes','Villas','Apartments','Plots','Commercial']].map(t=>`<span>${t}</span>`).join('');
+  $('#trust').innerHTML=[['shield','Quality Materials','Sourced from trusted brands and checked before dispatch.'],['tag','Competitive Pricing','Transparent, indicative pricing — and quotes on request.'],['truck','Reliable Supply','Dependable stock and delivery planning for your site.'],['help','Customer Support','A real person to help from enquiry to completion.']].map((t,i)=>`<div class="it rv d${i+1}"><span class="ti">${ic(t[0])}</span><div><b>${t[1]}</b><span>${t[2]}</span></div></div>`).join('');
+  const cnt=c=>PRODUCTS.filter(p=>p.cat===c).length;
+  const bt=(c,rep,cls,txt)=>`<article class="bt ${cls} rv" data-act="view-cat" data-id="${c}"><div class="bt-art">${prodArt(mat(rep))}</div><div class="bt-ov"></div><div class="bt-c"><span class="bt-n">${cnt(c)} products</span><h3>${c}</h3><p>${txt}</p><span class="bt-go">View materials ${ic('arrow')}</span></div></article>`;
+  $('#bento').innerHTML=bt('Cement','ut-ppc','big','Multiple brands &amp; grades')+bt('Steel','tmt-12','','TMT bars &amp; structural steel')+bt('Sand','msand','','Quality construction sand')+bt('Bricks','redbrick','wide','Clay &amp; fly ash bricks');
+  $('#featProp').innerHTML=['villa','apt2','plot'].map((id,i)=>propFeat(prop(id),i)).join('');
+  $('#steps').innerHTML=[['Browse','Explore materials or properties and shortlist what you need.'],['Enquire','Add items to your list and send one simple enquiry — no account needed.'],['Get a quote','Our team replies with availability, pricing and delivery details.'],['Delivery / Visit','Materials arrive at your site, or we arrange your property visit.']].map((s,i)=>`<div class="stp rv d${i+1}"><div class="c">${i+1}</div><b>${s[0]}</b><p>${s[1]}</p></div>`).join('');
+  $('#why').innerHTML=[['Quality','Reliable materials and verified property information.'],['Competitive','Competitive pricing and a transparent enquiry process.'],['Reliable','Professional support from enquiry to completion.'],['Local Expertise','Knowledge of the markets and areas we serve.']].map((w,i)=>`<div class="wy"><div class="no">0${i+1}</div><b>${w[0]}</b><p>${w[1]}</p></div>`).join('');
+}
+function renderMat(){
+  const q=$('#matQ').value.trim().toLowerCase(),br=$('#matBrand').value,so=$('#matSort').value;
+  let list=PRODUCTS.filter(p=>(matCat==='All'||p.cat===matCat)&&(!br||p.brand===br)&&(!q||(p.name+p.brand+p.type+p.cat).toLowerCase().includes(q)));
+  if(so)list=[...list].sort((a,b)=>(so==='lo'?1:-1)*((a.price??1e12)-(b.price??1e12)));
+  $('#matCount').textContent=`${list.length} material${list.length===1?'':'s'} found`;
+  $('#matGrid').innerHTML=list.length?list.map(matCard).join(''):`<div class="empty" style="grid-column:1/-1">No materials match your search. Try a different keyword or clear the filters.</div>`;
+  observe();
+}
+function renderProps(){
+  const ty=$('#pType').value,lo=$('#pLoc').value,bu=$('#pBud').value,be=$('#pBed').value;
+  let list=PROPS.filter(p=>(!ty||p.type===ty)&&(!lo||p.loc===lo)&&(!be||(be==='4'?p.bed>=4:p.bed==be))&&(!bu||(p.price>=+bu.split('-')[0]&&p.price<+bu.split('-')[1])));
+  $('#pCount').textContent=`${list.length} propert${list.length===1?'y':'ies'} found`;
+  $('#propGrid').innerHTML=list.length?list.map(propCard).join(''):`<div class="empty" style="grid-column:1/-1">No properties match these filters. Try widening your budget or location.</div>`;
+  observe();
+}
+function initControls(){
+  $('#matChips').innerHTML=['All',...CATS].map(c=>`<button class="chip ${c==='All'?'on':''}" data-act="chip" data-id="${c}">${c}<small>${c==='All'?PRODUCTS.length:PRODUCTS.filter(p=>p.cat===c).length}</small></button>`).join('');
+  $('#qqMat').innerHTML='<option value="">Select material…</option>'+PRODUCTS.map(p=>`<option>${esc(p.name)}</option>`).join('')+'<option>Real-estate enquiry</option>';
+  $('#matBrand').innerHTML='<option value="">All brands</option>'+[...new Set(PRODUCTS.map(p=>p.brand))].map(b=>`<option>${esc(b)}</option>`).join('');
+  $('#pType').innerHTML='<option value="">All types</option>'+[...new Set(PROPS.map(p=>p.type))].map(b=>`<option>${b}</option>`).join('');
+  $('#pLoc').innerHTML='<option value="">All locations</option>'+[...new Set(PROPS.map(p=>p.loc))].map(b=>`<option>${b}</option>`).join('');
+  ['#matQ','#matBrand','#matSort'].forEach(s=>$(s).addEventListener('input',renderMat));
+  ['#pType','#pLoc','#pBud','#pBed'].forEach(s=>$(s).addEventListener('input',renderProps));
+  $('#pReset').onclick=()=>{['#pType','#pLoc','#pBud','#pBed'].forEach(s=>$(s).value='');renderProps()};
+  $('#icSearch').innerHTML=ic('search');$('#burger').innerHTML=ic('menu');$('#cartBtn').innerHTML=ic('list')+'<span>Enquiry</span><span class="n" id="cartN">0</span>';
+}
+function initContact(){
+  $('#uPhone').innerHTML=ic('phone')+CO.phone;$('#uPhone').href='tel:'+CO.tel;$('#uMail').innerHTML=ic('mail')+CO.email;$('#uMail').href='mailto:'+CO.email;
+  $('#uHours').innerHTML=ic('clock')+CO.hours;$('#uWa').innerHTML=ic('wa')+'WhatsApp us';$('#uWa').href=`https://wa.me/${CO.wa}`;
+  $('#b1').innerHTML=ic('tag')+'Quote on request';$('#b2').innerHTML=ic('truck')+'Delivery to site';$('#b3').innerHTML=ic('shield')+'Verified listings';$('#mCall').href='tel:'+CO.tel;$('#mCall').innerHTML=ic('phone')+'Call';$('#mWa').href=`https://wa.me/${CO.wa}`;$('#mWa').innerHTML=ic('wa')+'WhatsApp';$('#fab').innerHTML=ic('wa');$('#fab').href=`https://wa.me/${CO.wa}?text=${encodeURIComponent('Hello, I would like to enquire about your materials / properties.')}`;
+  $('#cPhone').textContent=CO.phone;$('#cWa').textContent=CO.phone;$('#cMail').textContent=CO.email;$('#cAddr').textContent=CO.addr;$('#cHours').textContent=CO.hours;
+  $('#cMap').innerHTML=mapArt()+`<a class="btn btn-b btn-s" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CO.addr)}">Get Directions</a>`;
+  $('#ctaCall').href='tel:'+CO.tel;$('#ctaCall').innerHTML=ic('phone')+'Call Us';
+  $('#ctaWa').href=`https://wa.me/${CO.wa}?text=${encodeURIComponent('Hello, I would like to enquire about your materials / properties.')}`;$('#ctaWa').innerHTML=ic('wa')+'WhatsApp Us';
+  $('#fContact').innerHTML=`<li><a href="tel:${CO.tel}">${CO.phone}</a></li><li><a href="mailto:${CO.email}">${CO.email}</a></li><li>${CO.addr}</li><li><a target="_blank" rel="noopener" href="https://wa.me/${CO.wa}">WhatsApp</a></li>`;
+  $('#contactForm').innerHTML=formHTML('general');
+}
+
+/* ---------- forms ---------- */
+function formHTML(kind,ctx){
+  const fld=(n,l,t='text',req=false,ph='')=>`<div class="fld"><label>${l}${req?' <i>*</i>':''}</label><input name="${n}" type="${t}" placeholder="${ph}" ${req?'data-req="1"':''}><span class="em">Please enter ${l.toLowerCase()}</span></div>`;
+  const hp='<input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">';
+  const today=new Date().toISOString().slice(0,10);
+  if(kind==='material'){
+    const items=CART.map(c=>{const p=mat(c.id);return `<li><span>${esc(p.name)}</span><b>${c.qty} ${p.qu}</b></li>`}).join('');
+    return `<form data-form="material" novalidate><div class="fg">${fld('name','Full name','text',1)}${fld('phone','Phone number','tel',1,'10-digit mobile')}${fld('email','Email','email')}${fld('company','Company / Organization')}
+    <div class="fld full"><label>Delivery location <i>*</i></label><input name="loc" data-req="1" placeholder="Area / city / site address"><span class="em">Please enter delivery location</span></div>
+    <div class="fld full"><label>Requested materials (auto-filled)</label><ul class="reqbox">${items}</ul></div>
+    <div class="fld full"><label>Additional requirements</label><textarea name="msg" placeholder="Delivery date, special grades, bulk quantity…"></textarea></div>
+    <div class="fld full"><label>Preferred contact method</label><div class="radios"><label><input type="radio" name="cm" value="Phone" checked> Phone</label><label><input type="radio" name="cm" value="WhatsApp"> WhatsApp</label><label><input type="radio" name="cm" value="Email"> Email</label></div></div></div>${hp}
+    <button class="btn btn-p btn-w" style="margin-top:20px">Submit Enquiry</button></form>`;
+  }
+  if(kind==='property'){
+    return `<form data-form="property" data-prop="${ctx.id}" novalidate><div class="fg"><div class="fld full"><label>Property</label><input value="${esc(ctx.title)} — ${esc(ctx.loc)} (${lakhs(ctx.price)})" readonly style="background:#F4F1E8"></div>
+    ${fld('name','Name','text',1)}${fld('phone','Phone','tel',1,'10-digit mobile')}${fld('email','Email','email')}
+    <div class="fld"><label>Preferred visit date</label><input type="date" name="date" min="${today}"></div>
+    <div class="fld"><label>Preferred time</label><select name="time"><option>Morning (9–12)</option><option>Afternoon (12–4)</option><option>Evening (4–7)</option></select></div>
+    <div class="fld full"><label>Message</label><textarea name="msg" placeholder="Anything you'd like to know?"></textarea></div></div>${hp}
+    <button class="btn btn-p btn-w" style="margin-top:20px">Submit Enquiry</button></form>`;
+  }
+  return `<form data-form="general" novalidate><div class="fg">${fld('name','Name','text',1)}${fld('phone','Phone','tel',1,'10-digit mobile')}${fld('email','Email','email')}${fld('subject','Subject')}
+    <div class="fld full"><label>Message <i>*</i></label><textarea name="msg" data-req="1" placeholder="How can we help?"></textarea><span class="em">Please enter a message</span></div></div>${hp}
+    <button class="btn btn-p btn-w" style="margin-top:20px">Send Enquiry</button></form>`;
+}
+function submitForm(f){
+  let ok=true;
+  $$('[data-req]',f).forEach(i=>{const v=i.value.trim();const bad=!v||(i.type==='tel'&&v.replace(/\D/g,'').length<8);i.closest('.fld').classList.toggle('err',bad);if(bad)ok=false});
+  const em=$('[name=email]',f);if(em&&em.value&&!/^\S+@\S+\.\S+$/.test(em.value)){em.closest('.fld').classList.add('err');ok=false}
+  if(!ok){const e=$('.err input,.err textarea',f);e&&e.focus();return}
+  if($('[name=website]',f).value)return;
+  const d=Object.fromEntries(new FormData(f));const kind=f.dataset.form;let title,body;
+  if(kind==='material'){title='NEW MATERIAL ENQUIRY';body=`Customer:\n${d.name}\n\nPhone:\n${d.phone}\n${d.email?`\nEmail:\n${d.email}\n`:''}${d.company?`\nCompany:\n${d.company}\n`:''}\nMaterials:\n\n${CART.map(c=>{const p=mat(c.id);return `${p.name}\n${c.qty} ${p.qu}`}).join('\n\n')}\n\nDelivery:\n${d.loc}\n\nPreferred contact: ${d.cm}\n\nMessage:\n${d.msg||'Please provide your best quotation.'}`}
+  else if(kind==='property'){const p=prop(f.dataset.prop);title='NEW PROPERTY ENQUIRY';body=`Property:\n${p.title} — ${p.loc}, ${p.city} (${lakhs(p.price)})\n\nCustomer:\n${d.name}\n\nPhone:\n${d.phone}\n${d.email?`\nEmail:\n${d.email}\n`:''}\nPreferred visit: ${d.date||'Not specified'} · ${d.time}\n\nMessage:\n${d.msg||'I would like more details.'}`}
+  else if(kind==='quick'){title='NEW QUICK QUOTE REQUEST';body=`Material:
+${d.mat||'Not specified'}
+
+Quantity:
+${d.qty||'Not specified'}
+
+Phone:
+${d.phone}
+
+Please call back with a quotation.`}
+  else{title='NEW GENERAL ENQUIRY';body=`From:\n${d.name} · ${d.phone}${d.email?' · '+d.email:''}\n\nSubject:\n${d.subject||'General enquiry'}\n\nMessage:\n${d.msg}`}
+  openModal(`<button class="mx" data-act="close" aria-label="Close">${ic('close')}</button><div class="succ"><div class="ok">${ic('check')}</div><h3>Enquiry sent — thank you!</h3><p>The Maverick team will contact you shortly.<br><b>Prototype note:</b> on the live site this email goes straight to the company inbox.</p>
+  <div class="mail"><span class="hd2">To: ${CO.email}  ·  Subject: ${title}</span>${esc(body)}</div><button class="btn btn-p btn-w" data-act="close">Done</button></div>`,'sm');
+  if(kind==='material'){CART=[];updCart()}
+  if(kind==='general'||kind==='quick')f.reset();
+}
+
+/* ---------- modal / drawer ---------- */
+const ov=$('#ov'),mod=$('#modal');
+function openModal(html,cls=''){closeDrawer();$('#cpill').classList.remove('on');mod.className='modal '+cls;mod.innerHTML=html;ov.classList.add('on');document.body.classList.add('lock');requestAnimationFrame(()=>ov.classList.add('show'));mod.scrollTop=0}
+function closeModal(){if(CART.length)$('#cpill').classList.add('on');try{if(document.fullscreenElement)document.exitFullscreen()}catch(e){}ov.classList.remove('show');setTimeout(()=>{ov.classList.remove('on');mod.innerHTML=''},280);document.body.classList.remove('lock');gLen=0}
+const dr=$('#drawer'),ds=$('#dscrim');
+function openDrawer(){$('#cpill').classList.remove('on');renderDrawer();dr.classList.add('on');ds.classList.add('on');document.body.classList.add('lock')}
+function closeDrawer(){dr.classList.remove('on');ds.classList.remove('on');if(CART.length&&!ov.classList.contains('on'))$('#cpill').classList.add('on');if(!ov.classList.contains('on'))document.body.classList.remove('lock')}
+function renderDrawer(){
+  const n=CART.length;
+  dr.innerHTML=`<div class="dh"><h3>Your Material Enquiry</h3><button class="rm" data-act="close-drawer" aria-label="Close">${ic('close')}</button></div>
+  <div class="db">${n?CART.map(c=>{const p=mat(c.id);return `<div class="ci-row"><div class="ci-art">${prodArt(p)}</div><div class="ci-i"><b>${esc(p.name)}</b><small>${esc(p.unit)} · ${p.price?inr(p.price)+' / '+p.per:'Price on request'}</small>
+  <div style="margin-top:8px;display:flex;align-items:center;gap:8px"><div class="qty s"><button data-act="dec" data-id="${p.id}" aria-label="Decrease">−</button><input value="${c.qty}" data-qty="${p.id}" inputmode="numeric" aria-label="Quantity"><button data-act="inc" data-id="${p.id}" aria-label="Increase">+</button></div><small>${p.qu}</small></div></div>
+  <button class="rm" data-act="rm" data-id="${p.id}" aria-label="Remove">${ic('trash')}</button></div>`}).join(''):`<div class="dempty">${ic('list')}<b>Your enquiry list is empty</b><p style="font-size:14px;margin-top:4px">Add materials to request a combined quote.</p></div>`}</div>
+  <div class="df"><button class="btn btn-o btn-w" data-act="close-drawer">Continue Browsing</button><button class="btn btn-p btn-w" data-act="checkout" ${n?'':'disabled style="opacity:.5;pointer-events:none"'}>Submit Enquiry (${n} item${n===1?'':'s'})</button></div>`;
+}
+function updCart(){const n=CART.length,b=$('#cartN');b.textContent=n;b.classList.toggle('show',n>0);$('#cpillT').textContent=`${n} item${n===1?'':'s'} in your enquiry`;$('#cpill').classList.toggle('on',n>0&&!dr.classList.contains('on')&&!ov.classList.contains('on'));if(dr.classList.contains('on'))renderDrawer()}
+function addCart(id,qty=1){const e=CART.find(c=>c.id===id);if(e)e.qty+=qty;else CART.push({id,qty});updCart();toast(`${mat(id).name} added to enquiry`);try{$('#cartBtn').animate([{transform:'scale(1)'},{transform:'scale(1.2)'},{transform:'scale(1)'}],{duration:350})}catch(e){}}
+let tT;function toast(m){const t=$('#toast');t.innerHTML=ic('check')+esc(m);t.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('on'),2200)}
+
+/* ---------- detail modals ---------- */
+function matModal(id){
+  const p=mat(id);
+  const pr=p.price?`<div class="bigp">${inr(p.price)} <small>/ ${p.per} · indicative</small></div>`:`<div class="bigp rq">Price on Request</div>`;
+  openModal(`<button class="mx" data-act="close" aria-label="Close">${ic('close')}</button><div class="mgrid"><div class="mart">${prodArt(p)}</div><div class="minfo">
+  <span class="mini">${p.cat} · ${esc(p.brand)}</span><h2>${esc(p.name)}</h2>
+  <table class="sp">${Object.entries(p.spec).map(([k,v])=>`<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join('')}</table>
+  <div class="h4">Qualities</div><ul class="ul">${p.qual.map(q=>`<li>${ic('check')}${esc(q)}</li>`).join('')}</ul>
+  <div class="h4">Features</div><ul class="ul">${p.feat.map(q=>`<li>${ic('check')}${esc(q)}</li>`).join('')}</ul>
+  ${pr}<small style="color:var(--soft)">Minimum order: ${p.moq}</small>
+  <div class="prow"><div class="qty"><button data-act="mdec" aria-label="Decrease">−</button><input id="mq" value="1" inputmode="numeric" aria-label="Quantity"><button data-act="minc" aria-label="Increase">+</button></div><span style="color:var(--soft);font-weight:500">${p.qu}</span></div>
+  <div class="ctas stick"><button class="btn btn-p" data-act="add-modal" data-id="${p.id}">Add to Enquiry</button><button class="btn btn-b" data-act="quote" data-id="${p.id}">Request Quote</button></div>
+  <div class="ctas" style="margin-top:10px"><a class="btn btn-o" href="tel:${CO.tel}">${ic('phone')}Call Now</a><a class="btn btn-o" target="_blank" rel="noopener" href="https://wa.me/${CO.wa}?text=${encodeURIComponent(`Hello, I'm interested in ${p.name}. Please share the current price and availability.`)}">${ic('wa')}WhatsApp</a></div>
+  </div></div>`);
+}
+let gIdx=0,gLen=0;
+function propModal(id){
+  const p=prop(id),sl=slidesFor(p);gIdx=0;gLen=sl.length;const sold=p.status==='Sold';
+  const rows=[['Property type',p.type],['Location',p.loc+', '+p.city],['Price',lakhs(p.price)],['Area',p.area],...(p.bed?[['Bedrooms',p.bed],['Bathrooms',p.bath]]:[]),...(p.plot!=='—'&&p.kind!=='plot'?[['Plot size',p.plot]]:[]),['Facing',p.face]];
+  openModal(`<button class="mx" data-act="close" aria-label="Close">${ic('close')}</button>
+  <div class="gal" id="gal">${sl.map((s,i)=>`<div class="sl ${i?'':'on'}">${s}</div>`).join('')}
+   ${sold?'<div class="sold" style="z-index:3"><span>SOLD</span></div>':''}
+   <button class="gnav l" data-act="gprev" aria-label="Previous">${ic('left')}</button><button class="gnav r" data-act="gnext" aria-label="Next">${ic('right')}</button>
+   <div class="gtools"><button data-act="video">${ic('play','f')}Watch Property Video</button><button data-act="fs" aria-label="Fullscreen">${ic('area')}Fullscreen</button></div><div class="gcount" id="gcount">1 / ${gLen}</div>
+   <div class="vid" id="vid"><button class="vx" data-act="vclose" aria-label="Close video">${ic('close')}</button><div class="pl">${ic('play','f')}</div><b>Property video tour</b><div class="bar"><i></i></div><small>Prototype: the client's YouTube / Vimeo video will be embedded here — hosted externally so the site stays fast.</small></div></div>
+  <div class="thumbs">${sl.map((s,i)=>`<button class="${i?'':'on'}" data-act="gto" data-id="${i}" aria-label="Photo ${i+1}">${s}</button>`).join('')}</div>
+  <div class="minfo"><span class="mini">${p.type} · ${p.status}</span><h2>${esc(p.title)}</h2><div class="bigp">${lakhs(p.price)}</div>
+  <div class="dgrid">${rows.map(r=>`<div class="dg"><small>${r[0]}</small><b>${esc(r[1])}</b></div>`).join('')}</div>
+  <div class="h4">Description</div><p style="margin:6px 0 16px;color:#3E4D56">${esc(p.desc)}</p>
+  <div class="h4">Amenities</div><div class="amen">${p.amen.map(a=>`<span>${esc(a)}</span>`).join('')}</div>
+  <div class="h4">Location</div><div class="mapbox">${mapArt()}<a class="btn btn-p btn-s" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.loc+' '+p.city)}">Get Directions</a></div>
+  <div class="ctas stick"><a class="btn btn-p" href="tel:${CO.tel}">${ic('phone')}Call Now</a><a class="btn btn-o" target="_blank" rel="noopener" href="https://wa.me/${CO.wa}?text=${encodeURIComponent(`Hello, I'm interested in the ${p.title} in ${p.loc}. I would like more details.`)}">${ic('wa')}WhatsApp</a>
+  <button class="btn btn-b" data-act="enq-prop" data-id="${p.id}">Enquire Now</button><button class="btn btn-o" data-act="enq-prop" data-id="${p.id}" data-visit="1">${ic('cal')}Schedule a Visit</button></div></div>`);
+}
+function gGo(i){gIdx=(i+gLen)%gLen;$$('#gal .sl').forEach((s,k)=>s.classList.toggle('on',k===gIdx));$$('.thumbs button').forEach((b,k)=>b.classList.toggle('on',k===gIdx));$('#gcount').textContent=`${gIdx+1} / ${gLen}`}
+function propForm(id,visit){gLen=0;const p=prop(id);openModal(`<button class="mx" data-act="close" aria-label="Close">${ic('close')}</button><div class="mpad"><span class="mini">${visit?'Schedule a visit':'Property enquiry'}</span><h2 style="font-size:30px;margin:8px 0 20px">${esc(p.title)}</h2>${formHTML('property',p)}</div>`,'sm');if(visit){const d=$('[name=date]',mod);d&&d.focus()}}
+const formModal=(label,title,kind)=>openModal(`<button class="mx" data-act="close" aria-label="Close">${ic('close')}</button><div class="mpad"><span class="mini">${label}</span><h2 style="font-size:30px;margin:8px 0 20px">${title}</h2>${formHTML(kind)}</div>`,'sm');
+
+/* ---------- views & navigation ---------- */
+function setView(v,cat){
+  VIEW=v;$$('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));
+  $$('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===v));
+  $('#nav').classList.remove('open');
+  window.scrollTo(0,0);
+  if(v==='materials'){if(cat){matCat=cat;$$('#matChips .chip').forEach(c=>c.classList.toggle('on',c.dataset.id===cat))}renderMat()}
+  if(v==='properties')renderProps();
+  try{if(location.hash!=='#'+v)history.replaceState(null,'','#'+v)}catch(e){}   // blocked inside sandboxed previews — safe to ignore
+  observe();
+}
+let busy=false;const cur=$('#curtain');
+function go(v,cat){
+  if(busy)return;
+  if(v===VIEW&&!cat){window.scrollTo({top:0,behavior:'smooth'});return}
+  if(RMQ){setView(v,cat);return}
+  busy=true;cur.className='curtain cover';
+  setTimeout(()=>{setView(v,cat);cur.className='curtain cover leave';setTimeout(()=>{cur.className='curtain';busy=false},560)},540);
+}
+function scrollTo2(id){
+  if(id==='about'&&VIEW!=='home'){go('home');setTimeout(()=>{const a=$('#about');a&&a.scrollIntoView({behavior:'smooth'})},1300);return}
+  $('#nav').classList.remove('open');const el=$('#'+id);el&&el.scrollIntoView({behavior:'smooth'})
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click',e=>{
+  if(e.target===ov){closeModal();return}
+  if(e.target===ds){closeDrawer();return}
+  const a=e.target.closest('[data-act]');if(!a)return;
+  const id=a.dataset.id,act=a.dataset.act;
+  switch(act){
+   case'view':closeModal();closeDrawer();go(id);break;
+   case'view-cat':go('materials',id);break;
+   case'scroll':closeModal();scrollTo2(id);break;
+   case'chip':matCat=id;$$('#matChips .chip').forEach(c=>c.classList.toggle('on',c===a));renderMat();break;
+   case'open-mat':matModal(id);break;
+   case'add':{addCart(id);const o=a.innerHTML;a.innerHTML=ic('check')+'Added';a.disabled=true;setTimeout(()=>{a.innerHTML=o;a.disabled=false},1300);break}
+   case'add-modal':{const q=Math.max(1,parseInt($('#mq').value)||1);addCart(id,q);closeModal();setTimeout(openDrawer,300);break}
+   case'mdec':{const i=$('#mq');i.value=Math.max(1,(parseInt(i.value)||1)-1);break}
+   case'minc':{const i=$('#mq');i.value=(parseInt(i.value)||1)+1;break}
+   case'quote':{const q=Math.max(1,parseInt($('#mq').value)||1);CART=[{id,qty:q}];updCart();formModal('Request quote','Your details','material');break}
+   case'cart':openDrawer();break;
+   case'close':closeModal();break;
+   case'close-drawer':closeDrawer();break;
+   case'inc':case'dec':{const c=CART.find(x=>x.id===id);c.qty=Math.max(1,c.qty+(act==='inc'?1:-1));renderDrawer();break}
+   case'rm':CART=CART.filter(c=>c.id!==id);updCart();break;
+   case'checkout':formModal('Material enquiry','Your details','material');break;
+   case'open-prop':propModal(id);break;
+   case'enq-prop':propForm(id,a.dataset.visit);break;
+   case'enq-general':formModal('General enquiry','How can we help?','general');break;
+   case'gprev':gGo(gIdx-1);break;case'gnext':gGo(gIdx+1);break;case'gto':gGo(+id);break;
+   case'video':$('#vid').classList.add('on');break;case'vclose':$('#vid').classList.remove('on');break;
+   case'fs':{try{const g=$('#gal');if(document.fullscreenElement)document.exitFullscreen();else if(g.requestFullscreen){const r=g.requestFullscreen();r&&r.catch&&r.catch(()=>{})}}catch(e){}break}
+  }
+});
+document.addEventListener('input',e=>{
+  if(e.target.dataset.qty){const c=CART.find(x=>x.id===e.target.dataset.qty);c.qty=Math.max(1,parseInt(e.target.value)||1)}
+  const f=e.target.closest('.fld');f&&f.classList.remove('err');
+});
+document.addEventListener('submit',e=>{const f=e.target.closest('form[data-form]');if(f){e.preventDefault();submitForm(f)}});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){if(ov.classList.contains('on'))closeModal();else closeDrawer()}
+  if(ov.classList.contains('on')&&gLen&&$('#gal')){if(e.key==='ArrowLeft')gGo(gIdx-1);if(e.key==='ArrowRight')gGo(gIdx+1)}
+});
+$('#burger').onclick=()=>$('#nav').classList.toggle('open');
+addEventListener('scroll',()=>$('#top').classList.toggle('sc',scrollY>20),{passive:true});
+
+/* reveal on scroll (starts after the intro) */
+let started=false;
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.1,rootMargin:'0px 0px -5% 0px'});
+function observe(){if(!started)return;$$('.rv:not(.in)').forEach(el=>io.observe(el))}
+setTimeout(()=>{started=true;observe()},RMQ?0:1700);
+
+/* ---------- init ---------- */
+renderHome();initControls();initContact();hydrateIcons();
+(function(){let h='';try{h=location.hash.replace('#','')}catch(e){}if(['materials','properties'].includes(h))setView(h)})();
+const mobCheck=()=>document.body.classList.toggle('mobdim',innerWidth<860);mobCheck();addEventListener('resize',mobCheck);
+addEventListener('hashchange',()=>{let v='';try{v=location.hash.replace('#','')}catch(e){}if(['home','materials','properties'].includes(v)&&v!==VIEW)go(v)});
+
+/* =========================================================
+   THE BUILDING — scroll-driven canvas animation
+   Down  → crane lifts blocks, building rises floor by floor
+   Up    → structure cracks, falls apart, dust and debris
+   ========================================================= */
+(function(){
+const cv=$('#site'),g=cv.getContext('2d'),progEl=$('#prog');
+const N=8;let W,H,Dp,mob,gy,bw,bx,fh,th;
+let blocks=[],slabs=[],dust=[],deb=[];
+let pd=0,prevPd=0,shake=0,craneTop=0,craneA=1,glow=0,scaf=1,brkT=0,floorsBuilt=0,rs=7;
+const R=()=>(rs=(rs*16807)%2147483647)/2147483647;
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const NAVY='#142C3A',BRASS='#B87545';
+
+function add(x,y,w,h,col,s,k){const b={x,y,w,h,col,s,k,v:0,tgt:0,landed:false,rot:(R()-.5)*2.6,dx:(R()-.5)*180,dr:130+R()*90,lit:0,litAt:.9+R()*.07};blocks.push(b);return b}
+function layout(){
+  Dp=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*Dp;cv.height=H*Dp;g.setTransform(Dp,0,0,Dp,0,0);
+  mob=W<860;bw=mob?Math.min(W*.6,270):Math.min(W*.3,400);bx=(mob?W*.5:W*.77)-bw/2;gy=Math.round(H*.9);
+  th=Math.min(H*.66,bw*1.75);fh=(th-10)/N;
+  rs=7;blocks=[];slabs=[];
+  add(bx-14,gy-10,bw+28,10,'#1E3947',.012,'slab');
+  const cw=7,bay=(bw-cw)/4,D=.74/N;
+  for(let f=0;f<N;f++){
+    const y0=gy-10-(f+1)*fh,s0=.06+f*D;
+    for(let i=0;i<5;i++)add(bx+i*bay,y0+7,cw,fh-7,'#3A5B6C',s0+i*D*.05,'col');
+    slabs.push(add(bx-4,y0,bw+8,7,'#1E3947',s0+D*.4,'slab'));
+    for(let b=0;b<4;b++){
+      const x=bx+b*bay+cw,w=bay-cw,wy=y0+7,wh=fh-7;
+      add(x,wy,w,wh,'#EDE9DD',s0+D*.5+b*D*.06,'wall');
+      if(f===0&&b===1)add(x+w*.22,wy+wh*.22,w*.56,wh*.78,BRASS,s0+D*.7+b*D*.06,'door');
+      else add(x+w*.2,wy+wh*.2,w*.6,wh*.52,'#6A8792',s0+D*.7+b*D*.06,'win');
+    }
+  }
+  const top=gy-10-N*fh;
+  add(bx-8,top-9,bw+16,9,'#1E3947',.8,'slab');
+  add(bx+bw*.06,top-9-fh*.42,bw*.13,fh*.42,'#8E9AA0',.83,'tank');
+  add(bx+bw*.84,top-9-fh*1.1,3,fh*1.1,'#617079',.86,'ant');
+  add(bx+bw*.27,top-9-fh*.46,bw*.46,fh*.46,BRASS,.9,'sign');
+  blocks.forEach(b=>{b.tgt=pd>=b.s?1:0;b.v=b.tgt;b.landed=!!b.tgt});
+  craneTop=gy-fh*3.4;
+}
+function dustAt(x,y,n=3){if(RMQ||dust.length>160)return;for(let i=0;i<n;i++)dust.push({x:x+(R()-.5)*30,y,vx:(R()-.5)*40,vy:-12-R()*26,r:5+R()*7,l:1})}
+function debAt(b){if(RMQ||deb.length>300)return;for(let i=0;i<3;i++)deb.push({x:b.x+R()*b.w,y:b.y+R()*b.h,vx:(R()-.5)*190,vy:-40-R()*150,rot:R()*6,vr:(R()-.5)*12,w:3+R()*7,h:3+R()*6,l:1,col:b.k==='win'?'#6A8792':b.col})}
+const rawP=()=>{const m=document.documentElement.scrollHeight-innerHeight;return m>0?clamp(scrollY/m,0,1):0};
+
+function step(dt){
+  const raw=rawP(),q=clamp(raw/.9,0,1);pd=RMQ?q:pd+(q-pd)*(1-Math.exp(-dt*7));
+  progEl.style.transform=`scaleX(${raw})`;
+  const dd=pd-prevPd;if(dd<-.00008)brkT=.9;else brkT=Math.max(0,brkT-dt);prevPd=pd;
+  for(const b of blocks){
+    const t=pd>=b.s?1:0;
+    if(t!==b.tgt){b.tgt=t;if(!t&&b.v>.6){debAt(b);shake=Math.min(7,shake+.7);if(b.k==='slab')dustAt(b.x+b.w/2,b.y+b.h,4)}if(t)b.landed=false}
+    if(RMQ)b.v=t;
+    else if(b.tgt){b.v=Math.min(1,b.v+dt*3.4);if(b.v>=1&&!b.landed){b.landed=true;if(b.k==='slab'||b.k==='col')dustAt(b.x+b.w/2,b.y+b.h)}}
+    else b.v=Math.max(0,b.v-dt*2.2);
+    if(b.k==='win')b.lit+=((pd>b.litAt?1:0)-b.lit)*Math.min(1,dt*4);
+  }
+  floorsBuilt=0;for(const s of slabs)if(s.v>.5)floorsBuilt++;
+  const builtTop=floorsBuilt?slabs[floorsBuilt-1].y:gy-10;
+  const want=clamp(builtTop-fh*2.3,gy-th-fh*2.5,gy-fh*3.4);
+  craneTop+=(want-craneTop)*Math.min(1,dt*3);
+  craneA+=((pd>.95?0:1)-craneA)*Math.min(1,dt*3);
+  glow+=((pd>.96?1:0)-glow)*Math.min(1,dt*2);
+  scaf+=((pd>.9?0:1)-scaf)*Math.min(1,dt*3);
+  shake*=Math.exp(-dt*6);
+  for(const d of dust){d.x+=d.vx*dt;d.y+=d.vy*dt;d.r+=dt*16;d.l-=dt*1.1}dust=dust.filter(d=>d.l>0);
+  for(const d of deb){d.vy+=900*dt;d.x+=d.vx*dt;d.y+=d.vy*dt;d.rot+=d.vr*dt;d.l-=dt*.7;if(d.y>gy){d.y=gy;d.vy*=-.25;d.vx*=.6;d.vr*=.5}}deb=deb.filter(d=>d.l>0);
+  return builtTop;
+}
+
+function drawBlock(b){
+  if(b.v<=.003)return;
+  let ox=0,oy=0,rot=0,a;
+  if(b.tgt){const e=1-Math.pow(1-b.v,3);oy=-(1-e)*(150+b.dr);a=Math.min(1,b.v*2.4)}
+  else{const u=1-b.v;oy=u*u*(gy-(b.y+b.h))*.95;ox=u*b.dx;rot=u*b.rot;a=Math.pow(b.v,.7)}
+  g.save();g.globalAlpha=a*.96;g.translate(b.x+b.w/2+ox,b.y+b.h/2+oy);g.rotate(rot);
+  const x=-b.w/2,y=-b.h/2;
+  if(b.k==='win'){
+    const gr=g.createLinearGradient(x,y,x+b.w,y+b.h);gr.addColorStop(0,'#CBD6D6');gr.addColorStop(1,'#6A8792');g.fillStyle=gr;g.fillRect(x,y,b.w,b.h);
+    if(b.lit>.01){g.globalAlpha=a*b.lit;g.fillStyle='#F2C48D';g.fillRect(x,y,b.w,b.h);g.fillStyle='rgba(255,243,210,.6)';g.fillRect(x+2,y+2,b.w-4,b.h*.35)}
+    g.globalAlpha=a;g.strokeStyle='rgba(20,44,58,.55)';g.lineWidth=1;g.strokeRect(x+.5,y+.5,b.w-1,b.h-1);g.beginPath();g.moveTo(0,y);g.lineTo(0,y+b.h);g.stroke()}
+  else if(b.k==='tank'){g.fillStyle=b.col;g.fillRect(x,y,b.w,b.h*.78);g.fillStyle='#617079';g.fillRect(x+3,y+b.h*.78,3,b.h*.22);g.fillRect(x+b.w-6,y+b.h*.78,3,b.h*.22)}
+  else if(b.k==='ant'){g.fillStyle=b.col;g.fillRect(x,y,b.w,b.h);g.fillStyle='#B5503A';g.beginPath();g.arc(0,y,4,0,7);g.fill()}
+  else if(b.k==='sign'){g.fillStyle=b.col;g.fillRect(x,y,b.w,b.h);g.fillStyle='#fff';g.font=`600 ${Math.max(10,b.h*.5)}px Fraunces,Georgia,serif`;g.textAlign='center';g.textBaseline='middle';g.fillText('MAVERICK',0,1)}
+  else{g.fillStyle=b.col;g.fillRect(x,y,b.w,b.h);if(b.k==='wall'){g.strokeStyle='rgba(20,44,58,.18)';g.lineWidth=1;g.strokeRect(x+.5,y+.5,b.w-1,b.h-1)}else if(b.k==='door'){g.fillStyle='rgba(0,0,0,.22)';g.fillRect(x+b.w/2-.5,y,1,b.h)}else{g.fillStyle='rgba(255,255,255,.14)';g.fillRect(x,y,b.w,1.5)}}
+  g.restore();
+}
+
+function craneDraw(now,builtTop){
+  if(craneA<.02)return;
+  const mx=Math.max(34,bx-(mob?26:56)),mw=16,top=craneTop;
+  g.save();g.globalAlpha=craneA;g.strokeStyle=BRASS;g.fillStyle=BRASS;g.lineWidth=2.2;
+  g.beginPath();g.moveTo(mx,gy);g.lineTo(mx,top);g.moveTo(mx+mw,gy);g.lineTo(mx+mw,top);g.stroke();
+  g.lineWidth=1.2;g.beginPath();let zz=0;for(let y=gy;y>top+6;y-=15){g.moveTo(zz%2?mx:mx+mw,y);g.lineTo(zz%2?mx+mw:mx,y-15);zz++}g.stroke();
+  const jl=mx-Math.min(70,bx*.4),jr=bx+bw+(mob?30:70),jy=top;
+  g.lineWidth=2.2;g.beginPath();g.moveTo(jl,jy);g.lineTo(jr,jy);g.moveTo(jl,jy+9);g.lineTo(jr,jy+9);g.stroke();
+  g.lineWidth=1;g.beginPath();for(let x=jl,i=0;x<jr;x+=14,i++){g.moveTo(x,i%2?jy:jy+9);g.lineTo(x+14,i%2?jy+9:jy)}g.stroke();
+  g.fillRect(jl-2,jy-4,26,18);g.fillStyle=NAVY;g.fillRect(mx-2,jy-14,mw+4,14);g.fillStyle=BRASS;
+  g.lineWidth=1.2;g.beginPath();g.moveTo(mx+mw/2,jy-46);g.lineTo(mx+mw/2,jy);g.moveTo(mx+mw/2,jy-46);g.lineTo(jr,jy);g.moveTo(mx+mw/2,jy-46);g.lineTo(jl,jy);g.stroke();
+  const tx=bx+bw*(.5+.34*Math.sin(now*.00045)),sw=Math.sin(now*.0013)*(brkT>0?14:6);
+  const hy=clamp(builtTop-fh*.6,jy+30,gy-30),hx=tx+sw;
+  g.fillRect(tx-6,jy+9,12,6);g.strokeStyle='#617079';g.lineWidth=1.2;g.beginPath();g.moveTo(tx,jy+15);g.lineTo(hx,hy);g.stroke();
+  g.fillStyle='#B5503A';g.fillRect(hx-4,hy,8,7);
+  if(pd>.015&&pd<.9){g.fillStyle='#1E3947';g.fillRect(hx-14,hy+9,28,8);g.strokeStyle='#617079';g.beginPath();g.moveTo(hx,hy+7);g.lineTo(hx-12,hy+9);g.moveTo(hx,hy+7);g.lineTo(hx+12,hy+9);g.stroke()}
+  g.restore();
+}
+function scaffDraw(builtTop){
+  if(scaf<.02||!floorsBuilt)return;
+  g.save();g.globalAlpha=scaf*.55;g.strokeStyle='#808E94';g.lineWidth=1.2;
+  for(const sx of[bx-18,bx+bw+8]){
+    g.beginPath();g.moveTo(sx,gy);g.lineTo(sx,builtTop);g.moveTo(sx+9,gy);g.lineTo(sx+9,builtTop);
+    for(let f=0;f<=floorsBuilt;f++){const y=gy-10-f*fh;g.moveTo(sx,y);g.lineTo(sx+9,y);if(f<floorsBuilt){g.moveTo(sx,y);g.lineTo(sx+9,y-fh)}}
+    g.stroke();
+  }
+  g.restore();
+}
+function ground(){
+  const gr=g.createLinearGradient(0,gy,0,H);gr.addColorStop(0,'rgba(20,44,58,.10)');gr.addColorStop(1,'rgba(20,44,58,.02)');
+  g.fillStyle=gr;g.fillRect(0,gy,W,H-gy);
+  g.fillStyle='#1E3947';g.fillRect(0,gy,W,2);
+  g.fillStyle='rgba(20,44,58,.1)';for(let x=0;x<W;x+=34)g.fillRect(x,gy+8,16,2);
+  g.fillStyle='rgba(20,44,58,.14)';g.beginPath();g.ellipse(bx+bw/2,gy+5,bw*.72,9,0,0,7);g.fill();
+  const px=bx+bw+(mob?20:56);
+  g.fillStyle='#D8B878';g.beginPath();g.moveTo(px,gy);g.quadraticCurveTo(px+26,gy-34,px+60,gy);g.fill();
+  g.fillStyle='#B5502F';for(let r=0;r<3;r++)for(let c=0;c<3-r;c++)g.fillRect(px+74+c*13+r*6,gy-8-r*7,12,6);
+  const fx=bx-(mob?90:150);if(fx>10){g.strokeStyle=BRASS;g.lineWidth=2;g.beginPath();g.moveTo(fx,gy);g.lineTo(fx,gy-22);g.moveTo(fx+44,gy);g.lineTo(fx+44,gy-22);g.moveTo(fx-4,gy-18);g.lineTo(fx+48,gy-18);g.moveTo(fx-4,gy-9);g.lineTo(fx+48,gy-9);g.stroke()}
+}
+
+const hud=$('#hud'),hS=$('#hudStage'),hF=$('#hudFill'),hSub=$('#hudSub');let lastStage='';
+function hudUpdate(){
+  let a,b;const brk=brkT>0&&pd>.004;
+  if(brk){a='⚠ Demolition in progress';b='Scroll down to rebuild'}
+  else if(pd<.02){a='Site ready';b='Scroll to start building'}
+  else if(pd<.06){a='Foundation';b='Laying the base'}
+  else if(pd<.8){a='Structure';b=`Floor ${Math.max(1,floorsBuilt)} of ${N}`}
+  else if(pd<.9){a='Roofing';b='Topping out'}
+  else if(pd<.985){a='Finishing';b='Lights on'}
+  else{a='Handover ✓';b='Project complete'}
+  const k=a+b;if(k!==lastStage){lastStage=k;hS.textContent=a;hSub.textContent=b}
+  hud.classList.toggle('brk',brk);hF.style.width=(pd*100).toFixed(1)+'%';
+}
+
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  const builtTop=step(dt);
+  g.clearRect(0,0,W,H);
+  g.save();
+  if(shake>.05&&!RMQ)g.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);
+  if(glow>.01){const gg=g.createRadialGradient(bx+bw/2,gy-th*.5,10,bx+bw/2,gy-th*.5,th*.95);gg.addColorStop(0,`rgba(212,154,112,${.38*glow})`);gg.addColorStop(1,'rgba(212,154,112,0)');g.fillStyle=gg;g.fillRect(0,0,W,H)}
+  ground();scaffDraw(builtTop);
+  for(const b of blocks)drawBlock(b);
+  craneDraw(now,builtTop);
+  for(const d of dust){g.globalAlpha=Math.max(0,d.l)*.38;g.fillStyle='#9AA2A6';g.beginPath();g.arc(d.x,d.y,d.r,0,7);g.fill()}
+  for(const d of deb){g.globalAlpha=Math.max(0,d.l);g.fillStyle=d.col;g.save();g.translate(d.x,d.y);g.rotate(d.rot);g.fillRect(-d.w/2,-d.h/2,d.w,d.h);g.restore()}
+  g.globalAlpha=1;g.restore();
+  hudUpdate();
+  requestAnimationFrame(frame);
+}
+layout();addEventListener('resize',layout);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

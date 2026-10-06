@@ -34,14 +34,19 @@ EXPECTED_ROUTES = {
     "/api/v1/cmo/keywords", "/api/v1/cmo/backend-terms", "/api/v1/cmo/hashtags", "/api/v1/cmo/catalog-answers",
     "/api/v1/cmo/title-approvals", "/api/v1/cmo/image-hints/confirm",
     "/api/v1/cmo/images", "/api/v1/cmo/image-analyses",  # P6: explicit zero-unit image actions
+    "/api/v1/cmo/niche-terms/suggest", "/api/v1/cmo/niche-terms/confirm", "/api/v1/cmo/niche-terms",  # P7d: zero-unit niche flow
+    "/api/v1/cmo/market-trends/preview", "/api/v1/cmo/market-trends", "/api/v1/cmo/market-trends/{generation_id}",  # P7f
 }
+READ_ONLY_ROUTES = {"/api/v1/cmo/niche-terms", "/api/v1/cmo/market-trends/{generation_id}"}  # GET-only; /market-trends is POST + GET
 
 
 class TestRouteSurface:
     def test_exactly_the_registered_actions_exist_all_post_and_nothing_else(self):
-        routes = {r.path: set(r.methods) for r in cmo.router.routes}  # type: ignore[attr-defined]
+        routes: dict[str, set[str]] = {}
+        for r in cmo.router.routes:  # type: ignore[attr-defined]
+            routes.setdefault(r.path, set()).update(r.methods)
         assert set(routes) == EXPECTED_ROUTES
-        assert all(m == {"POST"} for m in routes.values())
+        assert all(m == ({"GET"} if path in READ_ONLY_ROUTES else {"GET", "POST"} if path == "/api/v1/cmo/market-trends" else {"POST"}) for path, m in routes.items())
 
     def test_no_marketplace_write_back_route_exists_anywhere_in_the_app(self, monkeypatch):
         for k in ("CLERK_SECRET_KEY", "CLERK_WEBHOOK_SECRET", "CLERK_JWT_KEY", "FRONTEND_ORIGIN"):

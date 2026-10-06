@@ -112,6 +112,33 @@ def _required_positive_int(name: str) -> int:
 
 
 @lru_cache
+def cmo_accept_test_fixture_constraints() -> bool:
+    """DEVELOPMENT ONLY. `CMO_ACCEPT_TEST_FIXTURE_CONSTRAINTS=true` lets generation use `TEST_FIXTURE` format-constraint rows (placeholder limits,
+    never verified marketplace rules) so the workflow can be exercised before the H1 inputs exist. Unset/false (the default) = VERIFIED rows only.
+    Every output made under it cites the fixture's `example.invalid/test-fixture` source."""
+    return (os.environ.get("CMO_ACCEPT_TEST_FIXTURE_CONSTRAINTS") or "").strip().lower() == "true"
+
+
+@lru_cache
+def cmo_llm_provider() -> str:
+    """OPTIONAL `CMO_LLM_PROVIDER`: which registered `LlmProvider` backs the CMO. Unset = `ollama` (the development backend);
+    a hosted model is selected here at deployment once its provider is registered in `services/cmo_runtime.py`."""
+    return (os.environ.get("CMO_LLM_PROVIDER") or "ollama").strip().lower()
+
+
+@lru_cache
+def cmo_llm_think() -> bool | None:
+    """OPTIONAL `CMO_LLM_THINK=false|true`. Unset => the field is not sent (the model's own default). `false` is needed for
+    reasoning models such as qwen3, whose thinking pass otherwise takes ~70 s per call and exhausts the timeout."""
+    raw = os.environ.get("CMO_LLM_THINK")
+    if raw is None or not raw.strip():
+        return None
+    if raw.strip().lower() not in ("true", "false"):
+        raise ValueError(f"CMO_LLM_THINK must be true or false, got {raw!r}")
+    return raw.strip().lower() == "true"
+
+
+@lru_cache
 def cmo_llm_timeout_seconds() -> int:
     """Per-request timeout, whole seconds, for the CMO model call. REQUIRED, no default (P5)."""
     return _required_positive_int("CMO_LLM_TIMEOUT_SECONDS")

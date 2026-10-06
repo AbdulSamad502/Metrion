@@ -66,6 +66,8 @@ VALID_TREND_VALUES: dict[str, Any] = {
     "max_term_chars": 30,
     "catalog_titles_read_cap": 100,
     "provider_call_timeout_seconds": 11,
+    "provider_cache_ttl_hours": 24,
+    "provider_daily_search_ceiling": 20,
 }
 
 
