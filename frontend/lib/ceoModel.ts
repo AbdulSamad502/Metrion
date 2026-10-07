@@ -241,6 +241,7 @@ const ERROR_TEXT: Record<string, string> = {
   FORBIDDEN: "You do not have access to do that.",
   ALREADY_ARCHIVED: "This investigation is already archived.",
   CANNOT_RESOLVE: "Only an active investigation can be resolved.",
+  NOT_RESOLVED: "Only a resolved investigation can be reopened.",
 };
 
 /** Plain words for an API failure. `detail` is whatever the backend returned (a string, or `{code}`); nothing internal is ever shown. */

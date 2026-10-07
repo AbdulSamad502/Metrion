@@ -163,6 +163,15 @@ export class FakeCeo {
           s.investigation.resolution_note = note;
           return { status: "RESOLVED" };
         }),
+      reopen: (id: string) =>
+        rec("reopen", [id], () => {
+          const s = this.visible(id);
+          if (s.investigation.status !== "RESOLVED") throw new ApiError(409, { code: "NOT_RESOLVED" }); // archived is visibility, not resolution
+          const note = s.investigation.resolution_note;
+          s.investigation.status = "ACTIVE"; // the note and all history are kept
+          s.messages.push({ id: uid("m"), role: "SYSTEM", kind: "SYSTEM_NOTE", turn_id: null, created_at: ts(), content: `This investigation was reopened. Your earlier conclusion was: ${note}` });
+          return { status: "ACTIVE" };
+        }),
       archive: (id: string) =>
         rec("archive", [id], () => {
           const s = this.visible(id);

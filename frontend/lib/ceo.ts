@@ -118,6 +118,7 @@ export function createCeoClient(getToken: GetToken) {
         json("POST", { message, ...(period ? { period_start: period.start, period_end: period.end } : {}) }),
       ),
     resolve: (id: string, note: string) => call<{ status: string }>(`/investigations/${id}/resolve`, json("POST", { resolution_note: note })),
+    reopen: (id: string) => call<{ status: string }>(`/investigations/${id}/reopen`, json("POST", {})),
     archive: (id: string) => call<{ status: string }>(`/investigations/${id}/archive`, json("POST", {})),
     setAgentAttached: (id: string, agent: AgentCode, attached: boolean) =>
       call<{ agent: AgentCode; attached: boolean }>(`/investigations/${id}/agents/${agent}`, json("PUT", { attached })),

@@ -37,6 +37,9 @@ describe("CEO API client", () => {
     await client().resolve("abc", "Fees explained it");
     expect(lastCall()).toMatchObject({ init: { method: "POST" }, body: { resolution_note: "Fees explained it" } });
     expect(lastCall().url).toMatch(/\/abc\/resolve$/);
+    await client().reopen("abc");
+    expect(lastCall()).toMatchObject({ init: { method: "POST" }, body: {} });
+    expect(lastCall().url).toMatch(/\/abc\/reopen$/);
     await client().archive("abc");
     expect(lastCall().url).toMatch(/\/abc\/archive$/);
     await client().setAgentAttached("abc", "CFO", false);

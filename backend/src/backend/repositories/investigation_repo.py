@@ -164,6 +164,20 @@ def reopen_investigation(tenant_id: UUID, investigation_id: UUID) -> None:
         )
 
 
+def reopen_resolved_investigation(tenant_id: UUID, investigation_id: UUID) -> str:
+    """RESOLVED -> ACTIVE, and ONLY from RESOLVED (an ARCHIVED investigation is a visibility state, never a conclusion, so it is not
+    reopened here). Unlike `reopen_investigation`, the seller's `resolution_note` / `resolved_by` / `resolved_at` are left exactly as
+    they were: nothing is deleted or rewritten. Returns the preserved note so the caller can record it in the thread (a later
+    re-resolve writes a new note into these columns, so the earlier conclusion must also live in the history)."""
+    with tenant_scope(tenant_id) as conn:
+        current = _require_investigation(conn, investigation_id)
+        if current["status"] != "RESOLVED":
+            raise InvalidInvestigationTransition(f"only a RESOLVED investigation can be reopened, not {current['status']}")
+        note = conn.execute(text("SELECT resolution_note FROM investigation WHERE id = :id"), {"id": str(investigation_id)}).scalar_one()
+        conn.execute(text("UPDATE investigation SET status = 'ACTIVE' WHERE id = :id"), {"id": str(investigation_id)})
+        return str(note)
+
+
 def archive_investigation(tenant_id: UUID, investigation_id: UUID) -> None:
     with tenant_scope(tenant_id) as conn:
         current = _require_investigation(conn, investigation_id)

@@ -399,3 +399,50 @@ describe("no figure is ever computed or invented by the UI", () => {
     expect(text).not.toMatch(/₹|score|projected|uplift|potential (revenue|profit)/i);
   });
 });
+
+describe("reopening a resolved investigation", () => {
+  it("offers Reopen only for a resolved investigation; reopening restores the composer and keeps the history", async () => {
+    const id = fake.seed({
+      id: "inv-1", status: "RESOLVED", investigation: { resolution_note: "Fees explained it." } as never,
+      messages: [msg({ id: "u1", role: "USER", content: "an earlier question", turn_id: "t1" })],
+      findings: [finding({ id: "keep", turn_id: "t1", source: "CFO", action_key: "cfo.reconcile", status: "COMPLETE", figure_refs: [{ kind: "ENGINE_RESULT", id: "44444444-aaaa" }] })],
+    });
+    mount();
+    await openInvestigation(id);
+    expect(screen.getByText(/Your note: Fees explained it\./)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Ask the CEO")).not.toBeInTheDocument();
+    await user().click(screen.getByRole("button", { name: "Reopen" }));
+    await waitFor(() => expect(screen.getByTestId("conversation")).toHaveAttribute("data-state", "ACTIVE"));
+    expect(fake.calls.find((c) => c.method === "reopen")?.args).toEqual([id]);
+    expect(screen.getByLabelText("Ask the CEO")).toBeEnabled(); // open for new questions again
+    expect(screen.getByTestId("message-user")).toHaveTextContent("an earlier question"); // nothing lost
+    expect(screen.getByTestId("finding-keep")).toHaveTextContent("Engine result · 44444444");
+    expect(screen.getByTestId("system-note")).toHaveTextContent("Your earlier conclusion was: Fees explained it."); // the conclusion is kept in the thread
+    expect(screen.getByTestId("investigation-inv-1")).toHaveTextContent("Active");
+    expect(screen.queryByRole("button", { name: "Reopen" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resolve" })).toBeInTheDocument();
+  });
+
+  it("never offers Reopen for an active or an archived investigation (archived is visibility, not resolution)", async () => {
+    fake.seed({ id: "active" });
+    fake.seed({ id: "arch", status: "ARCHIVED" });
+    mount();
+    await openInvestigation("active");
+    expect(screen.queryByRole("button", { name: "Reopen" })).not.toBeInTheDocument();
+    await user().click(screen.getByLabelText(/Show archived/));
+    await user().click(await screen.findByTestId("investigation-arch"));
+    await screen.findByText(/Hidden from your list by default/);
+    expect(screen.queryByRole("button", { name: "Reopen" })).not.toBeInTheDocument();
+    expect(fake.count("reopen")).toBe(0);
+  });
+
+  it("if the server refuses, the UI says so in plain words and stays resolved", async () => {
+    const id = fake.seed({ id: "inv-1", status: "RESOLVED", investigation: { resolution_note: "x" } as never });
+    mount();
+    await openInvestigation(id);
+    fake.store.get(id)!.investigation.status = "ARCHIVED"; // changed elsewhere after the page loaded
+    await user().click(screen.getByRole("button", { name: "Reopen" }));
+    expect(await screen.findByText("Only a resolved investigation can be reopened.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Ask the CEO")).not.toBeInTheDocument();
+  });
+});

@@ -71,6 +71,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs }: { client: CeoCl
             onDismissNotice={hub.dismissNotice}
             onSend={hub.sendTurn}
             onResolve={hub.resolve}
+            onReopen={hub.reopen}
             onArchive={hub.archive}
             onRetry={() => void hub.retryDetail()}
           />

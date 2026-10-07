@@ -7,6 +7,7 @@
     GET  /api/v1/ceo/investigations/{id}/findings      findings so far (the polling seam for progressive delivery; SSE is B4)
     POST /api/v1/ceo/investigations/{id}/resolve       RESOLVED with a seller-authored note
     POST /api/v1/ceo/investigations/{id}/archive       ARCHIVED (hides; never a conclusion)
+    POST /api/v1/ceo/investigations/{id}/reopen        RESOLVED -> ACTIVE (only from RESOLVED; the seller's note and all history are kept)
     PUT  /api/v1/ceo/investigations/{id}/agents/{code} attach / detach a specialist for FUTURE work (history is never touched)
     GET  /api/v1/ceo/agents/availability               per-agent availability for THIS member (PRESENT / NOT_PERMITTED / NOT_ENTITLED) and how many chat actions it has
 
@@ -171,6 +172,22 @@ def archive(investigation_id: UUID, ctx: AuthContext = require_auth(permission=I
     except repo.InvalidInvestigationTransition:
         raise HTTPException(status_code=409, detail={"code": "ALREADY_ARCHIVED"}) from None
     return {"status": "ARCHIVED"}
+
+
+@router.post("/investigations/{investigation_id}/reopen")
+def reopen(investigation_id: UUID, ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW)) -> dict[str, str]:
+    """Only a RESOLVED investigation can be reopened. An ARCHIVED one is hidden, not concluded, so it answers 409 `NOT_RESOLVED`. Messages,
+    turns, findings, provenance and the seller's resolution note are untouched; the earlier conclusion is also written into the thread as a
+    SYSTEM_NOTE so it survives a later re-resolve (which overwrites the note columns with the new conclusion)."""
+    _require_visible(ctx, investigation_id)
+    tenant = _tenant(ctx)
+    try:
+        note = repo.reopen_resolved_investigation(tenant, investigation_id)
+    except repo.InvalidInvestigationTransition:
+        raise HTTPException(status_code=409, detail={"code": "NOT_RESOLVED"}) from None
+    repo.append_message(tenant, investigation_id, role="SYSTEM", kind="SYSTEM_NOTE", created_by=ctx.app_user_id,
+                        content=f"This investigation was reopened. Your earlier conclusion was: {note}")
+    return {"status": "ACTIVE"}
 
 
 @router.get("/agents/availability")

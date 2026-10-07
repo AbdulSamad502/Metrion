@@ -147,3 +147,85 @@ def test_an_invalid_explicit_period_is_rejected_before_anything_runs(api):
         r = client.post(f"/api/v1/ceo/investigations/{inv}/turns", json={"message": "hello", **extra}, headers=ha)
         assert r.status_code == 422, extra
     assert row_counts(a, "investigation_message", "agent_run") == before
+
+
+# ------------------------------------------------------------------------------------------------ B4.1: reopen
+def test_reopen_restores_a_resolved_investigation_and_keeps_every_record(api):
+    client, ha, _, a, _ = api
+    seed_books(a)
+    inv = start(client, ha)
+    client.post(f"/api/v1/ceo/investigations/{inv}/turns", json={"message": STATE}, headers=ha)
+    before = client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()
+    client.post(f"/api/v1/ceo/investigations/{inv}/resolve", json={"resolution_note": "Fees explained it."}, headers=ha)
+    resolved = client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()["investigation"]
+
+    r = client.post(f"/api/v1/ceo/investigations/{inv}/reopen", headers=ha)
+    assert r.status_code == 200 and r.json() == {"status": "ACTIVE"}
+    after = client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()
+    assert after["investigation"]["status"] == "ACTIVE"
+    # the seller's conclusion is neither deleted nor rewritten
+    for col in ("resolution_note", "resolved_by", "resolved_at"):
+        assert after["investigation"][col] == resolved[col] and resolved[col] is not None
+    # every earlier message, turn, finding (and its provenance refs) is intact; the only addition is one SYSTEM_NOTE
+    assert after["findings"] == before["findings"] and after["turns"] == before["turns"]
+    assert [m["id"] for m in after["messages"][:-1]] == [m["id"] for m in before["messages"]]
+    note = after["messages"][-1]
+    assert (note["role"], note["kind"]) == ("SYSTEM", "SYSTEM_NOTE") and "Fees explained it." in note["content"] and "reopened" in note["content"]
+    assert [i["status"] for i in client.get("/api/v1/ceo/investigations", headers=ha).json()] == ["ACTIVE"]
+
+    # it works again: a new turn is accepted, and a later re-resolve writes the NEW conclusion while the old one stays in the thread
+    assert client.post(f"/api/v1/ceo/investigations/{inv}/turns", json={"message": STATE}, headers=ha).status_code == 200
+    assert client.post(f"/api/v1/ceo/investigations/{inv}/resolve", json={"resolution_note": "Second conclusion."}, headers=ha).status_code == 200
+    final = client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()
+    assert final["investigation"]["resolution_note"] == "Second conclusion."
+    assert any("Fees explained it." in m["content"] for m in final["messages"] if m["kind"] == "SYSTEM_NOTE")  # the first conclusion survives
+
+
+def test_only_a_resolved_investigation_can_be_reopened(api):
+    client, ha, *_ = api
+    active = start(client, ha)
+    r = client.post(f"/api/v1/ceo/investigations/{active}/reopen", headers=ha)
+    assert r.status_code == 409 and r.json()["detail"] == {"code": "NOT_RESOLVED"}
+
+    archived = start(client, ha)
+    client.post(f"/api/v1/ceo/investigations/{archived}/archive", headers=ha)
+    r = client.post(f"/api/v1/ceo/investigations/{archived}/reopen", headers=ha)
+    assert r.status_code == 409 and r.json()["detail"] == {"code": "NOT_RESOLVED"}  # archived is visibility, not resolution
+    assert client.get(f"/api/v1/ceo/investigations/{archived}", headers=ha).json()["investigation"]["status"] == "ARCHIVED"
+
+    resolved = start(client, ha)
+    client.post(f"/api/v1/ceo/investigations/{resolved}/resolve", json={"resolution_note": "x"}, headers=ha)
+    assert client.post(f"/api/v1/ceo/investigations/{resolved}/reopen", headers=ha).status_code == 200
+    assert client.post(f"/api/v1/ceo/investigations/{resolved}/reopen", headers=ha).status_code == 409  # now active: nothing to reopen
+
+
+def test_reopen_enforces_authentication_permission_and_tenant(api, clerk):
+    client, ha, hb, a, _ = api
+    inv = start(client, ha)
+    client.post(f"/api/v1/ceo/investigations/{inv}/resolve", json={"resolution_note": "mine"}, headers=ha)
+    assert client.post(f"/api/v1/ceo/investigations/{inv}/reopen", headers={}).status_code == 401
+    assert client.post(f"/api/v1/ceo/investigations/{inv}/reopen", headers={"Authorization": "Bearer nope"}).status_code == 401
+    no_view = login(clerk, a, role=PARTNER_ROLE, permissions={AGENT_CEO: True})
+    assert client.post(f"/api/v1/ceo/investigations/{inv}/reopen", headers=no_view).status_code == 403
+    r = client.post(f"/api/v1/ceo/investigations/{inv}/reopen", headers=hb)  # another tenant
+    assert r.status_code == 404 and r.json()["detail"] == {"code": "NOT_FOUND"}
+    detail = client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()
+    assert detail["investigation"]["status"] == "RESOLVED" and detail["investigation"]["resolution_note"] == "mine"  # nothing changed
+    assert row_counts(a, "investigation_message") == {"investigation_message": 0}
+    assert client.post(f"/api/v1/ceo/investigations/{uuid.uuid4()}/reopen", headers=ha).status_code == 404
+
+
+def test_the_repository_reopen_is_strict_and_keeps_the_note(two_tenants, app_user):
+    from tests.integration.ceo_support import T0
+
+    a, _ = two_tenants
+    inv = repo.create_investigation(a, created_by=app_user, attached_agents=("CFO",), now=T0)
+    with pytest.raises(repo.InvalidInvestigationTransition):
+        repo.reopen_resolved_investigation(a, inv)  # active
+    repo.resolve_investigation(a, inv, resolved_by=app_user, resolution_note="done")
+    assert repo.reopen_resolved_investigation(a, inv) == "done"
+    row = repo.get_investigation(a, inv)
+    assert row["status"] == "ACTIVE" and row["resolution_note"] == "done" and row["resolved_by"] == app_user and row["resolved_at"] is not None
+    repo.archive_investigation(a, inv)
+    with pytest.raises(repo.InvalidInvestigationTransition):
+        repo.reopen_resolved_investigation(a, inv)  # archived

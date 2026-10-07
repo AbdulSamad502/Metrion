@@ -25,6 +25,7 @@ export function Conversation({
   onDismissNotice,
   onSend,
   onResolve,
+  onReopen,
   onArchive,
   onRetry,
 }: {
@@ -35,6 +36,7 @@ export function Conversation({
   onDismissNotice: () => void;
   onSend: (message: string, period: ExplicitPeriod | null) => void;
   onResolve: (note: string) => void;
+  onReopen: () => void;
   onArchive: () => void;
   onRetry: () => void;
 }) {
@@ -64,12 +66,12 @@ export function Conversation({
             {investigationTitle(inv)}
           </div>
         </div>
-        <StatusControls status={inv.status} processing={state === "PROCESSING"} onResolve={onResolve} onArchive={onArchive} />
+        <StatusControls status={inv.status} processing={state === "PROCESSING"} onResolve={onResolve} onReopen={onReopen} onArchive={onArchive} />
       </header>
 
       {state === "RESOLVED" && (
         <Banner tone="info" title="Resolved">
-          {inv.resolution_note ? <>Your note: {inv.resolution_note}</> : "This investigation was marked resolved."} It stays here as business history; new questions are closed.
+          {inv.resolution_note ? <>Your note: {inv.resolution_note}</> : "This investigation was marked resolved."} It stays here as business history; new questions are closed until you reopen it.
         </Banner>
       )}
       {state === "ARCHIVED" && (
@@ -177,7 +179,7 @@ function Bubble({ message, turnById }: { message: CeoMessage; turnById: Map<stri
   );
 }
 
-function StatusControls({ status, processing, onResolve, onArchive }: { status: string; processing: boolean; onResolve: (note: string) => void; onArchive: () => void }) {
+function StatusControls({ status, processing, onResolve, onReopen, onArchive }: { status: string; processing: boolean; onResolve: (note: string) => void; onReopen: () => void; onArchive: () => void }) {
   const [mode, setMode] = useState<"none" | "resolve" | "archive">("none");
   const [note, setNote] = useState("");
   if (status === "ARCHIVED") return <StatusBadge tone="neutral">Archived</StatusBadge>;
@@ -188,6 +190,11 @@ function StatusControls({ status, processing, onResolve, onArchive }: { status: 
         {status === "ACTIVE" && (
           <button type="button" disabled={processing} onClick={() => setMode(mode === "resolve" ? "none" : "resolve")} className="mt-btn mt-focus rounded-lg px-2.5 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
             Resolve
+          </button>
+        )}
+        {status === "RESOLVED" && (
+          <button type="button" onClick={onReopen} className="mt-btn mt-focus rounded-lg px-2.5 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
+            Reopen
           </button>
         )}
         <button type="button" disabled={processing} onClick={() => setMode(mode === "archive" ? "none" : "archive")} className="mt-btn mt-focus rounded-lg px-2.5 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>

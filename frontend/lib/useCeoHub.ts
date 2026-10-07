@@ -173,6 +173,17 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
     [client, loadDetail, refreshList],
   );
 
+  const reopen = useCallback(async () => {
+    const id = selectedRef.current;
+    if (!id) return;
+    try {
+      await client.reopen(id);
+      await Promise.all([loadDetail(id, true), refreshList()]);
+    } catch (e) {
+      setNotice(failure(e));
+    }
+  }, [client, loadDetail, refreshList]);
+
   const archive = useCallback(async () => {
     const id = selectedRef.current;
     if (!id) return;
@@ -188,6 +199,6 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
 
   return {
     state, list, availability, selectedId, detail, turn, showArchived, setShowArchived, busyAgent, notice, dismissNotice: () => setNotice(null),
-    refreshList, select, create, sendTurn, setAttached, resolve, archive, retryDetail: () => selectedRef.current && loadDetail(selectedRef.current, false),
+    refreshList, select, create, sendTurn, setAttached, resolve, reopen, archive, retryDetail: () => selectedRef.current && loadDetail(selectedRef.current, false),
   };
 }
