@@ -865,6 +865,26 @@ Neither spec restates the other: **product/display rules there, arithmetic here.
 
 ---
 
+### 5.16 Goal progress and deviation — `goal_progress` (NEW — CEO CP1 round 2 amendment, 2026-10-07)
+
+**Why this lives in Brain 1.** The CEO's Goals/KPI capability (`ceo-agent-orchestration.md` §6.20) must report progress against a seller's target. Subtracting an actual from a target, or classifying the gap, is arithmetic on money/ratios — the CEO must never do it (hard rule). Brain 1 owns it.
+
+**Inputs.** One `Goal` (metric code from the closed eligible set, comparator `AT_LEAST | AT_MOST`, typed target `PAISE` or `RATIO`, period grain, scope) and the **persisted** actual `MetricResult` for the matching period and scope, or `Unavailable`. No other input; no LLM; no I/O beyond the persisted result lookup done by the caller (this function is pure, like `estimate_product_feasibility`).
+
+**Output — `GoalProgress`.** `status ∈ ON_TRACK | AT_RISK | OFF_TRACK | NOT_YET_MEASURABLE | UNAVAILABLE`; `actual` and `target` (the same unit); `gap` = the **signed** shortfall/excess in that unit (paise `BIGINT`, or `Fraction` for a ratio — **never a float**); `actual_ref` (the `engine_result_ref` consumed); and a minted `engine_result_ref` for this result (`metric_result`, `metric_code = GOAL_PROGRESS`, `formula_version = goal_progress.v1`), persisted by the caller like every other `metric_result`.
+
+**Rules.**
+1. **Missing input is not zero.** No persisted actual ⇒ `UNAVAILABLE` with the reason; a period not yet complete ⇒ `NOT_YET_MEASURABLE`. Never a default.
+2. **Comparator semantics are exact:** `AT_LEAST` meets the goal when `actual ≥ target`; `AT_MOST` when `actual ≤ target`. A met goal is `ON_TRACK`.
+3. **`AT_RISK` vs `OFF_TRACK` use a configured tolerance** (a `Fraction` of the target, per metric) in the existing configuration store. **No default is seeded; a missing tolerance ⇒ the function returns `Unavailable(CONFIG_MISSING)`** rather than choosing a band — the standing convention for thresholds (§5.12.1, §5.14.1).
+4. Percent-valued metrics compare as `Fraction`; paise-valued as integers; a goal whose target kind does not match its metric's unit is rejected at creation.
+5. **Provenance.** `GoalProgress` cites the actual's `engine_result_ref` and carries its own; it never carries an `estimate_ref`.
+6. **Confidence** follows the actual: `combine_confidence` of the consumed result (§9); a goal never raises confidence above its input.
+
+**Tests required (build-time, deterministic):** boundary equality for both comparators; signed gap for both units; `UNAVAILABLE` and `NOT_YET_MEASURABLE` paths; `CONFIG_MISSING` tolerance path; no-float guard; unit-mismatch rejection; provenance fields present.
+
+**Status:** specified; **not built** (the goal registry is V1-later). Reopening the eligible metric set needs a spec amendment, not an ad-hoc addition.
+
 ## 6. Grain and periods
 
 Computable at: `line` → `order` → `sku` → `marketplace` → `account`.
