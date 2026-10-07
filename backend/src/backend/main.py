@@ -10,7 +10,7 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.v1 import ceo_hub, cfo, ci, cmo, onboarding, pi, ping, session
+from backend.api.v1 import ceo, ceo_hub, cfo, ci, cmo, onboarding, pi, ping, session
 from backend.config import (
     ci_max_evidence_bytes,
     cmo_image_max_bytes,
@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(pi.router)
     app.include_router(cmo.router)
     app.include_router(ceo_hub.router)
+    app.include_router(ceo.router)
 
     return app
 

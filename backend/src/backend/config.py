@@ -104,6 +104,69 @@ def cmo_ollama_host() -> str:
     return _required("CMO_OLLAMA_HOST")
 
 
+@lru_cache
+def ceo_llm_model() -> str:
+    """The model the CEO composes answers with. REQUIRED, no default: a model is an operator decision (B2's benchmark was
+    deliberately not completed, so nothing here may imply a preferred model). Unset -> `MissingConfig` -> `503 CEO_NOT_CONFIGURED`."""
+    return _required("CEO_LLM_MODEL")
+
+
+@lru_cache
+def ceo_classifier_model() -> str:
+    """OPTIONAL `CEO_CLASSIFIER_MODEL`: a (typically smaller) model for the single classification pass (spec §6.26 L5). Unset = the same model."""
+    return (os.environ.get("CEO_CLASSIFIER_MODEL") or "").strip() or ceo_llm_model()
+
+
+@lru_cache
+def ceo_ollama_host() -> str:
+    """The local model server for the CEO. `CEO_OLLAMA_HOST`, else the shared `ollama_host()` (a local address by default; the model
+    layer refuses a non-local host)."""
+    return (os.environ.get("CEO_OLLAMA_HOST") or "").strip() or ollama_host()
+
+
+@lru_cache
+def ceo_llm_provider() -> str:
+    """OPTIONAL `CEO_LLM_PROVIDER` (default `ollama`, the development backend). Another provider is selected here once registered in `services/ceo_runtime.py`."""
+    return (os.environ.get("CEO_LLM_PROVIDER") or "ollama").strip().lower()
+
+
+@lru_cache
+def ceo_llm_think() -> bool | None:
+    """OPTIONAL `CEO_LLM_THINK=false|true`; unset = the field is not sent (the model's own default)."""
+    raw = os.environ.get("CEO_LLM_THINK")
+    if raw is None or not raw.strip():
+        return None
+    if raw.strip().lower() not in ("true", "false"):
+        raise ValueError(f"CEO_LLM_THINK must be true or false, got {raw!r}")
+    return raw.strip().lower() == "true"
+
+
+@lru_cache
+def ceo_llm_timeout_seconds() -> int:
+    """Per-request timeout, whole seconds, for a CEO model call. REQUIRED, no default (a CPU host measured 15-200 s per call)."""
+    return _required_positive_int("CEO_LLM_TIMEOUT_SECONDS")
+
+
+def _optional_positive_int(name: str) -> int | None:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return None
+    if not raw.isdigit() or int(raw) <= 0:
+        raise ValueError(f"{name} must be a positive integer, got {raw!r}")
+    return int(raw)
+
+
+def ceo_leg_timeout_seconds() -> int | None:
+    """`CEO_LEG_TIMEOUT_SECONDS`: the per-turn deadline for specialist legs (spec §6.12 rule 5, §6.26 L9). NO default: unset -> None -> any
+    investigation with legs refuses with CONFIG_MISSING. Not cached, so a test or operator change takes effect."""
+    return _optional_positive_int("CEO_LEG_TIMEOUT_SECONDS")
+
+
+def ceo_playbook_max_legs() -> int | None:
+    """`CEO_PLAYBOOK_MAX_LEGS`: the most legs one playbook may fan out to (§6.12 rule 5). NO default; unset -> CONFIG_MISSING for playbooks with legs."""
+    return _optional_positive_int("CEO_PLAYBOOK_MAX_LEGS")
+
+
 def _required_positive_int(name: str) -> int:
     raw = _required(name).strip()
     if not raw.isdigit() or int(raw) <= 0:

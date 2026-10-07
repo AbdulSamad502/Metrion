@@ -61,6 +61,14 @@ def resolve_ref(tenant_id: UUID, ref: Ref, *, resolvers: Mapping[tuple[RefKind, 
     return Resolution(ref=ref, found=True, as_of=as_of, is_available=is_available)
 
 
+def load_ref_row(tenant_id: UUID, ref: Ref, *, resolvers: Mapping[tuple[RefKind, str | None], Resolver] | None = None) -> Mapping[str, Any] | None:
+    """The OWNING row a ref points at, for THIS tenant, or None (missing and cross-tenant are indistinguishable by design). Same resolver
+    table as `resolve_ref`, so a ref that does not resolve there can never produce a figure here either."""
+    table = resolvers if resolvers is not None else _RESOLVERS
+    resolver = table.get((ref.kind, ref.source if ref.kind is RefKind.AGENT_REPORT_FIELD else None))
+    return resolver(tenant_id, ref.id) if resolver is not None else None
+
+
 @dataclass(frozen=True, slots=True)
 class GateResult:
     kept: tuple[Figure, ...]

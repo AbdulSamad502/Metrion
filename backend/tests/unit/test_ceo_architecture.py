@@ -131,3 +131,41 @@ def test_the_composition_root_is_not_imported_by_other_modules():
             assert not _matches(module, "backend.agents"), f"{path.name}:{line} imports the dummy hub"
             if _matches(module, "backend.api") and path.name != "registry.py":
                 pytest.fail(f"{path.name}:{line} imports an HTTP module")
+
+
+# ---------------------------------------------------------------------------------------------------------------- B3: the model seams
+MODEL_SEAMS = ("classifier.py", "composer.py")
+NEVER_IN_MODEL_SEAMS = ("backend.ceo.dispatch", "backend.ceo.registry", "backend.ceo.business_state", "backend.repositories", "backend.entitlement", "backend.tenant_context")
+
+
+@pytest.mark.parametrize("name", MODEL_SEAMS)
+def test_the_two_model_seams_cannot_execute_anything(name: str):
+    """The classifier and composer take text in and return text out (spec §6.3, §6.5): neither may import the choke point, the registry,
+    Business State, a repository or the entitlement/tenant machinery, so a model's output can only ever be VALIDATED by other code."""
+    bad = [f"{name}:{ln} imports {m}" for m, ln in _imports(_tree(CEO / name)) if any(_matches(m, f) for f in NEVER_IN_MODEL_SEAMS)]
+    assert not bad, "\n".join(bad)
+
+
+def test_only_the_orchestrator_calls_dispatch_and_the_legs_come_from_the_fixed_plans():
+    callers = []
+    for path in FILES:
+        for node in ast.walk(_tree(path)):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "dispatch" and path.name not in ("dispatch.py",):
+                callers.append(path.name)
+    assert set(callers) == {"orchestrator.py"}
+    src = (CEO / "orchestrator.py").read_text(encoding="utf-8")
+    assert "ACTIONS[key].build_slots" in src and "PLAYBOOKS[key]" in src  # slots and legs come from plans.py, never from model output
+
+
+def test_nothing_in_the_ceo_package_imports_the_evaluation_harness_or_a_provider_sdk():
+    for path in FILES:
+        for module, line in _imports(_tree(path)):
+            assert not _matches(module, "backend.ceo_eval"), f"{path.name}:{line}"
+            assert not any(_matches(module, sdk) for sdk in ("ollama", "openai", "anthropic", "langchain", "langgraph", "httpx")), f"{path.name}:{line} imports {module}"
+
+
+def test_the_llm_layer_is_the_only_place_that_talks_to_a_model_server():
+    llm = SRC / "llm" / "model.py"
+    assert "httpx" in llm.read_text(encoding="utf-8")
+    for path in FILES:
+        assert "11434" not in path.read_text(encoding="utf-8") and "api/generate" not in path.read_text(encoding="utf-8")

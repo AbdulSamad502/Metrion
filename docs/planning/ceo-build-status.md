@@ -8,7 +8,7 @@ Authority: `docs/specs/ceo-agent-orchestration.md` (CP1 2026-10-07). This file r
 | **B1 Foundation** | **Done, approved** (this file's detail) |
 | B1 privilege hardening | **Done** — migration 0007, see below |
 | **B2 Evaluation harness** | **Harness built and tested; baseline NOT completed (no benchmark results exist)** — see `docs/evaluation/ceo-eval-b2-checkpoint.md` |
-| B3 Intelligence (classifier, composer, gates, advisory) | Not started |
+| **B3 Intelligence** (classifier, plans, parallel legs, composer, gate, API) | **Built and tested on a scratch Postgres with scripted models; not benchmarked against a live model** — see below |
 | B4 Orchestration (playbooks, parallel dispatch, API) | Not started |
 | B5 Seller surface (CEO Hub UI) | Not started |
 | B6 Hardening and manual E2E | Not started |
@@ -88,3 +88,9 @@ Authority: `docs/specs/ceo-agent-orchestration.md` (CP1 2026-10-07). This file r
 * **Built:** the model-agnostic harness in `backend/src/backend/ceo_eval/` — 126 classifier fixtures (123 scored, 3 pending) and 43 composer fixtures; 217 harness tests pass (499 across the CEO suites including integration).
 * **Not done:** the 3-model baseline was intentionally terminated (CPU-only host, hours per model, no model completed); **no run record, no accuracy/safety/latency result and no model comparison exist**; the partial progress log is not a result; the DB latency stage was not run. No pass bars or model choice are claimed.
 * **B3 has not started.** Model-selection evidence needs a run on suitable hardware (commands in the checkpoint document).
+
+## B3 first end-to-end CEO turn — state (2026-10-07)
+
+* **Built:** `POST /api/v1/ceo/investigations`, `GET .../investigations`, `GET .../{id}`, `POST .../{id}/turns` (the full turn), `GET .../{id}/findings` (polling seam), `POST .../{id}/resolve`. The turn: admission -> one classification -> deterministic plan validation (closed catalog, slots, periods) -> per-leg pre-flight -> parallel CFO legs + Business State reads with findings emitted as each completes -> evidence table via refs -> one composition -> numeral/provenance gate or fixed template -> persisted messages, turn, findings, timings. Details and decisions: spec §6.29.
+* **Supported:** BUSINESS_STATE, ACTION (5 CFO actions), PLAYBOOK (`PROFIT_DIAGNOSIS`, `CASH_AND_LEAK_CHECK`, `BUSINESS_BRIEFING`), ADVISORY, SYNTHESIZE, CLARIFY, OUT_OF_SCOPE. **Not supported:** the other registry actions, `COMPETITOR_PRICE_IMPACT`, `NEW_PRODUCT_DECISION`, GST routes, goals, proactive detection, UI, SSE.
+* **Not done / honest limits:** no live-model run (B2 benchmark was intentionally abandoned; the model is configuration, none is chosen); turns are not serialized per investigation; no rolling-summary regeneration; capability/entitlement lookups are uncached (~0.3 s/turn on the scratch DB).

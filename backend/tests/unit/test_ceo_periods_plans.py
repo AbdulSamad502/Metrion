@@ -1,0 +1,101 @@
+"""B3: deterministic period/slot resolution and the fixed plans (spec §6.3 rule 3, §6.11, §6.12). No model, no database."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date
+
+import pytest
+
+from backend.ceo.periods import PeriodUnresolvable, resolve_period
+from backend.ceo.plans import ACTIONS, PLAYBOOKS, UNSUPPORTED_PLAYBOOKS, Clarification, ResolvedSlots, resolve_slots
+from backend.ceo.registry import get_registry
+
+TODAY = date(2026, 10, 7)
+TENANT = uuid.uuid4()
+
+
+@pytest.mark.parametrize(
+    "text, start, end",
+    [
+        ("last month", "2026-09-01", "2026-09-30"),
+        ("Previous month", "2026-09-01", "2026-09-30"),
+        ("September", "2026-09-01", "2026-09-30"),
+        ("for September", "2026-09-01", "2026-09-30"),
+        ("sep", "2026-09-01", "2026-09-30"),
+        ("August 2025", "2025-08-01", "2025-08-31"),
+        ("december", "2025-12-01", "2025-12-31"),  # most recent December NOT in the future
+        ("this month", "2026-10-01", "2026-10-07"),
+        ("october", "2026-10-01", "2026-10-07"),  # the current month is cut at today, never extended into the future
+        ("2026-08", "2026-08-01", "2026-08-31"),
+        ("2026-09-01 to 2026-09-15", "2026-09-01", "2026-09-15"),
+    ],
+)
+def test_period_resolution(text, start, end):
+    p = resolve_period(text, today=TODAY)
+    assert (p.start.isoformat(), p.end.isoformat()) == (start, end)
+    assert p.as_of == TODAY  # as_of is the day of the request, never a model- or seller-supplied date
+    assert start in p.echo and end in p.echo  # the interpretation is always echoed (AC17)
+
+
+@pytest.mark.parametrize("text", ["", None, "last quarter", "Q2", "recently", "yesterday", "2026-13", "2026-09-30 to 2026-09-01", "2027-03", "foo 2026"])
+def test_an_unresolvable_period_is_refused_never_guessed(text):
+    with pytest.raises(PeriodUnresolvable):
+        resolve_period(text, today=TODAY)
+
+
+def test_january_looks_back_across_the_year_boundary():
+    p = resolve_period("last month", today=date(2026, 1, 15))
+    assert (p.start, p.end) == (date(2025, 12, 1), date(2025, 12, 31))
+
+
+def test_missing_required_slots_are_clarifications():
+    assert resolve_slots({}, ("period",), tenant_id=TENANT, today=TODAY) == Clarification("period", resolve_slots({}, ("period",), tenant_id=TENANT, today=TODAY).question)
+    r = resolve_slots({"period": "september"}, ("marketplace", "period"), tenant_id=TENANT, today=TODAY)
+    assert isinstance(r, Clarification) and r.slot == "marketplace"
+    r = resolve_slots({"period": "soonish", "marketplace": "Amazon"}, ("marketplace", "period"), tenant_id=TENANT, today=TODAY)
+    assert isinstance(r, Clarification) and r.slot == "period"
+
+
+def test_marketplace_text_is_normalised():
+    r = resolve_slots({"period": "last month", "marketplace": "my flipkart store"}, ("marketplace", "period"), tenant_id=TENANT, today=TODAY)
+    assert isinstance(r, ResolvedSlots) and r.marketplace == "FLIPKART" and any("Flipkart" in e for e in r.echoes())
+    assert isinstance(resolve_slots({"marketplace": "Shopify", "period": "september"}, ("marketplace", "period"), tenant_id=TENANT, today=TODAY), Clarification)
+
+
+# ------------------------------------------------------------------------------------------------ the fixed plans
+def test_every_planned_action_is_a_wired_registry_action_with_valid_slots():
+    reg = get_registry()
+    resolved = resolve_slots({"period": "september", "marketplace": "amazon"}, ("marketplace", "period"), tenant_id=TENANT, today=TODAY)
+    assert isinstance(resolved, ResolvedSlots)
+    for key, plan in ACTIONS.items():
+        spec = reg.get(key)
+        assert spec.wired and spec.agent is not None and not spec.denial_surface
+        built = plan.build_slots(resolved)
+        spec.slot_model.model_validate({**built, **dict(spec.fixed_params)})  # the registry's own model accepts exactly what the plan builds
+
+
+def test_slot_builders_never_take_a_tenant_id_from_the_request():
+    resolved = resolve_slots({"period": "september"}, ("period",), tenant_id=TENANT, today=TODAY)
+    assert isinstance(resolved, ResolvedSlots)
+    built = ACTIONS["cfo.anomaly_check"].build_slots(resolved)
+    assert built["target_ref"] == str(TENANT) and built["include_narration"] is False  # derived from the authenticated tenant; narration off
+
+
+def test_playbook_legs_are_registry_keys_and_independent():
+    reg = get_registry()
+    for pb in PLAYBOOKS.values():
+        assert len({leg.key for leg in pb.legs}) == len(pb.legs)
+        for leg in pb.legs:
+            assert leg.key in ACTIONS and leg.key in reg  # no leg outside the closed, wired set
+        assert all(read.startswith("BS_") for read in pb.state_reads)
+
+
+def test_unsupported_starter_playbooks_are_declared_not_silently_absent():
+    assert set(UNSUPPORTED_PLAYBOOKS) == {"COMPETITOR_PRICE_IMPACT", "NEW_PRODUCT_DECISION"}
+    assert not set(UNSUPPORTED_PLAYBOOKS) & set(PLAYBOOKS)
+
+
+def test_business_briefing_has_no_legs_and_reads_only_persisted_state():
+    pb = PLAYBOOKS["BUSINESS_BRIEFING"]
+    assert pb.legs == () and "BS_PNL_LATEST" in pb.state_reads
