@@ -383,6 +383,60 @@ def resolve_market_trends_entitlement(
     )
 
 
+# --- CEO (ceo-agent-orchestration.md D5, §8 rule 3, E7) --------------------------------------
+CEO_AGENT_CODE = "CEO"
+CEO_TURN_EVENT_KIND = "ceo.chat_turn"
+
+
+def resolve_ceo_entitlement(
+    tenant_id: UUID,
+    *,
+    occurred_at: datetime | None = None,
+    as_of_date: date | None = None,
+) -> EntitlementResult:
+    """The CEO's own cap check — one conversational turn is one unit (D5), checked BEFORE classification
+    runs at all (§8 rule 3, E7). A thin wrapper over the same real F2 mechanism CFO/PI/CMO use, so seeding
+    a `CEO` / `ceo.chat_turn` cap needs no code change. Nothing is seeded: until a cap row exists every call
+    resolves `NO_CAP_CONFIGURED`/`passed=True`, stated honestly (the 30/month figure is provisional config,
+    never a hardcoded threshold here). System/proactive runs never call this: they consume no seller
+    conversation unit (CP1-D5)."""
+    return resolve_cfo_entitlement(
+        tenant_id,
+        direct_action_code=CEO_TURN_EVENT_KIND,
+        agent_code=CEO_AGENT_CODE,
+        occurred_at=occurred_at,
+        as_of_date=as_of_date,
+    )
+
+
+def ceo_turn_metering_key(turn_id: UUID) -> str:
+    """`metered_event.idempotency_key` is unique per tenant across ALL agents, so the CEO's keys are namespaced."""
+    return f"ceo:turn:{turn_id}"
+
+
+def meter_ceo_turn(
+    tenant_id: UUID,
+    *,
+    member_id: UUID,
+    turn_id: UUID,
+    agent_run_id: UUID | None = None,
+    occurred_at: datetime | None = None,
+) -> UUID | None:
+    """Records the one unit a delivered seller turn consumes (D5), idempotently per turn. Best-effort like every
+    metering write (D4): a failure never blocks the answer the seller already received."""
+    return record_metered_event(
+        tenant_id,
+        agent_code=CEO_AGENT_CODE,
+        event_kind=CEO_TURN_EVENT_KIND,
+        idempotency_key=ceo_turn_metering_key(turn_id),
+        member_id=member_id,
+        quantity=1,
+        agent_run_id=agent_run_id,
+        source_ref=turn_id,
+        occurred_at=occurred_at,
+    )
+
+
 def cmo_metering_key(generation_id: UUID) -> str:
     """`metered_event.idempotency_key` is unique per tenant across ALL agents, so CMO's keys are
     namespaced. One delivered artefact (`cmo_generation.id`) is exactly one unit; re-recording
