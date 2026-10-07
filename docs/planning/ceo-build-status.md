@@ -5,8 +5,9 @@ Authority: `docs/specs/ceo-agent-orchestration.md` (CP1 2026-10-07). This file r
 | Checkpoint | State |
 |---|---|
 | CP1 spec/contract amendment (rounds 1–2) | **Done, approved** |
-| **B1 Foundation** | **Done — awaiting approval** (this file's detail) |
-| B2 Evaluation harness | Not started |
+| **B1 Foundation** | **Done, approved** (this file's detail) |
+| B1 privilege hardening | **Done** — migration 0007, see below |
+| **B2 Evaluation harness** | **Harness built and tested; baseline NOT completed (no benchmark results exist)** — see `docs/evaluation/ceo-eval-b2-checkpoint.md` |
 | B3 Intelligence (classifier, composer, gates, advisory) | Not started |
 | B4 Orchestration (playbooks, parallel dispatch, API) | Not started |
 | B5 Seller surface (CEO Hub UI) | Not started |
@@ -73,3 +74,17 @@ Authority: `docs/specs/ceo-agent-orchestration.md` (CP1 2026-10-07). This file r
 * `read_entries` and `dispatch` are sequential; parallel legs, the per-tenant cache and streaming are B4.
 * The old dummy-hub modules (`agents/ceo_hub.py`, `agents/ceo_hub_cmo.py`) and `/api/v1/ceo-hub/*` routes still exist unchanged and are **not** the CEO; a parity test pins the registry's CMO permissions to the hub's table until the hub is removed.
 * No API route, classifier, composer, playbook, or UI exists yet.
+
+## B1 privilege hardening (2026-10-07)
+
+`docker/postgres-init/02-roles.sql` gives `metrion_app` full CRUD on every new table, so a table is app-deletable unless its migration revokes. Migration `20261007_0007`: `investigation_finding` is now append-only (no UPDATE, no DELETE) and DELETE is revoked on `investigation`, `investigation_message` and `agent_run`; the three B1 tables already had no DELETE. `tests/integration/test_privilege_boundary.py` (24 tests; 6 fail if the migration is reverted) pins this and adds a drift guard so a new table cannot silently become app-deletable.
+
+**Reported, not changed (other owners):** `metrion_app` still holds DELETE on ~70 earlier tables including `auth_audit`, `metered_event`, `metric_result`, `leak_finding`, `ingestion_run`, `whatsapp_message` and the `alembic_version*` tables (listed in `KNOWN_APP_DELETABLE` in that test). Needs its own decision/migration per owning spec.
+
+**CMO integration failures** are not caused by B1: all 87 CMO tests pass on a clean database with B1 + 0007 applied (full backend suite 851/851 there). The dev database's fixture contamination is recorded separately and untouched. Note the dev database is at backend revision 0004; 0005–0007 have not been applied to it.
+
+## B2 Evaluation harness — state (2026-10-07)
+
+* **Built:** the model-agnostic harness in `backend/src/backend/ceo_eval/` — 126 classifier fixtures (123 scored, 3 pending) and 43 composer fixtures; 217 harness tests pass (499 across the CEO suites including integration).
+* **Not done:** the 3-model baseline was intentionally terminated (CPU-only host, hours per model, no model completed); **no run record, no accuracy/safety/latency result and no model comparison exist**; the partial progress log is not a result; the DB latency stage was not run. No pass bars or model choice are claimed.
+* **B3 has not started.** Model-selection evidence needs a run on suitable hardware (commands in the checkpoint document).

@@ -182,4 +182,8 @@ def test_figure_refs_must_be_a_json_array(two_tenants, app_user):
     investigation_repo.insert_finding(a, inv, turn_id=turn, source="CFO", action_key="k", status="COMPLETE", figure_refs=[], now=T0)  # control
     with pytest.raises(IntegrityError):
         with tenant_scope(a) as conn:
-            conn.execute(text("UPDATE investigation_finding SET figure_refs = '{}'::jsonb WHERE investigation_id = :i"), {"i": str(inv)})
+            conn.execute(
+                text("INSERT INTO investigation_finding (tenant_id, investigation_id, turn_id, source, action_key, status, figure_refs) "
+                     "VALUES (:t, :i, :turn, 'CFO', 'k', 'COMPLETE', '{}'::jsonb)"),
+                {"t": str(a), "i": str(inv), "turn": str(turn)},
+            )
