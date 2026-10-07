@@ -105,6 +105,7 @@ class TurnContext:
     summary: str | None = None
     recent: tuple[tuple[str, str], ...] = ()
     findings: tuple[str, ...] = ()  # ids/labels/status only — never values (§6.3 rule 5)
+    period_note: str | None = None  # the seller picked a date range explicitly; it is already supplied (B4)
 
 
 def build_prompt(cat: Catalog, message: str, ctx: TurnContext | None = None) -> str:
@@ -116,6 +117,8 @@ def build_prompt(cat: Catalog, message: str, ctx: TurnContext | None = None) -> 
         parts.append("Recent messages:\n" + "\n".join(f"{role}: {text}" for role, text in ctx.recent[-MAX_RECENT_MESSAGES:]))
     if ctx.findings:
         parts.append("Findings already in this investigation: " + "; ".join(ctx.findings))
+    if ctx.period_note:
+        parts.append(ctx.period_note)
     parts.append(f'Seller message: """{message}"""')
     parts.append("JSON:")
     return static_prefix(cat) + "\n".join(parts)
@@ -177,8 +180,11 @@ def _s(v: Any) -> str | None:
     return s or None
 
 
-def parse_decision(text: str, cat: Catalog) -> Decision:
-    """Raw model text -> the decision code will act on. Never raises; every doubt resolves to CLARIFY."""
+def parse_decision(text: str, cat: Catalog, preset_slots: Mapping[str, str] | None = None) -> Decision:
+    """Raw model text -> the decision code will act on. Never raises; every doubt resolves to CLARIFY.
+
+    `preset_slots` are values the SELLER supplied through a deterministic control (the date-range picker, B4). They overwrite whatever
+    the model put in the same slot, BEFORE the required-slot check, so the model can neither choose nor withhold them."""
     try:
         data = _extract(text)
         if not isinstance(data, dict):
@@ -195,6 +201,7 @@ def parse_decision(text: str, cat: Catalog) -> Decision:
             flags.add("UNKNOWN_SLOT")
         elif val is not None:
             slots[k] = val
+    slots.update({k: v for k, v in (preset_slots or {}).items() if k in SLOT_VOCAB})
     needs = _s(data.get("needs_agent"))
     needs = needs.upper() if needs and needs.upper() in AGENT_CODES else None
     clarify_for = _s(data.get("clarify_for"))
@@ -237,10 +244,12 @@ class ClassifierOutcome:
     prompt_version: str = PROMPT_VERSION
 
 
-def classify(model: LlmModel, cat: Catalog, message: str, ctx: TurnContext | None = None, *, max_output_tokens: int = 160) -> ClassifierOutcome:
+def classify(
+    model: LlmModel, cat: Catalog, message: str, ctx: TurnContext | None = None, *, max_output_tokens: int = 160, preset_slots: Mapping[str, str] | None = None
+) -> ClassifierOutcome:
     """The one classification pass. A model/transport failure is a safe CLARIFY (flagged `MODEL_ERROR`), never a guess."""
     completion = model.complete(build_prompt(cat, message, ctx), schema=output_schema(cat), max_output_tokens=max_output_tokens)
     if completion.error:
         d = Decision(False, None, None, "CLARIFY", None, {}, None, "UNCLEAR_REQUEST", frozenset({"MODEL_ERROR"}))
         return ClassifierOutcome(d, completion)
-    return ClassifierOutcome(parse_decision(completion.text, cat), completion)
+    return ClassifierOutcome(parse_decision(completion.text, cat, preset_slots), completion)

@@ -1,0 +1,218 @@
+/** An in-memory stand-in for the CEO API, honouring the same CONTRACT the real backend tests pin (tenant 404s, closed investigations,
+ * entitlement refusal on attach, SYSTEM_NOTEs, append-only findings). It exists so UI behaviour can be tested deterministically; it does
+ * no orchestration of its own: tests script what the "server" persisted and when, exactly as the real turn endpoint would. */
+
+import { ApiError } from "@/lib/api";
+import type {
+  AgentAvailability, AgentCode, CeoClient, CeoMessage, CeoRoute, ExplicitPeriod, FindingRow, InvestigationDetail, InvestigationStatus, InvestigationSummary,
+  TurnResponse, TurnRow,
+} from "@/lib/ceo";
+import type { FeedFactory, FeedOptions, FindingsFeed } from "@/lib/ceoPolling";
+
+type Stored = InvestigationDetail & { tenant: string };
+
+export const ALL_PRESENT: AgentAvailability = {
+  CI: { status: "PRESENT", chatActions: 0 },
+  CFO: { status: "PRESENT", chatActions: 5 },
+  PI: { status: "PRESENT", chatActions: 0 },
+  CMO: { status: "PRESENT", chatActions: 0 },
+};
+
+let counter = 0;
+const uid = (p: string) => `${p}-${(++counter).toString().padStart(8, "0")}-0000-0000-0000-000000000000`;
+const ts = () => new Date(Date.UTC(2026, 9, 8, 9, 0, counter)).toISOString();
+
+export function finding(over: Partial<FindingRow> & Pick<FindingRow, "source" | "action_key" | "status">): FindingRow {
+  return { id: uid("f"), turn_id: undefined, figure_refs: [], report_ref: null, gap_reason: null, agent_run_id: null, created_at: ts(), ...over };
+}
+
+export type TurnScript = {
+  status?: TurnResponse["status"];
+  route?: CeoRoute;
+  answer: string;
+  kind?: CeoMessage["kind"];
+  compositionMode?: TurnRow["composition_mode"];
+  findings?: FindingRow[];
+};
+
+export class FakeCeo {
+  tenant = "A";
+  availability: AgentAvailability = structuredClone(ALL_PRESENT);
+  store = new Map<string, Stored>();
+  calls: { method: string; args: unknown[] }[] = [];
+  failNextTurn: ApiError | null = null;
+  private pending: { id: string; message: string; period: ExplicitPeriod | null; resolve: (r: TurnResponse) => void; reject: (e: unknown) => void } | null = null;
+
+  seed(over: Partial<Stored> & { id?: string; status?: InvestigationStatus; title?: string | null } = {}): string {
+    const id = over.id ?? uid("i");
+    const meta = {
+      id, title: over.title ?? "Why did profit drop?", status: over.status ?? "ACTIVE", origin: "USER_CHAT", created_at: ts(), last_message_at: ts(),
+      resolution_note: null, resolved_at: null, summary: null,
+    };
+    this.store.set(id, {
+      tenant: over.tenant ?? this.tenant,
+      investigation: { ...meta, ...(over.investigation ?? {}) },
+      agents: over.agents ?? { CI: true, CFO: true, PI: true, CMO: true },
+      messages: over.messages ?? [],
+      turns: over.turns ?? [],
+      findings: over.findings ?? [],
+    });
+    return id;
+  }
+
+  private visible(id: string): Stored {
+    const s = this.store.get(id);
+    if (!s || s.tenant !== this.tenant) throw new ApiError(404, { code: "NOT_FOUND" }); // another tenant's id is indistinguishable from a missing one
+    return s;
+  }
+
+  count(method: string): number {
+    return this.calls.filter((c) => c.method === method).length;
+  }
+
+  /** What the server persists the moment a specialist leg finishes (visible to the polling endpoint immediately). */
+  emitFinding(f: FindingRow): FindingRow {
+    const p = this.pending;
+    if (!p) throw new Error("no turn in flight");
+    const s = this.visible(p.id);
+    const row = { ...f, turn_id: f.turn_id ?? "turn-in-flight" };
+    s.findings.push(row);
+    return row;
+  }
+
+  /** The turn endpoint finishing: persists the CEO message + turn row, then answers the in-flight POST. */
+  completeTurn(script: TurnScript): void {
+    const p = this.pending;
+    if (!p) throw new Error("no turn in flight");
+    this.pending = null;
+    const s = this.visible(p.id);
+    const turnId = uid("t");
+    const userMsg = s.messages.find((m) => m.content === p.message && m.turn_id === null && m.role === "USER");
+    const ceoMsg: CeoMessage = { id: uid("m"), role: "CEO", kind: script.kind ?? "ANSWER", content: script.answer, turn_id: turnId, created_at: ts() };
+    s.messages.push(ceoMsg);
+    s.turns.push({
+      id: turnId, route: script.route ?? "ADVISORY", route_key: null, status: script.status ?? "DELIVERED", composition_mode: script.compositionMode ?? "LLM",
+      user_message_id: userMsg?.id ?? "", ceo_message_id: ceoMsg.id, created_at: ts(),
+    });
+    for (const f of s.findings) if (f.turn_id === "turn-in-flight") f.turn_id = turnId;
+    for (const f of script.findings ?? []) s.findings.push({ ...f, turn_id: turnId });
+    if (userMsg) userMsg.turn_id = turnId;
+    p.resolve({
+      turnId, status: script.status ?? "DELIVERED", route: script.route ?? "ADVISORY", routeKey: null, answer: script.answer, messageId: ceoMsg.id,
+      compositionMode: script.compositionMode ?? "LLM", clarifyFor: null, notes: [], findings: s.findings.filter((f) => f.turn_id === turnId), timings: {}, events: [],
+    });
+  }
+
+  failTurn(error: unknown): void {
+    const p = this.pending;
+    if (!p) throw new Error("no turn in flight");
+    this.pending = null;
+    p.reject(error);
+  }
+
+  client(): CeoClient {
+    const rec = <T>(method: string, args: unknown[], fn: () => T | Promise<T>): Promise<T> => {
+      this.calls.push({ method, args });
+      try {
+        return Promise.resolve(fn());
+      } catch (e) {
+        return Promise.reject(e);
+      }
+    };
+    return {
+      listInvestigations: () =>
+        rec("listInvestigations", [], () =>
+          [...this.store.values()].filter((s) => s.tenant === this.tenant).map((s): InvestigationSummary => ({ ...s.investigation })).reverse(),
+        ),
+      createInvestigation: (title?: string) =>
+        rec("createInvestigation", [title], () => {
+          const entitled = (c: AgentCode) => this.availability[c].status !== "NOT_ENTITLED";
+          const agents: Partial<Record<AgentCode, boolean>> = { CI: entitled("CI"), CFO: entitled("CFO"), PI: entitled("PI"), CMO: entitled("CMO") };
+          return { investigationId: this.seed({ title: title ?? null, agents }) };
+        }),
+      getInvestigation: (id: string) =>
+        rec("getInvestigation", [id], () => {
+          const { tenant: _t, ...detail } = this.visible(id);
+          void _t;
+          return structuredClone(detail) as InvestigationDetail;
+        }),
+      getFindings: (id: string) => rec("getFindings", [id], () => structuredClone(this.visible(id).findings)),
+      postTurn: (id: string, message: string, period?: ExplicitPeriod | null) => {
+        this.calls.push({ method: "postTurn", args: [id, message, period ?? null] });
+        return new Promise<TurnResponse>((resolve, reject) => {
+          try {
+            const s = this.visible(id);
+            if (s.investigation.status !== "ACTIVE") throw new ApiError(409, { code: "INVESTIGATION_NOT_ACTIVE" });
+            if (this.failNextTurn) {
+              const e = this.failNextTurn;
+              this.failNextTurn = null;
+              throw e;
+            }
+            s.messages.push({ id: uid("m"), role: "USER", kind: "TEXT", content: message, turn_id: null, created_at: ts() });
+            this.pending = { id, message, period: period ?? null, resolve, reject };
+          } catch (e) {
+            reject(e);
+          }
+        });
+      },
+      resolve: (id: string, note: string) =>
+        rec("resolve", [id, note], () => {
+          const s = this.visible(id);
+          if (s.investigation.status !== "ACTIVE") throw new ApiError(409, { code: "CANNOT_RESOLVE" });
+          s.investigation.status = "RESOLVED";
+          s.investigation.resolution_note = note;
+          return { status: "RESOLVED" };
+        }),
+      archive: (id: string) =>
+        rec("archive", [id], () => {
+          const s = this.visible(id);
+          s.investigation.status = "ARCHIVED";
+          s.investigation.resolution_note = null;
+          return { status: "ARCHIVED" };
+        }),
+      setAgentAttached: (id: string, agent: AgentCode, attached: boolean) =>
+        rec("setAgentAttached", [id, agent, attached], () => {
+          const s = this.visible(id);
+          if (s.investigation.status !== "ACTIVE") throw new ApiError(409, { code: "INVESTIGATION_NOT_ACTIVE" });
+          if (attached && !s.agents[agent] && this.availability[agent].status === "NOT_ENTITLED") throw new ApiError(409, { code: "AGENT_NOT_ENTITLED" });
+          if (s.agents[agent] !== attached) {
+            s.agents[agent] = attached;
+            s.messages.push({
+              id: uid("m"), role: "SYSTEM", kind: "SYSTEM_NOTE", turn_id: null, created_at: ts(),
+              content: attached ? `${agent} was attached to this investigation.` : `${agent} was detached from this investigation. Its earlier findings remain as historical evidence; it will not be used for new work.`,
+            });
+          }
+          return { agent, attached };
+        }),
+      getAvailability: () => rec("getAvailability", [], () => structuredClone(this.availability)),
+    };
+  }
+}
+
+/** A findings feed the test drives by hand: no timers, fully deterministic. `tick()` is one poll. */
+export class ManualFeed {
+  started = 0;
+  stopped = 0;
+  private active: FeedOptions | null = null;
+
+  factory: FeedFactory = (options): FindingsFeed => {
+    this.started += 1;
+    this.active = options;
+    return {
+      stop: () => {
+        this.stopped += 1;
+        this.active = null;
+      },
+    };
+  };
+
+  get running(): boolean {
+    return this.active !== null;
+  }
+
+  async tick(): Promise<void> {
+    const o = this.active;
+    if (!o) return;
+    o.onFindings(await o.fetchFindings());
+  }
+}

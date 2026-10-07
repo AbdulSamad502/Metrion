@@ -49,11 +49,12 @@ class Scripted:
     """A classifier keyed by seller message, counting its calls."""
 
     def __init__(self, table: dict[str, str]) -> None:
-        self.table, self.calls = table, 0
+        self.table, self.calls, self.prompts = table, 0, []
 
     def model(self) -> ScriptedModel:
         def script(prompt: str, schema):
             self.calls += 1
+            self.prompts.append(prompt)
             msg = prompt.split('Seller message: """')[1].split('"""')[0]
             return self.table[msg]
 

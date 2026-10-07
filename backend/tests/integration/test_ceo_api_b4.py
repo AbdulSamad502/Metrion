@@ -1,0 +1,149 @@
+"""B4 backend additions the CEO Hub needs: archive, attach/detach, per-agent availability, explicit date range (spec §6.22, R13, §6.3 rule 3).
+
+Same harness as `test_ceo_api.py`: real app, real auth chain (Clerk faked), real Postgres, scripted models."""
+
+from __future__ import annotations
+
+import os
+import uuid
+
+import pytest
+
+from backend.auth.permissions import AGENT_CEO, INVESTIGATION_VIEW, PARTNER_ROLE
+from backend.repositories import investigation_repo as repo
+from tests.integration.ceo_support import row_counts, seed_platform_cap
+from tests.integration.test_ceo_api import STATE, api, clerk, login, start  # noqa: F401
+from tests.integration.test_ceo_turn import Grounded, Scripted, decision, health_config, runtime, seed_books  # noqa: F401
+
+pytestmark = pytest.mark.skipif(not os.environ.get("DATABASE_URL_APP") or not os.environ.get("DATABASE_URL"), reason="needs a live Postgres")
+
+CFO_ACTION_METERS = (
+    "cfo.pnl", "cfo.pricing", "cfo.gst_summary", "cfo.period_comparison", "cfo.landed_cost", "cfo.supplier_ranking", "cfo.funding_readiness",
+    "cfo.batch_size", "cfo.reconcile", "cfo.anomaly_check", "cfo.financial_health", "cfo.cash_reconciliation", "cfo.strategic_briefing",
+)
+
+
+def test_archive_hides_without_a_conclusion_and_closes_the_thread(api):
+    client, ha, hb, a, _ = api
+    inv = start(client, ha)
+    assert client.post(f"/api/v1/ceo/investigations/{inv}/archive", headers=hb).status_code == 404  # another tenant
+    r = client.post(f"/api/v1/ceo/investigations/{inv}/archive", headers=ha)
+    assert r.status_code == 200 and r.json() == {"status": "ARCHIVED"}
+    assert [(i["id"], i["status"]) for i in client.get("/api/v1/ceo/investigations", params={"status": "ARCHIVED"}, headers=ha).json()] == [(inv, "ARCHIVED")]
+    assert client.get("/api/v1/ceo/investigations", params={"status": "ACTIVE"}, headers=ha).json() == []
+    detail = client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()  # still readable as history
+    assert detail["investigation"]["status"] == "ARCHIVED" and detail["investigation"]["resolution_note"] is None
+    assert client.post(f"/api/v1/ceo/investigations/{inv}/archive", headers=ha).status_code == 409
+    assert client.post(f"/api/v1/ceo/investigations/{inv}/turns", json={"message": STATE}, headers=ha).status_code == 409
+
+
+def test_a_resolved_investigation_can_be_archived_later(api):
+    client, ha, *_ = api
+    inv = start(client, ha)
+    assert client.post(f"/api/v1/ceo/investigations/{inv}/resolve", json={"resolution_note": "done"}, headers=ha).status_code == 200
+    assert client.post(f"/api/v1/ceo/investigations/{inv}/archive", headers=ha).status_code == 200
+
+
+def test_detaching_an_agent_is_future_only_and_leaves_a_system_note(api):
+    client, ha, hb, a, _ = api
+    seed_books(a)
+    inv = start(client, ha)
+    first = client.post(f"/api/v1/ceo/investigations/{inv}/turns", json={"message": STATE}, headers=ha).json()
+    findings_before = client.get(f"/api/v1/ceo/investigations/{inv}/findings", headers=ha).json()
+    assert first["findings"]
+
+    r = client.put(f"/api/v1/ceo/investigations/{inv}/agents/cfo", json={"attached": False}, headers=ha)
+    assert r.status_code == 200 and r.json() == {"agent": "CFO", "attached": False}
+    detail = client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()
+    assert detail["agents"]["CFO"] is False and detail["agents"]["CI"] is True
+    notes = [m for m in detail["messages"] if m["kind"] == "SYSTEM_NOTE"]
+    assert len(notes) == 1 and "CFO was detached" in notes[0]["content"] and "historical evidence" in notes[0]["content"] and notes[0]["role"] == "SYSTEM"
+    assert client.get(f"/api/v1/ceo/investigations/{inv}/findings", headers=ha).json() == findings_before  # nothing erased or invalidated
+
+    again = client.put(f"/api/v1/ceo/investigations/{inv}/agents/CFO", json={"attached": False}, headers=ha)
+    assert again.status_code == 200
+    assert len([m for m in client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()["messages"] if m["kind"] == "SYSTEM_NOTE"]) == 1  # idempotent
+
+    blocked = client.post(f"/api/v1/ceo/investigations/{inv}/turns", json={"message": STATE}, headers=ha).json()  # BS_PNL_LATEST is CFO-owned: gone from the catalog
+    assert blocked["status"] == "CLARIFIED" and blocked["findings"] == []
+
+    back = client.put(f"/api/v1/ceo/investigations/{inv}/agents/CFO", json={"attached": True}, headers=ha)
+    assert back.status_code == 200 and client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()["agents"]["CFO"] is True
+
+
+def test_attachment_endpoint_guards(api, clerk):
+    client, ha, hb, a, _ = api
+    inv = start(client, ha)
+    assert client.put(f"/api/v1/ceo/investigations/{inv}/agents/HACKER", json={"attached": False}, headers=ha).status_code == 404
+    assert client.put(f"/api/v1/ceo/investigations/{inv}/agents/CFO", json={"attached": False}, headers=hb).status_code == 404  # another tenant
+    assert client.put(f"/api/v1/ceo/investigations/{inv}/agents/CFO", json={}, headers=ha).status_code == 422
+    assert client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()["agents"]["CFO"] is True  # B's attempt changed nothing
+    no_ceo = login(clerk, a, role=PARTNER_ROLE, permissions={INVESTIGATION_VIEW: True})
+    assert client.put(f"/api/v1/ceo/investigations/{inv}/agents/CFO", json={"attached": False}, headers=no_ceo).status_code == 403
+    client.post(f"/api/v1/ceo/investigations/{inv}/archive", headers=ha)
+    r = client.put(f"/api/v1/ceo/investigations/{inv}/agents/CFO", json={"attached": False}, headers=ha)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "INVESTIGATION_NOT_ACTIVE"
+
+
+def test_an_agent_the_tenant_is_not_entitled_to_cannot_be_attached_and_shows_locked(api, migrate_engine):
+    client, ha, _, a, _ = api
+    for meter in CFO_ACTION_METERS:
+        seed_platform_cap(migrate_engine, agent_code="CFO", meter_code=meter, cap_value=0)
+    avail = client.get("/api/v1/ceo/agents/availability", headers=ha).json()
+    assert avail["CFO"] == {"status": "NOT_ENTITLED", "chatActions": 5} and avail["CI"]["status"] == "PRESENT"
+    inv = start(client, ha)  # default attachment follows entitlement (§6.22 rule 1): CFO is recorded detached
+    assert client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()["agents"]["CFO"] is False
+    r = client.put(f"/api/v1/ceo/investigations/{inv}/agents/CFO", json={"attached": True}, headers=ha)
+    assert r.status_code == 409 and r.json()["detail"] == {"code": "AGENT_NOT_ENTITLED"}
+    assert client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()["agents"]["CFO"] is False  # never silently attached
+
+
+def test_availability_reflects_the_members_permissions_and_truthful_chat_actions(api, clerk):
+    client, ha, _, a, _ = api
+    full = client.get("/api/v1/ceo/agents/availability", headers=ha).json()
+    assert {k: v["status"] for k, v in full.items()} == {"CFO": "PRESENT", "CI": "PRESENT", "PI": "PRESENT", "CMO": "PRESENT"}
+    assert {k: v["chatActions"] for k, v in full.items()} == {"CFO": 5, "CI": 0, "PI": 0, "CMO": 0}  # only CFO has chat-runnable actions in B3
+    member = login(clerk, a, role=PARTNER_ROLE, permissions={AGENT_CEO: True, INVESTIGATION_VIEW: True})
+    assert client.get("/api/v1/ceo/agents/availability", headers=member).json()["CFO"]["status"] == "NOT_PERMITTED"
+    assert client.get("/api/v1/ceo/agents/availability", headers={}).status_code == 401
+
+
+def test_an_explicit_period_is_the_period_the_model_cannot_choose_or_withhold(api, health_config):
+    from backend.api.v1 import ceo as ceo_api
+    from backend.main import app
+
+    client, ha, _, a, _ = api
+    seed_books(a)
+    # the model names a DIFFERENT period (October) in one turn and none at all in the other; the seller's picker decides both
+    cls = Scripted({
+        "Why did profit drop?": decision(route="PLAYBOOK", route_key="PROFIT_DIAGNOSIS", slots={"period": "October"}),
+        "And again?": decision(route="PLAYBOOK", route_key="PROFIT_DIAGNOSIS", slots={}),
+    })
+    rt = runtime(cls, Grounded())
+    app.dependency_overrides[ceo_api.get_runtime] = lambda: rt
+    inv = start(client, ha)
+    body = {"message": "Why did profit drop?", "period_start": "2026-09-01", "period_end": "2026-09-30"}
+    r = client.post(f"/api/v1/ceo/investigations/{inv}/turns", json=body, headers=ha)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["status"] == "DELIVERED" and out["route"] == "PLAYBOOK"
+    assert "2026-09-01 to 2026-09-30" in out["answer"] and "October" not in out["answer"]  # AC17: the echoed interpretation is the seller's range
+    assert "already chose the period 2026-09-01 to 2026-09-30" in cls.prompts[0]
+    turn = repo.get_turn(a, uuid.UUID(out["turnId"]))
+    assert turn["classifier_result"]["slots"]["period"] == "2026-09-01 to 2026-09-30" and turn["classifier_result"]["effectiveRoute"] == "PLAYBOOK"
+
+    r2 = client.post(f"/api/v1/ceo/investigations/{inv}/turns", json={**body, "message": "And again?"}, headers=ha)
+    assert r2.status_code == 200 and r2.json()["status"] == "DELIVERED"  # the model withheld the period; no clarification was needed
+
+
+def test_an_invalid_explicit_period_is_rejected_before_anything_runs(api):
+    client, ha, _, a, _ = api
+    inv = start(client, ha)
+    before = row_counts(a, "investigation_message", "agent_run")
+    for extra in (
+        {"period_start": "2026-09-01"}, {"period_end": "2026-09-30"}, {"period_start": "2026-09-30", "period_end": "2026-09-01"},
+        {"period_start": "2027-01-01", "period_end": "2027-01-31"}, {"period_start": "not-a-date", "period_end": "2026-09-30"},
+    ):
+        r = client.post(f"/api/v1/ceo/investigations/{inv}/turns", json={"message": "hello", **extra}, headers=ha)
+        assert r.status_code == 422, extra
+    assert row_counts(a, "investigation_message", "agent_run") == before

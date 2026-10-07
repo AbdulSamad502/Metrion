@@ -62,6 +62,23 @@ def test_an_absent_agent_cannot_be_routed_to_even_if_the_model_names_it():
     assert d.route == "CLARIFY" and "OUT_OF_CATALOG" in d.flags
 
 
+def test_a_preset_slot_overwrites_the_model_and_satisfies_the_required_slot_check():
+    preset = {"period": "2026-09-01 to 2026-09-30"}
+    # the model withheld the period: the preset fills it, so this is NOT a clarification
+    d = classifier.parse_decision(_json(route="PLAYBOOK", route_key="PROFIT_DIAGNOSIS", slots={}), FULL, preset)
+    assert (d.route, d.slots["period"], "MISSING_SLOT" in d.flags) == ("PLAYBOOK", "2026-09-01 to 2026-09-30", False)
+    # the model chose a different period: the seller's explicit choice wins
+    d = classifier.parse_decision(_json(route="PLAYBOOK", route_key="PROFIT_DIAGNOSIS", slots={"period": "october"}), FULL, preset)
+    assert d.slots["period"] == "2026-09-01 to 2026-09-30"
+    # only declared slot names can be preset
+    assert "tenant_id" not in classifier.parse_decision(_json(route="CLARIFY"), FULL, {"tenant_id": "x"}).slots
+
+
+def test_the_period_note_reaches_the_prompt_outside_the_static_prefix():
+    p = classifier.build_prompt(FULL, "why?", classifier.TurnContext(period_note="The seller already chose the period X."))
+    assert "already chose the period X" in p and "already chose" not in classifier.static_prefix(FULL)
+
+
 def test_the_advisory_route_carries_the_needed_agent_but_executing_routes_cannot():
     assert decide(_json(route="ADVISORY", needs_agent="cfo"), NO_CFO).needs_agent == "CFO"
     assert decide(_json(route="BUSINESS_STATE", route_key="BS_PNL_LATEST", needs_agent="CFO")).needs_agent is None

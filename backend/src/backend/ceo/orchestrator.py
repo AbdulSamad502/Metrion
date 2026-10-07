@@ -22,7 +22,7 @@ import logging
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -122,8 +122,11 @@ def _turn_context(tenant: UUID, inv: dict[str, Any], current_msg: UUID) -> tuple
 
 # ------------------------------------------------------------------------------------------------ the turn
 def run_turn(
-    ctx: AuthContext, runtime: CeoRuntime, investigation_id: UUID, message: str, *, sink: EventSink | None = None
+    ctx: AuthContext, runtime: CeoRuntime, investigation_id: UUID, message: str, *, sink: EventSink | None = None,
+    period: tuple[date, date] | None = None,
 ) -> TurnResult:
+    """`period` is an explicit (start, end) the seller chose with the date-range control. When given it is the period for this turn: it
+    is passed to the classifier as a preset slot (the model neither chooses nor withholds it) and resolved by the same deterministic code."""
     assert ctx.tenant_id is not None and ctx.role is not None
     tenant = ctx.tenant_id
     text = message.strip()
@@ -155,7 +158,7 @@ def run_turn(
 
     result = TurnResult("FAILED", "CLARIFY", FAILED_TEXT)
     try:
-        result = _run_admitted(ctx, runtime, inv, user_msg, text, turn, clock, log)
+        result = _run_admitted(ctx, runtime, inv, user_msg, text, turn, clock, log, period)
     except Exception:  # noqa: BLE001 — R12: nothing internal reaches the seller; the server log has it
         logger.exception("CEO turn failed (tenant=%s investigation=%s)", tenant, investigation_id)
         log.emit("TURN_FAILED")
@@ -203,7 +206,8 @@ def _finish(
 
 
 def _run_admitted(
-    ctx: AuthContext, runtime: CeoRuntime, inv: dict[str, Any], user_msg: UUID, text: str, turn: CeoTurn, clock: StageClock, log: EventLog
+    ctx: AuthContext, runtime: CeoRuntime, inv: dict[str, Any], user_msg: UUID, text: str, turn: CeoTurn, clock: StageClock, log: EventLog,
+    period: tuple[date, date] | None = None,
 ) -> TurnResult:
     tenant = ctx.tenant_id
     assert tenant is not None
@@ -215,11 +219,18 @@ def _run_admitted(
     with clock.span("context"):
         tctx, composer_ctx = _turn_context(tenant, inv, user_msg)
     cat = classifier.build_catalog(caps.allowed_actions, caps.allowed_playbooks, caps.allowed_state)
+    preset: dict[str, str] = {}
+    if period is not None:
+        preset["period"] = f"{period[0].isoformat()} to {period[1].isoformat()}"
+        tctx = classifier.TurnContext(
+            tctx.summary, tctx.recent, tctx.findings,
+            period_note=f"The seller already chose the period {preset['period']} with the date picker; it is supplied, do not ask for it.",
+        )
 
     # ---- one classification pass
     with clock.span("classification"):
         try:
-            outcome = classifier.classify(runtime.classifier, cat, text, tctx)
+            outcome = classifier.classify(runtime.classifier, cat, text, tctx, preset_slots=preset)
             decision = outcome.decision
             clock.note("classificationModelMs", outcome.completion.wall_ms)
             if outcome.completion.ttft_ms is not None:
