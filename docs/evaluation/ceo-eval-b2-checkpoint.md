@@ -59,3 +59,7 @@ python -m backend.ceo_eval report docs/evaluation/ceo-runs/<id>.json --output do
 ```
 
 Model quality and infrastructure latency must be read separately: latency on this CPU host says nothing about the model on suitable hardware. Do not select a production model on speed alone or accuracy alone; the report shows both.
+
+## Addendum (2026-10-08): live smoke is not a baseline
+
+A single end-to-end smoke of the production CEO path against `qwen3.5:4b` was run after B3 (see `docs/planning/ceo-build-status.md`, "B3.1"). It verifies the integration seam only. It does not change anything above: **there is still no baseline, no pass bar and no model comparison**, and no model has been selected.

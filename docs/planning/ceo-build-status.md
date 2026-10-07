@@ -94,3 +94,20 @@ Authority: `docs/specs/ceo-agent-orchestration.md` (CP1 2026-10-07). This file r
 * **Built:** `POST /api/v1/ceo/investigations`, `GET .../investigations`, `GET .../{id}`, `POST .../{id}/turns` (the full turn), `GET .../{id}/findings` (polling seam), `POST .../{id}/resolve`. The turn: admission -> one classification -> deterministic plan validation (closed catalog, slots, periods) -> per-leg pre-flight -> parallel CFO legs + Business State reads with findings emitted as each completes -> evidence table via refs -> one composition -> numeral/provenance gate or fixed template -> persisted messages, turn, findings, timings. Details and decisions: spec §6.29.
 * **Supported:** BUSINESS_STATE, ACTION (5 CFO actions), PLAYBOOK (`PROFIT_DIAGNOSIS`, `CASH_AND_LEAK_CHECK`, `BUSINESS_BRIEFING`), ADVISORY, SYNTHESIZE, CLARIFY, OUT_OF_SCOPE. **Not supported:** the other registry actions, `COMPETITOR_PRICE_IMPACT`, `NEW_PRODUCT_DECISION`, GST routes, goals, proactive detection, UI, SSE.
 * **Not done / honest limits:** no live-model run (B2 benchmark was intentionally abandoned; the model is configuration, none is chosen); turns are not serialized per investigation; no rolling-summary regeneration; capability/entitlement lookups are uncached (~0.3 s/turn on the scratch DB).
+
+## B3.1 live-model smoke verification (2026-10-08) — NOT a benchmark, NOT model-selection evidence
+
+One minimal run through the **real HTTP layer, the real provider seam (`services/ceo_runtime.build_runtime` -> `backend.llm.model.OllamaEvalModel`, Ollama `/api/chat` with the classifier's JSON schema) and a real Postgres** (scratch container, synthetic tenant, purged afterwards). It proves the seam works; it says nothing about which model is good. **No production model has been selected**; the model is configuration (`CEO_LLM_MODEL`, no default).
+
+| | |
+|---|---|
+| Provider / model | `ollama` / `qwen3.5:4b` for both seams, thinking off (`CEO_LLM_THINK=false`), local host, CPU-only (i5-12450H) |
+| Scenario 1 | "How did last month go?" with a seeded September P&L |
+| Scenario 2 | "What should I focus on this month?" (advisory, so the composer is invoked) |
+| Classifier | **Succeeded both times**: schema-constrained JSON parsed, `parseOk=true`, no flags, every key inside the closed catalog. Scenario 1 routed `BUSINESS_STATE` but chose `BS_SELLER_CONTEXT` rather than `BS_PNL_LATEST` (a valid but arguably wrong key: a model-quality observation, not an integration fault); scenario 2 routed `ADVISORY` |
+| Composer | Not invoked in scenario 1 (pure read -> template, `composition_mode=TEMPLATE`). Scenario 2: draft **rejected by the gate** (`REASONING_LEAKED`) and the fixed template shipped (`TEMPLATE_FALLBACK`). Reproduced separately: the draft referred to "the evidence" (meta-talk about its own input table), which the detector rejects conservatively. That is the safety path working, not an integration defect; whether the leak patterns are too strict is a prompt/gate tuning question for later, so nothing was loosened |
+| Gate / provenance | Scenario 1: not applicable (template; the one state finding `BS_SELLER_CONTEXT` persisted as `UNAVAILABLE`, nothing invented). Scenario 2: gate `FAIL` -> template; no figure or numeral from the model reached the seller |
+| API result | Both `POST .../turns` returned HTTP 200, `status=DELIVERED`; 4 messages (USER/CEO x2), 2 turns `DELIVERED`, `classifier_result` and `safety_result` persisted on the turn rows |
+| Wall clock (single runs, cold-ish model, CPU) | Scenario 1: 44.7 s (classification 43.9 s of model time, 34.7 s to first token; every deterministic stage together under 1 s). Scenario 2: 80.7 s (classification 37.2 s + composition 42.9 s) |
+
+No code was changed for this verification; nothing in the closed catalog, permission, entitlement, attachment, provenance, numeral-gate or tenant-isolation paths was touched. The B2 benchmark remains abandoned and the B2 checkpoint document is unchanged in substance: this smoke is separate evidence of a different kind.
