@@ -1,10 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/LoadingState";
 import { agentMeta } from "@/lib/agents";
 import type { AgentCode } from "@/lib/ceo";
-import type { CanvasNode, NodeState } from "@/lib/ceoModel";
+import { findingStatusView, type CanvasNode, type NodeState } from "@/lib/ceoModel";
 
 const STATE_LABEL: Record<NodeState, string> = {
   ATTACHED: "Attached to this investigation",
@@ -36,6 +37,7 @@ export function AgentCanvas({
 }) {
   return (
     <div className="relative" data-testid="agent-canvas" aria-label="CEO orchestration canvas">
+      <AddAgent nodes={nodes} busy={busy} onToggle={onToggle} />
       <div className="relative mx-auto w-full max-w-[880px]">
         <div className="flex justify-center">
           <div className="mt-panel mt-panel--elevated flex items-center gap-3 rounded-2xl px-5 py-3" style={{ boxShadow: "var(--glass-shadow-hover)" }} data-testid="ceo-node">
@@ -85,6 +87,49 @@ export function AgentCanvas({
           ))}
         </ul>
       </div>
+    </div>
+  );
+}
+
+/** Top-right "Add agent": wires a detached agent back in. Only agents that CAN be attached are offered (locked / no-access ones never are). */
+function AddAgent({ nodes, busy, onToggle }: { nodes: CanvasNode[]; busy: AgentCode | null; onToggle: (c: AgentCode, attach: boolean) => void }) {
+  const [open, setOpen] = useState(false);
+  const addable = nodes.filter((n) => n.canToggle && n.state === "DETACHED");
+  return (
+    <div className="absolute right-0 top-0 z-10 flex flex-col items-end gap-1.5">
+      <button
+        type="button"
+        data-testid="add-agent"
+        disabled={addable.length === 0}
+        aria-expanded={open && addable.length > 0}
+        title={addable.length === 0 ? "Every agent you can use is already wired in." : "Wire an agent into this investigation"}
+        onClick={() => setOpen((o) => !o)}
+        className="mt-btn mt-focus flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 t-meta font-bold"
+        style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)", opacity: addable.length === 0 ? 0.5 : 1 }}
+      >
+        <Icon name="plus" size={13} strokeWidth={1.9} /> Add agent
+      </button>
+      {open && addable.length > 0 && (
+        <ul className="m-0 flex list-none flex-col gap-1 rounded-xl p-2" style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }} aria-label="Agents you can add">
+          {addable.map((n) => (
+            <li key={n.code}>
+              <button
+                type="button"
+                data-testid={`add-${n.code}`}
+                disabled={busy === n.code}
+                onClick={() => {
+                  onToggle(n.code, true);
+                  setOpen(false);
+                }}
+                className="mt-btn mt-focus w-full rounded-lg px-2.5 py-1 text-left t-body-sm"
+                style={{ color: "var(--text-2)" }}
+              >
+                {n.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -147,6 +192,29 @@ function AgentNode({ node, busy, onToggle }: { node: CanvasNode; busy: boolean; 
       {node.state === "ATTACHED" && node.chatActions !== null && node.chatActions > 0 && (
         <span className="t-meta" style={{ color: "var(--text-6)" }}>
           {node.chatActions} {node.chatActions === 1 ? "action" : "actions"} the CEO can run from chat.
+        </span>
+      )}
+      {node.result.headline && (
+        <span className="flex flex-col gap-0.5">
+          <span className="line-clamp-2 t-body-sm font-semibold" style={{ color: "var(--text-2)" }} data-testid={`headline-${node.code}`} title={node.result.headline}>
+            {node.result.headline}
+          </span>
+          {node.result.headlineAt && (
+            <span className="t-meta" style={{ color: "var(--text-6)" }}>
+              Latest complete result · <time dateTime={node.result.headlineAt}>{new Date(node.result.headlineAt).toLocaleString()}</time>
+            </span>
+          )}
+        </span>
+      )}
+      {node.result.noCompleteResult && (
+        <span className="t-body-sm font-semibold" style={{ color: "var(--text-4)" }} data-testid={`no-result-${node.code}`}>
+          No complete result yet.
+        </span>
+      )}
+      {node.result.newer && (
+        <span className="t-meta" style={{ color: node.result.newer.status === "COMPLETE" ? "var(--text-5)" : "var(--warning)" }} data-testid={`newer-${node.code}`}>
+          Latest check: {node.result.newer.label} · {findingStatusView(node.result.newer.status).label} ·{" "}
+          <time dateTime={node.result.newer.at}>{new Date(node.result.newer.at).toLocaleString()}</time>
         </span>
       )}
       {node.state === "LOCKED" && (

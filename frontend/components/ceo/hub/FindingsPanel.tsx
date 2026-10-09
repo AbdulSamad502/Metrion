@@ -1,19 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import { FlowView } from "@/components/ceo/hub/FlowView";
+import { PresentationView } from "@/components/ceo/hub/PresentationView";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { AgentCode, FindingRow } from "@/lib/ceo";
 import {
-  actionLabel, findingStatusView, groupFindings, isHistorical, isProblemFinding, refLabel, sourceLabel, type FindingGroup,
+  actionLabel, findingStatusView, groupFindings, hasPresentation, isHistorical, isProblemFinding, refLabel, sourceLabel, type FindingGroup,
 } from "@/lib/ceoModel";
 import type { CeoMessage, TurnRow } from "@/lib/ceo";
+import type { FlowState } from "@/lib/useCeoHub";
 
-/** RIGHT: structured specialist findings, one card per finding, grouped under the question that produced them (newest first).
+/** RIGHT: the agents' responses, one card per finding, grouped under the question that produced them (newest first).
  *
- * A finding carries REFERENCES, never a value the UI could re-derive: the numbers live in the CEO's gated answer. A card shows who
- * produced it, its status (a failed or partial leg is shown plainly and never blocks the others), the provenance references it cites,
- * and, when its agent has since been detached, that it is historical evidence with its original provenance intact. */
+ * A card shows who produced it, its status (a failed or partial leg is shown plainly and never blocks the others), the verified figures
+ * the backend stored with it (each with its register and as-of date), what could not be checked, and the provenance references behind it.
+ * The figures are the backend's display snapshot, resolved through those references for this tenant: the UI shows them verbatim and never
+ * computes anything. A finding from an agent that has since been detached stays visible as historical evidence. "Show flow" reads the
+ * audit rows for a turn. */
 export function FindingsPanel({
   findings,
   messages,
@@ -22,6 +27,8 @@ export function FindingsPanel({
   arrivedIds,
   inFlightQuestion,
   processing,
+  flows,
+  onShowFlow,
 }: {
   findings: FindingRow[];
   messages: CeoMessage[];
@@ -30,7 +37,10 @@ export function FindingsPanel({
   arrivedIds: string[];
   inFlightQuestion: string | null;
   processing: boolean;
+  flows: Record<string, FlowState>;
+  onShowFlow: (turnId: string) => void;
 }) {
+  const turnById = new Map(turns.map((t) => [t.id, t]));
   const groups = groupFindings(findings, messages, turns, inFlightQuestion);
   const arrived = new Set(arrivedIds);
   return (
@@ -47,20 +57,39 @@ export function FindingsPanel({
           description={processing ? "Each specialist's result appears here the moment it finishes." : "Findings appear here as the CEO runs specialists or reads your saved results. They stay with the investigation as history."}
         />
       ) : (
-        groups.map((g, gi) => <Group key={g.key} group={g} agents={agents} arrived={arrived} defaultOpen={gi === 0} />)
+        groups.map((g, gi) => <Group key={g.key} group={g} agents={agents} arrived={arrived} defaultOpen={gi === 0} turn={g.turnId ? turnById.get(g.turnId) : undefined} flow={g.turnId ? flows[g.turnId] : undefined} onShowFlow={onShowFlow} />)
       )}
     </div>
   );
 }
 
-function Group({ group, agents, arrived, defaultOpen }: { group: FindingGroup; agents: Partial<Record<AgentCode, boolean>> | null; arrived: Set<string>; defaultOpen: boolean }) {
+function Group({
+  group, agents, arrived, defaultOpen, turn, flow, onShowFlow,
+}: {
+  group: FindingGroup;
+  agents: Partial<Record<AgentCode, boolean>> | null;
+  arrived: Set<string>;
+  defaultOpen: boolean;
+  turn: TurnRow | undefined;
+  flow: FlowState | undefined;
+  onShowFlow: (turnId: string) => void;
+}) {
   return (
     <section aria-label={group.question ?? "Findings"} className="flex flex-col gap-2">
-      {group.question && (
-        <div className="t-meta" style={{ color: "var(--text-5)" }}>
-          For &ldquo;{group.question}&rdquo;
-        </div>
-      )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {group.question && (
+          <div className="t-meta" style={{ color: "var(--text-5)" }}>
+            For &ldquo;{group.question}&rdquo;
+            {turn?.route_source === "UI_ACTION" && <> · quick action</>}
+          </div>
+        )}
+        {group.turnId && !flow && (
+          <button type="button" onClick={() => onShowFlow(group.turnId as string)} className="mt-focus t-meta font-semibold" style={{ color: "var(--text-3)" }}>
+            Show flow
+          </button>
+        )}
+      </div>
+      {flow && <FlowView flow={flow} />}
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {group.findings.map((f) => (
           <li key={f.id}>
@@ -73,7 +102,8 @@ function Group({ group, agents, arrived, defaultOpen }: { group: FindingGroup; a
 }
 
 function FindingCard({ finding: f, historical, arrived, defaultOpen }: { finding: FindingRow; historical: boolean; arrived: boolean; defaultOpen: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const shown = hasPresentation(f);
+  const [open, setOpen] = useState(defaultOpen && !shown); // when figures are shown, the references stay one click away
   const status = findingStatusView(f.status);
   const problem = isProblemFinding(f);
   const refs = f.figure_refs ?? [];
@@ -104,12 +134,17 @@ function FindingCard({ finding: f, historical, arrived, defaultOpen }: { finding
           This agent has since been detached. This is historical evidence; its original sources are unchanged.
         </div>
       )}
-      {f.gap_reason && (
+      {shown && f.presentation && (
+        <div className="mt-2">
+          <PresentationView presentation={f.presentation} />
+        </div>
+      )}
+      {f.gap_reason && !(f.presentation && f.presentation.gaps.length > 0) && (
         <div className="mt-1.5 t-body-sm" style={{ color: problem ? "var(--warning)" : "var(--text-4)" }}>
           {f.gap_reason}
         </div>
       )}
-      {problem && !f.gap_reason && (
+      {problem && !f.gap_reason && !shown && (
         <div className="mt-1.5 t-body-sm" style={{ color: "var(--warning)" }}>
           This part did not complete. Other results are unaffected.
         </div>

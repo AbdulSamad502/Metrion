@@ -23,7 +23,16 @@ const msg = (over: Partial<CeoMessage> & Pick<CeoMessage, "role" | "content">): 
   id: `m-${Math.random().toString(36).slice(2)}`, kind: over.role === "USER" ? "TEXT" : "ANSWER", turn_id: null, created_at: "2026-10-08T09:00:00.000Z", ...over,
 });
 
+async function openList() {
+  if (!screen.queryByTestId("drawer")) await user().click(await screen.findByTestId("open-drawer")); // the conversations live in the drawer
+}
+
+async function openAgent(code: string) {
+  await user().click(screen.getByTestId(`agent-node-${code}`)); // an agent chip opens its on/off control
+}
+
 async function openInvestigation(id: string) {
+  await openList();
   await user().click(await screen.findByTestId(`investigation-${id}`));
   await screen.findByTestId("conversation");
 }
@@ -37,8 +46,9 @@ async function ask(text: string) {
 describe("empty and new states", () => {
   it("shows an honest empty state with nothing fabricated", async () => {
     mount();
+    await openList();
     expect(await screen.findByText("No investigations yet")).toBeInTheDocument();
-    expect(screen.getByText("Select or start an investigation")).toBeInTheDocument();
+    expect(screen.getByTestId("welcome")).toBeInTheDocument(); // nothing selected: what the CEO can do, as things to click
     expect(screen.getByTestId("canvas-idle")).toBeInTheDocument();
     expect(screen.queryByTestId("agent-canvas")).not.toBeInTheDocument(); // no investigation: no wires are claimed
     expect(screen.queryByText(/₹/)).not.toBeInTheDocument();
@@ -47,10 +57,11 @@ describe("empty and new states", () => {
 
   it("creates an investigation through the existing endpoint and opens it as a new, empty conversation", async () => {
     mount();
+    await openList();
     await screen.findByText("No investigations yet");
     await user().type(screen.getByLabelText(/Title for a new investigation/), "Margins");
     await user().click(screen.getByRole("button", { name: /New/ }));
-    expect(await screen.findByText("New investigation")).toBeInTheDocument();
+    expect(await screen.findByTestId("welcome")).toBeInTheDocument();
     expect(fake.calls.find((c) => c.method === "createInvestigation")?.args).toEqual(["Margins"]);
     expect(screen.getByTestId("conversation")).toHaveAttribute("data-state", "NEW");
     expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "ATTACHED");
@@ -58,13 +69,13 @@ describe("empty and new states", () => {
     expect(screen.getByText("Margins", { selector: ".t-card-title" })).toBeInTheDocument();
   });
 
-  it("question ideas only fill the composer: they never send anything or call a model", async () => {
-    fake.seed({ id: "inv-new", title: "Empty one" });
+  it("a question idea asks that question (a catalog tile or an idea is one click), and a conversation starts by itself", async () => {
     mount();
-    await openInvestigation("inv-new");
-    await user().click(screen.getByRole("button", { name: "Why did my profit drop?" }));
-    expect(screen.getByLabelText("Ask the CEO")).toHaveValue("Why did my profit drop?");
-    expect(fake.count("postTurn")).toBe(0);
+    await user().click(await screen.findByRole("button", { name: "Why did my profit drop?" }));
+    await screen.findByTestId("processing");
+    expect(fake.count("createInvestigation")).toBe(1); // typing or clicking with no conversation open starts one
+    expect(fake.calls.find((c) => c.method === "postTurn")?.args).toEqual([expect.any(String), "Why did my profit drop?", null, null]);
+    fake.completeTurn({ answer: "ok" });
   });
 });
 
@@ -106,6 +117,7 @@ describe("loading an investigation", () => {
     fake.seed({ id: "mine", title: "Mine" });
     fake.seed({ id: "theirs", title: "Secret plan", tenant: "B", messages: [msg({ id: "x", role: "USER", content: "TOP SECRET" })] });
     mount();
+    await openList();
     expect(await screen.findByTestId("investigation-mine")).toBeInTheDocument();
     expect(screen.queryByText("Secret plan")).not.toBeInTheDocument(); // the list is the tenant's own
     // a stale or guessed link to the other tenant's id:
@@ -120,6 +132,7 @@ describe("loading an investigation", () => {
     fake.seed({ id: "mine", title: "Mine" });
     fake.seed({ id: "gone", title: "Vanished", tenant: "B" });
     const { rerender } = mount();
+    await openList();
     await screen.findByTestId("investigation-mine");
     fake.tenant = "A";
     const c = fake.client();
@@ -201,7 +214,7 @@ describe("a turn: processing, progressive findings, completion", () => {
     await openInvestigation(id);
     await ask("Why are my margins down?");
     fake.completeTurn({ route: "CLARIFY", status: "CLARIFIED", kind: "CLARIFICATION", answer: "Which period do you mean?", compositionMode: null });
-    expect(await screen.findByText("Needs your input")).toBeInTheDocument();
+    expect((await screen.findAllByText("Needs your input")).length).toBeGreaterThanOrEqual(2); // the CEO chip and the message
     expect(screen.getByText("Which period do you mean?")).toBeInTheDocument();
     expect(screen.getByLabelText("Ask the CEO")).toBeEnabled(); // the seller can answer immediately
   });
@@ -235,32 +248,13 @@ describe("a turn: processing, progressive findings, completion", () => {
     expect(feed.running).toBe(false);
   });
 
-  it("sends the date range explicitly, never infers one, and blocks an invalid range before it leaves the browser", async () => {
-    const id = fake.seed({ id: "inv-1" });
-    mount();
-    await openInvestigation(id);
-    const u = user();
-    await u.type(screen.getByLabelText("From"), "2026-09-01");
-    await u.type(screen.getByLabelText("To"), "2026-08-01"); // before the start
-    await u.type(screen.getByLabelText("Ask the CEO"), "Why did profit drop?");
-    expect(screen.getByRole("alert")).toHaveTextContent("The end date is before the start date.");
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-    await u.clear(screen.getByLabelText("To"));
-    await u.type(screen.getByLabelText("To"), "2026-09-30");
-    await u.click(screen.getByRole("button", { name: "Send" }));
-    await screen.findByTestId("processing");
-    expect(fake.calls.find((c) => c.method === "postTurn")?.args).toEqual([id, "Why did profit drop?", { start: "2026-09-01", end: "2026-09-30" }]);
-    fake.completeTurn({ answer: "ok" });
-    await waitFor(() => expect(screen.queryByTestId("processing")).not.toBeInTheDocument());
-  });
-
   it("sends NO period when none is chosen (the backend, not the UI, resolves any period named in the text)", async () => {
     const id = fake.seed({ id: "inv-1" });
     mount();
     await openInvestigation(id);
     await ask("Why did profit drop in September?");
     await screen.findByTestId("processing");
-    expect(fake.calls.find((c) => c.method === "postTurn")?.args).toEqual([id, "Why did profit drop in September?", null]);
+    expect(fake.calls.find((c) => c.method === "postTurn")?.args).toEqual([id, "Why did profit drop in September?", null, null]);
     fake.completeTurn({ answer: "ok" });
   });
 });
@@ -274,6 +268,7 @@ describe("agents on the canvas", () => {
     mount();
     await openInvestigation(id);
     expect(screen.getByTestId("finding-fc")).toHaveAttribute("data-historical", "false");
+    await openAgent("CFO");
     await user().click(screen.getByTestId("wire-CFO"));
     await waitFor(() => expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "DETACHED"));
     expect(fake.calls.find((c) => c.method === "setAgentAttached")?.args).toEqual([id, "CFO", false]);
@@ -283,6 +278,7 @@ describe("agents on the canvas", () => {
     expect(within(card).getByText("Historical")).toBeInTheDocument();
     expect(within(card).getByText(/historical evidence; its original sources are unchanged/)).toBeInTheDocument();
     expect(within(card).getByText("Engine result · 33333333")).toBeInTheDocument(); // original provenance intact
+    await openAgent("CFO");
     expect(screen.getByTestId("wire-CFO")).toHaveAccessibleName("Attach CFO to this investigation"); // wiring it back is the seller's choice
     expect(screen.getByTestId("agent-node-CI")).toHaveAttribute("data-state", "ATTACHED"); // the others are untouched
   });
@@ -296,7 +292,7 @@ describe("agents on the canvas", () => {
     await openInvestigation(id);
     expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "DETACHED");
     expect(screen.getByTestId("finding-old")).toHaveAttribute("data-historical", "true");
-    expect(screen.getByText("Detached: not used for new work")).toBeInTheDocument();
+    expect(within(screen.getByTestId("agent-node-CFO")).getByText("Off for this conversation")).toBeInTheDocument();
   });
 
   it("a locked (not entitled) agent is shown as locked, has no wire to add, and is never shown as attached", async () => {
@@ -306,8 +302,7 @@ describe("agents on the canvas", () => {
     await openInvestigation(id);
     const node = screen.getByTestId("agent-node-CFO");
     expect(node).toHaveAttribute("data-state", "LOCKED");
-    expect(within(node).getByText("Locked: not on your plan")).toBeInTheDocument();
-    expect(within(node).getByText(/cannot be attached, and nothing from it will run/)).toBeInTheDocument();
+    expect(within(node).getByText("Locked · not on your plan")).toBeInTheDocument();
     expect(screen.queryByTestId("wire-CFO")).not.toBeInTheDocument();
     expect(within(node).queryByRole("button")).not.toBeInTheDocument();
     expect(fake.count("setAgentAttached")).toBe(0);
@@ -328,18 +323,12 @@ describe("agents on the canvas", () => {
     mount();
     await openInvestigation(id);
     fake.availability.CFO = { status: "NOT_ENTITLED", chatActions: 5 }; // entitlement changed after the canvas loaded
+    await openAgent("CFO");
     await user().click(screen.getByTestId("wire-CFO"));
     expect(await screen.findByText(/not on your plan, so it cannot be attached/)).toBeInTheDocument();
     expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "DETACHED");
   });
 
-  it("is honest about what an attached agent can do from chat today", async () => {
-    const id = fake.seed({ id: "inv-1" });
-    mount();
-    await openInvestigation(id);
-    expect(within(screen.getByTestId("agent-node-CFO")).getByText(/5 actions the CEO can run from chat/)).toBeInTheDocument();
-    expect(within(screen.getByTestId("agent-node-CMO")).getByText(/cannot run its actions from chat yet/)).toBeInTheDocument();
-  });
 });
 
 describe("investigation lifecycle", () => {
@@ -355,8 +344,9 @@ describe("investigation lifecycle", () => {
     expect(await screen.findByText(/Your note: Fees explained it; renegotiating\./)).toBeInTheDocument();
     expect(fake.calls.find((c) => c.method === "resolve")?.args).toEqual([id, "Fees explained it; renegotiating."]);
     expect(screen.getByTestId("conversation")).toHaveAttribute("data-state", "RESOLVED");
-    expect(screen.queryByLabelText("Ask the CEO")).not.toBeInTheDocument(); // closed to new questions
+    expect(screen.getByLabelText("Ask the CEO")).toBeDisabled(); // closed to new questions
     expect(screen.getByTestId("message-user")).toHaveTextContent("q"); // still readable
+    await openList();
     expect(screen.getByTestId("investigation-inv-1")).toHaveTextContent("Resolved");
     expect(screen.queryByTestId("wire-CFO")).not.toBeInTheDocument(); // a resolved investigation cannot be re-wired
   });
@@ -371,9 +361,10 @@ describe("investigation lifecycle", () => {
     await u.click(screen.getAllByRole("button", { name: "Archive" })[1]); // the confirmation
     expect(await screen.findByText(/Hidden from your list by default/)).toBeInTheDocument();
     expect(screen.getByTestId("conversation")).toHaveAttribute("data-state", "ARCHIVED");
-    expect(screen.queryByLabelText("Ask the CEO")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Ask the CEO")).toBeDisabled();
     expect(screen.getByTestId("message-user")).toHaveTextContent("an old question");
     expect(screen.queryByTestId("wire-CFO")).not.toBeInTheDocument(); // an archived investigation cannot be re-wired
+    await openList();
     await waitFor(() => expect(screen.queryByTestId("investigation-inv-1")).not.toBeInTheDocument()); // hidden from the default list
     expect(screen.getByTestId("investigation-inv-2")).toBeInTheDocument();
     await u.click(screen.getByLabelText(/Show archived \(1\)/));
@@ -410,7 +401,7 @@ describe("reopening a resolved investigation", () => {
     mount();
     await openInvestigation(id);
     expect(screen.getByText(/Your note: Fees explained it\./)).toBeInTheDocument();
-    expect(screen.queryByLabelText("Ask the CEO")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Ask the CEO")).toBeDisabled();
     await user().click(screen.getByRole("button", { name: "Reopen" }));
     await waitFor(() => expect(screen.getByTestId("conversation")).toHaveAttribute("data-state", "ACTIVE"));
     expect(fake.calls.find((c) => c.method === "reopen")?.args).toEqual([id]);
@@ -418,6 +409,7 @@ describe("reopening a resolved investigation", () => {
     expect(screen.getByTestId("message-user")).toHaveTextContent("an earlier question"); // nothing lost
     expect(screen.getByTestId("finding-keep")).toHaveTextContent("Engine result · 44444444");
     expect(screen.getByTestId("system-note")).toHaveTextContent("Your earlier conclusion was: Fees explained it."); // the conclusion is kept in the thread
+    await openList();
     expect(screen.getByTestId("investigation-inv-1")).toHaveTextContent("Active");
     expect(screen.queryByRole("button", { name: "Reopen" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Resolve" })).toBeInTheDocument();
@@ -429,6 +421,7 @@ describe("reopening a resolved investigation", () => {
     mount();
     await openInvestigation("active");
     expect(screen.queryByRole("button", { name: "Reopen" })).not.toBeInTheDocument();
+    await openList();
     await user().click(screen.getByLabelText(/Show archived/));
     await user().click(await screen.findByTestId("investigation-arch"));
     await screen.findByText(/Hidden from your list by default/);
@@ -443,6 +436,369 @@ describe("reopening a resolved investigation", () => {
     fake.store.get(id)!.investigation.status = "ARCHIVED"; // changed elsewhere after the page loaded
     await user().click(screen.getByRole("button", { name: "Reopen" }));
     expect(await screen.findByText("Only a resolved investigation can be reopened.")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Ask the CEO")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Ask the CEO")).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------- B5: figures, quick actions, health, flow
+import type { HealthEntry, Presentation, TurnFlow } from "@/lib/ceo";
+
+const snapshot = (over: Partial<Presentation> = {}): Presentation => ({
+  version: 1,
+  headline: "Net realized revenue: ₹4,82,150.00",
+  figures: [
+    { label: "Net realized revenue", value: "₹4,82,150.00", register: "DERIVED", as_of: "2026-09-30", note: null, ref: { kind: "ENGINE_RESULT", id: "abcdef12-0000" } },
+    { label: "Contribution profit", value: "₹91,200.00", register: "ESTIMATE", as_of: null, note: "Based on a saved estimate.", ref: { kind: "ESTIMATE", id: "eeeeeeee-0000" } },
+  ],
+  facts: [{ label: "Band", text: "Watch", basis: "SOURCE_DERIVED" }],
+  gaps: ["Marketplace fees are not uploaded yet."],
+  offers: [{ key: "cfo.anomaly_check", label: "Check this period for unusual changes" }],
+  ...over,
+});
+
+describe("the agents' responses show verified figures", () => {
+  it("renders each figure verbatim with its register and as-of date, plus facts, gaps and offers; references stay one click away", async () => {
+    const id = fake.seed({
+      id: "inv-1",
+      findings: [finding({ id: "f1", turn_id: "t1", source: "CFO", action_key: "cfo.financial_health", status: "PARTIAL", figure_refs: [{ kind: "ENGINE_RESULT", id: "abcdef12-0000" }], presentation: snapshot() })],
+    });
+    mount();
+    await openInvestigation(id);
+    const card = screen.getByTestId("finding-f1");
+    const figures = within(card).getAllByTestId("figure");
+    expect(figures[0]).toHaveTextContent("Net realized revenue");
+    expect(within(figures[0]).getByTestId("figure-value").textContent).toBe("₹4,82,150.00"); // exactly the backend's formatting, untouched
+    expect(within(figures[1]).getByTestId("figure-value").textContent).toBe("₹91,200.00");
+    expect(figures[0]).toHaveTextContent("Derived from verified");
+    expect(figures[0]).toHaveTextContent("as of 2026-09-30");
+    expect(figures[1]).toHaveTextContent("Estimate"); // an estimate is never dressed as verified
+    expect(figures[1]).toHaveTextContent("Based on a saved estimate.");
+    expect(within(card).getByText("Marketplace fees are not uploaded yet.")).toBeInTheDocument();
+    expect(within(card).getByText("Check this period for unusual changes")).toBeInTheDocument();
+    expect(within(card).queryByText("Engine result · abcdef12")).not.toBeInTheDocument(); // collapsed
+    await user().click(within(card).getByText(/Provenance: 1 verified reference/));
+    expect(within(card).getByText("Engine result · abcdef12")).toBeInTheDocument();
+  });
+
+  it("an older finding without a snapshot still shows its status and references (nothing is invented)", async () => {
+    fake.seed({ id: "inv-1", findings: [finding({ id: "old", turn_id: "t1", source: "CFO", action_key: "cfo.financial_health", status: "COMPLETE", figure_refs: [{ kind: "ENGINE_RESULT", id: "99999999-0000" }] })] });
+    mount();
+    await openInvestigation("inv-1");
+    const card = screen.getByTestId("finding-old");
+    expect(within(card).queryByTestId("presentation")).not.toBeInTheDocument();
+    expect(within(card).getByText("Engine result · 99999999")).toBeInTheDocument();
+  });
+
+  it("a refused leg shows the reason as a gap and no figure", async () => {
+    fake.seed({
+      id: "inv-1",
+      findings: [finding({ id: "no", turn_id: "t1", source: "CFO", action_key: "cfo.anomaly_check", status: "DENIED", presentation: snapshot({ figures: [], facts: [], offers: [], gaps: ["You do not have access to this check."], headline: "You do not have access to this check." }) })],
+    });
+    mount();
+    await openInvestigation("inv-1");
+    const card = screen.getByTestId("finding-no");
+    expect(within(card).queryAllByTestId("figure")).toHaveLength(0);
+    expect(within(card).getByText("You do not have access to this check.")).toBeInTheDocument();
+  });
+
+});
+
+describe("quick actions", () => {
+  it("sends the chosen catalog item as an action (the label is the thread text) and nothing is typed", async () => {
+    const id = fake.seed({ id: "inv-1" });
+    mount();
+    await openInvestigation(id);
+    await user().click(screen.getByTestId("quick-pnl"));
+    await screen.findByTestId("processing");
+    expect(fake.calls.find((c) => c.method === "postTurn")?.args).toEqual([id, "Latest profit & loss", null, { kind: "BUSINESS_STATE", key: "BS_PNL_LATEST" }]);
+    fake.completeTurn({ route: "BUSINESS_STATE", answer: "Here is your saved P&L.", compositionMode: "TEMPLATE" });
+    await waitFor(() => expect(screen.queryByTestId("processing")).not.toBeInTheDocument());
+    expect(screen.getByTestId("message-ceo")).toHaveTextContent("Here is your saved P&L.");
+  });
+
+  it("a period action is sent WITHOUT a period: the CEO asks for it in the conversation, no date control exists", async () => {
+    const id = fake.seed({ id: "inv-1" });
+    mount();
+    await openInvestigation(id);
+    expect(screen.getByTestId("quick-diagnosis")).toBeEnabled();
+    await user().click(screen.getByTestId("quick-diagnosis"));
+    await screen.findByTestId("processing");
+    expect(fake.calls.find((c) => c.method === "postTurn")?.args).toEqual([id, "Why did profit drop?", null, { kind: "PLAYBOOK", key: "PROFIT_DIAGNOSIS" }]);
+    fake.completeTurn({ answer: "ok" });
+  });
+
+  it("a chip needing a detached agent is disabled and says why; the briefing, which needs none, stays available", async () => {
+    fake.seed({ id: "inv-1", agents: { CI: true, CFO: false, PI: true, CMO: true } });
+    mount();
+    await openInvestigation("inv-1");
+    expect(screen.getByTestId("quick-pnl")).toBeDisabled();
+    expect(screen.getByTestId("quick-pnl")).toHaveAttribute("title", "CFO is not attached to this investigation.");
+    expect(screen.getByTestId("quick-briefing")).toBeEnabled();
+  });
+
+  it("the chat bar is locked while a turn is running, and the backend's refusal is shown as the answer", async () => {
+    fake.seed({ id: "inv-1" });
+    mount();
+    await openInvestigation("inv-1");
+    await user().click(screen.getByTestId("quick-bands"));
+    await screen.findByTestId("processing");
+    expect(screen.getByLabelText("Ask the CEO")).toBeDisabled(); // one question at a time
+    fake.completeTurn({ status: "DENIED", route: "CLARIFY", answer: "That quick action is not available for this investigation." });
+    expect(await screen.findByText("That quick action is not available for this investigation.")).toBeInTheDocument();
+    expect(screen.getByText("Not permitted")).toBeInTheDocument();
+  });
+});
+
+describe("turning an agent on", () => {
+  it("only an agent that can be attached has an on switch, and turning it on wires it back in", async () => {
+    const id = fake.seed({ id: "inv-1", agents: { CI: true, CFO: false, PI: false, CMO: true } });
+    fake.availability.PI = { status: "NOT_ENTITLED", chatActions: 0 };
+    mount();
+    await openInvestigation(id);
+    expect(screen.getByTestId("agent-node-PI").tagName).toBe("DIV"); // locked: nothing to click, never offered
+    await openAgent("CFO");
+    await user().click(screen.getByRole("menuitem", { name: /Attach CFO/ }));
+    await waitFor(() => expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "ATTACHED"));
+    expect(fake.calls.find((c) => c.method === "setAgentAttached")?.args).toEqual([id, "CFO", true]);
+  });
+});
+
+describe("business at a glance", () => {
+  const entry = (over: Partial<HealthEntry>): HealthEntry => ({ key: "BS_HEALTH_BANDS", status: "COMPLETE", period: "2026-09", asOf: "2026-09-30", previewHint: null, presentation: snapshot(), ...over });
+
+  it("shows each saved result with its own date; an unavailable result says so instead of showing a number", async () => {
+    fake.health = [entry({}), entry({ key: "BS_PNL_LATEST", status: "UNAVAILABLE", period: null, asOf: null, presentation: null, previewHint: "No profit & loss has been saved yet." })];
+    mount();
+    await openList();
+    expect(await screen.findByTestId("health-BS_HEALTH_BANDS")).toHaveTextContent("₹4,82,150.00");
+    expect(screen.getByTestId("health-BS_PNL_LATEST")).toHaveTextContent("Not available yet");
+    expect(screen.getByTestId("health-BS_PNL_LATEST")).toHaveTextContent("No profit & loss has been saved yet.");
+    expect(screen.getByTestId("health-BS_PNL_LATEST").querySelector("[data-testid=figure]")).toBeNull();
+    expect(screen.queryByText(/score/i)).not.toBeInTheDocument(); // no composite score exists
+  });
+
+  it("says plainly when the strip cannot be loaded, and lets the seller retry", async () => {
+    fake.healthError = new ApiError(403, { code: "FORBIDDEN" });
+    mount();
+    await openList();
+    expect(await screen.findByTestId("health-unavailable")).toBeInTheDocument();
+    fake.healthError = null;
+    fake.health = [entry({})];
+    await user().click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByTestId("health-BS_HEALTH_BANDS")).toBeInTheDocument();
+  });
+});
+
+describe("show flow", () => {
+  const flow: TurnFlow = {
+    turnId: "t1", route: "PLAYBOOK", routeKey: "PROFIT_DIAGNOSIS", routeSource: "UI_ACTION", status: "DELIVERED", compositionMode: "TEMPLATE", timings: null,
+    ceo: { id: "r0", agentId: "CEO", triggerRef: null, status: "COMPLETE", permissionCheck: null, entitlementCheck: null, startedAt: null, finishedAt: null, reason: null },
+    legs: [{ id: "r1", agentId: "CFO", triggerRef: "cfo.anomaly_check", status: "DENIED", permissionCheck: "DENIED:investigation.view", entitlementCheck: null, startedAt: null, finishedAt: null, reason: "not permitted" }],
+  };
+
+  async function openWithTurn() {
+    const id = fake.seed({
+      id: "inv-1",
+      messages: [msg({ id: "u1", role: "USER", content: "Why did profit drop?", turn_id: "t1" })],
+      turns: [{ id: "t1", route: "PLAYBOOK", route_key: "PROFIT_DIAGNOSIS", route_source: "UI_ACTION", status: "DELIVERED", composition_mode: "TEMPLATE", user_message_id: "u1", ceo_message_id: null, created_at: "x" }],
+      findings: [finding({ id: "f1", turn_id: "t1", source: "CFO", action_key: "cfo.anomaly_check", status: "DENIED" })],
+    });
+    mount();
+    await openInvestigation(id);
+    return id;
+  }
+
+  it("loads the audit flow on demand, marks a quick action, and shows a refused leg with its reason", async () => {
+    fake.flows.set("t1", flow);
+    await openWithTurn();
+    expect(fake.count("getFlow")).toBe(0); // nothing is fetched until asked
+    expect(screen.getByText(/quick action/)).toBeInTheDocument();
+    await user().click(screen.getByRole("button", { name: "Show flow" }));
+    const view = await screen.findByTestId("flow-view");
+    expect(view).toHaveTextContent("You chose a quick action, so no model decided the route.");
+    expect(view).toHaveTextContent("Anomaly check");
+    expect(view).toHaveTextContent("Not permitted");
+    expect(view).toHaveTextContent("not permitted");
+    expect(fake.count("getFlow")).toBe(1);
+  });
+
+  it("a flow that cannot be read says so in plain words", async () => {
+    await openWithTurn(); // no flow registered: the fake answers 404 like the server does for a foreign id
+    await user().click(screen.getByRole("button", { name: "Show flow" }));
+    expect(await screen.findByText("That investigation was not found.")).toBeInTheDocument();
+  });
+});
+
+describe("live progress (SSE) is an accelerator over the poll, never a dependency", () => {
+  it("shows what the turn is doing and fetches findings the moment a leg finishes, without waiting for a poll", async () => {
+    const id = fake.seed({ id: "inv-1" });
+    mount();
+    await openInvestigation(id);
+    await ask("Why did profit drop?");
+    await screen.findByTestId("processing");
+    await waitFor(() => expect(fake.streams.length).toBe(1)); // the stream was opened with the turn
+    const before = fake.count("getFindings");
+    fake.streams[0].emit({ kind: "CLASSIFIED", atMs: 3, data: { route: "PLAYBOOK" } });
+    expect(await screen.findByTestId("stage")).toHaveTextContent("Choosing what to check");
+    fake.emitFinding(finding({ source: "CFO", action_key: "cfo.financial_health", status: "COMPLETE" }));
+    fake.streams[0].emit({ kind: "LEG_FINISHED", atMs: 9, data: { action: "cfo.financial_health", status: "COMPLETE" } });
+    await waitFor(() => expect(fake.count("getFindings")).toBe(before + 1)); // fetched by the event: the manual feed never ticked
+    expect(await screen.findByText("Financial health bands")).toBeInTheDocument();
+    fake.completeTurn({ answer: "done" });
+    await waitFor(() => expect(screen.queryByTestId("processing")).not.toBeInTheDocument());
+  });
+
+  it("closes the stream when the turn ends", async () => {
+    const id = fake.seed({ id: "inv-1" });
+    mount();
+    await openInvestigation(id);
+    await ask("hello");
+    await waitFor(() => expect(fake.streams.length).toBe(1));
+    fake.completeTurn({ answer: "ok" });
+    await waitFor(() => expect(fake.streams[0].closed).toBe(true));
+  });
+
+  it("a stream that cannot open changes nothing: the turn completes through the normal path", async () => {
+    fake.streamFails = true;
+    const id = fake.seed({ id: "inv-1" });
+    mount();
+    await openInvestigation(id);
+    await ask("hello");
+    await screen.findByTestId("processing");
+    expect(screen.queryByTestId("stage")).not.toBeInTheDocument(); // no stage text, and no error either
+    fake.emitFinding(finding({ source: "CFO", action_key: "cfo.financial_health", status: "COMPLETE" }));
+    await feed.tick(); // the poll still delivers progressive findings
+    expect(await screen.findByText("Financial health bands")).toBeInTheDocument();
+    fake.completeTurn({ answer: "ok" });
+    await waitFor(() => expect(screen.queryByTestId("processing")).not.toBeInTheDocument());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("a second question while one is running is refused in plain words", async () => {
+    const id = fake.seed({ id: "inv-1" });
+    fake.failNextTurn = new ApiError(409, { code: "TURN_IN_PROGRESS" });
+    mount();
+    await openInvestigation(id);
+    await ask("hello");
+    expect(await screen.findByText(/still answering your previous question/)).toBeInTheDocument();
+  });
+});
+
+describe("the new quick actions", () => {
+  it("send the specialist actions as catalog keys, and are disabled when their agent is detached", async () => {
+    const id = fake.seed({ id: "inv-1", agents: { CI: false, CFO: true, PI: true, CMO: true } });
+    mount();
+    await openInvestigation(id);
+    expect(screen.getByTestId("quick-competitors")).toBeDisabled();
+    expect(screen.getByTestId("quick-competitors")).toHaveAttribute("title", "Competitor Intelligence is not attached to this investigation.");
+    await user().click(screen.getByTestId("quick-report"));
+    await screen.findByTestId("processing");
+    expect(fake.calls.find((c) => c.method === "postTurn")?.args).toEqual([id, "Latest research report", null, { kind: "ACTION", key: "pi.report" }]);
+    fake.completeTurn({ answer: "ok" });
+  });
+});
+
+// ------------------------------------------------------------------------------------------------ C5: decision cards and conflicts
+const CARD = {
+  version: 1, kind: "MISSING_INPUT", slot: "period",
+  options: [
+    { key: "period-2026-09-01/2026-09-30", label: "September 2026", kind: "RECOMMENDED" as const, reason: "Latest period with saved results" },
+    { key: "period-2026-08-01/2026-08-31", label: "August 2026", kind: "ALTERNATIVE" as const, reason: "An earlier period with saved results" },
+    { key: "other", label: "Other", kind: "OTHER" as const, reason: "Type it in your own words" },
+  ],
+};
+
+async function askForCard() {
+  const id = fake.seed({ id: "inv-1" });
+  mount();
+  await openInvestigation(id);
+  await ask("Why are my margins down?");
+  fake.completeTurn({ route: "CLARIFY", status: "CLARIFIED", kind: "CLARIFICATION", answer: "Which period do you mean?", compositionMode: null, choices: CARD });
+  await screen.findByTestId("decision-card");
+  return id;
+}
+
+describe("decision cards (spec 6.32)", () => {
+  it("shows exactly the real options the backend sent, the recommended one first with its rule, and an Other; nothing is invented", async () => {
+    await askForCard();
+    const card = screen.getByTestId("decision-card");
+    const options = within(card).getAllByRole("button");
+    expect(options.map((b) => b.textContent)).toEqual(["September 2026RecommendedLatest period with saved results", "August 2026An earlier period with saved results", "Other…"]);
+    expect(screen.getByLabelText("Ask the CEO")).toBeEnabled(); // typing a plain answer still works
+  });
+
+  it("choosing an option sends that option's key with the card's id, and the label is the thread text", async () => {
+    await askForCard();
+    const cardId = (await screen.findAllByTestId("message-ceo")).length && fake.store.get("inv-1")!.messages.at(-1)!.id;
+    await user().click(screen.getByTestId("card-option-period-2026-08-01/2026-08-31"));
+    await screen.findByTestId("processing");
+    expect(fake.calls.filter((c) => c.method === "postTurn").at(-1)?.args).toEqual([
+      "inv-1", "August 2026", null, null, { id: cardId, option: "period-2026-08-01/2026-08-31" },
+    ]);
+    fake.completeTurn({ answer: "Here is August." });
+  });
+
+  it("Other sends the typed text with a null option; an empty answer cannot be sent", async () => {
+    await askForCard();
+    const u = user();
+    await u.click(screen.getByTestId("card-option-other"));
+    const field = screen.getByLabelText("Your own answer");
+    const send = within(screen.getByTestId("decision-card")).getByRole("button", { name: "Send" });
+    expect(send).toBeDisabled();
+    await u.type(field, "last quarter");
+    await u.click(send);
+    await screen.findByTestId("processing");
+    const args = fake.calls.filter((c) => c.method === "postTurn").at(-1)!.args as unknown[];
+    expect(args[1]).toBe("last quarter");
+    expect(args[4]).toMatchObject({ option: null });
+    fake.completeTurn({ answer: "ok" });
+  });
+
+  it("an answered card is gone the moment the answer is sent, so it cannot be answered twice", async () => {
+    await askForCard();
+    await user().click(screen.getByTestId("card-option-period-2026-09-01/2026-09-30"));
+    await screen.findByTestId("processing");
+    expect(screen.queryByTestId("decision-card")).not.toBeInTheDocument();
+    fake.completeTurn({ answer: "Here is September." });
+    expect(await screen.findByText("Here is September.")).toBeInTheDocument();
+    expect(screen.queryByTestId("decision-card")).not.toBeInTheDocument();
+  });
+
+  it("a plain clarification with no real candidates shows no card", async () => {
+    const id = fake.seed({ id: "inv-1" });
+    mount();
+    await openInvestigation(id);
+    await ask("Tell me about it");
+    fake.completeTurn({ route: "CLARIFY", status: "CLARIFIED", kind: "CLARIFICATION", answer: "What would you like to know?", compositionMode: null });
+    expect(await screen.findByText("What would you like to know?")).toBeInTheDocument();
+    expect(screen.queryByTestId("decision-card")).not.toBeInTheDocument();
+  });
+
+  it("a card in a resolved investigation cannot be answered", async () => {
+    fake.seed({
+      id: "inv-1", status: "RESOLVED",
+      messages: [msg({ role: "CEO", kind: "CLARIFICATION", content: "Which period do you mean?", choices: CARD })],
+    });
+    mount();
+    await openInvestigation("inv-1");
+    expect(screen.queryByTestId("decision-card")).not.toBeInTheDocument();
+  });
+});
+
+describe("conflicts are shown as the backend wrote them", () => {
+  it("shows the backend's block verbatim, with neither value presented as a plain figure", async () => {
+    const text = "Net realized revenue (2026-09-01/2026-09-30) has two different stored values: A, and B. They differ; neither has been chosen, averaged or combined.";
+    fake.seed({
+      id: "inv-1",
+      findings: [finding({
+        id: "fc", turn_id: "t1", source: "BUSINESS_STATE", action_key: "BS_PNL_LATEST", status: "COMPLETE",
+        presentation: snapshot({ figures: [], facts: [], gaps: [], offers: [], headline: "Net realized revenue has two different stored values", conflicts: [{ what: "Net realized revenue", text, kind: "C1_METRIC", refIds: ["a", "b"] }] }),
+      })],
+    });
+    mount();
+    await openInvestigation("inv-1");
+    const card = screen.getByTestId("finding-fc");
+    expect(within(card).getByTestId("conflict").textContent).toBe(text);
+    expect(within(card).queryAllByTestId("figure")).toHaveLength(0);
   });
 });

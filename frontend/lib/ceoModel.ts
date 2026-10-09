@@ -2,7 +2,8 @@
  * and labels things the backend already decided. Every number a seller sees comes from the backend's gated answer text. */
 
 import type {
-  AgentAvailability, AgentCode, CeoMessage, FindingRow, FindingStatus, InvestigationDetail, InvestigationStatus, InvestigationSummary, Ref, TurnRow,
+  AgentAvailability, AgentCode, CeoMessage, ExplicitPeriod, FindingRow, FindingStatus, FlowRun, InvestigationDetail, InvestigationStatus, InvestigationSummary,
+  Ref, TurnFlow, TurnRow, UiAction,
 } from "@/lib/ceo";
 import { AGENT_CODES } from "@/lib/ceo";
 
@@ -26,6 +27,8 @@ export type CanvasNode = {
   code: AgentCode;
   name: string;
   state: NodeState;
+  /** What this node shows as its result: the newest COMPLETE finding that has something to show, never a newer partial / failed / refused one. */
+  result: NodeResult;
   chatActions: number | null;
   canToggle: boolean; // a wire can be removed (attached) or added (detached AND not locked)
 };
@@ -39,10 +42,44 @@ export function nodeState(attached: boolean | undefined, availability: AgentAvai
   return "UNKNOWN";
 }
 
+export type NodeResult = {
+  /** the newest complete, usable finding's own snapshot headline (null when there is none) */
+  headline: string | null;
+  headlineAt: string | null;
+  /** the newest finding of this agent of ANY status, shown separately and only when it is not the one the headline came from */
+  newer: { status: FindingStatus; at: string; label: string } | null;
+  /** this agent has produced findings, but none is complete and usable: say so instead of showing an incomplete result as a result */
+  noCompleteResult: boolean;
+};
+
+/** A finding is a usable result when it completed AND its snapshot holds a figure or a fact (a gap sentence alone is not a result). */
+const isUsableResult = (f: FindingRow): boolean =>
+  f.status === "COMPLETE" && !!f.presentation && (f.presentation.figures.length > 0 || f.presentation.facts.length > 0) && !!f.presentation.headline;
+
+/** Selection only, nothing combined, counted or derived: the newest complete usable finding supplies the headline; the newest finding of any
+ * status is reported beside it (status, time, which check) so the seller sees that a newer check happened and how it ended. Timestamps,
+ * statuses and the finding's own provenance are untouched. */
+export function nodeResult(findings: FindingRow[], code: AgentCode): NodeResult {
+  let usable: FindingRow | null = null;
+  let newest: FindingRow | null = null;
+  for (const f of findings) {
+    if (f.source !== code) continue;
+    if (!newest || byCreated(newest, f) < 0) newest = f;
+    if (isUsableResult(f) && (!usable || byCreated(usable, f) < 0)) usable = f;
+  }
+  return {
+    headline: usable?.presentation?.headline ?? null,
+    headlineAt: usable?.created_at ?? null,
+    newer: newest && newest.id !== usable?.id ? { status: newest.status, at: newest.created_at, label: actionLabel(newest.action_key) } : null,
+    noCompleteResult: newest !== null && usable === null,
+  };
+}
+
 export function canvasNodes(
   agents: Partial<Record<AgentCode, boolean>> | null,
   availability: AgentAvailability | null,
   investigationStatus: InvestigationStatus | null,
+  findings: FindingRow[] = [],
 ): CanvasNode[] {
   return AGENT_CODES.map((code) => {
     const state = nodeState(agents?.[code], availability, code);
@@ -51,6 +88,7 @@ export function canvasNodes(
       code,
       name: AGENT_NAMES[code],
       state,
+      result: nodeResult(findings, code),
       chatActions: availability?.[code]?.chatActions ?? null,
       // attached or detached agents can be toggled while the investigation is active; locked / no-access / unknown never can
       canToggle: active && (state === "ATTACHED" || state === "DETACHED"),
@@ -81,6 +119,14 @@ const ACTION_LABELS: Record<string, string> = {
   "cfo.strategic_briefing": "CFO briefing",
   "cfo.reconcile": "Marketplace reconciliation",
   "cfo.cash_reconciliation": "Cash reconciliation",
+  gst_lookup: "GST rate lookup",
+  "cfo.gst_lookup": "GST rate lookup",
+  "service.gst_lookup": "GST rate lookup",
+  "ci.request_price_scenario": "Competitor price comparison",
+  "pi.report": "Product research report",
+  BS_COMPETITOR_SNAPSHOT: "Competitor prices",
+  BS_PI_REPORT_LATEST: "Product research status",
+  BS_CMO_WORKFLOW: "Listing content status",
   BS_PNL_LATEST: "Latest profit & loss",
   BS_LEAK_OPEN: "Open leak findings",
   BS_DATA_GAPS: "Inputs still needed",
@@ -95,6 +141,7 @@ export function actionLabel(key: string): string {
 
 /** `source` is a specialist code or BUSINESS_STATE (a persisted read by the CEO itself). */
 export function sourceLabel(source: string): string {
+  if (source === "GST_LOOKUP") return "GST lookup";
   return source === "BUSINESS_STATE" ? "CEO · saved results" : (AGENT_NAMES[source as AgentCode] ?? source);
 }
 
@@ -160,6 +207,130 @@ export function groupFindings(findings: FindingRow[], messages: CeoMessage[], tu
     g.findings.push(f);
   }
   return [...groups.values()].reverse();
+}
+
+// ------------------------------------------------------------------------------------------------ presentation
+/** The five registers a figure can carry (cfo-agent.md 7.4.7). The chip says how much to trust the number and where it came from. */
+const REGISTER_VIEW: Record<string, { label: string; tone: "accent" | "info" | "warning" | "neutral" }> = {
+  VERIFIED: { label: "Verified", tone: "accent" },
+  DERIVED: { label: "Derived from verified", tone: "info" },
+  MANUAL: { label: "Seller-provided", tone: "neutral" },
+  ESTIMATE: { label: "Estimate", tone: "warning" },
+  UNAVAILABLE: { label: "Unavailable", tone: "neutral" },
+};
+
+export function registerView(register: string) {
+  return REGISTER_VIEW[register] ?? { label: register, tone: "neutral" as const };
+}
+
+/** "as of 2026-09-30": the backend's ISO date shown as given. */
+export const asOfLabel = (asOf: string | null): string | null => (asOf ? `as of ${asOf.slice(0, 10)}` : null);
+
+/** Does this finding have anything beyond references to show? */
+export function hasPresentation(f: FindingRow): boolean {
+  const p = f.presentation;
+  return !!p && (p.figures.length > 0 || p.facts.length > 0 || p.gaps.length > 0 || p.offers.length > 0 || (p.conflicts?.length ?? 0) > 0);
+}
+
+// ------------------------------------------------------------------------------------------------ quick actions
+/** A deterministic control that asks for one catalog item directly. It skips the classifier (the slow, uncertain step) and nothing else:
+ * the backend applies the same attachment, permission, entitlement and slot checks as for a typed question, and says plainly when it refuses. */
+export type QuickAction = {
+  id: string;
+  label: string;
+  action: UiAction;
+  /** needs the seller's explicit date range (never guessed) */
+  needsPeriod: boolean;
+  /** the agent that must be wired in for this to run */
+  needsAgent: AgentCode | null;
+};
+
+export const QUICK_ACTIONS: QuickAction[] = [
+  { id: "pnl", label: "Latest profit & loss", action: { kind: "BUSINESS_STATE", key: "BS_PNL_LATEST" }, needsPeriod: false, needsAgent: "CFO" },
+  { id: "bands", label: "Health bands", action: { kind: "BUSINESS_STATE", key: "BS_HEALTH_BANDS" }, needsPeriod: false, needsAgent: "CFO" },
+  { id: "leaks", label: "Open leaks", action: { kind: "BUSINESS_STATE", key: "BS_LEAK_OPEN" }, needsPeriod: false, needsAgent: "CFO" },
+  { id: "gaps", label: "Inputs still needed", action: { kind: "BUSINESS_STATE", key: "BS_DATA_GAPS" }, needsPeriod: false, needsAgent: "CFO" },
+  { id: "competitors", label: "Competitor prices", action: { kind: "BUSINESS_STATE", key: "BS_COMPETITOR_SNAPSHOT" }, needsPeriod: false, needsAgent: "CI" },
+  { id: "research", label: "Product research status", action: { kind: "BUSINESS_STATE", key: "BS_PI_REPORT_LATEST" }, needsPeriod: false, needsAgent: "PI" },
+  { id: "report", label: "Latest research report", action: { kind: "ACTION", key: "pi.report" }, needsPeriod: false, needsAgent: "PI" },
+  { id: "listing", label: "Listing content status", action: { kind: "BUSINESS_STATE", key: "BS_CMO_WORKFLOW" }, needsPeriod: false, needsAgent: "CMO" },
+  { id: "briefing", label: "Business briefing", action: { kind: "PLAYBOOK", key: "BUSINESS_BRIEFING" }, needsPeriod: false, needsAgent: null },
+  { id: "diagnosis", label: "Why did profit drop?", action: { kind: "PLAYBOOK", key: "PROFIT_DIAGNOSIS" }, needsPeriod: true, needsAgent: "CFO" },
+  { id: "anomaly", label: "Anomaly check", action: { kind: "ACTION", key: "cfo.anomaly_check" }, needsPeriod: true, needsAgent: "CFO" },
+];
+
+/** Whether a chip can be used right now, and if not, the plain reason. Advisory only: the backend re-checks everything. */
+export function quickActionState(
+  qa: QuickAction,
+  agents: Partial<Record<AgentCode, boolean>> | null,
+  period: ExplicitPeriod | null,
+): { enabled: boolean; reason: string | null } {
+  if (qa.needsAgent && agents?.[qa.needsAgent] !== true) return { enabled: false, reason: `${AGENT_NAMES[qa.needsAgent]} is not attached to this investigation.` };
+  if (qa.needsPeriod && !period) return { enabled: false, reason: "Choose a period first: the CEO never guesses dates." };
+  return { enabled: true, reason: null };
+}
+
+// ------------------------------------------------------------------------------------------------ live progress
+const STAGE_TEXT: Record<string, string> = {
+  TURN_RECEIVED: "Reading your question…",
+  TURN_ADMITTED: "Reading your question…",
+  CLASSIFIED: "Choosing what to check…",
+  PLAN_VALIDATED: "Checking your access and plan…",
+  LEG_STARTED: "Asking the specialists…",
+  LEG_FINISHED: "A specialist has answered…",
+  STATE_READ: "Reading your saved results…",
+  SYNTHESIS_STARTED: "Writing the answer…",
+  ANSWER_READY: "Checking the answer against your data…",
+};
+
+/** Plain words for a live progress event, or null for one that adds nothing (including a kind this version does not know). */
+export const stageLabel = (kind: string): string | null => STAGE_TEXT[kind] ?? null;
+
+// ------------------------------------------------------------------------------------------------ flow
+const ROUTE_LABELS: Record<string, string> = {
+  BUSINESS_STATE: "Read saved results",
+  ACTION: "Ran one specialist action",
+  PLAYBOOK: "Ran a playbook",
+  ADVISORY: "Advice from saved results",
+  SYNTHESIZE: "Summarised the investigation",
+  CLARIFY: "Asked for clarification",
+  OUT_OF_SCOPE: "Out of scope",
+};
+
+export const routeLabel = (route: string): string => ROUTE_LABELS[route] ?? route;
+
+export const routeSourceLabel = (source: string): string =>
+  source === "UI_ACTION" ? "You chose a quick action, so no model decided the route." : "A model classified your message into this route.";
+
+const RUN_STATUS: Record<string, string> = {
+  QUEUED: "Queued", COMPLETE: "Completed", PARTIAL: "Partial", DENIED: "Not permitted", FAILED: "Failed", RUNNING: "Running", NOT_ENTITLED: "Not on your plan",
+};
+export const runStatusLabel = (status: string): string => RUN_STATUS[status] ?? status;
+
+export type FlowStep = { key: string; title: string; detail: string | null; status: string };
+
+const stageDuration = (s: unknown): number | null => {
+  if (typeof s !== "object" || s === null) return null;
+  const { startMs, endMs } = s as { startMs?: unknown; endMs?: unknown };
+  // a duration in milliseconds, not a money figure
+  return typeof startMs === "number" && typeof endMs === "number" ? endMs - startMs : null;
+};
+
+/** The steps of a turn for the "Show flow" view: the CEO anchor first, then each specialist leg, with timings the backend recorded. */
+export function flowSteps(flow: TurnFlow): FlowStep[] {
+  const steps: FlowStep[] = [];
+  const stages = (flow.timings?.stages ?? {}) as Record<string, unknown>;
+  const timed = (name: string): string | null => {
+    const d = stageDuration(stages[name]);
+    return d === null ? null : `${d} ms`;
+  };
+  const runStep = (r: FlowRun, title: string, detail: string | null): FlowStep => ({ key: r.id, title, detail, status: runStatusLabel(r.status) });
+  if (flow.ceo) steps.push(runStep(flow.ceo, "CEO", [routeLabel(flow.route), timed("classification") ?? timed("route_resolution")].filter(Boolean).join(" · ") || null));
+  for (const leg of flow.legs) {
+    const checks = [leg.permissionCheck && `permission: ${leg.permissionCheck}`, leg.entitlementCheck && `plan: ${leg.entitlementCheck}`].filter(Boolean).join(" · ");
+    steps.push(runStep(leg, leg.triggerRef ? actionLabel(leg.triggerRef) : (leg.agentId ?? "Specialist"), [checks, leg.reason].filter(Boolean).join(" · ") || null));
+  }
+  return steps;
 }
 
 // ------------------------------------------------------------------------------------------------ conversation
@@ -234,6 +405,7 @@ export function validatePeriod(start: string, end: string, todayIso: string): st
 const ERROR_TEXT: Record<string, string> = {
   CEO_NOT_CONFIGURED: "The CEO is not configured yet. An administrator needs to set it up.",
   INVESTIGATION_NOT_ACTIVE: "This investigation is closed. Re-open it to continue.",
+  TURN_IN_PROGRESS: "The CEO is still answering your previous question. Try again in a moment.",
   AGENT_NOT_ENTITLED: "That agent is not on your plan, so it cannot be attached.",
   INVALID_PERIOD: "That date range is not valid. Choose a range that has started.",
   INVALID_MESSAGE: "Write a question between 1 and 4000 characters.",

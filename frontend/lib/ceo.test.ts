@@ -56,6 +56,21 @@ describe("CEO API client", () => {
     expect(lastCall().body).toEqual({ message: "Hello" });
   });
 
+  it("sends a quick action as {kind, key, slots}, only when one was chosen; reads health and flow from their own endpoints", async () => {
+    await client().postTurn("abc", "Health bands", null, { kind: "BUSINESS_STATE", key: "BS_HEALTH_BANDS" });
+    expect(lastCall().body).toEqual({ message: "Health bands", action: { kind: "BUSINESS_STATE", key: "BS_HEALTH_BANDS", slots: {} } });
+    await client().postTurn("abc", "Why did profit drop?", { start: "2026-09-01", end: "2026-09-30" }, { kind: "PLAYBOOK", key: "PROFIT_DIAGNOSIS" });
+    expect(lastCall().body).toEqual({
+      message: "Why did profit drop?", period_start: "2026-09-01", period_end: "2026-09-30", action: { kind: "PLAYBOOK", key: "PROFIT_DIAGNOSIS", slots: {} },
+    });
+    await client().postTurn("abc", "Typed", null, null);
+    expect(lastCall().body).toEqual({ message: "Typed" }); // no action key at all for a typed question
+    await client().getHealth();
+    expect(lastCall().url).toMatch(/\/api\/v1\/ceo\/state\/health$/);
+    await client().getFlow("abc", "t1");
+    expect(lastCall().url).toMatch(/\/investigations\/abc\/turns\/t1\/flow$/);
+  });
+
   it("never sends a tenant id (the tenant comes only from the session)", async () => {
     await client().postTurn("abc", "hi", { start: "2026-09-01", end: "2026-09-30" });
     await client().createInvestigation("x");
@@ -65,5 +80,49 @@ describe("CEO API client", () => {
   it("surfaces a non-2xx response as an ApiError carrying the backend's detail", async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 409, statusText: "Conflict", json: async () => ({ detail: { code: "INVESTIGATION_NOT_ACTIVE" } }) });
     await expect(client().postTurn("abc", "hi")).rejects.toMatchObject({ status: 409, detail: { code: "INVESTIGATION_NOT_ACTIVE" } });
+  });
+});
+
+describe("CEO live event stream client", () => {
+  const enc = new TextEncoder();
+  const streamOf = (chunks: string[]) =>
+    new ReadableStream<Uint8Array>({
+      start(c) {
+        chunks.forEach((x) => c.enqueue(enc.encode(x)));
+        c.close();
+      },
+    });
+  const frame = (kind: string, data: Record<string, unknown> = {}) => `event: ${kind}\ndata: ${JSON.stringify({ kind, atMs: 5, data })}\n\n`;
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("parses frames split across chunks, skips keep-alives and malformed frames, and sends the bearer token", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: streamOf(["retry: 3000\n\n", ": keepalive\n\n", frame("CLASSIFIED", { route: "ACTION" }).slice(0, 20), frame("CLASSIFIED", { route: "ACTION" }).slice(20),
+        "event: X\ndata: {not json\n\n", frame("LEG_FINISHED", { findingId: "f1" }), frame("TURN_DONE", { status: "DELIVERED" })]),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const seen: string[] = [];
+    await createCeoClient(async () => "tok_9").streamEvents("inv-1", (e) => seen.push(e.kind));
+    expect(seen).toEqual(["CLASSIFIED", "LEG_FINISHED", "TURN_DONE"]);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/v1\/ceo\/investigations\/inv-1\/events$/);
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok_9");
+    expect((init.headers as Record<string, string>).Accept).toBe("text/event-stream");
+  });
+
+  it("rejects when the stream cannot be opened (the findings poll then does the whole job)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404, statusText: "Not Found", body: null }));
+    await expect(createCeoClient(async () => "t").streamEvents("x", () => undefined)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("sends no tenant id and no body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: streamOf([]) });
+    vi.stubGlobal("fetch", fetchMock);
+    await createCeoClient(async () => "t").streamEvents("inv-1", () => undefined);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.body).toBeUndefined();
+    expect(url).not.toMatch(/tenant/i);
   });
 });

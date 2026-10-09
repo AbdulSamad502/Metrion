@@ -155,3 +155,151 @@ describe("errors", () => {
     expect(describeError(null, null)).toBe("Could not reach the backend.");
   });
 });
+
+// ---------------------------------------------------------------------------------------------- B5: presentation, quick actions, flow
+import type { Presentation, TurnFlow } from "@/lib/ceo";
+import { asOfLabel, flowSteps, hasPresentation, nodeResult, QUICK_ACTIONS, quickActionState, registerView, routeSourceLabel } from "@/lib/ceoModel";
+
+const pres = (over: Partial<Presentation> = {}): Presentation => ({ version: 1, headline: "Net revenue: shown", figures: [], facts: [], gaps: [], offers: [], ...over });
+
+describe("presentation helpers", () => {
+  it("a finding has something to show only when its snapshot has content", () => {
+    expect(hasPresentation(f("a", "1"))).toBe(false); // an old finding without a snapshot: references only
+    expect(hasPresentation(f("a", "1", { presentation: pres() }))).toBe(false);
+    expect(hasPresentation(f("a", "1", { presentation: pres({ gaps: ["Nothing saved yet."] }) }))).toBe(true);
+  });
+
+  it("never lets an unknown register look verified", () => {
+    expect(registerView("VERIFIED").label).toBe("Verified");
+    expect(registerView("ESTIMATE").tone).toBe("warning");
+    expect(registerView("SOMETHING_NEW")).toEqual({ label: "SOMETHING_NEW", tone: "neutral" });
+  });
+
+  it("shows the as-of date exactly as stored, and nothing when there is none", () => {
+    expect(asOfLabel("2026-09-30T00:00:00+00:00")).toBe("as of 2026-09-30");
+    expect(asOfLabel(null)).toBeNull();
+  });
+
+  const fig = { label: "Margin", value: "shown", register: "DERIVED", as_of: null, note: null, ref: { kind: "ENGINE_RESULT", id: "x" } };
+  const good = (headline: string) => pres({ headline, figures: [fig] });
+
+  it("the node headline is the newest COMPLETE usable finding, with its own timestamp", () => {
+    const rows = [
+      f("a", "2026-10-01T00:00:00Z", { presentation: good("old") }),
+      f("b", "2026-10-02T00:00:00Z", { presentation: good("new") }),
+      f("c", "2026-10-03T00:00:00Z", { source: "PI", presentation: good("pi") }),
+    ];
+    expect(nodeResult(rows, "CFO")).toEqual({ headline: "new", headlineAt: "2026-10-02T00:00:00Z", newer: null, noCompleteResult: false });
+    expect(nodeResult(rows, "PI").headline).toBe("pi");
+  });
+
+  it("a newer partial / failed / refused / unavailable result NEVER replaces an older complete one; it is reported beside it", () => {
+    for (const status of ["PARTIAL", "FAILED", "DENIED", "UNAVAILABLE", "NOT_ENTITLED"] as const) {
+      const rows = [
+        f("old", "2026-10-01T00:00:00Z", { presentation: good("Margin: shown") }),
+        f("new", "2026-10-05T00:00:00Z", { status, action_key: "cfo.anomaly_check", presentation: pres({ headline: "not enough history", gaps: ["not enough history"] }) }),
+      ];
+      expect(nodeResult(rows, "CFO"), status).toEqual({
+        headline: "Margin: shown", headlineAt: "2026-10-01T00:00:00Z",
+        newer: { status, at: "2026-10-05T00:00:00Z", label: "Anomaly check" }, noCompleteResult: false,
+      });
+    }
+  });
+
+  it("a COMPLETE finding whose snapshot holds only a gap sentence, or none, is not a usable result", () => {
+    const rows = [
+      f("a", "2026-10-01T00:00:00Z", { presentation: good("real") }),
+      f("b", "2026-10-02T00:00:00Z", { presentation: pres({ headline: "just a gap", gaps: ["just a gap"] }) }),
+      f("c", "2026-10-03T00:00:00Z"), // complete but written before snapshots existed
+    ];
+    expect(nodeResult(rows, "CFO").headline).toBe("real");
+    expect(nodeResult(rows, "CFO").newer?.at).toBe("2026-10-03T00:00:00Z");
+  });
+
+  it("when no finding is complete and usable, the node says there is no complete result (never an incomplete one as the result)", () => {
+    const rows = [f("a", "2026-10-02T00:00:00Z", { status: "PARTIAL", presentation: pres({ headline: "partial thing", figures: [fig] }) })];
+    expect(nodeResult(rows, "CFO")).toEqual({
+      headline: null, headlineAt: null, newer: { status: "PARTIAL", at: "2026-10-02T00:00:00Z", label: "Financial health bands" }, noCompleteResult: true,
+    });
+  });
+
+  it("an agent with no findings at all makes no claim", () => {
+    expect(nodeResult([], "CFO")).toEqual({ headline: null, headlineAt: null, newer: null, noCompleteResult: false });
+    expect(nodeResult([f("a", "2026-10-01T00:00:00Z", { source: "PI", presentation: good("pi") })], "CMO").noCompleteResult).toBe(false);
+  });
+
+  it("the canvas carries that result per agent", () => {
+    const rows = [f("a", "2026-10-01T00:00:00Z", { presentation: good("old") })];
+    expect(canvasNodes({ CFO: true }, avail(), "ACTIVE", rows).find((n) => n.code === "CFO")?.result.headline).toBe("old");
+  });
+});
+
+describe("quick actions", () => {
+  const byId = (id: string) => QUICK_ACTIONS.find((q) => q.id === id)!;
+  const period = { start: "2026-09-01", end: "2026-09-30" };
+
+  it("every chip names a real catalog kind and a key (the backend refuses anything else)", () => {
+    for (const q of QUICK_ACTIONS) {
+      expect(["BUSINESS_STATE", "ACTION", "PLAYBOOK"]).toContain(q.action.kind);
+      expect(q.action.key).toBeTruthy();
+    }
+  });
+
+  it("a period-dependent chip is unavailable until the seller chooses a period (dates are never guessed)", () => {
+    expect(quickActionState(byId("diagnosis"), { CFO: true }, null)).toEqual({ enabled: false, reason: "Choose a period first: the CEO never guesses dates." });
+    expect(quickActionState(byId("diagnosis"), { CFO: true }, period).enabled).toBe(true);
+    expect(quickActionState(byId("pnl"), { CFO: true }, null).enabled).toBe(true); // a saved-result read needs no period
+  });
+
+  it("a chip whose agent is detached or unknown is unavailable, with the reason", () => {
+    expect(quickActionState(byId("pnl"), { CFO: false }, null)).toEqual({ enabled: false, reason: "CFO is not attached to this investigation." });
+    expect(quickActionState(byId("pnl"), null, null).enabled).toBe(false);
+  });
+});
+
+describe("flow", () => {
+  const flow: TurnFlow = {
+    turnId: "t", route: "PLAYBOOK", routeKey: "PROFIT_DIAGNOSIS", routeSource: "UI_ACTION", status: "DELIVERED", compositionMode: "TEMPLATE",
+    timings: { stages: { route_resolution: { startMs: 10, endMs: 12 } } },
+    ceo: { id: "r0", agentId: "CEO", triggerRef: null, status: "COMPLETE", permissionCheck: null, entitlementCheck: null, startedAt: null, finishedAt: null, reason: null },
+    legs: [
+      { id: "r1", agentId: "CFO", triggerRef: "cfo.financial_health", status: "COMPLETE", permissionCheck: "PASS", entitlementCheck: "PASS", startedAt: null, finishedAt: null, reason: null },
+      { id: "r2", agentId: "CFO", triggerRef: "cfo.anomaly_check", status: "DENIED", permissionCheck: "DENIED:investigation.view", entitlementCheck: null, startedAt: null, finishedAt: null, reason: "not permitted" },
+    ],
+  };
+
+  it("lists the CEO step then every leg, a refused leg included, with its reason", () => {
+    const steps = flowSteps(flow);
+    expect(steps.map((s) => [s.title, s.status])).toEqual([["CEO", "Completed"], ["Financial health bands", "Completed"], ["Anomaly check", "Not permitted"]]);
+    expect(steps[0].detail).toBe("Ran a playbook · 2 ms");
+    expect(steps[2].detail).toContain("not permitted");
+  });
+
+  it("says plainly whether a model or the seller's own click chose the route", () => {
+    expect(routeSourceLabel("UI_ACTION")).toMatch(/no model/);
+    expect(routeSourceLabel("CLASSIFIER")).toMatch(/model classified/);
+  });
+});
+
+import { sourceLabel, stageLabel } from "@/lib/ceoModel";
+
+describe("live progress and the new actions", () => {
+  it("every known event kind has plain words, and an unknown one adds nothing", () => {
+    for (const k of ["TURN_RECEIVED", "CLASSIFIED", "LEG_STARTED", "LEG_FINISHED", "STATE_READ", "SYNTHESIS_STARTED", "ANSWER_READY"]) expect(stageLabel(k)).toBeTruthy();
+    expect(stageLabel("TURN_DONE")).toBeNull();
+    expect(stageLabel("SOMETHING_NEW")).toBeNull();
+  });
+
+  it("the new actions and state entries have readable labels, and the GST lookup is named as its own source", () => {
+    expect(actionLabel("gst_lookup")).toBe("GST rate lookup");
+    expect(actionLabel("service.gst_lookup")).toBe("GST rate lookup");
+    expect(actionLabel("ci.request_price_scenario")).toBe("Competitor price comparison");
+    expect(actionLabel("BS_COMPETITOR_SNAPSHOT")).toBe("Competitor prices");
+    expect(sourceLabel("GST_LOOKUP")).toBe("GST lookup");
+  });
+
+  it("each specialist chip needs its own agent attached and no period", () => {
+    const need = Object.fromEntries(QUICK_ACTIONS.filter((q) => ["competitors", "research", "report", "listing"].includes(q.id)).map((q) => [q.id, [q.needsAgent, q.needsPeriod]]));
+    expect(need).toEqual({ competitors: ["CI", false], research: ["PI", false], report: ["PI", false], listing: ["CMO", false] });
+  });
+});

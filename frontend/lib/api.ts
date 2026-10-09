@@ -2,7 +2,7 @@
  * token as a bearer token — the backend's `require_auth()` (auth.md §7.1) verifies it
  * server-side; nothing here is a security boundary of its own. */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
   constructor(

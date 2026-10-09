@@ -4,17 +4,17 @@
 
 import { ApiError } from "@/lib/api";
 import type {
-  AgentAvailability, AgentCode, CeoClient, CeoMessage, CeoRoute, ExplicitPeriod, FindingRow, InvestigationDetail, InvestigationStatus, InvestigationSummary,
-  TurnResponse, TurnRow,
+  AgentAvailability, AgentCode, CeoClient, UploadedAttachment, NewProductFormSupport, PriceImpactFormSupport, SaveInputBody, CeoMessage, CeoRoute, ClarificationCard, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationStatus,
+  InvestigationSummary, TurnEvent, TurnFlow, TurnResponse, TurnRow, UiAction,
 } from "@/lib/ceo";
 import type { FeedFactory, FeedOptions, FindingsFeed } from "@/lib/ceoPolling";
 
 type Stored = InvestigationDetail & { tenant: string };
 
 export const ALL_PRESENT: AgentAvailability = {
-  CI: { status: "PRESENT", chatActions: 0 },
-  CFO: { status: "PRESENT", chatActions: 5 },
-  PI: { status: "PRESENT", chatActions: 0 },
+  CI: { status: "PRESENT", chatActions: 1 },
+  CFO: { status: "PRESENT", chatActions: 6 },
+  PI: { status: "PRESENT", chatActions: 1 },
   CMO: { status: "PRESENT", chatActions: 0 },
 };
 
@@ -33,6 +33,8 @@ export type TurnScript = {
   kind?: CeoMessage["kind"];
   compositionMode?: TurnRow["composition_mode"];
   findings?: FindingRow[];
+  /** a decision card on the CEO message (kind CLARIFICATION) */
+  choices?: ClarificationCard;
 };
 
 export class FakeCeo {
@@ -41,7 +43,18 @@ export class FakeCeo {
   store = new Map<string, Stored>();
   calls: { method: string; args: unknown[] }[] = [];
   failNextTurn: ApiError | null = null;
-  private pending: { id: string; message: string; period: ExplicitPeriod | null; resolve: (r: TurnResponse) => void; reject: (e: unknown) => void } | null = null;
+  health: HealthEntry[] = [];
+  healthError: ApiError | null = null;
+  flows = new Map<string, TurnFlow>();
+  /** live-event stream: tests push events; `streamFails` makes it refuse to open (the poll must still do the whole job) */
+  streamFails = false;
+  priceForm: PriceImpactFormSupport = { competitors: [], feeOptions: [], storedCost: null, maxCandidatePrices: 5 };
+  productForm: NewProductFormSupport = { quotes: [], budget: [], budgetTargetRef: "tenant-a" };
+  saved: SaveInputBody[] = [];
+  uploads: { id: string; name: string }[] = [];
+  uploadFails: ApiError | null = null;
+  streams: { id: string; emit: (e: TurnEvent) => void; closed: boolean }[] = [];
+  private pending: { id: string; message: string; period: ExplicitPeriod | null; action: UiAction | null; clarification: ClarificationReply | null; resolve: (r: TurnResponse) => void; reject: (e: unknown) => void } | null = null;
 
   seed(over: Partial<Stored> & { id?: string; status?: InvestigationStatus; title?: string | null } = {}): string {
     const id = over.id ?? uid("i");
@@ -88,7 +101,7 @@ export class FakeCeo {
     const s = this.visible(p.id);
     const turnId = uid("t");
     const userMsg = s.messages.find((m) => m.content === p.message && m.turn_id === null && m.role === "USER");
-    const ceoMsg: CeoMessage = { id: uid("m"), role: "CEO", kind: script.kind ?? "ANSWER", content: script.answer, turn_id: turnId, created_at: ts() };
+    const ceoMsg: CeoMessage = { id: uid("m"), role: "CEO", kind: script.kind ?? "ANSWER", content: script.answer, turn_id: turnId, created_at: ts(), ...(script.choices ? { choices: script.choices } : {}) };
     s.messages.push(ceoMsg);
     s.turns.push({
       id: turnId, route: script.route ?? "ADVISORY", route_key: null, status: script.status ?? "DELIVERED", composition_mode: script.compositionMode ?? "LLM",
@@ -99,7 +112,7 @@ export class FakeCeo {
     if (userMsg) userMsg.turn_id = turnId;
     p.resolve({
       turnId, status: script.status ?? "DELIVERED", route: script.route ?? "ADVISORY", routeKey: null, answer: script.answer, messageId: ceoMsg.id,
-      compositionMode: script.compositionMode ?? "LLM", clarifyFor: null, notes: [], findings: s.findings.filter((f) => f.turn_id === turnId), timings: {}, events: [],
+      compositionMode: script.compositionMode ?? "LLM", clarifyFor: null, choices: script.choices ?? null, clarificationId: script.choices ? ceoMsg.id : null, notes: [], findings: s.findings.filter((f) => f.turn_id === turnId), timings: {}, events: [],
     });
   }
 
@@ -137,8 +150,8 @@ export class FakeCeo {
           return structuredClone(detail) as InvestigationDetail;
         }),
       getFindings: (id: string) => rec("getFindings", [id], () => structuredClone(this.visible(id).findings)),
-      postTurn: (id: string, message: string, period?: ExplicitPeriod | null) => {
-        this.calls.push({ method: "postTurn", args: [id, message, period ?? null] });
+      postTurn: (id: string, message: string, period?: ExplicitPeriod | null, action?: UiAction | null, clarification?: ClarificationReply | null, attachmentIds?: string[]) => {
+        this.calls.push({ method: "postTurn", args: attachmentIds && attachmentIds.length ? [id, message, period ?? null, action ?? null, clarification ?? null, attachmentIds] : clarification ? [id, message, period ?? null, action ?? null, clarification] : [id, message, period ?? null, action ?? null] });
         return new Promise<TurnResponse>((resolve, reject) => {
           try {
             const s = this.visible(id);
@@ -149,7 +162,7 @@ export class FakeCeo {
               throw e;
             }
             s.messages.push({ id: uid("m"), role: "USER", kind: "TEXT", content: message, turn_id: null, created_at: ts() });
-            this.pending = { id, message, period: period ?? null, resolve, reject };
+            this.pending = { id, message, period: period ?? null, action: action ?? null, clarification: clarification ?? null, resolve, reject };
           } catch (e) {
             reject(e);
           }
@@ -193,7 +206,42 @@ export class FakeCeo {
           }
           return { agent, attached };
         }),
+      uploadAttachment: (id: string, file: File) =>
+        rec("uploadAttachment", [id, file.name], (): UploadedAttachment => {
+          this.visible(id);
+          if (this.uploadFails) throw this.uploadFails;
+          const up = { id: uid("a"), name: file.name };
+          this.uploads.push(up);
+          return { id: up.id, filename: file.name, type: "PDF", byteSize: file.size, status: "OK", note: null };
+        }),
       getAvailability: () => rec("getAvailability", [], () => structuredClone(this.availability)),
+      getPriceImpactForm: (sku?: string) => rec("getPriceImpactForm", [sku ?? null], () => structuredClone(this.priceForm)),
+      getNewProductForm: (sku?: string) => rec("getNewProductForm", [sku ?? null], () => structuredClone(this.productForm)),
+      saveInput: (body: SaveInputBody) => rec("saveInput", [body], () => { this.saved.push(body); return {}; }),
+      streamEvents: (id: string, onEvent: (e: TurnEvent) => void, signal?: AbortSignal) => {
+        this.calls.push({ method: "streamEvents", args: [id] });
+        if (this.streamFails) return Promise.reject(new ApiError(503, "no stream"));
+        return new Promise<void>((resolve) => {
+          const s = { id, emit: onEvent, closed: false };
+          this.streams.push(s);
+          signal?.addEventListener("abort", () => {
+            s.closed = true;
+            resolve();
+          });
+        });
+      },
+      getHealth: () =>
+        rec("getHealth", [], () => {
+          if (this.healthError) throw this.healthError;
+          return { entries: structuredClone(this.health) };
+        }),
+      getFlow: (id: string, turnId: string) =>
+        rec("getFlow", [id, turnId], () => {
+          this.visible(id);
+          const f = this.flows.get(turnId);
+          if (!f) throw new ApiError(404, { code: "NOT_FOUND" });
+          return structuredClone(f);
+        }),
     };
   }
 }

@@ -8,6 +8,8 @@ import { Section } from "@/components/ui/Section";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { isOpenRequest } from "@/lib/useNotifications";
 import { useHashTab } from "@/lib/useHashTab";
+import { CostInput } from "@/components/ui/CostInput";
+import { costReady, costToApi, EMPTY_COST, rupeesToPaise, type CostChoice } from "@/lib/costInput";
 import {
   ApiError,
   apiFetch,
@@ -257,7 +259,7 @@ function rupees(paise: number | null): string {
 }
 
 function toPaise(rupeesStr: string): number {
-  return Math.round(parseFloat(rupeesStr) * 100);
+  return rupeesToPaise(rupeesStr) ?? Number.NaN; // exact integer parsing, never a float; an unparsable amount stays NaN (rejected by the server) rather than a guess
 }
 
 /** Mirrors ceo-hub/page.tsx's own `MetricResultRow` — reused for every `MetricResult`-shaped
@@ -1196,9 +1198,9 @@ function PricingCurveSection({ getToken }: { getToken: () => Promise<string | nu
   const [cogsUnavailable, setCogsUnavailable] = useState(false);
   const [cogsRupees, setCogsRupees] = useState("");
   const [cogsUnavailableReason, setCogsUnavailableReason] = useState("");
-  const [shipping, setShipping] = useState("0");
-  const [advertising, setAdvertising] = useState("0");
-  const [other, setOther] = useState("0");
+  const [shipping, setShipping] = useState<CostChoice>(EMPTY_COST);
+  const [advertising, setAdvertising] = useState<CostChoice>(EMPTY_COST);
+  const [other, setOther] = useState<CostChoice>(EMPTY_COST);
   const [rtoUnavailable, setRtoUnavailable] = useState(false);
   const [rtoRupees, setRtoRupees] = useState("");
   const [rtoUnavailableReason, setRtoUnavailableReason] = useState("");
@@ -1216,6 +1218,13 @@ function PricingCurveSection({ getToken }: { getToken: () => Promise<string | nu
       setError("Fill in SKU, at least one candidate price, marketplace, category, fee type and as-of date first.");
       return;
     }
+    if (![shipping, advertising, other].every(costReady)) {
+      setError("Answer shipping, advertising and other costs: an amount, \"None (0), I confirm\", or Unknown. Nothing is assumed to be zero.");
+      return;
+    }
+    const ship = costToApi(shipping);
+    const ads = costToApi(advertising);
+    const oth = costToApi(other);
     setBusy(true);
     setError(null);
     setResult(null);
@@ -1231,11 +1240,14 @@ function PricingCurveSection({ getToken }: { getToken: () => Promise<string | nu
         as_of_date: asOfDate,
         cogs_paise: cogsUnavailable ? null : cogsRupees.trim() ? toPaise(cogsRupees) : null,
         cogs_unavailable_reason: cogsUnavailable ? cogsUnavailableReason.trim() || null : null,
-        shipping_logistics_paise: toPaise(shipping || "0"),
-        advertising_costs_paise: toPaise(advertising || "0"),
+        shipping_logistics_paise: ship.paise,
+        shipping_logistics_unavailable_reason: ship.reason,
+        advertising_costs_paise: ads.paise,
+        advertising_costs_unavailable_reason: ads.reason,
         return_rto_losses_paise: rtoUnavailable ? null : rtoRupees.trim() ? toPaise(rtoRupees) : null,
         return_rto_losses_unavailable_reason: rtoUnavailable ? rtoUnavailableReason.trim() || null : null,
-        other_allocated_costs_paise: toPaise(other || "0"),
+        other_allocated_costs_paise: oth.paise,
+        other_allocated_costs_unavailable_reason: oth.reason,
       };
       const res = await apiFetch<PricingCurveResponse>("/api/v1/cfo/pricing", await getToken(), {
         method: "POST",
@@ -1294,9 +1306,9 @@ function PricingCurveSection({ getToken }: { getToken: () => Promise<string | nu
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <Field label="Shipping/logistics (₹)"><TextInput value={shipping} onChange={setShipping} /></Field>
-          <Field label="Advertising (₹)"><TextInput value={advertising} onChange={setAdvertising} /></Field>
-          <Field label="Other allocated costs (₹)"><TextInput value={other} onChange={setOther} /></Field>
+          <CostInput label="Shipping/logistics" value={shipping} onChange={setShipping} />
+          <CostInput label="Advertising" value={advertising} onChange={setAdvertising} />
+          <CostInput label="Other allocated costs" value={other} onChange={setOther} />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
