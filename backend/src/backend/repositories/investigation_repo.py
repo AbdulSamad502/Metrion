@@ -178,6 +178,16 @@ def reopen_resolved_investigation(tenant_id: UUID, investigation_id: UUID) -> st
         return str(note)
 
 
+def update_summary(tenant_id: UUID, investigation_id: UUID, summary: str, covers_through: UUID) -> None:
+    """Writes the rolling summary and the pointer to the last message folded into it (spec D2). Called only by `ceo.summary`, under the turn lock."""
+    with tenant_scope(tenant_id) as conn:
+        _require_investigation(conn, investigation_id)
+        conn.execute(
+            text("UPDATE investigation SET summary = :s, summary_covers_through = :m WHERE id = :id"),
+            {"s": summary, "m": str(covers_through), "id": str(investigation_id)},
+        )
+
+
 def archive_investigation(tenant_id: UUID, investigation_id: UUID) -> None:
     with tenant_scope(tenant_id) as conn:
         current = _require_investigation(conn, investigation_id)
@@ -250,6 +260,7 @@ def append_message(
     created_by: UUID | None = None,
     agent_run_id: UUID | None = None,
     turn_id: UUID | None = None,
+    choices: Mapping[str, Any] | None = None,
     now: datetime | None = None,
 ) -> UUID:
     at, message_id = _now(now), uuid4()
@@ -258,12 +269,13 @@ def append_message(
         conn.execute(
             text(
                 "INSERT INTO investigation_message (id, investigation_id, tenant_id, role, kind, content, turn_id, "
-                "agent_run_id, created_by, created_at) VALUES (:id, :inv, :tenant, :role, :kind, :content, :turn, "
-                ":run, :by, :at)"
+                "agent_run_id, created_by, created_at, choices) VALUES (:id, :inv, :tenant, :role, :kind, :content, :turn, "
+                ":run, :by, :at, CAST(:choices AS jsonb))"
             ),
             {"id": str(message_id), "inv": str(investigation_id), "tenant": str(tenant_id), "role": role, "kind": kind,
              "content": content, "turn": str(turn_id) if turn_id else None,
-             "run": str(agent_run_id) if agent_run_id else None, "by": str(created_by) if created_by else None, "at": at},
+             "run": str(agent_run_id) if agent_run_id else None, "by": str(created_by) if created_by else None, "at": at,
+             "choices": _jsonb(choices)},
         )
         conn.execute(
             text("UPDATE investigation SET last_message_at = :at WHERE id = :id"), {"at": at, "id": str(investigation_id)}
@@ -277,7 +289,7 @@ def list_messages(tenant_id: UUID, investigation_id: UUID, *, after_message_id: 
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(
             text(
-                "SELECT m.id, m.role, m.kind, m.content, m.turn_id, m.agent_run_id, m.created_by, m.created_at "
+                "SELECT m.id, m.role, m.kind, m.content, m.turn_id, m.agent_run_id, m.created_by, m.created_at, m.choices "
                 "FROM investigation_message m WHERE m.investigation_id = :inv "
                 "AND (CAST(:after AS uuid) IS NULL OR (m.created_at, m.id) > "
                 "     (SELECT a.created_at, a.id FROM investigation_message a WHERE a.id = :after)) "
@@ -286,6 +298,19 @@ def list_messages(tenant_id: UUID, investigation_id: UUID, *, after_message_id: 
             {"inv": str(investigation_id), "after": str(after_message_id) if after_message_id else None},
         )
         return [dict(r._mapping) for r in rows]
+
+
+def get_message(tenant_id: UUID, investigation_id: UUID, message_id: UUID) -> dict[str, Any] | None:
+    """One message of THIS investigation of THIS tenant (RLS + the investigation id), or None."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text(
+                "SELECT id, role, kind, content, turn_id, created_at, choices FROM investigation_message "
+                "WHERE id = :id AND investigation_id = :inv"
+            ),
+            {"id": str(message_id), "inv": str(investigation_id)},
+        ).mappings().first()
+        return dict(row) if row is not None else None
 
 
 # ------------------------------------------------------------------------------ turns
@@ -383,10 +408,12 @@ def insert_finding(
     figure_refs: Sequence[Mapping[str, Any]] = (),
     report_ref: Mapping[str, Any] | None = None,
     gap_reason: str | None = None,
+    presentation: Mapping[str, Any] | None = None,
     now: datetime | None = None,
 ) -> UUID:
-    """Appends one finding. Refs and pointers only — never a value the CEO computed (spec R7). The turn must belong
-    to the SAME investigation in the SAME tenant."""
+    """Appends one finding: refs and pointers, plus an optional display snapshot (`presentation`, spec R7 as amended) — formatted copies of values
+    that were resolved through their refs, never a value the CEO computed. The table is append-only for the app role (no UPDATE), so the snapshot
+    is written once, here, and can never be rewritten. The turn must belong to the SAME investigation in the SAME tenant."""
     finding_id = uuid4()
     with tenant_scope(tenant_id) as conn:
         _require_investigation(conn, investigation_id)
@@ -400,13 +427,13 @@ def insert_finding(
         conn.execute(
             text(
                 "INSERT INTO investigation_finding (id, tenant_id, investigation_id, turn_id, agent_run_id, source, "
-                "action_key, status, figure_refs, report_ref, gap_reason, created_at) VALUES (:id, :tenant, :inv, "
-                ":turn, :run, :source, :key, :status, CAST(:refs AS jsonb), CAST(:report AS jsonb), :gap, :at)"
+                "action_key, status, figure_refs, report_ref, gap_reason, presentation, created_at) VALUES (:id, :tenant, :inv, "
+                ":turn, :run, :source, :key, :status, CAST(:refs AS jsonb), CAST(:report AS jsonb), :gap, CAST(:presentation AS jsonb), :at)"
             ),
             {"id": str(finding_id), "tenant": str(tenant_id), "inv": str(investigation_id), "turn": str(turn_id),
              "run": str(agent_run_id) if agent_run_id else None, "source": source, "key": action_key, "status": status,
              "refs": json.dumps(list(figure_refs), default=str), "report": _jsonb(report_ref), "gap": gap_reason,
-             "at": _now(now)},
+             "presentation": _jsonb(presentation), "at": _now(now)},
         )
     return finding_id
 
@@ -418,9 +445,40 @@ def list_findings(tenant_id: UUID, investigation_id: UUID, *, turn_id: UUID | No
         rows = conn.execute(
             text(
                 "SELECT id, turn_id, agent_run_id, source, action_key, status, figure_refs, report_ref, gap_reason, "
-                "created_at FROM investigation_finding WHERE investigation_id = :inv "
+                "presentation, created_at FROM investigation_finding WHERE investigation_id = :inv "
                 "AND (CAST(:turn AS uuid) IS NULL OR turn_id = :turn) ORDER BY created_at, id"
             ),
             {"inv": str(investigation_id), "turn": str(turn_id) if turn_id else None},
+        )
+        return [dict(r._mapping) for r in rows]
+
+
+# ------------------------------------------------------------------------------ attachments (spec 6.34)
+def insert_attachment(
+    tenant_id: UUID, investigation_id: UUID, *, filename: str, detected_type: str, content: bytes, sha256: str, extraction_status: str, extraction_note: str | None,
+    extracted_text: str | None, created_by: UUID | None, now: datetime | None = None,
+) -> UUID:
+    new_id = uuid4()
+    with tenant_scope(tenant_id) as conn:
+        _require_investigation(conn, investigation_id)  # the parent must be visible in THIS tenant: a foreign investigation id is a plain not-found
+        conn.execute(
+            text("INSERT INTO investigation_attachment (id, tenant_id, investigation_id, filename, detected_type, byte_size, sha256, content, extraction_status, extraction_note, "
+                 "extracted_text, created_by, created_at) VALUES (:id, :t, :inv, :fn, :ty, :sz, :sha, :c, :st, :note, :txt, :by, :at)"),
+            {"id": str(new_id), "t": str(tenant_id), "inv": str(investigation_id), "fn": filename[:255], "ty": detected_type, "sz": len(content), "sha": sha256, "c": content,
+             "st": extraction_status, "note": extraction_note, "txt": extracted_text, "by": str(created_by) if created_by else None, "at": _now(now)},
+        )
+    return new_id
+
+
+def get_attachments(tenant_id: UUID, investigation_id: UUID, ids: Sequence[UUID]) -> list[dict[str, Any]]:
+    """The named attachments of THIS investigation in THIS tenant, without their bytes. An id that is foreign, from another investigation or unknown is simply absent
+    (the caller compares counts and refuses): a reference is never trusted for existing."""
+    if not ids:
+        return []
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text("SELECT id, filename, detected_type, byte_size, extraction_status, extraction_note, extracted_text FROM investigation_attachment "
+                 "WHERE investigation_id = :inv AND id = ANY(CAST(:ids AS uuid[])) ORDER BY created_at"),
+            {"inv": str(investigation_id), "ids": [str(i) for i in ids]},
         )
         return [dict(r._mapping) for r in rows]

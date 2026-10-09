@@ -161,3 +161,18 @@ def load_generation(conn: Connection, tenant_id: UUID, generation_id: UUID) -> S
         r.agent_run_id, r.created_at, options,
     )
 
+
+def list_recent_for_tenant(tenant_id: UUID, *, limit: int) -> list[dict[str, Any]]:
+    """The tenant's most recent generations, newest first: which output, for which SKU and marketplace, and how it ended. Deliberately NOT the generated
+    copy (`output_text` / `output_structured`): a read for the CEO's Business State (spec 6.13), which never relays specialist free text (R9)."""
+    from slim_cmo.repositories.tenant_context import tenant_scope
+
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                "SELECT id, sku, marketplace, output_type, status, created_at FROM cmo_generation "
+                "WHERE tenant_id = :tenant_id ORDER BY created_at DESC, id LIMIT :limit"
+            ),
+            {"tenant_id": str(tenant_id), "limit": limit},
+        ).mappings().all()
+    return [dict(r) for r in rows]

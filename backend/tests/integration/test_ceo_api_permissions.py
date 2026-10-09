@@ -104,8 +104,9 @@ def test_another_tenants_investigation_is_a_404_on_every_endpoint_and_nothing_ch
     assert client.get("/api/v1/ceo/investigations", headers=owner_b).json() == []  # and it is not in B's list
 
 
-def test_two_simultaneous_turns_leave_a_consistent_thread(api):  # noqa: F811
-    """E24 (turns are not yet serialized): the concurrent case must at least stay consistent — each turn owns one question and one answer."""
+def test_two_simultaneous_turns_leave_a_consistent_thread(api, monkeypatch):  # noqa: F811
+    """E24: with a wait configured the second turn waits for the first; the thread stays consistent — each turn owns one question and one answer."""
+    monkeypatch.setenv("CEO_TURN_LOCK_WAIT_SECONDS", "30")
     client, owner, _, a, _ = api
     inv = start(client, owner)
     out: list = []

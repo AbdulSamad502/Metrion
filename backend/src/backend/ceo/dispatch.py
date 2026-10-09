@@ -21,7 +21,8 @@ This module computes nothing and calls no model.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+import dataclasses
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -78,6 +79,8 @@ class CeoTurn:
     investigation_id: UUID | None = None
     turn_id: UUID | None = None
     legs: list[LegResult] = field(default_factory=list)
+    # Builds the finding's display snapshot from the (tentative) leg — set by the orchestrator; None for callers that do not present (spec R7 amended).
+    presenter: Callable[[LegResult], Mapping[str, Any] | None] | None = None
     _closed: bool = False
 
     @property
@@ -201,23 +204,28 @@ def _refuse(
         status="DENIED", started_at=now, finished_at=now, error_reason=reason, parent_run_id=turn.anchor_run_id,
         investigation_id=turn.investigation_id,
     )
-    finding_id = _write_finding(turn, spec, status=status, agent_run_id=run, refs=(), report=None, reason=reason, now=now)
-    leg = LegResult(action_key=spec.key, status=status, agent_run_id=run, finding_id=finding_id, reason=reason, denial=denial)
+    leg = _record(turn, spec, LegResult(action_key=spec.key, status=status, agent_run_id=run, reason=reason, denial=denial), report=None, now=now)
     turn.legs.append(leg)
     return leg
 
 
-def _write_finding(
-    turn: CeoTurn, spec: ActionSpec, *, status: LegStatus, agent_run_id: UUID | None, refs: tuple[Ref, ...],
-    report: Mapping[str, str] | None, reason: str | None, now: datetime,
-) -> UUID | None:
+def _record(turn: CeoTurn, spec: ActionSpec, leg: LegResult, *, report: Mapping[str, str] | None, now: datetime) -> LegResult:
+    """Writes the finding for a (tentative) leg together with its display snapshot, and returns the leg carrying the finding id. The snapshot
+    comes from `turn.presenter`, which resolves every figure through its ref (R3); nothing here formats or computes a value."""
     if turn.investigation_id is None or turn.turn_id is None:
-        return None
-    return investigation_repo.insert_finding(
+        return leg
+    presentation = None
+    if turn.presenter is not None:
+        try:
+            presentation = turn.presenter(leg)
+        except Exception:  # noqa: BLE001 — a display snapshot must never break a finding; the API then shows refs only
+            logger.exception("could not build a finding presentation for %s", spec.key)
+    finding_id = investigation_repo.insert_finding(
         turn.tenant_id, turn.investigation_id, turn_id=turn.turn_id, source=spec.source, action_key=spec.key,
-        status=status.value, agent_run_id=agent_run_id, figure_refs=[r.to_json() for r in refs],
-        report_ref=dict(report) if report else None, gap_reason=reason, now=now,
+        status=leg.status.value, agent_run_id=leg.agent_run_id, figure_refs=[r.to_json() for r in leg.figure_refs],
+        report_ref=dict(report) if report else None, gap_reason=leg.reason, presentation=presentation, now=now,
     )
+    return dataclasses.replace(leg, finding_id=finding_id)
 
 
 def dispatch(
@@ -244,8 +252,7 @@ def dispatch(
             permission_check="NOT_EVALUATED", entitlement_check="NOT_EVALUATED", status="FAILED", started_at=at, finished_at=at,
             error_reason=f"NOT_WIRED: {spec.not_wired_reason}", parent_run_id=turn.anchor_run_id, investigation_id=turn.investigation_id,
         )
-        finding = _write_finding(turn, spec, status=LegStatus.UNAVAILABLE, agent_run_id=run, refs=(), report=None, reason="not available yet", now=at)
-        leg = LegResult(spec.key, LegStatus.UNAVAILABLE, agent_run_id=run, finding_id=finding, reason="not available yet", denial=Denial.NOT_WIRED)
+        leg = _record(turn, spec, LegResult(spec.key, LegStatus.UNAVAILABLE, agent_run_id=run, reason="not available yet", denial=Denial.NOT_WIRED), report=None, now=at)
         turn.legs.append(leg)
         return leg
 
@@ -319,22 +326,18 @@ def dispatch(
                     investigation_id=turn.investigation_id,
                 )
             status = LegStatus.NOT_ENTITLED if kind is Denial.ENTITLEMENT else LegStatus.DENIED
-            finding = _write_finding(turn, spec, status=status, agent_run_id=leg_run, refs=(), report=None, reason=reason, now=at)
-            leg = LegResult(spec.key, status, agent_run_id=leg_run, finding_id=finding, reason=reason, denial=kind)
+            leg = _record(turn, spec, LegResult(spec.key, status, agent_run_id=leg_run, reason=reason, denial=kind), report=None, now=at)
         else:
             reason = "unavailable" if exc.status_code in (404, 409, 503) else "request rejected"
             finish("FAILED", f"{exc.status_code}")
-            finding = _write_finding(turn, spec, status=LegStatus.UNAVAILABLE if exc.status_code in (404, 503) else LegStatus.FAILED,
-                                     agent_run_id=leg_run, refs=(), report=None, reason=reason, now=at)
-            leg = LegResult(spec.key, LegStatus.UNAVAILABLE if exc.status_code in (404, 503) else LegStatus.FAILED,
-                            agent_run_id=leg_run, finding_id=finding, reason=reason)
+            leg = _record(turn, spec, LegResult(spec.key, LegStatus.UNAVAILABLE if exc.status_code in (404, 503) else LegStatus.FAILED,
+                                                agent_run_id=leg_run, reason=reason), report=None, now=at)
         turn.legs.append(leg)
         return leg
     except Exception:  # noqa: BLE001 — R12: never surface internals; the server log has them
         logger.exception("CEO leg %s failed (tenant=%s)", spec.key, ctx.tenant_id)
         finish("FAILED", "dispatch failed")
-        finding = _write_finding(turn, spec, status=LegStatus.FAILED, agent_run_id=leg_run, refs=(), report=None, reason="the action failed", now=at)
-        leg = LegResult(spec.key, LegStatus.FAILED, agent_run_id=leg_run, finding_id=finding, reason="the action failed")
+        leg = _record(turn, spec, LegResult(spec.key, LegStatus.FAILED, agent_run_id=leg_run, reason="the action failed"), report=None, now=at)
         turn.legs.append(leg)
         return leg
 
@@ -343,7 +346,6 @@ def dispatch(
     partial = any(payload.get(k) for k in _PARTIAL_KEYS)
     status = LegStatus.PARTIAL if partial else LegStatus.COMPLETE
     finish(status.value, None, refs)
-    finding = _write_finding(turn, spec, status=status, agent_run_id=leg_run, refs=refs, report=provenance.report_pointers(payload), reason=None, now=at)
-    leg = LegResult(spec.key, status, agent_run_id=leg_run, finding_id=finding, payload=payload, figure_refs=refs)
+    leg = _record(turn, spec, LegResult(spec.key, status, agent_run_id=leg_run, payload=payload, figure_refs=refs), report=provenance.report_pointers(payload), now=at)
     turn.legs.append(leg)
     return leg

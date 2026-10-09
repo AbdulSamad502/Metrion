@@ -34,6 +34,7 @@ from backend.auth.permissions import (
     RESEARCH_NICHE_RUN,
     has_permission,
 )
+from backend.ceo import gst_lookup
 from backend.ceo.contract import (
     AGENT_PERMISSION_KEY,
     ActionSpec,
@@ -187,6 +188,28 @@ def _pi_entitlement(code: str, *, also_niche_run: bool) -> EntitlementPreflight:
     return check
 
 
+def _gst_invoke(slots: Any, ctx: AuthContext, leg: LegContext) -> Mapping[str, Any]:
+    from backend.api.v1 import cfo as cfo_api
+
+    return gst_lookup.invoke(
+        slots, ctx, leg, result_to_dict=cfo_api._gst_lookup_result_to_dict, no_match_to_dict=cfo_api._gst_lookup_no_match_to_dict,
+    )
+
+
+def _gst_entitlement(*, through_cfo: bool) -> EntitlementPreflight:
+    """Route A meters CFO's own cap AND the shared GST cap (two independent keys); Route B meters the shared GST cap ONLY (G2): no CFO or CMO unit."""
+    from backend.entitlement import resolve_cfo_entitlement, resolve_gst_lookup_entitlement
+
+    def check(tenant_id: UUID, now: datetime) -> Any:
+        if through_cfo:
+            cfo = resolve_cfo_entitlement(tenant_id, direct_action_code="cfo.gst_lookup", occurred_at=now)
+            if not cfo.passed:
+                return cfo
+        return resolve_gst_lookup_entitlement(tenant_id)
+
+    return check
+
+
 class _PiReportSlots(BaseModel):
     model_config = {"extra": "forbid"}
     run_id: UUID
@@ -264,7 +287,7 @@ def build_default_registry() -> ActionRegistry:
             ActionSpec(
                 key=key, source=source, agent=agent, effect=Effect.COMPUTE_PERSIST,
                 description="GST applicability lookup (Route A via CFO / Route B shared)", required_permissions=extra,
-                not_wired_reason="Route A/B selection and G1–G7 basis-label plumbing are built with orchestration (B4)",
+                slot_model=gst_lookup.GstSlots, invoke=_gst_invoke, entitlement=_gst_entitlement(through_cfo=agent is not None),
             )
         )
 

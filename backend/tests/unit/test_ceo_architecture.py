@@ -24,7 +24,14 @@ ALLOWED_SPECIALIST_IMPORTS: dict[str, tuple[str, ...]] = {
     "registry.py": ("backend.api",),
     # persisted-derived reads: the single CFO service function (derived_reads) and read-only repositories
     "derived_reads.py": ("backend.services.cfo_actions",),
-    "business_state.py": ("calc_engine.repositories", "cfo.repositories", "backend.services.cfo_imports"),
+    # the CI / PI / CMO persisted reads come through ONE declared seam (`backend/services/ceo_reads.py`), never a direct specialist import
+    "business_state.py": ("calc_engine.repositories", "cfo.repositories", "backend.services.cfo_imports", "backend.services.ceo_reads"),
+    "clarification.py": ("backend.services.ceo_reads",),  # ranking candidates by their latest capture is a tenant-scoped read through that seam
+    "plans.py": ("backend.services.ceo_reads",),  # resolving "the latest finished research run" is a tenant-scoped read through that seam
+    "input_session.py": ("backend.services.ceo_reads",),  # real competitors and fee-rate combinations to offer, read through that seam (tenant-scoped, read-only)
+    "slot_resolvers.py": ("backend.services.ceo_reads",),  # resolving a named competitor is a tenant-scoped read through that seam
+    # the GST lookup invocation: the single declared use of the CFO service function for GST (same precedent as derived_reads.py)
+    "gst_lookup.py": ("backend.services.cfo_actions",),
     "provenance.py": ("calc_engine.repositories", "competitor_intelligence.repositories"),
 }
 # Brain 1 compute surfaces: NEVER importable from the CEO package.

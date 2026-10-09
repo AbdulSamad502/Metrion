@@ -178,7 +178,8 @@ def test_grounded_synthesis_substitutes_stored_values_and_ships():
     t = table(figures=figures_with_tokens([fig(), fig("Revenue", "₹4,82,150.00", Register.VERIFIED)]))
     c = compose(model("Your margin is {{F1}} and revenue is {{F2}}."), "how are we?", "ACTION", t)
     assert c.mode == "LLM" and c.safety["gate"] == "PASS"
-    assert c.text == "Your margin is 12.7% and revenue is ₹4,82,150.00."  # values come from the stored strings, not the model
+    # values come from the stored strings, not the model; the as-of line is written by code (never by the model) after the gate
+    assert c.text == "Your margin is 12.7% and revenue is ₹4,82,150.00.\n\nFigures as of 2026-10-01."
 
 
 def test_missing_evidence_must_be_named_and_a_draft_that_omits_the_gap_is_rejected():

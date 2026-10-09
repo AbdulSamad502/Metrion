@@ -75,7 +75,7 @@ class Grounded:
                 return self.override
             body = prompt.split(STATIC_END, 1)[1]
             figs = [t for t, reg in re.findall(r"- \{\{(F\d+)\}\} \| .*register: (\w+)", body) if reg != "UNAVAILABLE"]
-            others = re.findall(r"- \{\{([GDAO]\d+)\}\} \|", body)
+            others = re.findall(r"- \{\{([GDAOC]\d+)\}\} \|", body)
             return "Here is what we found. " + " ".join("{{%s}}" % t for t in [*figs, *others])
 
         return ScriptedModel(script, name="scripted-composer")

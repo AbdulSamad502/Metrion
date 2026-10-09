@@ -20,6 +20,7 @@ from typing import Any
 from uuid import UUID
 
 from calc_engine.repositories import metric_result_repo, product_feasibility_estimate_repo
+from calc_engine.repositories import gst_lookup_repo
 from competitor_intelligence.repositories import competitor_snapshot_repo
 
 from backend.ceo.contract import Figure, Gap, Ref, RefKind, Register
@@ -34,9 +35,10 @@ _RESOLVERS: dict[tuple[RefKind, str | None], Resolver] = {
     (RefKind.SELLER_PROVIDED, None): provenance_repo.get_manual_adjustment,
     (RefKind.AGENT_REPORT_FIELD, "leak_finding"): provenance_repo.get_leak_finding,
     (RefKind.AGENT_REPORT_FIELD, "competitor_snapshot"): competitor_snapshot_repo.get_by_id,
+    (RefKind.AGENT_REPORT_FIELD, "gst_lookup_result"): gst_lookup_repo.get_by_id,
 }
 
-_AS_OF_KEYS = ("computed_at", "created_at", "captured_at", "first_observed_at")
+_AS_OF_KEYS = ("computed_at", "created_at", "captured_at", "first_observed_at", "retrieved_at")
 
 
 @dataclass(frozen=True, slots=True)

@@ -20,6 +20,7 @@ pytestmark = pytest.mark.skipif(not os.environ.get("DATABASE_URL_APP") or not os
 CFO_ACTION_METERS = (
     "cfo.pnl", "cfo.pricing", "cfo.gst_summary", "cfo.period_comparison", "cfo.landed_cost", "cfo.supplier_ranking", "cfo.funding_readiness",
     "cfo.batch_size", "cfo.reconcile", "cfo.anomaly_check", "cfo.financial_health", "cfo.cash_reconciliation", "cfo.strategic_briefing",
+    "cfo.gst_lookup",  # wired in B4 (Route A of the GST lookup)
 )
 
 
@@ -90,7 +91,7 @@ def test_an_agent_the_tenant_is_not_entitled_to_cannot_be_attached_and_shows_loc
     for meter in CFO_ACTION_METERS:
         seed_platform_cap(migrate_engine, agent_code="CFO", meter_code=meter, cap_value=0)
     avail = client.get("/api/v1/ceo/agents/availability", headers=ha).json()
-    assert avail["CFO"] == {"status": "NOT_ENTITLED", "chatActions": 5} and avail["CI"]["status"] == "PRESENT"
+    assert avail["CFO"] == {"status": "NOT_ENTITLED", "chatActions": 6} and avail["CI"]["status"] == "PRESENT"
     inv = start(client, ha)  # default attachment follows entitlement (§6.22 rule 1): CFO is recorded detached
     assert client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()["agents"]["CFO"] is False
     r = client.put(f"/api/v1/ceo/investigations/{inv}/agents/CFO", json={"attached": True}, headers=ha)
@@ -102,7 +103,7 @@ def test_availability_reflects_the_members_permissions_and_truthful_chat_actions
     client, ha, _, a, _ = api
     full = client.get("/api/v1/ceo/agents/availability", headers=ha).json()
     assert {k: v["status"] for k, v in full.items()} == {"CFO": "PRESENT", "CI": "PRESENT", "PI": "PRESENT", "CMO": "PRESENT"}
-    assert {k: v["chatActions"] for k, v in full.items()} == {"CFO": 5, "CI": 0, "PI": 0, "CMO": 0}  # only CFO has chat-runnable actions in B3
+    assert {k: v["chatActions"] for k, v in full.items()} == {"CFO": 6, "CI": 1, "PI": 1, "CMO": 0}  # B4: CFO +GST lookup (Route A), CI price positioning, PI report; CMO writers stay on their own page
     member = login(clerk, a, role=PARTNER_ROLE, permissions={AGENT_CEO: True, INVESTIGATION_VIEW: True})
     assert client.get("/api/v1/ceo/agents/availability", headers=member).json()["CFO"]["status"] == "NOT_PERMITTED"
     assert client.get("/api/v1/ceo/agents/availability", headers={}).status_code == 401

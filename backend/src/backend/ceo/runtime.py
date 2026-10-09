@@ -34,6 +34,7 @@ class CeoRuntime:
     composer: LlmModel | None  # None => answers needing prose use the template (flagged TEMPLATE_FALLBACK)
     leg_timeout_seconds: int | None  # None => CONFIG_MISSING for any playbook with legs
     max_legs: int | None  # None => CONFIG_MISSING
+    max_candidate_prices: int | None = None  # None => COMPETITOR_PRICE_IMPACT refuses with CONFIG_MISSING (no default, Q32)
     clock: Callable[[], datetime] = utcnow
     registry: ActionRegistry = field(default_factory=get_registry)
 

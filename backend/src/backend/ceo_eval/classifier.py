@@ -24,17 +24,21 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from backend.ceo_eval import criteria
 from backend.ceo_eval.catalog import (
     AGENTS, CLARIFY_TARGETS, EXECUTING_ROUTES, KEYED_ROUTES, ROUTES, SLOT_VOCAB, Catalog, build_catalog,
 )
 from backend.ceo_eval.model import Completion, EvalModel
 
-PROMPT_VERSION = "classifier-v0"
+PROMPT_VERSION = "classifier-v1"  # v0 -> v1: the same routing guidance as production `ceo-classifier-2` (prefer a saved read / a playbook over a single action)
 
 _ROUTE_HELP = """\
-BUSINESS_STATE - answerable from saved results. route_key = one STATE id below.
-ACTION - needs exactly one named capability. route_key = one ACTION key below.
-PLAYBOOK - a multi-specialist investigation. route_key = one PLAYBOOK id below.
+BUSINESS_STATE - answerable from saved results. route_key = one STATE id below. Prefer it for overview questions ("how did last month
+  go", "how am I doing", "what is my latest ...") whenever a STATE entry covers them.
+ACTION - needs exactly one named capability. route_key = one ACTION key below. Use it only when the seller asks for that one specific
+  check by name; a "why" question is never a single ACTION when a PLAYBOOK below covers it.
+PLAYBOOK - a multi-specialist investigation. route_key = one PLAYBOOK id below. Prefer it over a single ACTION whenever the question
+  matches a playbook description (for example why profit or margin dropped, or whether the marketplace has paid what it owes).
 ADVISORY - a business question no capability owns (strategy, planning, what to focus on). Also use it when the question needs a
   capability that is NOT in the lists below: set needs_agent to the specialist it would need (CFO, CI, PI or CMO).
 SYNTHESIZE - wrap up what the investigation already found; no new work.
@@ -215,6 +219,7 @@ class ClassifierCase:
     metered_trap: bool = False  # picking any metered action/playbook here is a cost-bearing error
     pending: str | None = None  # excluded from accuracy; the reason it cannot be scored yet
     note: str = ""
+    family: str = ""  # template family for generated cases ("" = a hand-written case, its own family)
 
 
 def case_from_json(raw: Mapping[str, Any]) -> ClassifierCase:
@@ -228,7 +233,7 @@ def case_from_json(raw: Mapping[str, Any]) -> ClassifierCase:
         slots={k: tuple(norm_slot(a) for a in (v if isinstance(v, list) else [v])) for k, v in x.get("slots", {}).items()},
         needs_agent=x.get("needs"), clarify_for=tuple(x.get("clarify", [])), forbid_keys=tuple(x.get("forbid", [])),
         forbid_routes=tuple(x.get("forbid_routes", [])), metered_trap=bool(x.get("metered_trap")), pending=raw.get("pending"),
-        note=raw.get("note", ""),
+        note=raw.get("note", ""), family=raw.get("fam", ""),
     )
 
 
@@ -390,4 +395,5 @@ def summarize(results: Sequence[CaseResult], cases: Mapping[str, ClassifierCase]
         "by_category": {c: _rate(sum(r.ok for r in rs), len(rs)) for c, rs in sorted(by_cat.items())},
         "confusion_expected_to_predicted": {e: dict(p) for e, p in sorted(confusion.items())},
         "errors": sum(1 for r in results if r.error),
+        "criteria": criteria.classifier_criteria(results, cases),
     }

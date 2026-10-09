@@ -18,7 +18,8 @@ from typing import Any
 
 import httpx
 
-from backend.ceo_eval import classifier, composer, fixtures
+from backend.ceo_eval import classifier, composer, criteria, fixtures
+from backend.ceo_eval import stats as split_stats
 from backend.ceo_eval.catalog import build_catalog
 from backend.ceo_eval.model import EvalModel, OllamaEvalModel
 
@@ -99,6 +100,8 @@ def run_model(
     constrained: bool = True,
     classifier_limit: int | None = None,
     composer_limit: int | None = None,
+    holdout_only: bool = False,
+    per_metric: int | None = None,
     progress: Callable[[str], None] = lambda s: None,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"model": model.name, "constrained_classifier": constrained}
@@ -106,6 +109,13 @@ def run_model(
         cases = fixtures.load_classifier_cases()
         by_id = {c.id: c for c in cases}
         scorable = [c for c in cases if c.pending is None]
+        if holdout_only:  # the approved criteria are measured on the hold-out split only (spec 6.18)
+            scorable = [c for c in scorable if split_stats.split_of(c.id) == "holdout"]
+        if per_metric:  # the smallest run that can satisfy the criteria: this many hold-out cases for each classifier metric (spec 6.18)
+            routing = [c for c in scorable if not criteria._clarify_only(c)]
+            execution = [c for c in routing if criteria._expects_execution(c)]  # the over-clarify denominator is these, so they get the full per-metric count
+            scorable = (_spread(execution, per_metric) + [c for c in routing if not criteria._expects_execution(c)]
+                        + _spread([c for c in scorable if criteria._clarify_only(c)], per_metric))
         if classifier_limit:
             scorable = _spread(scorable, classifier_limit)
         t0 = time.perf_counter()
@@ -118,6 +128,10 @@ def run_model(
     if "composer" in suites:
         ccases = fixtures.load_composer_cases()
         cby = {c.id: c for c in ccases}
+        if holdout_only:
+            ccases = [c for c in ccases if split_stats.split_of(c.id) == "holdout"]
+        if per_metric:
+            ccases = _spread([c for c in ccases if c.category != "CONFLICT"], per_metric) + _spread([c for c in ccases if c.category == "CONFLICT"], per_metric)
         if composer_limit:
             ccases = _spread(ccases, composer_limit)
         t0 = time.perf_counter()

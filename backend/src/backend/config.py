@@ -162,9 +162,27 @@ def ceo_leg_timeout_seconds() -> int | None:
     return _optional_positive_int("CEO_LEG_TIMEOUT_SECONDS")
 
 
+def ceo_state_cache_max_entries() -> int | None:
+    """`CEO_STATE_CACHE_MAX_ENTRIES`: how many Business State reads the in-process cache may hold (spec L7). NO default: unset -> None -> caching is OFF.
+    Not cached, so a test or operator change takes effect."""
+    return _optional_positive_int("CEO_STATE_CACHE_MAX_ENTRIES")
+
+
+def ceo_turn_lock_wait_seconds() -> int | None:
+    """`CEO_TURN_LOCK_WAIT_SECONDS`: how long a second turn in the SAME investigation waits for the running one (spec E24). NO default: unset ->
+    None -> the second turn is refused at once (409 TURN_IN_PROGRESS) rather than waiting an unchosen time."""
+    return _optional_positive_int("CEO_TURN_LOCK_WAIT_SECONDS")
+
+
 def ceo_playbook_max_legs() -> int | None:
     """`CEO_PLAYBOOK_MAX_LEGS`: the most legs one playbook may fan out to (§6.12 rule 5). NO default; unset -> CONFIG_MISSING for playbooks with legs."""
     return _optional_positive_int("CEO_PLAYBOOK_MAX_LEGS")
+
+
+def ceo_max_candidate_prices() -> int | None:
+    """`CEO_MAX_CANDIDATE_PRICES`: the most candidate prices one COMPETITOR_PRICE_IMPACT run may carry (spec 6.33, Q32). NO default: unset -> that playbook refuses
+    with CONFIG_MISSING rather than running with an unchosen bound."""
+    return _optional_positive_int("CEO_MAX_CANDIDATE_PRICES")
 
 
 def _required_positive_int(name: str) -> int:
@@ -425,3 +443,18 @@ def cfo_narration_model() -> str:
     operator can swap models without a code change (mirrors `ci_vision_model()`'s own
     precedent exactly)."""
     return os.environ.get("CFO_NARRATION_MODEL", "qwen3:8b")
+
+
+def ceo_attachment_max_bytes() -> int | None:
+    """`CEO_ATTACHMENT_MAX_BYTES`: the largest single attachment (spec 6.34, Q34). NO default: unset -> attachments are refused with a plain message."""
+    return _optional_positive_int("CEO_ATTACHMENT_MAX_BYTES")
+
+
+def ceo_attachment_max_files() -> int | None:
+    """`CEO_ATTACHMENT_MAX_FILES`: how many attachments one message may carry. NO default: unset -> attachments are refused."""
+    return _optional_positive_int("CEO_ATTACHMENT_MAX_FILES")
+
+
+def ceo_attachment_max_pages() -> int | None:
+    """`CEO_ATTACHMENT_MAX_PAGES`: how many PDF pages are read. NO default: unset -> attachments are refused."""
+    return _optional_positive_int("CEO_ATTACHMENT_MAX_PAGES")

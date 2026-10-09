@@ -20,6 +20,7 @@ tenant-scoped. Entries whose source exists but has no tenant-wide read function 
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -31,11 +32,13 @@ from cfo.repositories import agent_data_request_repo, leak_finding_repo
 
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, AGENT_CFO, FILES_VIEW, has_permission
-from backend.ceo import derived_reads, provenance
+from backend.ceo import conflicts as conflict_rules
+from backend.ceo import derived_reads, provenance, state_cache
 from backend.ceo.contract import (
     AGENT_PERMISSION_KEY,
     AgentCode,
     BusinessStateEntry,
+    Conflict,
     EntryStatus,
     Fact,
     Figure,
@@ -45,7 +48,7 @@ from backend.ceo.contract import (
     Register,
 )
 from backend.ceo.figure_format import format_paise, register_for
-from backend.services import cfo_imports
+from backend.services import ceo_reads, cfo_imports
 
 # A presentation bound on how many rows one entry lists — not a business threshold. Truncation is stated as a gap.
 MAX_ITEMS_PER_ENTRY = 20
@@ -73,6 +76,7 @@ class StateRead:
     figures: tuple[Figure, ...] = ()
     facts: tuple[Fact, ...] = ()
     gaps: tuple[Gap, ...] = ()
+    conflicts: tuple[Conflict, ...] = ()
 
 
 Loader = Callable[[AuthContext, datetime], StateRead]
@@ -86,24 +90,46 @@ class StateEntrySpec:
     persisted_source: str  # what was verified
     loader: Loader
     extra_permissions: tuple[str, ...] = ()
+    # The tables this entry is built from, for the L7 cache's data fingerprint (`state_cache`). None = never cached: the result depends on something
+    # other than stored rows (CI's staleness label depends on the clock), so a fingerprint would not be enough to know it is still current.
+    source_tables: tuple[str, ...] | None = None
 
 
 # --------------------------------------------------------------------------------------------- loaders
-def _latest_pnl_rows(tenant_id: UUID) -> tuple[str | None, dict[str, Mapping[str, Any]]]:
+def _latest_pnl_rows(tenant_id: UUID) -> tuple[str | None, dict[str, Mapping[str, Any]], list[Conflict]]:
     """The newest persisted TENANT_PERIOD label across the P&L metrics, and the newest-computed row per metric for it.
     Ordering only: the period label begins with its ISO start date, so it sorts chronologically (metric_result_repo docs)."""
     rows_by_code = {code: [r for r in metric_result_repo.list_by_metric_code(tenant_id, metric_code=code) if r.get("period")]
                     for code in _PNL_METRICS}
     periods = [str(r["period"]) for rows in rows_by_code.values() for r in rows]
     if not periods:
-        return None, {}
+        return None, {}, []
     latest = max(periods)
     chosen: dict[str, Mapping[str, Any]] = {}
     for code, rows in rows_by_code.items():
         match = [r for r in rows if str(r["period"]) == latest]
         if match:
             chosen[code] = max(match, key=lambda r: r["computed_at"])
-    return latest, chosen
+    found = conflict_rules.metric_conflicts(
+        [r for rows in rows_by_code.values() for r in rows if str(r["period"]) == latest],
+        figure_for=lambda r: _figure_from_metric_row(_PNL_METRICS[str(r["metric_code"])], r),
+        what_for=lambda r: f"{_PNL_METRICS[str(r['metric_code'])]} ({latest})",
+    )
+    # Only a disagreement over the result the seller would otherwise be shown is reported: an older, superseded input set that disagreed with itself is history.
+    shown = {UUID(str(r["id"])) for r in chosen.values()}
+    return latest, chosen, [c for c in found if c.a.ref.id in shown]
+
+
+def recent_periods(tenant_id: UUID, *, limit: int) -> list[str]:
+    """The newest distinct persisted P&L period labels ("start/end" ISO), newest first: for offering the seller a real choice of period. Ordering only
+    (a period label begins with its ISO start date, so it sorts chronologically); nothing is computed."""
+    labels: set[str] = set()
+    for code in _PNL_METRICS:
+        for r in metric_result_repo.list_by_metric_code(tenant_id, metric_code=code):
+            period = str(r.get("period") or "")
+            if period.count("/") == 1 and all(len(p) == 10 for p in period.split("/")):
+                labels.add(period)
+    return sorted(labels, reverse=True)[:limit]
 
 
 def _figure_from_metric_row(label: str, row: Mapping[str, Any]) -> Figure:
@@ -120,7 +146,7 @@ def _figure_from_metric_row(label: str, row: Mapping[str, Any]) -> Figure:
 
 def _load_pnl_latest(ctx: AuthContext, now: datetime) -> StateRead:
     assert ctx.tenant_id is not None
-    period, rows = _latest_pnl_rows(ctx.tenant_id)
+    period, rows, found = _latest_pnl_rows(ctx.tenant_id)
     if period is None:
         return StateRead(
             EntryStatus.UNAVAILABLE,
@@ -134,7 +160,7 @@ def _load_pnl_latest(ctx: AuthContext, now: datetime) -> StateRead:
     ]
     return StateRead(
         EntryStatus.PARTIAL if gaps else EntryStatus.AVAILABLE,
-        as_of=max(f.as_of for f in figures if f.as_of is not None), period=period, figures=figures, gaps=tuple(gaps),
+        as_of=max(f.as_of for f in figures if f.as_of is not None), period=period, figures=figures, gaps=tuple(gaps), conflicts=tuple(found),
     )
 
 
@@ -209,8 +235,17 @@ def _load_seller_context(ctx: AuthContext, now: datetime) -> StateRead:
         return StateRead(EntryStatus.UNAVAILABLE, gaps=(Gap("NO_GOAL", "No seller goal has been recorded."),))
     row = rows[0]
     value = row["value"] or {}
+    goal_conflicts = conflict_rules.manual_input_conflicts(
+        rows,
+        comparable=lambda r: str((r["value"] or {}).get("target_margin_pct")) if (r["value"] or {}).get("target_margin_pct") is not None else None,
+        figure_for=lambda r: Figure(
+            label="Target margin (your goal)", formatted_value=f"{r['value']['target_margin_pct']}%", register=Register.MANUAL,
+            ref=Ref(RefKind.SELLER_PROVIDED, UUID(str(r["id"])), as_of=r["created_at"]), as_of=r["created_at"],
+        ),
+        what="Your saved target margin",
+    )
     figures: tuple[Figure, ...] = ()
-    if value.get("target_margin_pct") is not None:
+    if value.get("target_margin_pct") is not None and not goal_conflicts:  # two different goals: neither is shown as "the" goal, the conflict block shows both
         figures = (
             Figure(
                 label="Target margin (your goal)",
@@ -225,7 +260,7 @@ def _load_seller_context(ctx: AuthContext, now: datetime) -> StateRead:
         for k, label in (("priority_category", "Priority category"), ("note", "Seller note"))
         if value.get(k)
     )
-    return StateRead(EntryStatus.AVAILABLE, as_of=row["created_at"], figures=figures, facts=facts)
+    return StateRead(EntryStatus.AVAILABLE, as_of=row["created_at"], figures=figures, facts=facts, conflicts=tuple(goal_conflicts))
 
 
 def _load_ingest_status(ctx: AuthContext, now: datetime) -> StateRead:
@@ -255,7 +290,7 @@ def _load_health_bands(ctx: AuthContext, now: datetime) -> StateRead:
     """CFO's GOOD/WATCH/AT_RISK bands over the latest persisted P&L period — a persisted-derived read (derived_reads). No composite
     score and no projection exist or are created (CP1-U1)."""
     assert ctx.tenant_id is not None
-    period, _rows = _latest_pnl_rows(ctx.tenant_id)
+    period, _rows, _found = _latest_pnl_rows(ctx.tenant_id)
     if period is None or "/" not in period:
         return StateRead(
             EntryStatus.UNAVAILABLE, gaps=(Gap("NO_PNL", "No profit & loss has been computed yet, so there is nothing to classify."),)
@@ -289,8 +324,95 @@ def _load_health_bands(ctx: AuthContext, now: datetime) -> StateRead:
     )
 
 
+def _load_competitor_snapshot(ctx: AuthContext, now: datetime) -> StateRead:
+    """CI's latest captured price per tracked competitor, through CI's own handoff builder (a DB read: no capture, no fetch). CI never claims
+    VERIFIED, so every price is DERIVED (competitor-intelligence-agent.md 5.1); the ref is the snapshot row, re-resolved by the provenance gate."""
+    assert ctx.tenant_id is not None
+    urls = ceo_reads.list_active_competitors(ctx.tenant_id, limit=MAX_ITEMS_PER_ENTRY + 1)
+    if not urls:
+        return StateRead(EntryStatus.UNAVAILABLE, gaps=(Gap("NO_COMPETITORS", "No competitors are being tracked yet."),))
+    figures: list[Figure] = []
+    gaps: list[Gap] = []
+    as_of: datetime | None = None
+    for u in urls[:MAX_ITEMS_PER_ENTRY]:
+        name = str(u.get("label") or f"{u['marketplace']} competitor")
+        snap = ceo_reads.competitor_handoff(ctx.tenant_id, UUID(str(u["id"])), now=now)
+        if isinstance(snap, ceo_reads.CiUnavailable):
+            gaps.append(Gap(f"NO_SNAPSHOT_{str(u['id'])[:8]}", f"{name}: no research has been submitted yet."))
+            continue
+        if snap.listed_price_paise is None or snap.capture_status not in ("COMPLETE", "PARTIAL"):
+            gaps.append(Gap(f"NO_PRICE_{str(u['id'])[:8]}", f"{name}: no usable price has been captured yet."))
+            continue
+        figures.append(Figure(
+            label=f"{name}: listed price ({snap.marketplace})", formatted_value=format_paise(snap.listed_price_paise), register=Register.DERIVED,
+            ref=Ref(RefKind.AGENT_REPORT_FIELD, snap.snapshot_id, source="competitor_snapshot", as_of=snap.captured_at), as_of=snap.captured_at,
+            note="This capture is out of date." if snap.is_stale else None,
+        ))
+        as_of = snap.captured_at if as_of is None or snap.captured_at > as_of else as_of
+    if len(urls) > MAX_ITEMS_PER_ENTRY:
+        gaps.append(Gap("TRUNCATED", "More competitors are tracked than are listed here."))
+    if not figures:
+        return StateRead(EntryStatus.UNAVAILABLE, gaps=tuple(gaps))
+    return StateRead(EntryStatus.PARTIAL if gaps else EntryStatus.AVAILABLE, as_of=as_of, figures=tuple(figures), gaps=tuple(gaps))
+
+
+def _load_pi_report_latest(ctx: AuthContext, now: datetime) -> StateRead:
+    """The state of PI's most recent research run: status and date only, no candidate counts or scores (a count has no engine ref)."""
+    assert ctx.tenant_id is not None
+    run = ceo_reads.latest_pi_run(ctx.tenant_id)
+    if run is None:
+        return StateRead(EntryStatus.UNAVAILABLE, gaps=(Gap("NO_RESEARCH_RUN", "No product research has been run yet."),))
+    when = run.get("finished_at") or run.get("started_at")
+    status = str(run["status"])
+    text = {
+        "COMPLETE": "finished; its report is ready", "PARTIAL": "finished with some parts missing; its report is ready",
+        "FAILED": "did not complete", "RUNNING": "is still running", "QUEUED": "is queued and has not started",
+    }.get(status, status.lower())
+    return StateRead(
+        EntryStatus.AVAILABLE if status in ("COMPLETE", "PARTIAL") else EntryStatus.PARTIAL, as_of=when,
+        facts=(Fact("Latest product research", f"The latest research run {text}" + (f" ({when.date().isoformat()})." if when else "."), "SOURCE_DERIVED"),),
+        gaps=(Gap("RUN_INCOMPLETE", "The latest research run has no report to show yet."),) if status not in ("COMPLETE", "PARTIAL") else (),
+    )
+
+
+_CMO_OUTPUT_LABEL = {
+    "TITLE_SET": "title options", "TITLES": "title options", "LISTING_COPY": "listing copy", "DESCRIPTION": "description", "BULLETS": "bullet points",
+    "KEYWORDS": "keywords", "BACKEND_TERMS": "backend terms", "HASHTAGS": "hashtags",
+}
+
+
+def _load_cmo_workflow(ctx: AuthContext, now: datetime) -> StateRead:
+    """What Slim CMO last produced and how each ended: output type, SKU, marketplace, status. Never the generated copy (R9)."""
+    assert ctx.tenant_id is not None
+    rows = ceo_reads.recent_cmo_generations(ctx.tenant_id, limit=5)
+    if not rows:
+        return StateRead(EntryStatus.UNAVAILABLE, gaps=(Gap("NO_GENERATIONS", "No listing content has been generated yet."),))
+    facts = tuple(
+        Fact(
+            "Listing content",
+            f"{_CMO_OUTPUT_LABEL.get(str(r['output_type']), str(r['output_type']).lower().replace('_', ' '))} for SKU {r['sku']} on "
+            f"{str(r['marketplace']).title()}: {str(r['status']).lower().replace('_', ' ')} ({r['created_at'].date().isoformat()})",
+            "SOURCE_DERIVED",
+        )
+        for r in rows
+    )
+    return StateRead(EntryStatus.AVAILABLE, as_of=rows[0]["created_at"], facts=facts)
+
+
+_CACHE_SOURCES: Mapping[str, tuple[str, ...]] = {
+    "BS_PNL_LATEST": ("metric_result",),
+    "BS_HEALTH_BANDS": ("metric_result", "financial_health_config"),
+    "BS_LEAK_OPEN": ("leak_finding",),
+    "BS_DATA_GAPS": ("agent_data_request",),
+    "BS_SELLER_CONTEXT": ("manual_adjustment",),
+    "BS_INGEST_STATUS": ("report_file", "ingestion_run"),
+    "BS_PI_REPORT_LATEST": ("pi_research_run",),
+    "BS_CMO_WORKFLOW": ("cmo_generation",),
+    # BS_COMPETITOR_SNAPSHOT is deliberately absent: its "out of date" label depends on the clock, not only on stored rows.
+}
+
 ENTRIES: Mapping[str, StateEntrySpec] = {
-    spec.key: spec
+    spec.key: dataclasses.replace(spec, source_tables=_CACHE_SOURCES.get(spec.key))
     for spec in (
         StateEntrySpec("BS_PNL_LATEST", AgentCode.CFO, "Latest persisted P&L period: revenue, contribution profit, marketplace fees",
                        "metric_result (Brain 1) via metric_result_repo.list_by_metric_code", _load_pnl_latest),
@@ -300,6 +422,12 @@ ENTRIES: Mapping[str, StateEntrySpec] = {
                        "agent_data_request via agent_data_request_repo.list_for_tenant", _load_data_gaps),
         StateEntrySpec("BS_HEALTH_BANDS", AgentCode.CFO, "CFO health bands over the latest P&L period (persisted-derived read)",
                        "metric_result + financial_health_config via assemble_financial_health", _load_health_bands),
+        StateEntrySpec("BS_COMPETITOR_SNAPSHOT", AgentCode.CI, "Latest captured listed price per tracked competitor, with staleness",
+                       "competitor_url + competitor_snapshot via competitor_intelligence.handoff.build_ci_handoff_snapshot", _load_competitor_snapshot),
+        StateEntrySpec("BS_PI_REPORT_LATEST", AgentCode.PI, "State of the most recent product research run",
+                       "pi_research_run via pi_research_run_repo.latest_run_for_tenant", _load_pi_report_latest),
+        StateEntrySpec("BS_CMO_WORKFLOW", AgentCode.CMO, "What Slim CMO last generated and how each ended (never the copy itself)",
+                       "cmo_generation via generation_repo.list_recent_for_tenant", _load_cmo_workflow),
         StateEntrySpec("BS_SELLER_CONTEXT", None, "Seller-declared context (goal, priority, note)",
                        "manual_adjustment field seller.goal", _load_seller_context),
         StateEntrySpec("BS_INGEST_STATUS", None, "What data the CEO has to reason on (latest report uploads and ingestion status)",
@@ -310,9 +438,6 @@ ENTRIES: Mapping[str, StateEntrySpec] = {
 # Sources that exist but have no tenant-wide read function in their owning package, so the entry is NOT in the V1 catalog yet
 # (spec §6.13 hard rule 5: dropped, not worked around). Each needs a small read function in the owner, added with its specialist leg.
 DEFERRED_ENTRIES: Mapping[str, str] = {
-    "BS_COMPETITOR_SNAPSHOT": "competitor_snapshot exists, but competitor_url_repo has no tenant-wide listing (only by id / linked SKU / count); the list lives inline in api/v1/ci.py",
-    "BS_PI_REPORT_LATEST": "pi_research_run exists, but pi_research_run_repo has no tenant-wide 'latest run' read (by id, by brief, count)",
-    "BS_CMO_WORKFLOW": "cmo_generation/approval rows exist, but no tenant-wide workflow read exists outside CMO's own route handlers",
     "BS_GOAL_PROGRESS": "V1-later: needs the ceo_goal registry and Brain 1 goal_progress (deterministic-engine.md §5.16)",
     "BS_SITUATIONS": "V1-later: needs the situation table and detectors (spec §6.21)",
 }
@@ -329,6 +454,23 @@ def _entitlement_for(owner: AgentCode, tenant_id: UUID, now: datetime) -> Any:
     if owner is AgentCode.CMO:
         return ent.resolve_cmo_entitlement(tenant_id, direct_action_code="cmo.business_state_read", occurred_at=now)
     return ent.resolve_ci_entitlement(tenant_id)
+
+
+def _load_through_cache(ctx: AuthContext, spec: StateEntrySpec, at: datetime) -> StateRead:
+    """The persisted read, served from the L7 cache when it is configured and still current. Called only AFTER the permission, attachment and
+    entitlement checks above, so a cache can never serve what the caller may not see. The key carries the tenant, the entry, the data fingerprint and
+    the UTC date; the provenance gate still re-resolves every ref on every read."""
+    assert ctx.tenant_id is not None
+    cache = state_cache.get_cache()
+    if cache is None or spec.source_tables is None:
+        return spec.loader(ctx, at)
+    key = (ctx.tenant_id, spec.key, state_cache.data_version(ctx.tenant_id, spec.source_tables), at.date())  # fingerprint BEFORE the load
+    cached = cache.get(key)
+    if cached is not None:
+        return cached  # type: ignore[no-any-return]
+    read = spec.loader(ctx, at)
+    cache.put(key, read)
+    return read
 
 
 def read_entry(
@@ -364,16 +506,22 @@ def read_entry(
                 preview_hint="cfo.preview" if spec.owner is AgentCode.CFO else None,
             )
 
-    read = spec.loader(ctx, at)
+    read = _load_through_cache(ctx, spec, at)
     gated = provenance.gate_figures(ctx.tenant_id, read.figures, resolvers=resolvers)
     gaps = read.gaps + gated.gaps
+    kept_conflicts: list[Conflict] = []
+    for c in read.conflicts:  # both sides must verify for THIS tenant, or the disagreement is not shown (and is named as a gap)
+        if len(provenance.gate_figures(ctx.tenant_id, (c.a, c.b)).kept) == 2:
+            kept_conflicts.append(c)
+        else:
+            gaps = gaps + (Gap("CONFLICT_UNVERIFIED", f"{c.what} has two stored values that disagree, but one could not be verified, so it is not shown."),)
     status = read.status
     if gated.gaps and status is EntryStatus.AVAILABLE:
         status = EntryStatus.PARTIAL
     if not gated.kept and read.figures and status is EntryStatus.PARTIAL and not read.facts:
         status = EntryStatus.UNAVAILABLE  # every figure failed verification: nothing citable remains
     return BusinessStateEntry(
-        key=key, status=status, as_of=read.as_of, period=read.period, figures=gated.kept, facts=read.facts, gaps=gaps,
+        key=key, status=status, as_of=read.as_of, period=read.period, figures=gated.kept, facts=read.facts, gaps=gaps, conflicts=tuple(kept_conflicts),
     )
 
 

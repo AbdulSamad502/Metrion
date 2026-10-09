@@ -14,7 +14,7 @@ from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, has_permission
 from backend.ceo import business_state
 from backend.ceo.contract import AGENT_PERMISSION_KEY, AgentCode
-from backend.ceo.plans import ACTIONS, PLAYBOOKS
+from backend.ceo.plans import ACTIONS, PLAYBOOKS, VIRTUAL_ROUTES
 from backend.ceo.registry import ActionRegistry
 
 STATE_DESCRIPTIONS: dict[str, str] = {
@@ -36,6 +36,7 @@ class Capabilities:
     allowed_playbooks: tuple[str, ...]
     allowed_state: dict[str, str]
     agent_status: dict[str, str]  # agent code -> PRESENT | NOT_ATTACHED | NOT_PERMITTED | NOT_ENTITLED
+    entitled_registry_keys: frozenset[str] = frozenset()  # registry keys this member may run now (used to pick the GST route in code, spec C11)
 
 
 def compute_capabilities(ctx: AuthContext, registry: ActionRegistry, attached: frozenset[str], *, now: datetime) -> Capabilities:
@@ -46,7 +47,7 @@ def compute_capabilities(ctx: AuthContext, registry: ActionRegistry, attached: f
 
     entitled_keys = set(registry.catalog_for(ctx, attached=attached, check_entitlement=True, now=now))
     permitted_keys = set(registry.catalog_for(ctx, attached=attached, check_entitlement=False, now=now))
-    actions = tuple(k for k in ACTIONS if k in entitled_keys)
+    actions = tuple(k for k in ACTIONS if k in entitled_keys or any(r in entitled_keys for r in VIRTUAL_ROUTES.get(k, ())))
     playbooks = tuple(pid for pid, p in PLAYBOOKS.items() if all(leg.key in entitled_keys for leg in p.legs if leg.required))
 
     state: dict[str, str] = {}
@@ -68,4 +69,4 @@ def compute_capabilities(ctx: AuthContext, registry: ActionRegistry, attached: f
             has_permitted = any(k in permitted_keys for k in keys)
             has_entitled = any(k in entitled_keys for k in keys)
             status[agent.value] = NOT_ENTITLED if has_permitted and not has_entitled else PRESENT
-    return Capabilities(attached, actions, playbooks, state, status)
+    return Capabilities(attached, actions, playbooks, state, status, frozenset(entitled_keys))

@@ -154,6 +154,17 @@ class Gap:
 
 
 @dataclass(frozen=True, slots=True)
+class Conflict:
+    """Two stored values for one quantity that disagree (spec §6.32). Both sides are Figures with refs, so each is verified like any other figure; the block that
+    states them is rendered by code (`conflicts.render`), never by the model."""
+
+    kind: str  # C1_METRIC | C2_MANUAL_INPUT
+    what: str
+    a: Figure
+    b: Figure
+
+
+@dataclass(frozen=True, slots=True)
 class BusinessStateEntry:
     key: str
     status: EntryStatus
@@ -162,6 +173,7 @@ class BusinessStateEntry:
     figures: tuple[Figure, ...] = ()
     facts: tuple[Fact, ...] = ()
     gaps: tuple[Gap, ...] = ()
+    conflicts: tuple[Conflict, ...] = ()
     preview_hint: str | None = None  # NOT_ENTITLED CFO-class entries point at cfo.preview (spec C17)
 
 

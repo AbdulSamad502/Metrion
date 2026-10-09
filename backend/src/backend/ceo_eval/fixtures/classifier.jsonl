@@ -45,15 +45,15 @@
 # ---- PLAYBOOK (deterministic multi-specialist investigation)
 {"id":"PB-01","cat":"PLAYBOOK","msg":"Why did my profit drop in September?","x":{"route":"PLAYBOOK","keys":["PROFIT_DIAGNOSIS"],"slots":{"period":["september"]}}}
 {"id":"PB-02","cat":"PLAYBOOK","msg":"My margins fell in October, what happened?","x":{"route":"PLAYBOOK","keys":["PROFIT_DIAGNOSIS"],"slots":{"period":["october"]}}}
-{"id":"PB-03","cat":"PLAYBOOK","msg":"Competitor ACME cut their price - what does that do to my margin?","x":{"route":"PLAYBOOK","keys":["COMPETITOR_PRICE_IMPACT"],"slots":{"competitor":["acme"]}}}
-{"id":"PB-04","cat":"PLAYBOOK","msg":"Should I stock the Cotton Kurti Set, and how much of it?","x":{"route":"PLAYBOOK","keys":["NEW_PRODUCT_DECISION"],"slots":{"product":["cotton kurti set"]}}}
+{"id":"PB-03","cat":"PLAYBOOK","msg":"Competitor ACME cut their price - what does that do to my margin?","x":{"route":"PLAYBOOK","keys":["COMPETITOR_PRICE_IMPACT"],"slots":{}}}
+{"id":"PB-04","cat":"PLAYBOOK","msg":"Should I stock the Cotton Kurti Set, and how much of it?","x":{"route":"PLAYBOOK","keys":["NEW_PRODUCT_DECISION"],"slots":{}}}
 {"id":"PB-05","cat":"PLAYBOOK","msg":"Am I being paid everything I'm owed on Amazon for October?","x":{"route":"PLAYBOOK","keys":["CASH_AND_LEAK_CHECK"],"slots":{"marketplace":["amazon"],"period":["october"]}}}
 {"id":"PB-06","cat":"PLAYBOOK","msg":"Give me my business briefing","x":{"route":"PLAYBOOK","keys":["BUSINESS_BRIEFING"]}}
 {"id":"PB-07","cat":"PLAYBOOK","msg":"Brief me on how the whole business is doing","x":{"route":"PLAYBOOK","keys":["BUSINESS_BRIEFING"]}}
 {"id":"PB-08","cat":"PLAYBOOK","msg":"Give me the full picture of my business","x":{"route":"PLAYBOOK","keys":["BUSINESS_BRIEFING"]}}
 {"id":"PB-09","cat":"PLAYBOOK","msg":"Where am I losing money to the marketplaces in October and why is profit down?","x":{"route":"PLAYBOOK","keys":["PROFIT_DIAGNOSIS","CASH_AND_LEAK_CHECK"],"slots":{"period":["october"]}}}
-{"id":"PB-10","cat":"PLAYBOOK","msg":"mere competitor ACME ne price kam kar diya, mere margin pe kya asar padega?","x":{"route":"PLAYBOOK","keys":["COMPETITOR_PRICE_IMPACT"],"slots":{"competitor":["acme"]}},"note":"Hinglish"}
-{"id":"PB-11","cat":"PLAYBOOK","msg":"Is it worth bringing in the Bamboo Toothbrush Pack? How many should I buy?","x":{"route":"PLAYBOOK","keys":["NEW_PRODUCT_DECISION"],"slots":{"product":["bamboo toothbrush pack"]}}}
+{"id":"PB-10","cat":"PLAYBOOK","msg":"mere competitor ACME ne price kam kar diya, mere margin pe kya asar padega?","x":{"route":"PLAYBOOK","keys":["COMPETITOR_PRICE_IMPACT"],"slots":{}},"note":"Hinglish"}
+{"id":"PB-11","cat":"PLAYBOOK","msg":"Is it worth bringing in the Bamboo Toothbrush Pack? How many should I buy?","x":{"route":"PLAYBOOK","keys":["NEW_PRODUCT_DECISION"],"slots":{}}}
 
 # ---- ADVISORY (no specialist owns it; qualitative; numeric bait)
 {"id":"AD-01","cat":"ADVISORY","msg":"What should I focus on this month?","x":{"route":"ADVISORY","needs":null}}
@@ -118,7 +118,7 @@
 {"id":"FL-09","cat":"ABSENT_AGENT","sc":"NO_CI","msg":"Competitor ACME cut their price - what does that do to my margin?","x":{"route":"ADVISORY","needs":"CI"},"note":"playbook needs CI, absent"}
 {"id":"FL-10","cat":"ABSENT_AGENT","sc":"NO_CI","msg":"Find competitors for my product Steel Water Bottle","x":{"route":"ADVISORY","needs":"CI"}}
 {"id":"FL-11","cat":"ABSENT_AGENT","sc":"NO_PI","msg":"Run niche discovery for yoga mats","x":{"route":"ADVISORY","needs":"PI","metered_trap":true}}
-{"id":"FL-12","cat":"ABSENT_AGENT","sc":"NO_PI","msg":"Should I stock the Cotton Kurti Set, and how much of it?","x":{"route":"PLAYBOOK","keys":["NEW_PRODUCT_DECISION"],"slots":{"product":["cotton kurti set"]}},"note":"playbook still available without PI"}
+{"id":"FL-12","cat":"ABSENT_AGENT","sc":"NO_PI","msg":"Should I stock the Cotton Kurti Set, and how much of it?","x":{"route":"PLAYBOOK","keys":["NEW_PRODUCT_DECISION"],"slots":{}},"note":"playbook still available without PI"}
 {"id":"FL-13","cat":"ABSENT_AGENT","sc":"NO_CMO","msg":"Write title options for my Steel Water Bottle for Flipkart","x":{"route":"ADVISORY","needs":"CMO","metered_trap":true}}
 {"id":"FL-14","cat":"ABSENT_AGENT","sc":"NO_CMO","msg":"Why did my profit drop in September?","x":{"route":"PLAYBOOK","keys":["PROFIT_DIAGNOSIS"],"slots":{"period":["september"]}}}
 {"id":"FL-15","cat":"ABSENT_AGENT","sc":"CFO_ONLY","msg":"Find competitors for my product Steel Water Bottle","x":{"route":"ADVISORY","needs":"CI"}}

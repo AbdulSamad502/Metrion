@@ -164,7 +164,10 @@ def test_findings_hold_refs_and_pointers_only(two_tenants, app_user):
                               report_ref={"generationId": str(uuid.uuid4())}, gap_reason="COGS missing", now=T0)
     [row] = repo.list_findings(a, inv)
     assert row["id"] == fid and row["figure_refs"] == [ref] and row["status"] == "PARTIAL" and row["gap_reason"] == "COGS missing"
-    assert set(row) == {"id", "turn_id", "agent_run_id", "source", "action_key", "status", "figure_refs", "report_ref", "gap_reason", "created_at"}  # no value column exists
+    # No numeric value column exists. `presentation` (B5) is the display snapshot of values resolved through their refs; it is None when the caller
+    # presents nothing, and is covered in test_ceo_presentation.py.
+    assert set(row) == {"id", "turn_id", "agent_run_id", "source", "action_key", "status", "figure_refs", "report_ref", "gap_reason", "presentation", "created_at"}
+    assert row["presentation"] is None
 
 
 def _turn(tenant, user, inv):

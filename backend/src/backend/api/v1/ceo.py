@@ -10,6 +10,11 @@
     POST /api/v1/ceo/investigations/{id}/reopen        RESOLVED -> ACTIVE (only from RESOLVED; the seller's note and all history are kept)
     PUT  /api/v1/ceo/investigations/{id}/agents/{code} attach / detach a specialist for FUTURE work (history is never touched)
     GET  /api/v1/ceo/agents/availability               per-agent availability for THIS member (PRESENT / NOT_PERMITTED / NOT_ENTITLED) and how many chat actions it has
+    GET  /api/v1/ceo/state/health                      the Hub's health strip: CFO bands + the latest saved P&L, as verified display snapshots (nothing is computed)
+    GET  /api/v1/ceo/investigations/{id}/turns/{tid}/flow   "Show flow": the CEO turn row and the child runs it fanned out to (spec 6.27)
+
+A turn may carry an optional `action` (a quick action the seller chose with a deterministic control, spec 6.26 L2): it skips the classifier and
+nothing else. Every finding carries a `presentation` display snapshot (spec R7 as amended).
 
 Tenant comes ONLY from the authenticated context (never a request field); every query is tenant-scoped and FORCE-RLS backs it, so another
 tenant's investigation id is a plain 404. Permission, attachment and entitlement are enforced per leg by the dispatch choke point, not
@@ -18,25 +23,37 @@ here. The old dummy hub (`/api/v1/ceo-hub/*`) is untouched and is not the CEO.
 
 from __future__ import annotations
 
-from datetime import date
-from typing import Any
+import json
+import queue
+from collections.abc import Iterator
+from datetime import date, datetime, timezone
+from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+import hashlib
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.auth.context import AuthContext, require_auth
-from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
-from backend.ceo import orchestrator
+from backend.auth.permissions import AGENT_CEO, AGENT_CFO, AGENT_CI, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
+from backend.ceo import business_state, orchestrator, summary
 from backend.ceo.capabilities import NOT_ENTITLED, compute_capabilities
 from backend.ceo.contract import AgentCode
 from backend.ceo.periods import PeriodUnresolvable, resolve_period
-from backend.ceo.plans import ACTIONS
+from backend.ceo.plans import ACTIONS, PLAYBOOKS, SLOT_VOCAB, VIRTUAL_ROUTES
+from backend.ceo import playbook_inputs
+from backend.ceo.figure_format import format_paise
+from backend.ceo.presentation import present_entry
+from backend.ceo import event_bus
+from backend.ceo.turn_lock import TurnInProgress
 from backend.ceo.registry import get_registry
 from backend.ceo.runtime import CeoRuntime
+from backend import config
 from backend.config import MissingConfig
-from backend.repositories import investigation_repo as repo
-from backend.services import ceo_runtime
+from backend.repositories import agent_run_repo, investigation_repo as repo
+from backend.services import ceo_attachments, ceo_reads, ceo_runtime
 
 router = APIRouter(prefix="/api/v1/ceo")
 
@@ -53,8 +70,59 @@ class StartInvestigationBody(BaseModel):
     title: str | None = Field(default=None, max_length=200)
 
 
+class UiActionBody(BaseModel):
+    """A quick action chosen with a deterministic UI control. `kind` is one of the executing routes; `key` is a catalog key (BUSINESS_STATE / ACTION /
+    PLAYBOOK) and absent for SYNTHESIZE; `slots` may only use the declared slot vocabulary, as short text the backend then resolves deterministically.
+    Whether the member may actually run it is decided server-side, per leg, exactly as for a classified message."""
+
+    kind: Literal["BUSINESS_STATE", "ACTION", "PLAYBOOK", "SYNTHESIZE"]
+    key: str | None = Field(default=None, max_length=64)
+    slots: dict[str, str] = Field(default_factory=dict)
+    refs: dict[str, UUID] = Field(default_factory=dict)  # references chosen through a control; each is validated against the caller's own tenant
+    # A decision playbook's structured form inputs (spec 6.33). Shape-checked here; money is integer paise and every cost carries an explicit state.
+    inputs: dict[str, Any] | None = None
+
+    @field_validator("slots")
+    @classmethod
+    def _slots_are_declared(cls, v: dict[str, str]) -> dict[str, str]:
+        if len(v) > len(SLOT_VOCAB) or any(k not in SLOT_VOCAB or len(val) > 64 for k, val in v.items()):
+            raise ValueError("undeclared or oversized slot")
+        return v
+
+    @field_validator("refs")
+    @classmethod
+    def _refs_are_declared(cls, v: dict[str, UUID]) -> dict[str, UUID]:
+        if any(k not in orchestrator.REF_VOCAB for k in v):
+            raise ValueError("undeclared reference")
+        return v
+
+    @model_validator(mode="after")
+    def _key_matches_kind(self) -> "UiActionBody":
+        if (self.kind == "SYNTHESIZE") != (self.key is None):
+            raise ValueError("a key is required for every kind except SYNTHESIZE, which takes none")
+        if self.inputs is not None:
+            if self.kind != "PLAYBOOK" or self.key is None or self.key not in PLAYBOOKS or not PLAYBOOKS[self.key].needs_form:
+                raise ValueError("form inputs belong only to a decision playbook")
+            try:
+                playbook_inputs.validate_inputs(self.key, self.inputs)  # shape only: the configured candidate-price bound is applied where the runtime is known
+            except playbook_inputs.InvalidInputs as exc:
+                raise ValueError("; ".join(exc.problems)) from None
+        return self
+
+
+class ClarificationReplyBody(BaseModel):
+    """The seller answering a decision card: the card's message id and the chosen option key (null = the free-text "Other", which is the message text)."""
+
+    id: UUID
+    option: str | None = Field(default=None, max_length=96)
+
+
 class TurnBody(BaseModel):
     message: str = Field(min_length=1, max_length=orchestrator.MAX_MESSAGE_CHARS)
+    # Optional quick action: when present the classifier is NOT called (spec 6.26 L2) and `message` is the label shown in the thread.
+    action: UiActionBody | None = None
+    clarification: ClarificationReplyBody | None = None  # answers a decision card; resumes ITS pending intent with no model call (spec 6.32)
+    attachment_ids: list[UUID] = Field(default_factory=list, max_length=20)  # files uploaded to this investigation; checked against it and the configured count
     # An explicit date range chosen with the UI's date picker. Both or neither. When present it is THE period for the turn: the model
     # neither chooses nor withholds it, and the same deterministic resolver validates it (a future or inverted range is a 422).
     period_start: date | None = None
@@ -67,6 +135,13 @@ class AttachBody(BaseModel):
 
 class ResolveBody(BaseModel):
     resolution_note: str = Field(min_length=1, max_length=2000)
+
+
+def _jd(value: Any) -> dict[str, Any]:
+    """`_j` for a JSON object response (typed so the route's declared return type holds)."""
+    out = _j(value)
+    assert isinstance(out, dict)
+    return out
 
 
 def _j(value: Any) -> Any:
@@ -124,7 +199,7 @@ def get_investigation(investigation_id: UUID, ctx: AuthContext = require_auth(pe
     _also(ctx, AGENT_CEO)
     inv = _require_visible(ctx, investigation_id)
     tenant = _tenant(ctx)
-    return _j({
+    return _jd({
         "investigation": inv, "agents": repo.agent_states(tenant, investigation_id), "messages": repo.list_messages(tenant, investigation_id),
         "turns": repo.list_turns(tenant, investigation_id), "findings": repo.list_findings(tenant, investigation_id),
     })
@@ -139,7 +214,8 @@ def get_findings(investigation_id: UUID, turn_id: UUID | None = None, ctx: AuthC
 
 @router.post("/investigations/{investigation_id}/turns")
 def post_turn(
-    investigation_id: UUID, body: TurnBody, ctx: AuthContext = require_auth(permission=AGENT_CEO), runtime: CeoRuntime = Depends(get_runtime)
+    investigation_id: UUID, body: TurnBody, background: BackgroundTasks, ctx: AuthContext = require_auth(permission=AGENT_CEO),
+    runtime: CeoRuntime = Depends(get_runtime),
 ) -> dict[str, Any]:
     # No second-key check here on purpose: a member with agent.ceo but without investigation.view is refused INSIDE the turn (`open_turn`),
     # which writes the DENIED audit row (spec AC11) and puts nothing into the investigation. A 403 here would drop that audit row.
@@ -153,19 +229,69 @@ def post_turn(
             raise HTTPException(status_code=422, detail={"code": "INVALID_PERIOD"}) from None
         explicit = (body.period_start, body.period_end)
     try:
-        result = orchestrator.run_turn(ctx, runtime, investigation_id, body.message, period=explicit)
+        ui = (
+            orchestrator.UiAction(body.action.kind, body.action.key, dict(body.action.slots), {k: str(v) for k, v in body.action.refs.items()}, body.action.inputs)
+            if body.action is not None else None
+        )
+        reply = orchestrator.ClarificationReply(body.clarification.id, body.clarification.option) if body.clarification is not None else None
+        max_files = config.ceo_attachment_max_files()
+        if body.attachment_ids and (max_files is None or len(body.attachment_ids) > max_files):
+            raise HTTPException(status_code=422, detail={"code": "TOO_MANY_ATTACHMENTS", "max": max_files})
+        bus = event_bus.get_bus()
+        result = orchestrator.run_turn(ctx, runtime, investigation_id, body.message, period=explicit, ui_action=ui, clarification=reply, attachment_ids=tuple(body.attachment_ids), sink=bus.sink_for(_tenant(ctx), investigation_id))
+        bus.done(_tenant(ctx), investigation_id, status=result.status)  # only a turn that actually ran ends a stream: a refused (409) one must not end another's
     except repo.InvestigationNotFound:
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"}) from None
     except orchestrator.InvestigationNotActive as exc:
         raise HTTPException(status_code=409, detail={"code": "INVESTIGATION_NOT_ACTIVE", "status": exc.status}) from None
+    except TurnInProgress:
+        raise HTTPException(status_code=409, detail={"code": "TURN_IN_PROGRESS"}) from None
+    except orchestrator.InvalidClarification:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_CLARIFICATION"}) from None
+    except orchestrator.InvalidAttachments:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_ATTACHMENTS"}) from None
+    except playbook_inputs.InvalidInputs as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_INPUTS", "problems": exc.problems}) from None
     except ValueError:
         raise HTTPException(status_code=422, detail={"code": "INVALID_MESSAGE"}) from None
-    return _j({
-        "turnId": result.turn_id, "status": result.status, "route": result.route, "routeKey": result.route_key, "answer": result.answer,
+    if result.turn_id is not None and result.status != "DENIED":  # spec D2: due-ness is checked after the answer is sent, so the seller never waits for it
+        background.add_task(summary.regenerate_if_due_locked, _tenant(ctx), investigation_id, runtime)
+    return _jd({
+        "turnId": result.turn_id, "status": result.status, "route": result.route, "routeKey": result.route_key,
+        "routeSource": "UI_ACTION" if (body.action is not None or body.clarification is not None) else "CLASSIFIER", "answer": result.answer,
+        "choices": result.choices, "clarificationId": str(result.message_id) if result.choices and result.message_id else None,
         "messageId": result.message_id, "compositionMode": result.composition_mode, "clarifyFor": result.clarify_for, "notes": result.notes,
         "findings": result.findings, "timings": result.timings,
         "events": [{"kind": e.kind, "atMs": e.at_ms, "data": e.data} for e in result.events],
     })
+
+
+@router.post("/investigations/{investigation_id}/attachments", status_code=201)
+async def upload_attachment(investigation_id: UUID, file: UploadFile, ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+    """Store one file the seller attaches to this conversation (spec 6.34). The type is decided from the CONTENT; the name and declared type are never trusted. Limits
+    are configuration with no default: unset refuses. The file is stored tenant-scoped and read for bounded, untrusted text; nothing is imported or acted on."""
+    _also(ctx, INVESTIGATION_VIEW)
+    if _require_visible(ctx, investigation_id)["status"] != "ACTIVE":
+        raise HTTPException(status_code=409, detail={"code": "INVESTIGATION_NOT_ACTIVE"})
+    max_bytes, max_files, max_pages = config.ceo_attachment_max_bytes(), config.ceo_attachment_max_files(), config.ceo_attachment_max_pages()
+    if max_bytes is None or max_files is None or max_pages is None:
+        raise HTTPException(status_code=503, detail={"code": "ATTACHMENTS_NOT_CONFIGURED"})
+    data = await file.read(max_bytes + 1)  # never reads more than one byte past the limit into memory
+    try:
+        kind = ceo_attachments.check(data, max_bytes=max_bytes)
+    except ValueError as exc:
+        if str(exc) == "too large":
+            raise HTTPException(status_code=413, detail={"code": "ATTACHMENT_TOO_LARGE", "maxBytes": max_bytes}) from None
+        raise HTTPException(status_code=415, detail={"code": "ATTACHMENT_TYPE_NOT_SUPPORTED", "problem": str(exc)}) from None
+    ex = ceo_attachments.extract(data, kind, max_pages=max_pages)
+    try:
+        new_id = repo.insert_attachment(
+            _tenant(ctx), investigation_id, filename=(file.filename or "file").replace("\\", "/").split("/")[-1], detected_type=kind, content=data,
+            sha256=hashlib.sha256(data).hexdigest(), extraction_status=ex.status, extraction_note=ex.note, extracted_text=ex.text, created_by=ctx.app_user_id,
+        )
+    except repo.InvestigationNotFound:
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"}) from None
+    return {"id": str(new_id), "filename": file.filename, "type": kind, "byteSize": len(data), "status": ex.status, "note": ex.note}
 
 
 @router.post("/investigations/{investigation_id}/resolve")
@@ -207,6 +333,138 @@ def reopen(investigation_id: UUID, ctx: AuthContext = require_auth(permission=IN
     return {"status": "ACTIVE"}
 
 
+SSE_KEEPALIVE_SECONDS = 15  # transport constants, not business thresholds: a comment line keeps proxies from closing an idle stream
+SSE_MAX_IDLE_KEEPALIVES = 8  # ~2 minutes with no turn: the stream ends and the client falls back to polling
+
+
+@router.get("/investigations/{investigation_id}/events")
+def stream_turn_events(investigation_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> StreamingResponse:
+    """Server-sent progress of the next/current turn in this investigation (spec L11, L8): CLASSIFIED, LEG_STARTED/LEG_FINISHED (with the finding id),
+    STATE_READ, ANSWER_READY, then TURN_DONE, after which the stream ends. Open it BEFORE posting the turn. Events carry labels only (route, key, status,
+    finding id), never a figure or an answer: the findings and the answer are read through the normal, gated endpoints. The subscription is keyed by
+    the caller's OWN tenant, so another tenant's investigation id is a plain 404 and can never receive these events. If no event arrives (a different
+    API worker ran the turn, or the proxy buffers), the client keeps polling findings: polling remains the fallback transport."""
+    _also(ctx, INVESTIGATION_VIEW)
+    _require_visible(ctx, investigation_id)
+    tenant = _tenant(ctx)
+    bus = event_bus.get_bus()
+    q = bus.subscribe(tenant, investigation_id)
+
+    def frames() -> Iterator[str]:
+        idle = 0
+        try:
+            yield "retry: 3000\n\n"
+            while True:
+                try:
+                    item = q.get(timeout=SSE_KEEPALIVE_SECONDS)
+                except queue.Empty:
+                    idle += 1
+                    if idle >= SSE_MAX_IDLE_KEEPALIVES:
+                        return
+                    yield ": keepalive\n\n"
+                    continue
+                idle = 0
+                if item is None:
+                    return
+                yield f"event: {item['kind']}\ndata: {json.dumps(item)}\n\n"
+                if item["kind"] == event_bus.DONE:
+                    return
+        finally:
+            bus.unsubscribe(tenant, investigation_id, q)
+
+    return StreamingResponse(frames(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.get("/state/health")
+def state_health(ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+    """The Hub's health strip: CFO's GOOD / WATCH / AT_RISK bands and the latest saved P&L, each as a verified display snapshot. These are Business
+    State reads of PERSISTED results: nothing is computed, no composite score and no projection exists (CP1-U1). Per-entry gating is the entry's
+    own (agent.cfo + CFO entitlement; a refusal comes back as a status with a plain gap, never a figure). No investigation is involved, so every agent
+    counts as attached for this tenant-level strip."""
+    _also(ctx, INVESTIGATION_VIEW)
+    attached = frozenset(a.value for a in AgentCode)
+    now = datetime.now(timezone.utc)
+    out = []
+    for key in ("BS_HEALTH_BANDS", "BS_PNL_LATEST"):
+        entry = business_state.read_entry(ctx, key, attached=attached, now=now)
+        out.append({
+            "key": entry.key, "status": entry.status.value, "period": entry.period, "asOf": entry.as_of.isoformat() if entry.as_of else None,
+            "previewHint": entry.preview_hint, "presentation": present_entry(_tenant(ctx), entry),
+        })
+    return {"entries": out}
+
+
+def _form_support_gate(ctx: AuthContext) -> None:
+    """The run-forms read the seller's STORED cost inputs, which are CFO data: they need the CEO key, the investigation key and the CFO key (spec 6.33)."""
+    _also(ctx, INVESTIGATION_VIEW)
+    _also(ctx, AGENT_CFO)
+
+
+@router.get("/forms/price-impact")
+def form_price_impact(sku: str | None = Query(default=None, max_length=120), runtime: CeoRuntime = Depends(get_runtime), ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+    """What the price-impact run-form needs to offer REAL choices and to show the seller the stored value it will use: tracked competitors, the (marketplace,
+    category, fee type) combinations that have a fee reference, the saved cost per unit for the SKU with its effective date, and the configured price bound.
+    Reads only; nothing is computed or defaulted."""
+    _form_support_gate(ctx)
+    tenant, today = _tenant(ctx), runtime.clock().date()
+    competitors = (
+        [{"id": str(r["id"]), "label": r.get("label")} for r in ceo_reads.list_active_competitors(tenant, limit=50) if r.get("label")]
+        if has_permission(role=ctx.role, permissions=ctx.permissions, key=AGENT_CI) else []  # type: ignore[arg-type]
+    )
+    stored = ceo_reads.stored_cogs(tenant, sku.strip(), today) if sku and sku.strip() else None
+    return _jd({
+        "competitors": competitors,
+        "feeOptions": [{"marketplace": o["marketplace"], "category": o["category"], "feeType": o["fee_type"]} for o in ceo_reads.fee_reference_options(tenant, as_of=today)],
+        "storedCost": ({"amountPaise": stored.amount_paise, "formatted": format_paise(stored.amount_paise) if stored.amount_paise is not None else None,
+                        "effectiveFrom": stored.effective_from, "reason": stored.reason} if stored is not None else None),
+        "maxCandidatePrices": runtime.max_candidate_prices,
+    })
+
+
+@router.get("/forms/new-product")
+def form_new_product(sku: str | None = Query(default=None, max_length=120), ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+    """The stored inputs the new-product run reads, shown so the seller sees exactly what will be used: every active supplier quote at the SKU and the active
+    batch budget, each with its id and date (a second active quote or budget makes the engine ask which to use, never pick)."""
+    _form_support_gate(ctx)
+    tenant = _tenant(ctx)
+
+    def row(r: dict[str, Any]) -> dict[str, Any]:
+        v = r["value"] or {}
+        text = (f"{v.get('supplier_name')}: {format_paise(v['unit_cost_paise'])} per unit" if isinstance(v.get("unit_cost_paise"), int)
+                else f"Budget {format_paise(v['amount_paise'])}" if isinstance(v.get("amount_paise"), int) else "A saved input")
+        return {"id": r["id"], "createdAt": r["created_at"], "value": v, "reason": r.get("reason"), "summary": text}  # `summary` is the stored value, formatted by the backend
+
+    quotes = [row(r) for r in ceo_reads.stored_quotes(tenant, sku.strip())] if sku and sku.strip() else []
+    return _jd({"quotes": quotes, "budget": [row(r) for r in ceo_reads.stored_budget(tenant)], "budgetTargetRef": str(tenant)})  # the target the budget is saved at (ACCOUNT, tenant)
+
+
+@router.get("/investigations/{investigation_id}/turns/{turn_id}/flow")
+def get_turn_flow(investigation_id: UUID, turn_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+    """"Show flow" (spec 6.27): how a turn was answered, read from the audit rows only: the CEO turn, whether it used the classifier, and every run it
+    fanned out to (agent, action, status, the permission/entitlement verdicts, timing). Tenant-scoped; another tenant's ids are a plain 404."""
+    _also(ctx, INVESTIGATION_VIEW)
+    _require_visible(ctx, investigation_id)
+    tenant = _tenant(ctx)
+    turn = repo.get_turn(tenant, turn_id)
+    if turn is None or turn["investigation_id"] != investigation_id:
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
+    anchor = agent_run_repo.get_run(tenant, turn["agent_run_id"])
+    children = agent_run_repo.list_children(tenant, turn["agent_run_id"])
+
+    def run(r: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": r["id"], "agentId": r["agent_id"], "triggerRef": r["trigger_ref"], "status": r["status"], "permissionCheck": r["permission_check"],
+            "entitlementCheck": r["entitlement_check"], "startedAt": r["started_at"], "finishedAt": r["finished_at"],
+            "reason": r["error_reason"] if r["status"] in ("DENIED", "FAILED") else None,
+        }
+
+    return _jd({
+        "turnId": turn["id"], "route": turn["route"], "routeKey": turn["route_key"], "routeSource": turn["route_source"], "status": turn["status"],
+        "compositionMode": turn["composition_mode"], "timings": turn["stage_timings"], "ceo": run(anchor) if anchor else None,
+        "legs": [run(c) for c in children],
+    })
+
+
 @router.get("/agents/availability")
 def agent_availability(ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW), runtime: CeoRuntime = Depends(get_runtime)) -> dict[str, Any]:
     """What this member can use right now, independent of any investigation: `status` is PRESENT, NOT_PERMITTED or NOT_ENTITLED (the
@@ -214,7 +472,9 @@ def agent_availability(ctx: AuthContext = require_auth(permission=INVESTIGATION_
     _also(ctx, AGENT_CEO)
     caps = compute_capabilities(ctx, runtime.registry, frozenset(a.value for a in AgentCode), now=runtime.clock())
     reg = get_registry()
-    chat_actions = {a.value: sum(1 for k in ACTIONS if reg.get(k).agent is a) for a in AgentCode}
+    # The GST lookup is one action to the model; it is counted under the agent of its first route (CFO's Route A). Route B (no agent) stays available to a
+    # member without CFO, but it is not an action of any specialist.
+    chat_actions = {a.value: sum(1 for k in ACTIONS if reg.get(VIRTUAL_ROUTES.get(k, (k,))[0]).agent is a) for a in AgentCode}
     return {code: {"status": status, "chatActions": chat_actions.get(code, 0)} for code, status in caps.agent_status.items()}
 
 

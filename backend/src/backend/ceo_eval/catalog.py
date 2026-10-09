@@ -71,6 +71,7 @@ ACTION_TEXT: dict[str, tuple[str, tuple[str, ...]]] = {
     "cfo.financial_health": ("Financial health bands (good / watch / at-risk) for a period", ("period",)),
     "cfo.cash_reconciliation": ("Cash reconciliation: is the marketplace paying what it owes, for a marketplace and period", ("marketplace", "period")),
     "cfo.strategic_briefing": ("CFO strategic briefing for a period", ("period",)),
+    "cfo.gst_lookup": ("Which GST rate likely applies to a product, from its name (provisional lookup from a cited source)", ("product",)),
     "pi.discover": ("Run product niche discovery for a niche (METERED, costs units)", ("niche",)),
     "pi.supplier_lookup": ("Look up suppliers for chosen candidates from a finished product-research run (METERED)", ()),
     "pi.report": ("Show a finished product-research run again from saved data", ()),
@@ -92,11 +93,11 @@ ACTION_TEXT: dict[str, tuple[str, tuple[str, ...]]] = {
     "cmo.market_trends": ("Generate the market-trends report for a niche (METERED; only after a preview)", ("niche",)),
 }
 
-# Harness candidates from spec §6.12's starter table (B4 builds the real playbooks): id -> (description, agents it needs, required slots)
+# Harness candidates from spec §6.12's starter table. The two form playbooks take NO chat slots (spec 6.33: money is entered in a form), as in production: id -> (description, agents it needs, required slots)
 PLAYBOOK_TEXT: dict[str, tuple[str, frozenset[str], tuple[str, ...]]] = {
     "PROFIT_DIAGNOSIS": ("Why did my profit or margin drop? Health, anomalies and a briefing for a period", frozenset({"CFO"}), ("period",)),
-    "COMPETITOR_PRICE_IMPACT": ("A competitor changed their price — what does it do to my margin?", frozenset({"CI", "CFO"}), ("competitor",)),
-    "NEW_PRODUCT_DECISION": ("Should I stock this product, and how much? Landed cost, batch size, supplier ranking", frozenset({"CFO"}), ("product",)),
+    "COMPETITOR_PRICE_IMPACT": ("A competitor changed their price — what does it do to my margin?", frozenset({"CI", "CFO"}), ()),
+    "NEW_PRODUCT_DECISION": ("Should I stock this product, and how much? Landed cost, batch size, supplier ranking", frozenset({"CFO"}), ()),
     "CASH_AND_LEAK_CHECK": ("Am I being paid what I am owed? Cash reconciliation plus leak check", frozenset({"CFO"}), ("marketplace", "period")),
     "BUSINESS_BRIEFING": ("Give me an overview briefing of the whole business from saved results", frozenset(), ()),
 }

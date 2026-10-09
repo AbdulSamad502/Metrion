@@ -32,4 +32,5 @@ def build_runtime() -> CeoRuntime:
     return CeoRuntime(
         classifier=factory(config.ceo_classifier_model()), composer=factory(config.ceo_llm_model()),
         leg_timeout_seconds=config.ceo_leg_timeout_seconds(), max_legs=config.ceo_playbook_max_legs(),
+        max_candidate_prices=config.ceo_max_candidate_prices(),
     )

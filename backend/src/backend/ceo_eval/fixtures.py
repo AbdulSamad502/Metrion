@@ -23,9 +23,14 @@ def _read(name: str) -> list[dict]:
     return out
 
 
+def _read_optional(name: str) -> list[dict]:
+    return _read(name) if (FIXTURE_DIR / name).exists() else []
+
+
 def load_classifier_cases() -> list[classifier.ClassifierCase]:
-    return [classifier.case_from_json(r) for r in _read("classifier.jsonl")]
+    """The hand-written cases plus the template-expanded ones (`classifier_gen.jsonl`, produced by `generate.py`; each carries its family)."""
+    return [classifier.case_from_json(r) for r in (*_read("classifier.jsonl"), *_read_optional("classifier_gen.jsonl"))]
 
 
 def load_composer_cases() -> list[composer.ComposerCase]:
-    return [composer.case_from_json(r) for r in _read("composer.jsonl")]
+    return [composer.case_from_json(r) for r in (*_read("composer.jsonl"), *_read_optional("composer_gen.jsonl"))]

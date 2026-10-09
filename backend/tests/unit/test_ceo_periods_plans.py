@@ -8,7 +8,7 @@ from datetime import date
 import pytest
 
 from backend.ceo.periods import PeriodUnresolvable, resolve_period
-from backend.ceo.plans import ACTIONS, PLAYBOOKS, UNSUPPORTED_PLAYBOOKS, Clarification, ResolvedSlots, resolve_slots
+from backend.ceo.plans import ACTIONS, PLAYBOOK_LEG_SLOTS, PLAYBOOKS, Clarification, ResolvedSlots, resolve_slots
 from backend.ceo.registry import get_registry
 
 TODAY = date(2026, 10, 7)
@@ -65,14 +65,26 @@ def test_marketplace_text_is_normalised():
 
 # ------------------------------------------------------------------------------------------------ the fixed plans
 def test_every_planned_action_is_a_wired_registry_action_with_valid_slots():
+    import uuid
+
+    from backend.ceo.plans import GST_KEY, GST_ROUTE_KEYS
+
     reg = get_registry()
-    resolved = resolve_slots({"period": "september", "marketplace": "amazon"}, ("marketplace", "period"), tenant_id=TENANT, today=TODAY)
-    assert isinstance(resolved, ResolvedSlots)
+    base = resolve_slots({"period": "september", "marketplace": "amazon"}, ("marketplace", "period"), tenant_id=TENANT, today=TODAY)
+    assert isinstance(base, ResolvedSlots)
+    # every value code can resolve, so each plan can build its slots (the resolvers themselves are tested where their data lives)
+    resolved = ResolvedSlots(
+        tenant_id=TENANT, today=TODAY, period=base.period, marketplace=base.marketplace, competitor_url_id=uuid.uuid4(), competitor_label="Rival",
+        seller_price_paise=49900, pi_run_id=uuid.uuid4(), product_text="steel water bottle",
+    )
     for key, plan in ACTIONS.items():
-        spec = reg.get(key)
-        assert spec.wired and spec.agent is not None and not spec.denial_surface
         built = plan.build_slots(resolved)
-        spec.slot_model.model_validate({**built, **dict(spec.fixed_params)})  # the registry's own model accepts exactly what the plan builds
+        specs = [reg.get(k) for k in GST_ROUTE_KEYS] if key == GST_KEY else [reg.get(key)]  # GST is one action to the model; code picks the route
+        for spec in specs:
+            assert spec.wired and not spec.denial_surface
+            spec.slot_model.model_validate({**built, **dict(spec.fixed_params)})  # the registry's own model accepts exactly what the plan builds
+        if key != GST_KEY:
+            assert specs[0].agent is not None
 
 
 def test_slot_builders_never_take_a_tenant_id_from_the_request():
@@ -87,13 +99,13 @@ def test_playbook_legs_are_registry_keys_and_independent():
     for pb in PLAYBOOKS.values():
         assert len({leg.key for leg in pb.legs}) == len(pb.legs)
         for leg in pb.legs:
-            assert leg.key in ACTIONS and leg.key in reg  # no leg outside the closed, wired set
+            assert leg.key in reg  # no leg outside the closed, wired set
+            assert leg.key in ACTIONS or (pb.id, leg.key) in PLAYBOOK_LEG_SLOTS  # a form-only playbook leg has its own slot builder, never a chat action
         assert all(read.startswith("BS_") for read in pb.state_reads)
 
 
-def test_unsupported_starter_playbooks_are_declared_not_silently_absent():
-    assert set(UNSUPPORTED_PLAYBOOKS) == {"COMPETITOR_PRICE_IMPACT", "NEW_PRODUCT_DECISION"}
-    assert not set(UNSUPPORTED_PLAYBOOKS) & set(PLAYBOOKS)
+def test_the_two_decision_playbooks_run_only_from_a_form():
+    assert {k for k, p in PLAYBOOKS.items() if p.needs_form} == {"COMPETITOR_PRICE_IMPACT", "NEW_PRODUCT_DECISION"}  # run only from a form's inputs (spec 6.33)
 
 
 def test_business_briefing_has_no_legs_and_reads_only_persisted_state():

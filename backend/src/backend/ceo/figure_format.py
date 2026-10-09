@@ -26,6 +26,13 @@ def format_paise(value_paise: int | None, *, is_available: bool = True) -> str:
     return f"{sign}₹{rupees:,}.{remainder_paise:02d}"
 
 
+def format_units(count: int | None, *, is_available: bool = True) -> str:
+    """A stored unit COUNT (the engine carries it in `value_paise`'s slot, e.g. BATCH_CONSTRAINED_QUANTITY) shown as units, never as rupees."""
+    if not is_available or count is None:
+        return UNAVAILABLE
+    return f"{count:,} unit" if count == 1 else f"{count:,} units"
+
+
 def register_for(*, is_available: bool, confidence: str | None) -> Register:
     """`cfo_actions._register_for` — UNAVAILABLE beats confidence; PROVISIONAL has no register of its own and is
     presented as DERIVED (never ESTIMATE, which §7.4.7 reserves for estimate_ref-bearing figures)."""

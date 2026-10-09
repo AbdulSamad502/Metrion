@@ -70,7 +70,7 @@ def test_the_expected_v1_catalog(registry):
 
 
 def test_unwired_actions_are_exactly_the_ones_that_need_later_checkpoints(registry):
-    assert {s.key for s in registry.specs() if not s.wired} == {"cfo.gst_lookup", "service.gst_lookup", "ci.research_now"}
+    assert {s.key for s in registry.specs() if not s.wired} == {"ci.research_now"}  # the GST routes were wired in B4
 
 
 def test_cmo_actions_match_the_dummy_hub_permission_table(registry):

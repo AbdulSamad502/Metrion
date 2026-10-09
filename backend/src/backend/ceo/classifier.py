@@ -25,7 +25,7 @@ from typing import Any
 from backend.ceo.plans import ACTIONS, PLAYBOOKS, SLOT_VOCAB
 from backend.llm.model import STATIC_END, Completion, LlmModel
 
-PROMPT_VERSION = "ceo-classifier-1"
+PROMPT_VERSION = "ceo-classifier-2"
 
 ROUTES: tuple[str, ...] = ("BUSINESS_STATE", "ACTION", "PLAYBOOK", "ADVISORY", "SYNTHESIZE", "CLARIFY", "OUT_OF_SCOPE")
 KEYED_ROUTES = frozenset({"BUSINESS_STATE", "ACTION", "PLAYBOOK"})
@@ -69,9 +69,12 @@ def build_catalog(allowed_actions: Sequence[str], allowed_playbooks: Sequence[st
 
 
 _ROUTE_HELP = """\
-BUSINESS_STATE - answerable from saved results. route_key = one STATE id below.
-ACTION - needs exactly one named capability. route_key = one ACTION key below.
-PLAYBOOK - a multi-specialist investigation. route_key = one PLAYBOOK id below.
+BUSINESS_STATE - answerable from saved results. route_key = one STATE id below. Prefer it for overview questions ("how did last month
+  go", "how am I doing", "what is my latest ...") whenever a STATE entry covers them.
+ACTION - needs exactly one named capability. route_key = one ACTION key below. Use it only when the seller asks for that one specific
+  check by name; a "why" question is never a single ACTION when a PLAYBOOK below covers it.
+PLAYBOOK - a multi-specialist investigation. route_key = one PLAYBOOK id below. Prefer it over a single ACTION whenever the question
+  matches a playbook description (for example why profit or margin dropped, or whether the marketplace has paid what it owes).
 ADVISORY - a business question no capability below owns (strategy, planning, what to focus on). Also use it when the question needs a
   specialist that is NOT in the lists below: set needs_agent to it (CFO, CI, PI or CMO).
 SYNTHESIZE - wrap up what this investigation already found; no new work.
@@ -193,7 +196,8 @@ def parse_decision(text: str, cat: Catalog, preset_slots: Mapping[str, str] | No
         return Decision(False, None, None, "CLARIFY", None, {}, None, "UNCLEAR_REQUEST", frozenset({"PARSE_FAIL"}))
     flags: set[str] = set()
     raw_route, raw_key = _s(data.get("route")), _s(data.get("route_key"))
-    raw_slots = data.get("slots") if isinstance(data.get("slots"), dict) else {}
+    maybe_slots = data.get("slots")
+    raw_slots: dict[Any, Any] = maybe_slots if isinstance(maybe_slots, dict) else {}
     slots: dict[str, str] = {}
     for k, v in raw_slots.items():
         val = _s(v)
@@ -235,6 +239,20 @@ def parse_decision(text: str, cat: Catalog, preset_slots: Mapping[str, str] | No
     if route in KEYED_ROUTES:
         needs = None  # an executing route cannot also claim a needed-but-absent agent
     return Decision(True, raw_route, raw_key, route or "CLARIFY", key if route in KEYED_ROUTES else None, slots, needs, clarify_for, frozenset(flags))
+
+
+UI_ACTION_ROUTES: tuple[str, ...] = ("BUSINESS_STATE", "ACTION", "PLAYBOOK", "SYNTHESIZE")
+
+
+def decision_from_ui_action(route: str, key: str | None, slots: Mapping[str, str], cat: Catalog, preset_slots: Mapping[str, str] | None = None) -> Decision:
+    """A seller-chosen quick action (a deterministic UI control, spec section 6.26 L2) becomes the SAME verdict a model would have produced, by going
+    through `parse_decision`: the closed catalog, the slot vocabulary and the required-slot check are enforced by that one function, so a UI action
+    has no weaker path than a classified message. No model is called. A route that is not an executing route (ADVISORY / CLARIFY / OUT_OF_SCOPE)
+    is not a UI action and is refused as a clarification."""
+    if route not in UI_ACTION_ROUTES:
+        return Decision(True, route, key, "CLARIFY", None, {}, None, "UNCLEAR_REQUEST", frozenset({"UNKNOWN_ROUTE"}))
+    payload = {"route": route, "route_key": key, "slots": dict(slots), "needs_agent": None, "clarify_for": None}
+    return parse_decision(json.dumps(payload), cat, preset_slots)
 
 
 @dataclass(frozen=True, slots=True)

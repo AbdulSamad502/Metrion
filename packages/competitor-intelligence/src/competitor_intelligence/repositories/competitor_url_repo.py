@@ -161,3 +161,17 @@ def archive_url(tenant_id: UUID, url_id: UUID) -> None:
             text("UPDATE competitor_url SET status = :status WHERE tenant_id = :tenant_id AND id = :id"),
             {"tenant_id": str(tenant_id), "id": str(url_id), "status": UrlStatus.ARCHIVED.value},
         )
+
+
+def list_active(tenant_id: UUID, *, limit: int) -> list[dict[str, Any]]:
+    """The tenant's ACTIVE tracked competitors, newest first, at most `limit`. A read for the CEO's Business State (spec 6.13): ids, marketplace and
+    the seller's own label only; the capture itself is read through `build_ci_handoff_snapshot`."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                "SELECT id, marketplace, label, status FROM competitor_url "
+                "WHERE tenant_id = :tenant_id AND status = 'ACTIVE' ORDER BY created_at DESC, id LIMIT :limit"
+            ),
+            {"tenant_id": str(tenant_id), "limit": limit},
+        ).mappings().all()
+    return [dict(r) for r in rows]

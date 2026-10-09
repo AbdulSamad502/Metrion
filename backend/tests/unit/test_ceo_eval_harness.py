@@ -86,7 +86,7 @@ def test_catalogs_are_filtered_to_present_agents():
 
 def test_unwired_and_denial_surface_actions_are_never_offered():
     keys = build_catalog("FULL").all_keys()
-    assert not keys & {"cfo.preview", "cfo.gst_lookup", "service.gst_lookup", "ci.research_now"}
+    assert not keys & {"cfo.preview", "service.gst_lookup", "ci.research_now"}  # cfo.gst_lookup was wired in B4 (Route A of the GST lookup)
 
 
 def test_metered_flag_comes_from_the_registry_effect():

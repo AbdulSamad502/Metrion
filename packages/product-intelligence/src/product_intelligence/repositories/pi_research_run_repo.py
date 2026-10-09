@@ -147,3 +147,18 @@ def finish_run(tenant_id: UUID, run_id: UUID, *, status: str, finished_at: datet
         )
         if result.rowcount == 0:
             raise ValueError(f"pi_research_run {run_id} not found for tenant {tenant_id}")
+
+
+def latest_run_for_tenant(tenant_id: UUID, *, finished_only: bool = False) -> dict[str, Any] | None:
+    """The tenant's most recent research run (a QUEUED run, which has no `started_at` yet, counts as the newest). With `finished_only`, the most recent
+    COMPLETE or PARTIAL run (the only ones that have a report). Status and dates only. A read for the CEO (spec 6.13)."""
+    where = "AND status IN ('COMPLETE', 'PARTIAL') " if finished_only else ""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text(
+                "SELECT id, niche_brief_id, depth, trigger, status, started_at, finished_at FROM pi_research_run "
+                "WHERE tenant_id = :tenant_id " + where + "ORDER BY (started_at IS NULL) DESC, started_at DESC, id LIMIT 1"
+            ),
+            {"tenant_id": str(tenant_id)},
+        ).mappings().first()
+    return dict(row) if row is not None else None

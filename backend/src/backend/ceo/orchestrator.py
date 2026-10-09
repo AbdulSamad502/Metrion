@@ -19,23 +19,27 @@ from __future__ import annotations
 
 import contextvars
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
+from backend import config
 from backend.auth.context import AuthContext
-from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, has_permission
-from backend.ceo import business_state, classifier
+from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
+from backend.ceo import business_state, classifier, clarification, input_session
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.composer import Composition, compose, template_only
 from backend.ceo.contract import AgentCode, BusinessStateEntry, Denial, LegResult, LegStatus, TurnDenied
 from backend.ceo.dispatch import CeoTurn, dispatch, open_turn
 from backend.ceo.evidence import EvidenceCollector, finding_status_for_entry
-from backend.ceo.plans import ACTIONS, PLAYBOOKS, SLOT_QUESTIONS, Clarification, ResolvedSlots, resolve_slots
+from backend.ceo.presentation import present_entry, present_leg, safe
+from backend.ceo.plans import ACTIONS, GST_KEY, GST_ROUTE_KEYS, PLAYBOOK_LEG_SLOTS, PLAYBOOKS, SLOT_QUESTIONS, Clarification, ResolvedSlots, gst_route_key, resolve_playbook_run, resolve_slots
+from backend.ceo.playbook_inputs import InvalidInputs
 from backend.ceo.runtime import CeoRuntime, EventLog, EventSink, StageClock, TurnEvent
+from backend.ceo.turn_lock import investigation_turn_lock
 from backend.entitlement import meter_ceo_turn
 from backend.repositories import investigation_repo as repo
 
@@ -43,6 +47,47 @@ logger = logging.getLogger(__name__)
 
 MAX_MESSAGE_CHARS = 4000  # a request-size bound, not a business threshold
 GENERAL_GUIDANCE_TEXT = "This is general advice, not derived from your data."
+
+
+@dataclass(frozen=True, slots=True)
+class UiAction:
+    """A quick action the seller chose with a deterministic control (spec section 6.26 L2). It skips the classifier but nothing else: the same closed
+    catalog (attached, permitted and entitled), slot validation, per-leg pre-flight, choke point, evidence, gate and persistence apply."""
+
+    route: str  # BUSINESS_STATE | ACTION | PLAYBOOK | SYNTHESIZE
+    key: str | None
+    slots: Mapping[str, str] = field(default_factory=dict)
+    refs: Mapping[str, str] = field(default_factory=dict)  # validated references chosen through a control (spec 6.12): ids, checked against the caller's tenant
+    inputs: Mapping[str, Any] | None = None  # a decision playbook's structured form inputs (spec 6.33): validated by code, never produced by a model
+
+
+@dataclass(frozen=True, slots=True)
+class ClarificationReply:
+    """The seller answering a decision card: the card's message id and the chosen option key, or None for the free-text "Other" (the message text)."""
+
+    card_id: UUID
+    option: str | None
+
+
+def clarification_module_resume(card: Mapping[str, Any], option: str | None, text: str) -> tuple[str, str | None, dict[str, str], dict[str, str]]:
+    return clarification.resume_action(card, option_key=option, other_text=text)
+
+
+class InvalidAttachments(Exception):
+    """An attachment id that is not an attachment of THIS investigation in this tenant (foreign, unknown or from another conversation)."""
+
+
+class InvalidClarification(Exception):
+    """The reply names a card that does not exist in this investigation, is not a decision card, or an option it does not have."""
+
+
+# the reference kinds a UI action may carry today (each is validated against the caller's own tenant before use)
+REF_VOCAB: tuple[str, ...] = ("competitor_url_id",)
+
+
+UI_ACTION_UNAVAILABLE_TEXT = (
+    "That quick action is not available for this investigation. Its agent may be detached, not on your plan, or you may not have access to it."
+)
 
 
 class InvestigationNotActive(Exception):
@@ -65,6 +110,7 @@ class TurnResult:
     events: list[TurnEvent] = field(default_factory=list)
     clarify_for: str | None = None
     notes: list[str] = field(default_factory=list)  # period/marketplace interpretations echoed back to the seller (AC17)
+    choices: dict[str, Any] | None = None  # the decision card of a clarification (spec 6.32); the card's id is `message_id`
 
 
 # ------------------------------------------------------------------------------------------------ investigations
@@ -95,12 +141,18 @@ OUT_OF_SCOPE_TEXT = (
     "Some specialist capabilities (such as pricing curves, landed cost, listing writing and market trends) also can't be run from chat yet; "
     "please use that agent's own page for them."
 )
+GST_WALL_TEXT = (
+    "You do not have access to the GST lookup. It needs the GST lookup permission on your account, and I will not answer a GST question from general "
+    "knowledge. Please ask your account owner, or check with your accountant."
+)
 DENIED_TEXT = {
     Denial.PERMISSION: "You do not have access to the CEO for this investigation.",
     Denial.ENTITLEMENT: "Your CEO conversation allowance for this period has been used. It resets with your plan period.",
 }
 FAILED_TEXT = "Something went wrong on our side and nothing was changed. Please try again."
 CONFIG_TEXT = "The CEO's investigation limits have not been configured by the operator yet, so this investigation cannot run."
+FORM_TEXT = "This one needs exact prices and costs, which are entered in a form rather than typed into chat. Open the form below and I will run it on what you enter."
+BAD_FORM_TEXT = "That form could not be used, so nothing was run: "
 
 
 def _clarification_text(slot: str) -> str:
@@ -123,7 +175,20 @@ def _turn_context(tenant: UUID, inv: dict[str, Any], current_msg: UUID) -> tuple
 # ------------------------------------------------------------------------------------------------ the turn
 def run_turn(
     ctx: AuthContext, runtime: CeoRuntime, investigation_id: UUID, message: str, *, sink: EventSink | None = None,
-    period: tuple[date, date] | None = None,
+    period: tuple[date, date] | None = None, ui_action: UiAction | None = None, clarification: ClarificationReply | None = None, attachment_ids: Sequence[UUID] = (),
+) -> TurnResult:
+    """One turn, serialized per investigation (spec E24): a second turn waits for the running one (bounded by `CEO_TURN_LOCK_WAIT_SECONDS`)
+    or is refused with `TurnInProgress`. Everything below, including any summary regeneration, runs under that lock."""
+    assert ctx.tenant_id is not None
+    if repo.get_investigation(ctx.tenant_id, investigation_id) is None:  # RLS: another tenant's id is a plain not-found, and takes no lock
+        raise repo.InvestigationNotFound(str(investigation_id))
+    with investigation_turn_lock(investigation_id, config.ceo_turn_lock_wait_seconds()):
+        return _run_turn_locked(ctx, runtime, investigation_id, message, sink=sink, period=period, ui_action=ui_action, clarification=clarification, attachment_ids=attachment_ids)
+
+
+def _run_turn_locked(
+    ctx: AuthContext, runtime: CeoRuntime, investigation_id: UUID, message: str, *, sink: EventSink | None = None,
+    period: tuple[date, date] | None = None, ui_action: UiAction | None = None, clarification: ClarificationReply | None = None, attachment_ids: Sequence[UUID] = (),
 ) -> TurnResult:
     """`period` is an explicit (start, end) the seller chose with the date-range control. When given it is the period for this turn: it
     is passed to the classifier as a preset slot (the model neither chooses nor withholds it) and resolved by the same deterministic code."""
@@ -137,6 +202,39 @@ def run_turn(
         raise repo.InvestigationNotFound(str(investigation_id))
     if inv["status"] != "ACTIVE":
         raise InvestigationNotActive(str(inv["status"]))
+    attachments = repo.get_attachments(tenant, investigation_id, list(dict.fromkeys(attachment_ids)))
+    if len(attachments) != len(set(attachment_ids)):  # a foreign, unknown or other-conversation id: refused before anything is written
+        raise InvalidAttachments("unknown attachment")
+
+    reply_meta: dict[str, Any] | None = None
+    input_outcome: Any = None
+    if clarification is None and ui_action is None and has_permission(role=ctx.role, permissions=ctx.permissions, key=INVESTIGATION_VIEW):
+        # Guided input (spec 6.34): when the CEO's last message is an open input question, whatever the seller types is the ANSWER to it, parsed by code.
+        tail = repo.list_messages(tenant, investigation_id)
+        last = tail[-1] if tail else None
+        if last is not None and last["role"] == "CEO" and last["kind"] == "CLARIFICATION" and (last.get("choices") or {}).get("kind") == "INPUT":
+            clarification = ClarificationReply(last["id"], None)
+    if clarification is not None and ui_action is None and has_permission(role=ctx.role, permissions=ctx.permissions, key=INVESTIGATION_VIEW):
+        # Answering a decision card resumes ITS pending intent with the chosen option (or the typed text) and no model call. Resolved before anything is
+        # written, and only for a member who may view the investigation (anyone else is refused by admission below, learning nothing about cards).
+        card_msg = repo.get_message(tenant, investigation_id, clarification.card_id)
+        if card_msg is None or card_msg["kind"] != "CLARIFICATION" or not card_msg.get("choices"):
+            raise InvalidClarification("no such decision card")
+        if card_msg["choices"].get("kind") == "INPUT":
+            try:
+                input_outcome = input_session.advance(card_msg["choices"], option_key=clarification.option, text=text, ctx=input_session.Ctx(tenant, runtime.clock().date(), runtime.max_candidate_prices))
+            except ValueError as exc:
+                raise InvalidClarification(str(exc)) from None
+            if isinstance(input_outcome, input_session.Done):  # every field collected: the same validated inputs as the form, and the playbook runs
+                ui_action = UiAction("PLAYBOOK", input_outcome.playbook, {}, {}, input_outcome.inputs)
+                input_outcome = None
+        else:
+            try:
+                r_route, r_key, r_slots, r_refs = clarification_module_resume(card_msg["choices"], clarification.option, text)
+            except ValueError as exc:
+                raise InvalidClarification(str(exc)) from None
+            ui_action = UiAction(r_route, r_key, r_slots, r_refs)
+        reply_meta = {"clarificationId": str(clarification.card_id), "clarificationOption": clarification.option or "other"}
 
     clock = StageClock()
     log = EventLog(clock, sink)
@@ -153,12 +251,14 @@ def run_turn(
                 msg_id = repo.append_message(tenant, investigation_id, role="CEO", kind="ANSWER", content=answer, agent_run_id=denied.anchor_run_id, now=runtime.clock())
             log.emit("TURN_DENIED", reason=denied.kind.value)  # a member without the permission leaves only the DENIED audit row (R12)
             return TurnResult("DENIED", "ADVISORY", answer, message_id=msg_id, timings=clock.to_json(), events=list(log.events))
-    user_msg = repo.append_message(tenant, investigation_id, role="USER", content=text, created_by=ctx.app_user_id, now=runtime.clock())
+    shown = text + (("\n\nAttached: " + ", ".join(f"{a['filename']}" for a in attachments)) if attachments else "")  # written by code; the classifier still sees only the seller's words
+    user_msg = repo.append_message(tenant, investigation_id, role="USER", content=shown, created_by=ctx.app_user_id, now=runtime.clock())
+    turn.presenter = lambda leg: present_leg(tenant, leg)  # every finding is written with its verified display snapshot (R7 as amended)
     log.emit("TURN_ADMITTED")
 
     result = TurnResult("FAILED", "CLARIFY", FAILED_TEXT)
     try:
-        result = _run_admitted(ctx, runtime, inv, user_msg, text, turn, clock, log, period)
+        result = _run_admitted(ctx, runtime, inv, user_msg, text, turn, clock, log, period, ui_action, reply_meta, input_outcome, attachments)
     except Exception:  # noqa: BLE001 — R12: nothing internal reaches the seller; the server log has it
         logger.exception("CEO turn failed (tenant=%s investigation=%s)", tenant, investigation_id)
         log.emit("TURN_FAILED")
@@ -177,18 +277,19 @@ def run_turn(
 
 
 def _public_finding(f: dict[str, Any]) -> dict[str, Any]:
-    return {k: (str(v) if isinstance(v, UUID) else v) for k, v in f.items() if k in ("id", "source", "action_key", "status", "figure_refs", "report_ref", "gap_reason", "agent_run_id", "created_at")}
+    return {k: (str(v) if isinstance(v, UUID) else v) for k, v in f.items() if k in ("id", "source", "action_key", "status", "figure_refs", "report_ref", "gap_reason", "agent_run_id", "presentation", "created_at")}
 
 
 def _finish(
     ctx: AuthContext, runtime: CeoRuntime, turn: CeoTurn, clock: StageClock, log: EventLog, *, status: str, route: str, route_key: str | None, answer: str,
     kind: str, composition: Composition | None, anchor_status: str, error_reason: str | None = None, clarify_for: str | None = None,
-    classifier_flags: Sequence[str] = (), notes: Sequence[str] = (),
+    classifier_flags: Sequence[str] = (), notes: Sequence[str] = (), choices: Mapping[str, Any] | None = None,
 ) -> TurnResult:
     assert ctx.tenant_id is not None
     tenant = ctx.tenant_id
     assert turn.investigation_id is not None
-    msg = repo.append_message(tenant, turn.investigation_id, role="CEO", kind=kind, content=answer, agent_run_id=turn.anchor_run_id, turn_id=turn.turn_id, now=runtime.clock())
+    msg = repo.append_message(tenant, turn.investigation_id, role="CEO", kind=kind, content=answer, agent_run_id=turn.anchor_run_id, turn_id=turn.turn_id,
+                              choices=choices, now=runtime.clock())
     safety = dict(composition.safety) if composition else {}
     if classifier_flags:
         safety["classifierFlags"] = sorted(classifier_flags)
@@ -202,17 +303,20 @@ def _finish(
         meter_ceo_turn(tenant, member_id=ctx.app_user_id, turn_id=turn.turn_id, agent_run_id=turn.anchor_run_id)  # best-effort (D4)
     log.emit("ANSWER_READY", status=status, mode=composition.mode if composition else None)
     return TurnResult(status, route, answer, turn_id=turn.turn_id, route_key=route_key, message_id=msg, composition_mode=composition.mode if composition else None,
-                      clarify_for=clarify_for, notes=list(notes))
+                      clarify_for=clarify_for, notes=list(notes), choices=dict(choices) if choices else None)
 
 
 def _run_admitted(
     ctx: AuthContext, runtime: CeoRuntime, inv: dict[str, Any], user_msg: UUID, text: str, turn: CeoTurn, clock: StageClock, log: EventLog,
-    period: tuple[date, date] | None = None,
+    period: tuple[date, date] | None = None, ui_action: UiAction | None = None, reply_meta: dict[str, Any] | None = None, input_outcome: Any = None,
+    attachments: Sequence[Mapping[str, Any]] = (),
 ) -> TurnResult:
     tenant = ctx.tenant_id
     assert tenant is not None
     inv_id: UUID = inv["id"]
     now = runtime.clock()
+    if input_outcome is not None:  # the next question of a guided input, or its end: no model, no specialist
+        return _answer_input(ctx, runtime, inv_id, user_msg, turn, clock, log, input_outcome, reply_meta, now)
     with clock.span("capabilities"):  # attached ∩ permitted ∩ entitled: the entitlement lookups are the cost here (a caching candidate, §6.26 L7)
         attached = repo.attached_agents(tenant, inv_id)
         caps = compute_capabilities(ctx, runtime.registry, attached, now=now)
@@ -227,45 +331,112 @@ def _run_admitted(
             period_note=f"The seller already chose the period {preset['period']} with the date picker; it is supplied, do not ask for it.",
         )
 
-    # ---- one classification pass
-    with clock.span("classification"):
-        try:
-            outcome = classifier.classify(runtime.classifier, cat, text, tctx, preset_slots=preset)
-            decision = outcome.decision
-            clock.note("classificationModelMs", outcome.completion.wall_ms)
-            if outcome.completion.ttft_ms is not None:
-                clock.note("classificationTtftMs", outcome.completion.ttft_ms)
-        except Exception:  # noqa: BLE001 — a model failure is a safe CLARIFY, never a guess
-            logger.exception("classifier failed")
-            decision = classifier.Decision(False, None, None, "CLARIFY", None, {}, None, "UNCLEAR_REQUEST", frozenset({"MODEL_ERROR"}))
-    log.emit("CLASSIFIED", route=decision.route, routeKey=decision.key)
+    # ---- one classification pass, or none at all for a seller-chosen quick action (spec section 6.26 L2)
+    if ui_action is not None:
+        with clock.span("route_resolution"):
+            decision = classifier.decision_from_ui_action(ui_action.route, ui_action.key, ui_action.slots, cat, preset)
+        classifier_model = "none (UI action)"
+        log.emit("CLASSIFIED", route=decision.route, routeKey=decision.key, source="UI_ACTION")
+    else:
+        classifier_model = runtime.classifier.name
+        with clock.span("classification"):
+            try:
+                outcome = classifier.classify(runtime.classifier, cat, text, tctx, preset_slots=preset)
+                decision = outcome.decision
+                clock.note("classificationModelMs", outcome.completion.wall_ms)
+                if outcome.completion.ttft_ms is not None:
+                    clock.note("classificationTtftMs", outcome.completion.ttft_ms)
+            except Exception:  # noqa: BLE001 - a model failure is a safe CLARIFY, never a guess
+                logger.exception("classifier failed")
+                decision = classifier.Decision(False, None, None, "CLARIFY", None, {}, None, "UNCLEAR_REQUEST", frozenset({"MODEL_ERROR"}))
+        log.emit("CLASSIFIED", route=decision.route, routeKey=decision.key)
 
     # ---- deterministic plan validation (slots, periods, closed catalog already enforced by parse_decision)
     route, key, notes = decision.route, decision.key, []
     clarify_slot: str | None = decision.clarify_for
+    clarify_text: str | None = None
     resolved: ResolvedSlots | None = None
     required: tuple[str, ...] = ()
-    if route == "ACTION" and key in ACTIONS:
-        required = ACTIONS[key].required_slots
-    elif route == "PLAYBOOK" and key in PLAYBOOKS:
+    resolves: tuple[str, ...] = ()
+    pending: dict[str, Any] | None = None  # the intent a clarification would resume (route, key, what is already understood)
+    candidates: tuple[tuple[UUID, str], ...] = ()
+    ui_refs: dict[str, UUID] = {}
+    if ui_action is not None:
+        for name, raw_id in ui_action.refs.items():
+            if name in REF_VOCAB:
+                try:
+                    ui_refs[name] = UUID(str(raw_id))
+                except ValueError:
+                    pass  # a malformed reference is simply absent: the slot is then asked for, never guessed
+    if route == "ACTION" and key is not None and key in ACTIONS:
+        required, resolves = ACTIONS[key].required_slots, ACTIONS[key].resolves
+    elif route == "PLAYBOOK" and key is not None and key in PLAYBOOKS:
         required = PLAYBOOKS[key].required_slots
-    if route in ("ACTION", "PLAYBOOK"):
-        r = resolve_slots(decision.slots, required, tenant_id=tenant, today=now.date())
+    form_playbook = route == "PLAYBOOK" and key is not None and key in PLAYBOOKS and PLAYBOOKS[key].needs_form
+    invalid_form: str | None = None
+    session_card: dict[str, Any] | None = None
+    if form_playbook:
+        assert key is not None
+        if (ui_action is None or ui_action.inputs is None) and not (key == "COMPETITOR_PRICE_IMPACT" and runtime.max_candidate_prices is None):
+            # from typed chat or a chip: the CEO asks for what it needs, one question at a time; every answer is parsed by code (spec 6.34)
+            started = input_session.start(key, input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices))
+            route, key = "CLARIFY", None
+            if isinstance(started, input_session.Ask):
+                clarify_slot, clarify_text, session_card = started.card["slot"], started.text, started.card
+            else:
+                clarify_slot, clarify_text = "INPUT", started.text
+        elif ui_action is None or ui_action.inputs is None or (key == "COMPETITOR_PRICE_IMPACT" and runtime.max_candidate_prices is None):
+            resolved = ResolvedSlots(tenant_id=tenant, today=now.date())  # refused below with CONFIG_MISSING: the bound has no default (Q32)
+        else:
+            try:
+                r = resolve_playbook_run(key, ui_action.inputs, tenant_id=tenant, today=now.date(), max_candidate_prices=runtime.max_candidate_prices)
+            except InvalidInputs as exc:
+                invalid_form = "; ".join(exc.problems)
+            else:
+                if isinstance(r, Clarification):
+                    pending = clarification.pending_intent("PLAYBOOK", key, {}, {})
+                    candidates = r.candidates
+                    route, key, clarify_slot, clarify_text = "CLARIFY", None, r.slot, r.question
+                else:
+                    resolved = r
+                    notes = list(r.echoes())
+    elif route in ("ACTION", "PLAYBOOK"):
+        r = resolve_slots(decision.slots, required, tenant_id=tenant, today=now.date(), resolves=resolves, refs=ui_refs)
         if isinstance(r, Clarification):
-            route, key, clarify_slot = "CLARIFY", None, r.slot
+            pending = clarification.pending_intent(decision.route, decision.key, decision.slots, {k: str(v) for k, v in ui_refs.items()})
+            candidates = r.candidates
+            route, key, clarify_slot, clarify_text = "CLARIFY", None, r.slot, r.question
         else:
             resolved = r
             notes = list(r.echoes())
+    if attachments and route == "CLARIFY" and pending is None and clarify_slot in (None, "UNCLEAR_REQUEST"):
+        route, clarify_slot, clarify_text = "ADVISORY", None, None  # the seller showed a file and asked about it: the CEO answers qualitatively from what it read
     turn.turn_id = repo.create_turn(
         tenant, inv_id, user_message_id=user_msg, agent_run_id=turn.anchor_run_id, route=route, route_key=key, slots=dict(decision.slots),
-        classifier_result={**decision.to_json(), "effectiveRoute": route, "effectiveKey": key, "model": runtime.classifier.name}, status="PLAN_VALIDATED", now=now,
+        route_source="UI_ACTION" if ui_action is not None else "CLASSIFIER",
+        classifier_result={**decision.to_json(), "effectiveRoute": route, "effectiveKey": key, "model": classifier_model, **(reply_meta or {}),
+                           **({"inputs": resolved.run.inputs.model_dump(mode="json")} if resolved is not None and resolved.run is not None else {}),
+                           **({"attachments": [str(a["id"]) for a in attachments]} if attachments else {})},
+        status="PLAN_VALIDATED", now=now,
     )
     log.emit("PLAN_VALIDATED", route=route, routeKey=key)
     flags = tuple(decision.flags)
 
+    if ui_action is not None and route == "CLARIFY" and "OUT_OF_CATALOG" in flags:
+        # The chip named something this member cannot use here (detached / not entitled / no permission): say so plainly; nothing was dispatched.
+        return _finish(ctx, runtime, turn, clock, log, status="DENIED", route="CLARIFY", route_key=None, answer=UI_ACTION_UNAVAILABLE_TEXT, kind="ANSWER",
+                       composition=None, anchor_status="DENIED", error_reason="ui action not available", classifier_flags=flags)
+    if invalid_form is not None:
+        return _finish(ctx, runtime, turn, clock, log, status="FAILED", route="PLAYBOOK", route_key=decision.key, answer=BAD_FORM_TEXT + invalid_form + ".", kind="ANSWER",
+                       composition=None, anchor_status="FAILED", error_reason="invalid form inputs", classifier_flags=flags)
     if route == "CLARIFY":
-        return _finish(ctx, runtime, turn, clock, log, status="CLARIFIED", route=route, route_key=None, answer=_clarification_text(clarify_slot or "UNCLEAR_REQUEST"),
-                       kind="CLARIFICATION", composition=None, anchor_status="COMPLETE", clarify_for=clarify_slot, classifier_flags=flags)
+        if pending is None and "MISSING_SLOT" in decision.flags and decision.raw_route in ("ACTION", "PLAYBOOK") and decision.raw_key:
+            pending = clarification.pending_intent(decision.raw_route, decision.raw_key, decision.slots, {k: str(v) for k, v in ui_refs.items()})
+        card = session_card
+        if card is None and pending is not None and clarify_slot in clarification.CARD_SLOTS:
+            card = clarification.build(tenant, slot=clarify_slot, pending=pending, candidates=candidates, now=now)  # real candidates only; None = a plain question
+        return _finish(ctx, runtime, turn, clock, log, status="CLARIFIED", route=route, route_key=None, answer=clarify_text or _clarification_text(clarify_slot or "UNCLEAR_REQUEST"),
+                       kind="CLARIFICATION", composition=None, anchor_status="COMPLETE", clarify_for=clarify_slot, classifier_flags=flags, choices=card)
     if route == "OUT_OF_SCOPE":
         return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route=route, route_key=None, answer=OUT_OF_SCOPE_TEXT, kind="ANSWER", composition=None,
                        anchor_status="COMPLETE", classifier_flags=flags)
@@ -301,7 +472,17 @@ def _run_admitted(
                 collector.add_fact(f"{agent} findings", f"{agent} is detached from this investigation; its earlier verified findings remain here as historical evidence.", "SOURCE_DERIVED")
     elif route in ("ACTION", "PLAYBOOK"):
         assert resolved is not None and key is not None
+        if route == "PLAYBOOK" and key == "COMPETITOR_PRICE_IMPACT" and runtime.max_candidate_prices is None:
+            return _finish(ctx, runtime, turn, clock, log, status="FAILED", route=route, route_key=key, answer=CONFIG_TEXT, kind="ANSWER", composition=None,
+                           anchor_status="FAILED", error_reason="CONFIG_MISSING: max candidate prices", classifier_flags=flags)
         leg_keys, required_keys, reads = _plan_legs(route, key)
+        if route == "ACTION" and key == GST_KEY:
+            # Route A / Route B is a permission-and-attachment result computed HERE, never a model choice (spec C11, G1).
+            route_key = gst_route_key(caps.entitled_registry_keys)
+            if route_key is None:
+                return _finish(ctx, runtime, turn, clock, log, status="DENIED", route=route, route_key=key, answer=GST_WALL_TEXT, kind="ANSWER", composition=None,
+                               anchor_status="DENIED", error_reason="no GST route available", classifier_flags=flags)
+            leg_keys, required_keys = [route_key], {route_key}
         if leg_keys and (runtime.leg_timeout_seconds is None or runtime.max_legs is None):
             return _finish(ctx, runtime, turn, clock, log, status="FAILED", route=route, route_key=key, answer=CONFIG_TEXT, kind="ANSWER", composition=None,
                            anchor_status="FAILED", error_reason="CONFIG_MISSING", classifier_flags=flags)
@@ -311,6 +492,8 @@ def _run_admitted(
         legs, entries, refused_required = _execute(ctx, runtime, turn, resolved, leg_keys, required_keys, reads, attached, now, clock, log)
         for leg in legs:
             collector.add_leg(leg)
+            if leg.action_key in GST_ROUTE_KEYS and leg.payload and (leg.payload.get("result") or {}).get("disclaimer"):
+                disclaimers.append(("GST_LOOKUP", str(leg.payload["result"]["disclaimer"])))  # the stored text, rendered by code, never retyped by the model
         for entry in entries:
             collector.add_entry(entry)
         for k in leg_keys:
@@ -320,11 +503,19 @@ def _run_admitted(
                     refused_required = True
         if route == "PLAYBOOK" and not leg_keys:
             heading = None
+        if route == "PLAYBOOK" and PLAYBOOKS[key].needs_form:
+            # Several figures of one metric (one margin per candidate price, one cost per supplier) can only be told apart by their labels, which the fixed
+            # layout carries and prose with markers cannot. The answer is therefore the deterministic layout, with no model call (spec 6.33).
+            template_only_answer = True
+            heading = "Here is what the saved results show for what you entered."
     else:  # defensive: an unknown route is a safe clarification
         return _finish(ctx, runtime, turn, clock, log, status="CLARIFIED", route="CLARIFY", route_key=None, answer=_clarification_text("UNCLEAR_REQUEST"), kind="CLARIFICATION",
                        composition=None, anchor_status="COMPLETE", clarify_for="UNCLEAR_REQUEST", classifier_flags=flags)
 
-    table = collector.table(disclaimers=disclaimers, attach=attach)
+    # What the seller attached is UNTRUSTED quoted data: shown to the composer only inside delimited evidence, never as a figure or an instruction (R9, spec 6.34).
+    untrusted = [(f"your attached file {a['filename']}", str(a["extracted_text"])[:ATTACHMENT_EVIDENCE_CHARS]) for a in attachments if a.get("extracted_text")]
+    notes = [*notes, *_attachment_notes(attachments)]
+    table = collector.table(untrusted=untrusted, disclaimers=disclaimers, attach=attach)
     if refused_required:
         # §6.12 rule 3 / E23: a required leg is missing, so no model synthesis is attempted — the seller gets what IS verified plus the named gaps.
         comp = template_only(table, heading="I could not complete this investigation. Here is what is available:")
@@ -381,10 +572,48 @@ def _read_state(ctx: AuthContext, turn: CeoTurn, key: str, attached: frozenset[s
     assert ctx.tenant_id is not None and turn.investigation_id is not None and turn.turn_id is not None
     repo.insert_finding(
         ctx.tenant_id, turn.investigation_id, turn_id=turn.turn_id, source="BUSINESS_STATE", action_key=key, status=finding_status_for_entry(entry.status),
-        figure_refs=[f.ref.to_json() for f in entry.figures], gap_reason="; ".join(g.message for g in entry.gaps) or None, now=runtime.clock(),
+        figure_refs=[f.ref.to_json() for f in entry.figures] + [f.ref.to_json() for c in entry.conflicts for f in (c.a, c.b)], gap_reason="; ".join(g.message for g in entry.gaps) or None,
+        presentation=safe(present_entry, ctx.tenant_id, entry), now=runtime.clock(),
     )
     log.emit("STATE_READ", entry=key, status=entry.status.value)
     return entry
+
+
+ATTACHMENT_EVIDENCE_CHARS = 4000  # how much of a file's text the composer may see (a prompt-size bound, not a business threshold)
+ATTACHMENT_EXCERPT_CHARS = 500  # how much the seller is shown verbatim, written by code and labelled as the file's own words
+
+
+def _attachment_notes(attachments: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Plain lines appended to the answer: what was attached, whether it could be read, and a short verbatim excerpt of what the file says. The excerpt is the FILE'S
+    text, quoted and labelled as such: it is never a figure with a register and never a verified value."""
+    out: list[str] = []
+    for a in attachments:
+        out.append(f"Attached: {a['filename']} ({a['detected_type']}).")
+        if a.get("extraction_note"):
+            out.append(str(a["extraction_note"]))
+        text = " ".join(str(a.get("extracted_text") or "").split())
+        if text:
+            cut = text[:ATTACHMENT_EXCERPT_CHARS] + ("…" if len(text) > ATTACHMENT_EXCERPT_CHARS else "")
+            out.append(f"Your file says (quoted from {a['filename']}, not checked by Metrion): “{cut}”")
+    return out
+
+
+def _answer_input(
+    ctx: AuthContext, runtime: CeoRuntime, inv_id: UUID, user_msg: UUID, turn: CeoTurn, clock: StageClock, log: EventLog, outcome: Any, reply_meta: dict[str, Any] | None, now: datetime,
+) -> TurnResult:
+    """The CEO's reply to one answer of a guided input: the next question (or the same one again, with why), or the end. Nothing is run and no model is called."""
+    tenant = ctx.tenant_id
+    assert tenant is not None
+    turn.turn_id = repo.create_turn(
+        tenant, inv_id, user_message_id=user_msg, agent_run_id=turn.anchor_run_id, route="CLARIFY", route_key=None, slots={}, route_source="UI_ACTION",
+        classifier_result={"inputSession": True, **(reply_meta or {})}, status="PLAN_VALIDATED", now=now,
+    )
+    log.emit("PLAN_VALIDATED", route="CLARIFY", routeKey=None)
+    if isinstance(outcome, input_session.Ask):
+        return _finish(ctx, runtime, turn, clock, log, status="CLARIFIED", route="CLARIFY", route_key=None, answer=outcome.text, kind="CLARIFICATION", composition=None,
+                       anchor_status="COMPLETE", clarify_for=outcome.card["slot"], choices=outcome.card)
+    text = "Okay, I have stopped. Nothing was run and nothing was saved." if isinstance(outcome, input_session.Cancelled) else outcome.text
+    return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route="CLARIFY", route_key=None, answer=text, kind="ANSWER", composition=None, anchor_status="COMPLETE")
 
 
 def _preflight(ctx: AuthContext, runtime: CeoRuntime, key: str, attached: frozenset[str], now: datetime) -> bool:
@@ -444,6 +673,12 @@ def _execute(
 
 
 def _slots_for(key: str, resolved: ResolvedSlots) -> dict[str, object]:
+    if resolved.run is not None:
+        builder = PLAYBOOK_LEG_SLOTS.get((resolved.run.playbook, key))
+        if builder is not None:
+            return builder(resolved)
+    if key in GST_ROUTE_KEYS:  # one plan for both routes: the slots are the same, only who runs them differs
+        return ACTIONS[GST_KEY].build_slots(resolved)
     return ACTIONS[key].build_slots(resolved)
 
 

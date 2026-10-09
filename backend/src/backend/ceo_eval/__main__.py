@@ -37,7 +37,7 @@ def _run(args: argparse.Namespace) -> int:
             log("  probe done")
         entry.update(runner.run_model(
             model, suites=[s for s in suites if s in ("classifier", "composer")], constrained=not args.unconstrained,
-            classifier_limit=args.classifier_limit, composer_limit=args.composer_limit, progress=log,
+            classifier_limit=args.classifier_limit, composer_limit=args.composer_limit, holdout_only=args.holdout_only, per_metric=args.per_metric, progress=log,
         ))
         record["models"][name] = entry
         runner.write_record(record, out_dir)  # incremental: a crash or pause keeps every finished model
@@ -74,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--think", choices=["off", "on", "default"], default="off")
     r.add_argument("--num-ctx", type=int, default=4096)
     r.add_argument("--unconstrained", action="store_true", help="classifier without schema-constrained decoding")
+    r.add_argument("--holdout-only", action="store_true", help="run only the hold-out split (the approved criteria are measured there)")
+    r.add_argument("--per-metric", type=int, help="with --holdout-only: this many hold-out cases for each metric (the minimum is 100)")
     r.add_argument("--classifier-limit", type=int)
     r.add_argument("--composer-limit", type=int)
     r.add_argument("--repeat", type=int, default=20)
