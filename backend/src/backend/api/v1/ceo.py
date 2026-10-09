@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.auth.context import AuthContext, require_auth
-from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW
+from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
 from backend.ceo import orchestrator
 from backend.ceo.capabilities import NOT_ENTITLED, compute_capabilities
 from backend.ceo.contract import AgentCode
@@ -86,6 +86,15 @@ def _tenant(ctx: AuthContext) -> UUID:
     return ctx.tenant_id
 
 
+def _also(ctx: AuthContext, key: str) -> None:
+    """Spec D8 / §8 rule 2: seeing or continuing an investigation needs `agent.ceo` AND `investigation.view` (starting one: `agent.ceo` AND
+    `investigation.create`). `require_auth` checks one key; this is the second, in-handler gate (the `financials.adjust` precedent in the CFO
+    routes) so that neither key alone is enough. The failure shape matches `require_auth`'s own 403."""
+    assert ctx.role is not None
+    if not has_permission(role=ctx.role, permissions=ctx.permissions, key=key):
+        raise HTTPException(status_code=403, detail=f"Missing permission: {key}")
+
+
 @router.post("/investigations", status_code=201)
 def start_investigation(
     body: StartInvestigationBody, ctx: AuthContext = require_auth(permission=INVESTIGATION_CREATE), runtime: CeoRuntime = Depends(get_runtime)
@@ -99,6 +108,7 @@ def start_investigation(
 
 @router.get("/investigations")
 def list_investigations(status: str | None = None, ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW)) -> list[dict[str, Any]]:
+    _also(ctx, AGENT_CEO)
     return [_j(r) for r in repo.list_investigations(_tenant(ctx), status=status)]
 
 
@@ -111,6 +121,7 @@ def _require_visible(ctx: AuthContext, investigation_id: UUID) -> dict[str, Any]
 
 @router.get("/investigations/{investigation_id}")
 def get_investigation(investigation_id: UUID, ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW)) -> dict[str, Any]:
+    _also(ctx, AGENT_CEO)
     inv = _require_visible(ctx, investigation_id)
     tenant = _tenant(ctx)
     return _j({
@@ -121,6 +132,7 @@ def get_investigation(investigation_id: UUID, ctx: AuthContext = require_auth(pe
 
 @router.get("/investigations/{investigation_id}/findings")
 def get_findings(investigation_id: UUID, turn_id: UUID | None = None, ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW)) -> list[dict[str, Any]]:
+    _also(ctx, AGENT_CEO)
     _require_visible(ctx, investigation_id)
     return [_j(f) for f in repo.list_findings(_tenant(ctx), investigation_id, turn_id=turn_id)]
 
@@ -129,6 +141,8 @@ def get_findings(investigation_id: UUID, turn_id: UUID | None = None, ctx: AuthC
 def post_turn(
     investigation_id: UUID, body: TurnBody, ctx: AuthContext = require_auth(permission=AGENT_CEO), runtime: CeoRuntime = Depends(get_runtime)
 ) -> dict[str, Any]:
+    # No second-key check here on purpose: a member with agent.ceo but without investigation.view is refused INSIDE the turn (`open_turn`),
+    # which writes the DENIED audit row (spec AC11) and puts nothing into the investigation. A 403 here would drop that audit row.
     explicit: tuple[date, date] | None = None
     if (body.period_start is None) != (body.period_end is None):
         raise HTTPException(status_code=422, detail={"code": "INVALID_PERIOD"})
@@ -156,6 +170,7 @@ def post_turn(
 
 @router.post("/investigations/{investigation_id}/resolve")
 def resolve(investigation_id: UUID, body: ResolveBody, ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW)) -> dict[str, str]:
+    _also(ctx, AGENT_CEO)
     _require_visible(ctx, investigation_id)
     try:
         repo.resolve_investigation(_tenant(ctx), investigation_id, resolved_by=ctx.app_user_id, resolution_note=body.resolution_note)
@@ -166,6 +181,7 @@ def resolve(investigation_id: UUID, body: ResolveBody, ctx: AuthContext = requir
 
 @router.post("/investigations/{investigation_id}/archive")
 def archive(investigation_id: UUID, ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW)) -> dict[str, str]:
+    _also(ctx, AGENT_CEO)
     _require_visible(ctx, investigation_id)
     try:
         repo.archive_investigation(_tenant(ctx), investigation_id)
@@ -179,6 +195,7 @@ def reopen(investigation_id: UUID, ctx: AuthContext = require_auth(permission=IN
     """Only a RESOLVED investigation can be reopened. An ARCHIVED one is hidden, not concluded, so it answers 409 `NOT_RESOLVED`. Messages,
     turns, findings, provenance and the seller's resolution note are untouched; the earlier conclusion is also written into the thread as a
     SYSTEM_NOTE so it survives a later re-resolve (which overwrites the note columns with the new conclusion)."""
+    _also(ctx, AGENT_CEO)
     _require_visible(ctx, investigation_id)
     tenant = _tenant(ctx)
     try:
@@ -194,6 +211,7 @@ def reopen(investigation_id: UUID, ctx: AuthContext = require_auth(permission=IN
 def agent_availability(ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW), runtime: CeoRuntime = Depends(get_runtime)) -> dict[str, Any]:
     """What this member can use right now, independent of any investigation: `status` is PRESENT, NOT_PERMITTED or NOT_ENTITLED (the
     UI shows the last two as locked, never as attached); `chatActions` is how many of the agent's actions the CEO can run from chat today."""
+    _also(ctx, AGENT_CEO)
     caps = compute_capabilities(ctx, runtime.registry, frozenset(a.value for a in AgentCode), now=runtime.clock())
     reg = get_registry()
     chat_actions = {a.value: sum(1 for k in ACTIONS if reg.get(k).agent is a) for a in AgentCode}
@@ -206,6 +224,7 @@ def set_agent(
 ) -> dict[str, Any]:
     """Attach or detach one specialist for FUTURE work (spec §6.22, R13). Attachment only ever narrows: it grants nothing, an agent the tenant
     is not entitled to cannot be attached, and detaching never touches earlier findings. A change writes a SYSTEM_NOTE into the thread."""
+    _also(ctx, INVESTIGATION_VIEW)
     code = agent_code.upper()
     if code not in repo.ATTACHABLE_AGENT_CODES:
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})

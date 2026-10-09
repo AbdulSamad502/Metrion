@@ -2,16 +2,17 @@
 
 Authority: `docs/specs/ceo-agent-orchestration.md` (CP1 2026-10-07). This file records what is **built and verified**, what is **registered but not wired**, and what is **deliberately not built yet** — so nothing partial is ever read as complete.
 
-| Checkpoint | State |
+| Checkpoint | State (reconciled 2026-10-09 — see "Independent verification" below) |
 |---|---|
 | CP1 spec/contract amendment (rounds 1–2) | **Done, approved** |
-| **B1 Foundation** | **Done, approved** (this file's detail) |
-| B1 privilege hardening | **Done** — migration 0007, see below |
-| **B2 Evaluation harness** | **Harness built and tested; baseline NOT completed (no benchmark results exist)** — see `docs/evaluation/ceo-eval-b2-checkpoint.md` |
-| **B3 Intelligence** (classifier, plans, parallel legs, composer, gate, API) | **Built and tested on a scratch Postgres with scripted models; not benchmarked against a live model** — see below |
-| B4 Orchestration (playbooks, parallel dispatch, API) | Not started |
-| B5 Seller surface (CEO Hub UI) | Not started |
+| **B1 Foundation** (+ privilege hardening, migration 0007) | **Done, verified** |
+| **B2 Evaluation harness** | **Harness built and tested; baseline NOT run — no accuracy/latency result exists, no model is selected** (`docs/evaluation/ceo-eval-b2-checkpoint.md`) |
+| **B3 Intelligence** (classifier, composer, gate, advisory, synthesis, API) | **Done and verified with scripted models; one live-model smoke only (not a benchmark)** |
+| **B4 Orchestration** | **Partly done.** Built: parallel legs, 3 playbooks (`PROFIT_DIAGNOSIS`, `CASH_AND_LEAK_CHECK`, `BUSINESS_BRIEFING`), 5 CFO chat actions, the HTTP API. **Not built:** `COMPETITOR_PRICE_IMPACT`, `NEW_PRODUCT_DECISION`, GST routes, any CI/PI/CMO action from chat, SSE, the L7 cache, per-investigation turn serialization, rolling-summary regeneration, the deferred Business State entries (CI/PI/CMO) |
+| **B5 Seller surface (CEO Hub)** | **First pass built** (the author's "B4": canvas, investigations, conversation, findings list). **Gaps against spec §6.27 are listed below.** |
 | B6 Hardening and manual E2E | Not started |
+
+> **Numbering note.** The earlier sections of this file label the first end-to-end turn "B3" and the Hub integration "B4". In the plan's numbering the Hub integration is the first pass of **B5**, and part of what the plan called B4 (orchestration) is not built. This table uses the plan's numbering.
 
 ## B1 Foundation — what exists
 
@@ -135,3 +136,35 @@ No code was changed for this verification; nothing in the closed catalog, permis
 **NOT verified: the authenticated browser flow.** Sign in -> `/dashboard/ceo-hub` -> create/open -> send a turn -> processing state -> a real finding/answer -> persistence after refresh was **not run**: it needs the user's interactive Clerk credentials (Google or password), and authentication was not bypassed or weakened (no tokens minted, no fake tenant). The CEO Hub has therefore been exercised end to end only against the in-memory fake API (frontend) and the real backend with a faked Clerk client (backend/B3.1 smoke). A real signed-in browser pass remains to be done by someone with a session.
 
 **Environment note:** to prepare that smoke, the **dev Postgres was upgraded forward** from backend revision `20260925_0004` to `20261007_0007` (additive CEO/CMO-quota migrations; tenant and app_user row counts and id hashes were identical before and after). No downgrade was run. The temporary dev servers were stopped.
+
+## Independent verification of B1–B4 as pushed (2026-10-09)
+
+Reviewer: not the author. Method: clean scratch Postgres 16 (a fresh `pgvector/pgvector:pg16` container, roles from `docker/postgres-init`, every package's migrations applied in CI order, backend round-tripped base → head), the CI environment variables, and an adversarial probe written independently of the author's tests.
+
+| Check | Result |
+|---|---|
+| All migration chains on a fresh DB (calc-engine → data-foundation → CI → cfo → PI → slim-cmo → backend 0007) | Apply cleanly; backend downgrade-to-base and re-upgrade clean |
+| Full backend suite (clean DB) | **1278 passed, 0 failed, 6 xfailed** (the xfails are the documented gate gap below). The earlier "359 CMO errors" were dev-database pollution, not code: all CMO tests pass on a clean DB |
+| Frontend: `vitest` / `tsc --noEmit` / `eslint` / `next build` | 60 tests pass / clean / clean / builds (all 16 routes) |
+| Cross-tenant: every CEO endpoint with another tenant's investigation id | 404 on all seven; nothing changes (pinned in `test_ceo_api_permissions.py`) |
+| Concurrent turns in one investigation | Consistent (each turn owns one question and one answer); still not serialized (E24) |
+| Composition gate vs digit tricks (ASCII, Devanagari, full-width, Arabic-Indic, superscript, zero-width splitting, keycap emoji, `3x`, markdown tables, lakh/crore, spelled amounts) | All caught |
+
+### Defect found and fixed — authorization did not match spec D8
+`investigation.view` **alone** could list, read, resolve and archive CEO investigations (transcripts that contain verified financial figures), and `agent.ceo` **alone** could attach or detach agents. Spec CP1-D8 requires **both** `agent.ceo` and `investigation.view` to view or continue (`agent.ceo` + `investigation.create` to start). Fixed in `api/v1/ceo.py` with a second-key gate (`_also`, the same pattern the CFO routes use for `financials.adjust`); 4 of the 8 new permission tests fail without the fix. One deliberate exception, kept from the author's design: a turn from a member holding `agent.ceo` but not `investigation.view` is refused **inside** the turn (HTTP 200, `status: DENIED`) because that path writes the DENIED audit row (spec AC11) — a 403 there would lose it; nothing executes or is recorded in the investigation. One of the author's tests assumed view-only read access and was updated to the two-key rule. **This reverses an implicit author decision; confirm it is the intended product behaviour.**
+
+### Finding recorded, not changed — the numeral gate lets quantity words through
+"About a third of orders were returned", "fees doubled", "twice", "half", "½" and "twelve and a half" pass the gate although each states a quantity not in any cited figure (`tests/unit/test_ceo_gate_limits.py`, `xfail(strict)`). Tightening risks false positives ("quarter" is also a reporting period) and the gate is the B2 measuring instrument too, so this needs a deliberate decision (spec Q13), ideally after a live-model run shows how often it occurs.
+
+### Not verified (honestly)
+* **The authenticated browser flow** (sign in → Hub → turn → refresh). It needs real Clerk credentials; the UI has only been exercised against the in-memory fake API and the backend against a faked Clerk client.
+* **Model quality and real latency.** There is no benchmark. One live smoke (author, `qwen3.5:4b`, CPU-only) showed the model dominates a turn (~44 s to classify, ~43 s to compose) while every deterministic stage together is under 1 s — which is why UI-initiated routes that skip the classifier (spec §6.26 L2) are the largest available latency win and are not built yet.
+
+### Hub gaps against spec §6.27 (the B5 backlog)
+1. **The findings panel shows no agent output.** A finding card shows status and provenance *reference labels* only; the figures live only in the CEO's prose answer. "See the response from the agents" is therefore not met.
+2. Canvas: attach/detach buttons rather than the `+` control / node connector; nodes show no latest-finding headline.
+3. No health strip (`BS_HEALTH_BANDS`) and no "recent investigations and recommendations" panel; no `GET /ceo/state/health`.
+4. No "Show flow" (no CEO-gated read of a turn's child runs).
+5. Quick actions only prefill the composer; there is no `UI_ACTION` route (no classifier) — the latency lever above.
+6. Polling only (no SSE); no per-turn progress stream.
+7. Only CFO is reachable from chat; CI, PI and CMO appear on the canvas but have no chat action.

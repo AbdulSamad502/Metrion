@@ -194,7 +194,7 @@ def test_another_tenant_gets_404_everywhere_and_sees_nothing(api, two_tenants):
 def test_investigations_are_visible_tenant_wide_to_members_with_view(api, clerk, two_tenants):
     client, ha, _, a, _ = api
     inv = start(client, ha)
-    colleague = login(clerk, a, role=PARTNER_ROLE, permissions={INVESTIGATION_VIEW: True})
+    colleague = login(clerk, a, role=PARTNER_ROLE, permissions={AGENT_CEO: True, INVESTIGATION_VIEW: True})  # CP1-D8: BOTH keys (view alone is not enough — see test_ceo_api_permissions.py)
     assert client.get(f"/api/v1/ceo/investigations/{inv}", headers=colleague).status_code == 200  # D8: tenant-wide visibility
     assert [i["id"] for i in client.get("/api/v1/ceo/investigations", headers=colleague).json()] == [inv]
 
