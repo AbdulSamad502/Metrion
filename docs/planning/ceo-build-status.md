@@ -6,10 +6,10 @@ Authority: `docs/specs/ceo-agent-orchestration.md` (CP1 2026-10-07). This file r
 |---|---|
 | CP1 spec/contract amendment (rounds 1–2) | **Done, approved** |
 | **B1 Foundation** (+ privilege hardening, migration 0007) | **Done, verified** |
-| **B2 Evaluation harness** | **Harness built and tested; baseline NOT run — no accuracy/latency result exists, no model is selected** (`docs/evaluation/ceo-eval-b2-checkpoint.md`) |
+| **B2 Evaluation harness** | **Harness built; a COMPLETE baseline now exists for ONE model (`qwen3:8b`, this laptop) but B2 is NOT closed:** no pass bar is set (a human decision, spec §6.18), no model is selected, and only one model has been measured. The measured safety rates are not good (see "B2 baseline" below) |
 | **B3 Intelligence** (classifier, composer, gate, advisory, synthesis, API) | **Done and verified with scripted models; one live-model smoke only (not a benchmark)** |
-| **B4 Orchestration** | **Partly done.** Built: parallel legs, 3 playbooks (`PROFIT_DIAGNOSIS`, `CASH_AND_LEAK_CHECK`, `BUSINESS_BRIEFING`), 5 CFO chat actions, the HTTP API. **Not built:** `COMPETITOR_PRICE_IMPACT`, `NEW_PRODUCT_DECISION`, GST routes, any CI/PI/CMO action from chat, SSE, the L7 cache, per-investigation turn serialization, rolling-summary regeneration, the deferred Business State entries (CI/PI/CMO) |
-| **B5 Seller surface (CEO Hub)** | **First pass built** (the author's "B4": canvas, investigations, conversation, findings list). **Gaps against spec §6.27 are listed below.** |
+| **B4 Orchestration** | **Mostly done (2026-10-10, uncommitted).** Built: parallel legs, 3 playbooks, 5 CFO chat actions, the HTTP API, **plus** turn serialization, rolling summary, SSE with polling fallback, the Business State cache, the CI/PI/CMO state entries, the GST lookup (Route A/B), CI price positioning and the PI report from chat. **Not built (reasons in spec §6.31):** the `COMPETITOR_PRICE_IMPACT` and `NEW_PRODUCT_DECISION` playbooks (their CFO legs need cost/quote inputs chat cannot supply: product-owner decision), the other CFO / metered / long-running specialist actions from chat, the summary token-budget trigger, cross-worker SSE/cache (Redis, V1.1) |
+| **B5 Seller surface (CEO Hub)** | **Mostly built (2026-10-09, uncommitted until the product owner approves).** First pass by the author; this pass added agent figures in the responses panel, `UI_ACTION` quick actions (no classifier), the health strip, "Show flow", node headlines and "Add agent". **Still open** (see "B5 — state" below): trend indicators, recommendations panel, CI/PI/CMO chat actions, SSE, a marketplace selector, the full-suite re-run and the manual signed-in run |
 | B6 Hardening and manual E2E | Not started |
 
 > **Numbering note.** The earlier sections of this file label the first end-to-end turn "B3" and the Hub integration "B4". In the plan's numbering the Hub integration is the first pass of **B5**, and part of what the plan called B4 (orchestration) is not built. This table uses the plan's numbering.
@@ -168,3 +168,156 @@ Reviewer: not the author. Method: clean scratch Postgres 16 (a fresh `pgvector/p
 5. Quick actions only prefill the composer; there is no `UI_ACTION` route (no classifier) — the latency lever above.
 6. Polling only (no SSE); no per-turn progress stream.
 7. Only CFO is reachable from chat; CI, PI and CMO appear on the canvas but have no chat action.
+
+## B5 seller surface — state (2026-10-09)
+
+Spec amendments: R7 (finding display snapshot) and §6.30 (build notes and decisions). Migration `20261009_0008` adds `investigation_finding.presentation jsonb`.
+
+**Built and tested**
+
+| Backlog item above | State |
+|---|---|
+| 1. Findings panel shows no agent output | **Done.** Each finding stores a verified display snapshot (figures resolved through their refs for the tenant, formatted by code); the panel shows value, register chip, as-of date, note, facts, gaps and offers, with provenance one click away. Older findings without a snapshot still show refs only |
+| 2. Canvas `+` control and node headline | **Done** (top-right **Add agent**, latest-finding headline per agent node). A `+` on the connector on hover was not added |
+| 3. Health strip and `GET /ceo/state/health` | **Strip and endpoint done** (health bands + latest P&L). **Not done:** verified trend indicators and the "recent investigations and recommendations" panel |
+| 4. Show flow | **Done** (`GET .../turns/{id}/flow`, read from audit rows; 404 for a foreign id) |
+| 5. `UI_ACTION` route | **Done.** Seven quick-action chips send an `action`; the classifier is skipped, every other check is unchanged (same `parse_decision` path). Period chips stay disabled until the seller picks a period |
+| 6. SSE / per-turn progress stream | **Not done** (polling) |
+| 7. Chat actions for CI, PI, CMO | **Not done** (B4 leftover) |
+
+**Tests.** Backend: 39 new tests in `test_ceo_presentation.py` and `test_ceo_ui_actions.py` (clean Postgres), 8 of 8 mutations caught. Frontend: 86 vitest tests (was 60), `tsc`, `eslint` and `next build` clean; five mutations on the new code, one initially missed (substring assertion) and fixed by making the assertion exact. Visual check at desktop and phone width on a throwaway page, since deleted.
+
+**Not verified.** The full backend suite has **not** been re-run since the B5 backend changes (only the new tests and the affected repo tests). The signed-in browser flow and any real-model run (B6). The measured latency win of quick actions against a live model (expected to remove the ~44 s classification step; not measured).
+
+**Decisions left for the product owner:** whether a node headline should prefer the newest *complete* finding over the newest finding; whether offers should become clickable (needs a key-to-action mapping); the numeral-gate quantity words (Q13, above).
+
+**Scratch-DB verification recipe** (used for every "clean DB" result in this file): start `pgvector/pgvector:pg16` with the roles from `docker/postgres-init`, set `DATABASE_URL` (owner `metrion_migrate`) and `DATABASE_URL_APP` (`metrion_app`) to it, run each package's `alembic upgrade head` in CI order (calc-engine, data-foundation, competitor-intelligence, cfo, product-intelligence, slim-cmo, backend), set the `CLERK_*` placeholder variables from CI, then `python -m pytest tests -q -p no:cacheprovider` from `backend/`.
+
+### B5 closure checks and latency measurements (2026-10-09)
+
+**Verification.** Full backend suite on the clean scratch Postgres: **1322 passed, 0 failed, 0 errors, 6 expected failures** (the documented numeral-gate quantity-word cases; counted from the progress output). Frontend: 92 vitest tests, `tsc`, `eslint` and `next build` clean. The node headline now shows the newest *complete* result with a figure or fact; a newer partial, failed, refused or unavailable check is shown on a separate "Latest check" line and never replaces it; with no complete result the node says "No complete result yet." (exact regression tests per status). The scratch container was removed after use.
+
+**Latency (single runs, one model, `qwen3:8b`, thinking off, CPU-only i5-12450H; raw data in `docs/evaluation/ceo-runs/b5-latency-1.json`, `b5-live-turns.json`, report `ceo-eval-latency-b5-latency-1.md`). Not a benchmark: n = 1 per scenario, no statistics, no pass bars, no model selected.**
+
+| Scenario | Classify | First finding | Final answer | Mode |
+|---|---|---|---|---|
+| Quick action: saved P&L read | none | 0.21 s | **0.24 s** | TEMPLATE (no model) |
+| Quick action: 1 specialist leg | none | 0.22 s | 24.1 s | LLM |
+| Quick action: playbook, 3 parallel legs | none | 0.34 s | 18.1 s | TEMPLATE_FALLBACK |
+| Typed, cold model | 26.5 s | 26.9 s | 39.3 s | TEMPLATE_FALLBACK |
+| Typed, warm model | 12.5 s | 12.9 s | 24.4 s | TEMPLATE_FALLBACK |
+| Typed, warm, single-agent question | 12.5 s | 13.0 s | 23.9 s | LLM |
+
+What the numbers do and do not show: (1) a quick action reaches its first finding in roughly 0.2-0.3 s versus about 13 s warm / 27 s cold for a typed question, because the classifier is skipped; (2) the composer then dominates (about 11-24 s); (3) cold vs warm: the harness probe shows a 11.7 s model load plus about 12 s extra on the first call (27.6 s cold vs about 14-15 s warm); (4) the 3 parallel deterministic legs took 0.16 s of dispatch in the live turn, but the harness's own single-vs-parallel leg numbers (33 ms vs 31 ms) were taken on *denied* legs (its seeded tenant lacks the permission) and so are **not** evidence about parallel execution; no real single-vs-parallel comparison of equal work was made. **Model quality observations (n = 1, not accuracy):** the typed question "How did last month go?" was routed to `cfo.strategic_briefing` rather than a saved-result read, and "Why did my profit drop in September?" was routed to a single action instead of the `PROFIT_DIAGNOSIS` playbook; three of seven composer drafts were rejected by the gate (`TEMPLATE_FALLBACK`).
+
+**Not run (blocker):** the classifier and composer accuracy suites (126 and 43 cases). On this CPU a single classifier call takes about 12-27 s, so the 126-case suite alone is roughly 30-60 minutes per model with no result yet to show it is worth it, and an earlier attempt was abandoned at 15-200 s per call under memory pressure. Only `qwen3:8b` is installed as a local text model (`qwen3.5:cloud` is not local). Accuracy, guess rate and gate-fallback rate therefore remain **unmeasured** and no model is selected.
+
+## B4 completion and B2 baseline — state (2026-10-10)
+
+Spec: §6.31 has every decision and limit. New migrations: none. New modules: `ceo/turn_lock.py`, `ceo/summary.py`, `ceo/event_bus.py`, `ceo/state_cache.py`, `ceo/slot_resolvers.py`, `ceo/gst_lookup.py`, `services/ceo_reads.py`, `repositories/ceo_runtime_repo.py`. New config (all optional, no defaults): `CEO_TURN_LOCK_WAIT_SECONDS`, `CEO_STATE_CACHE_MAX_ENTRIES`.
+
+**The 4/7 template fallbacks.** Causes found, fixed and pinned (spec §6.31): the model summarised gaps instead of writing their markers; it copied an ISO date it was shown; two typed questions were mis-routed to a single action. The composition gate was **not** changed and still rejects every old failure mode (tested). Re-run on the same cases: no fallbacks, correct routes (one run each: an indication, not a rate).
+
+**What was added and tested** (backend tests, all against a clean Postgres): turn lock (8), rolling summary (16), SSE over real HTTP (11), specialist state entries (14), chat actions and resolvers (43), GST (18), cache (13), prompt-fix regressions (`test_ceo_prompt_fixes.py`, including that the old failure modes still fall back). Frontend: 103 vitest tests (was 92) covering the stream client (split frames, keep-alives, malformed frames, auth header), live stage text, immediate finding fetch on a finished leg, stream closing, a stream that cannot open, `TURN_IN_PROGRESS` wording and the new chips; three mutations on the new frontend code were all caught.
+
+**B2 baseline (`qwen3:8b`, thinking off, temperature 0, seed 0, this laptop: i5-12450H, 12 GB RAM, RTX 2050 4 GB with the model about 40% offloaded to the GPU).** Raw runs: `docs/evaluation/ceo-runs/b2-baseline-qwen3-8b.json` (classifier prompt `classifier-v0` + composer `composer-v1`) and `b2-classifier-v1-qwen3-8b.json` (classifier `classifier-v1`, which carries the same routing guidance as production `ceo-classifier-2`). Reports: `ceo-eval-baseline-b2-baseline-qwen3-8b.md`, `ceo-eval-classifier-v1-b2-classifier-v1-qwen3-8b.md`. One run each; no pass bars exist; **no model is selected**.
+
+| Measure (123 scored classifier cases) | v0 | v1 |
+|---|---|---|
+| Whole case correct | 35.8% (44) | 41.5% (51) |
+| PLAYBOOK cases correct | 0/11 | 3/11 |
+| STATE cases correct | 3/13 | 7/13 |
+| INJECTION cases correct | 1/8 | 4/8 |
+| Guess rate (executed when it should have clarified) | 27.3% | 22.7% |
+| Forbidden execution (injection / writes) | 22.2% (2/9) | 22.2% (2/9) |
+| Absent-agent identification | 16.7% | 16.7% |
+| Over-clarify rate | 29.5% | 34.4% |
+
+Composer (43 cases, v0 baseline only): 69.8% whole-case clean; 14.0% of drafts would fall back to the template; 7.0% used an unknown placeholder; **injection in evidence obeyed in 3 of 4 cases**; numerals in prose 1 of 43; required disclaimer dropped 0 of 17; non-result narrated as a real result 0 of 5. Latency (uncontended call): classify p50 14.0 s, compose p50 6.7 s on this host.
+
+Reading these honestly: v1 improved the categories it targeted, but the prompt change was informed by two live cases and by categories the fixtures also cover, so part of the gain may be tuning to the fixture; the safety-relevant rates (forbidden execution 2/9, injection obeyed 3/4 in the composer, 17% absent-agent identification) are **unresolved and are the main reason B2 is not closed**. Code (the closed catalog, the numeral gate and the choke point) rejects what the model gets wrong, which is why these are measurements of the model and not of the product's safety, but a 22% forbidden-execution attempt rate is a quality problem a different model or prompt must fix. An earlier v1 run was discarded as invalid (the model server had stopped, so every output failed to parse); it is not used anywhere.
+
+**Remaining before B2 can close:** a human sets the pass bars (§6.18); at least one more candidate model is measured (only `qwen3:8b` is installed; pulling another is a download that needs your approval); the composer suite is re-run on `composer-2`.
+
+### Final verification and live latency (2026-10-10)
+
+**Verification (clean scratch Postgres, `metrion_app` role).** Full backend suite: **1484 passed, 0 failed, 1 skipped, 6 expected failures** (the documented numeral-gate quantity-word cases). `mypy --strict` clean on the new and changed CEO modules. Frontend: **103 vitest tests pass**, `tsc`, `eslint` and `next build` clean. Along the way the suite caught and I fixed: tests pinned to the old unwired/chat-action sets (GST now wired, chat-action counts CFO 6 / CI 1 / PI 1), the availability endpoint looking up the virtual `gst_lookup` key in the registry (a real defect, fixed), and three architecture-test violations in my first draft (SQL in the CEO package, a direct specialist import, a float literal), which I fixed by moving code rather than loosening the tests. Two environment incidents (the Docker engine and the Ollama server both stopped while the machine was idle) produced one hung suite run and one invalid classifier run; both were discarded and re-run, and neither is used as evidence.
+
+**Live turns through the production path (`ceo-composer-2` / `ceo-classifier-2`, `qwen3:8b`, this laptop, single runs, nothing else running; not a benchmark):**
+
+| Scenario | Classify | First finding | Wall | Mode |
+|---|---|---|---|---|
+| Quick action: saved P&L | none | 0.28 s | 0.3 s | TEMPLATE |
+| Quick action: one leg | none | 0.22 s | 12.8 s | LLM |
+| Quick action: playbook, 3 legs | none | 0.37 s | 17.9 s | LLM |
+| Typed, cold model | 22.8 s | 23.1 s | 23.2 s | TEMPLATE |
+| Typed, warm | 12.8 s | 13.1 s | 13.1 s | TEMPLATE |
+| Typed "why did profit drop" (warm) | 12.6 s | 12.9 s | 30.6 s | LLM, playbook |
+| Typed "financial health" (warm) | 12.4 s | 12.7 s | 22.0 s | ACTION, LLM |
+
+All 7 delivered and **none fell back to the template** (before the fixes 4 of 7 did). Both typed questions that were mis-routed before now route correctly ("last month" to a saved-result read, "why did profit drop" to the playbook). The model call still dominates: classification about 12-13 s warm and 23 s cold on this machine (the RTX 2050 holds about 40% of `qwen3:8b`), so quick actions remain the only fast path (first finding in 0.2-0.4 s).
+
+
+## C4 conflict handling — state (2026-10-10)
+
+**Built (spec §6.32, AC46).** `ceo/conflicts.py` detects conflicts from persisted rows, never with a model. Two V1 classes, each defined narrowly so ordinary recomputation is not mistaken for a disagreement:
+- **C1 METRIC** — two stored engine results for the same metric, period, grain, target and basis, computed from the **same inputs** (data version, config, formula, adjustment set) that hold different values. A newer result from newer inputs is an update, not a conflict. Only a disagreement over the result the seller would otherwise be shown is reported (an older, superseded input set that disagreed with itself is history).
+- **C2 MANUAL INPUT** — two active seller inputs for the same target and field with different values (the seller goal today).
+The competitor-price class (C2 in the earlier draft) is **dropped**: there is no stored source to compare a typed price against, so a detector would have invented one. The supplier-quote class waits on Q29/Q30.
+
+`EvidenceCollector` carries conflicts; both sides are kept out of the plain figure list; `EvidenceTable.conflicts` holds `{{C#}}` markers that are **required exactly like gap markers**; the composer prompt has a `CONFLICTS` section and a marker-based rule 6 (`ceo-composer-3`); code renders the block (both values, both sources, both dates, "neither has been chosen, averaged or combined"). Both sides are re-verified through the provenance gate for this tenant at table time; if either fails, neither is shown and a gap says so. The finding snapshot carries `conflicts` (with both ref ids); a later SYNTHESIZE turn turns a stored conflict into a named gap rather than two plain figures.
+
+**Tests.** `tests/unit/test_ceo_conflicts.py` (detectors incl. same-inputs-vs-update, exact fractions, rendering, a draft omitting `{{C1}}` falls back, a draft typing a value is rejected); `tests/integration/test_ceo_conflicts.py` (real Postgres: both values appear once each, no average, cross-tenant isolation, synthesis). Evaluation: harness composer is `composer-v2`; `ceo_eval/generate.py` adds 384 generated CONFLICT cases (117 in the hold-out; the floor is asserted in `test_ceo_eval_generated.py`). They are **not yet run against a live model** (C7).
+
+## C5 decision card and conflict display — state (2026-10-10)
+
+The Hub renders the backend's decision card (spec §6.32): the recommended option first with its stated rule, up to two alternatives, then "Other" (typed answer, empty answer blocked). Choosing sends `clarification: {id, option}` with the card's message id (option null = typed "Other"); the card exists only on the latest message of an active investigation and is gone the moment the answer is sent, so it cannot be answered twice. No card is drawn when the backend sent none (no real candidates = a plain question). The findings panel shows a conflict block verbatim from the snapshot (`conflicts[].text`), with neither value listed as a plain figure. Streaming and the new quick-action chips already had tests (B4/B5). **Frontend: 110 vitest tests pass, `tsc` and `eslint` clean.** Backend: unit suite 3752 passed; the CEO integration suite (`-k "ceo or investigation or state"`) 432 passed, plus the one test whose helper signature changed (fixed, 11/11 in that file).
+
+## C6.1 explicit cost states and duties — state (2026-10-10)
+
+Decisions (owner, 2026-10-10): Q29 quotes are written at `(SKU, sku)`; Q30 add optional `duties_paise`; Q31 refuse silent zeros on both routes; Q32 no preference (config without a code default, example value 5).
+
+**Built and tested.** (1) `supplier.quote.duties_paise`: an optional order total, spread over the quantity with shipping and rounded once (`LANDED_COST_PER_UNIT.v2`); absent is never assumed zero. (2) `POST /cfo/pricing`: shipping, advertising and other-allocated costs are required (an amount, or null = unknown); `margin_at_price` returns UNAVAILABLE for an unknown cost, keeping COGS and return/RTO precedence, and a named data request is raised. (3) The CFO page's pricing form uses the new `CostInput` (amount / "None (0), I confirm" / Unknown, no default) and an exact, integer-only rupee parser (`lib/costInput.ts`; the old `parseFloat * 100` could be off by a paise). Tests: calc-engine 376 unit + 471 total, `packages/cfo` 320, new backend `test_pricing_explicit_costs.py`, frontend `costInput.test.ts`.
+
+**Not yet built (C6.2+):** the stored-input read-back, the sales-history assembler, the reference slots, the two playbooks and the seller input forms. Open design points for those are listed in the final message of this session.
+
+## C0 second model — verified (2026-10-10)
+
+`Qwen3.5-4B-Q4_K_M.gguf` (unsloth/Qwen3.5-4B-GGUF), 2,740,937,888 bytes, **SHA256 00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4** (matches the published hash after the owner re-copied it). Registered in Ollama as `qwen35-4b-q4` (Modelfile: `FROM` the file, nothing else). Smoke test with `think:false`: answered "OK" (cold load about 11 s); VRAM in use 2.9 of 4.0 GB. Not yet measured on the evaluation sets (C7).
+
+## C6.2 decision playbooks, backend — state (2026-10-10)
+
+Spec §6.33. Built and tested: `ceo/playbook_inputs.py` (strict form inputs; every cost is amount / none-confirmed / unknown; no default), `UiAction.inputs` + API `action.inputs` (422 on a bad shape), `CEO_MAX_CANDIDATE_PRICES` (no default; unset refuses), the two playbooks in `plans.py` with per-leg slot builders validated by the real HTTP request models, stored cost / sales history / quotes / budget / fee options read through `services/ceo_reads.py`, `canonical_lines` on `POST /cfo/batch-size` (the reduced line shape drops return/RTO status and would count returned units as sold: also true of the existing direct form, left unchanged), labels and unit formatting for margin-at-price / landed cost / batch quantity, a `FORM` decision card from chat or a chip, and a deterministic-layout answer (no model call). Form-support reads: `GET /ceo/forms/price-impact`, `GET /ceo/forms/new-product`. Tests: 20 unit, 12 + 5 integration (including a real-engine run: landed cost 10,080 paise with duties and a 196-unit batch, hand-computed).
+
+**Remaining for C6:** the Hub "Decide" panel (forms, saving quotes/budget/cost through `PUT /cfo/expenses`, opening the form from the card), classifier routing cases and evaluation fixtures for the two playbooks, a full-suite re-run.
+
+## C6.3 Hub forms — state (2026-10-10)
+
+The Hub has a "Decide" area: two buttons open the price-impact and new-product run-forms (`DecidePanel.tsx`); the `FORM` card from typed chat opens the same form and sends nothing. Price impact: competitor, SKU, fee reference (only combinations that exist), basis, optional GST rate, current price, up to the configured number of candidate prices, four per-unit costs each answered as an amount / "None (0), I confirm" / Unknown (running is refused until all are answered), and the saved cost per unit shown with its date (save a new one through `PUT /cfo/expenses`). New product: SKU, units, history window, the saved quotes and budget listed (formatted by the backend), save quote (with duties; a single saved quote is superseded, several are listed and the engine asks), save budget at the tenant's account target. The browser sends only integer paise (exact parser, no floats), and the no-client-math guard still passes (display strings come from the backend). Classifier harness: the two playbooks take no chat slots, matching production; their hand-written routing cases no longer expect slots.
+
+**Verified:** frontend 139 vitest, `tsc`, `eslint`, production build clean; backend unit 3786, CEO integration for the playbooks and form API 17. Full backend suite re-run: see the final report. **Not verified:** a signed-in browser run of the forms against the real backend (needs the owner to sign in, C8); the two playbooks have not been run against a live model (they use no model by design) or with real sales lines in the sales history (only the empty "never sold" case is covered by an integration test).
+
+## C8 close-out and handover (2026-10-10)
+
+**Verified, this session, on a clean scratch Postgres as `metrion_app`:** full backend suite **4530 passed, 0 failed, 7 expected failures** (documented quantity-word gaps, Q13), run alone; `packages/calc-engine` 471, `packages/cfo` 320; frontend 139 vitest, `tsc`, `eslint`, production build clean; `mypy` clean on `backend/ceo`.
+
+**Security review findings (both fixed, tested):** (1) a write could name another tenant's input as `supersedes_id`, creating a cross-tenant link and an existence oracle; now refused identically for a foreign and a missing id, and a supersede must match target and field. (2) A superseded input stayed ACTIVE (the table is append-only, "active" checked only `status`), so a new quote, budget or cost never replaced the old one; "active" now also excludes any row a later row supersedes. Both are in `manual_adjustment_repo.py` and affect every caller of the expense path. Tests: `test_ceo_form_write_isolation.py`. Reviewed without findings: the form-support reads (CEO + view + CFO keys, tenant from the session only, another tenant's data invisible), `action.inputs` (strict, competitor verified against the caller's tenant, no raw echo in errors), the answer for the two playbooks (fixed layout, no model call), React rendering of seller-entered text (escaped).
+
+**Not done / open (stated, not hidden)**
+- **C7 criteria evaluation is NOT run.** Two attempts were stopped (too slow; one was accidentally run twice). The owner's partner runs it. The runner now supports `--holdout-only` and `--per-metric 100` (the smallest run that can satisfy the criteria: 100 hold-out cases per metric). Until it runs, routing, missing-input, conflict handling and grounded answers are **unmeasured** against the 90% lower-bound criteria. The harness measures its own `classifier-v1` / `composer-v2` prompts, not the shipped `ceo-classifier-2` / `ceo-composer-3`. The safety gate (`test_ceo_safety_gate.py`) passed in the full run.
+- Qwen3.5-4B (`qwen35-4b-q4`, hash verified) is registered but unmeasured.
+- A signed-in browser run of the Hub (decision card, forms, conflict display) against the real backend is the owner's check.
+- The new-product run is covered with the empty-history case in the database and with the status-preserving round trip in unit tests, not with real ingested sales lines.
+- Open decisions unchanged: summary token-budget trigger; cross-worker SSE and cache need Redis (V1.1); quantity words in the numeral gate (Q13). `CEO_MAX_CANDIDATE_PRICES`, `CEO_LEG_TIMEOUT_SECONDS`, `CEO_PLAYBOOK_MAX_LEGS` must be set by the operator (no defaults); the price-impact run refuses without the first.
+- Nothing is committed or pushed. `C:\ABDULS~1\` (two scratch scripts) awaits the owner's OK to delete.
+
+## C9 the conversational Hub — state (2026-10-10)
+
+**Owner direction:** one conversation, not a dashboard. Spec §6.34. **Built:**
+- **Layout** (`CeoHubWorkspace`, `AgentStrip`, `Welcome`, `Composer`, `Conversation`): top strip with the CEO and every agent and their live state (ready / working with the action name / needs your input / off / locked / no access; click an agent to turn it on or off for the conversation); left work area with each agent's results and figures; right conversation window; chat bar always at the bottom with an attach button; conversations and "business at a glance" in a drawer; empty state offers what the CEO can do as tiles. Typing or clicking with no conversation open starts one. The Competitor Intelligence workspace was removed from this page (it still lives at `/dashboard/competitors`); the explicit date pickers are gone (a missing period is asked in the conversation).
+- **Guided input** (`ceo/input_session.py`): the CEO asks for what a playbook needs one question at a time; every answer, typed or chosen, is parsed by code against the one question (no model, tested with an empty classifier); a bad answer re-asks with the reason and keeps the state; a bare zero cost must be confirmed on purpose; cancel stops with nothing run; the same validated inputs as the form are built at the end. Typed replies to an open question are detected by the backend, so the browser sends them like any message.
+- **Attachments** (`investigation_attachment`, `services/ceo_attachments.py`, `POST /ceo/investigations/{id}/attachments`): type decided from the content (an executable named `.png` is refused), limits are configuration with no default (`CEO_ATTACHMENT_MAX_BYTES/FILES/PAGES`; unset refuses), stored tenant-scoped and append-only, bounded text extracted, reaches the composer only as delimited untrusted evidence and is shown to the seller as a labelled quote; a number or instruction inside a file is never a figure or an order (tested with an injection string). Foreign or other-conversation attachment ids are refused before anything is written.
+
+**Verified:** backend unit 3813 passed; guided input 6, playbooks 17 (incl. real engine), attachments 7 + reader 19, isolation 3; frontend 148 vitest, `tsc`, `eslint`, production build clean; `mypy` clean on `backend/ceo` and the CEO API. Full backend suite: see the final report. A rendered look was checked with a temporary fake-data preview page (deleted). **Not verified:** the new Hub in a signed-in browser against the real backend (the owner's check); reading images; importing reports from chat; a download endpoint for attachments.
+
+**Dev database:** migrations through `20261010_0010` were applied to the local development database; `backend/.env` (gitignored) carries local development CEO and attachment limits.

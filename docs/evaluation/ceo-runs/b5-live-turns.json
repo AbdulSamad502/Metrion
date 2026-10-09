@@ -1,0 +1,362 @@
+{
+ "model": "qwen3:8b",
+ "rows": [
+  {
+   "scenario": "UI action: saved P&L read (no model)",
+   "wallSeconds": 0.3,
+   "status": "DELIVERED",
+   "route": "BUSINESS_STATE",
+   "routeKey": "BS_PNL_LATEST",
+   "compositionMode": "TEMPLATE",
+   "totalMs": 244,
+   "classificationModelMs": null,
+   "classificationTtftMs": null,
+   "firstFindingAtMs": 209,
+   "answerReadyAtMs": 244,
+   "stages": {
+    "admission": {
+     "startMs": 0,
+     "endMs": 12
+    },
+    "capabilities": {
+     "startMs": 19,
+     "endMs": 141
+    },
+    "context": {
+     "startMs": 141,
+     "endMs": 153
+    },
+    "route_resolution": {
+     "startMs": 153,
+     "endMs": 153
+    },
+    "state_read": {
+     "startMs": 168,
+     "endMs": 209
+    }
+   },
+   "legs": [],
+   "extras": {}
+  },
+  {
+   "scenario": "UI action: 1 specialist leg + composition",
+   "wallSeconds": 24.1,
+   "status": "DELIVERED",
+   "route": "ACTION",
+   "routeKey": "cfo.financial_health",
+   "compositionMode": "LLM",
+   "totalMs": 24104,
+   "classificationModelMs": null,
+   "classificationTtftMs": null,
+   "firstFindingAtMs": 220,
+   "answerReadyAtMs": 24104,
+   "stages": {
+    "admission": {
+     "startMs": 0,
+     "endMs": 10
+    },
+    "capabilities": {
+     "startMs": 16,
+     "endMs": 144
+    },
+    "context": {
+     "startMs": 144,
+     "endMs": 149
+    },
+    "route_resolution": {
+     "startMs": 150,
+     "endMs": 150
+    },
+    "dispatch": {
+     "startMs": 167,
+     "endMs": 220
+    },
+    "synthesis": {
+     "startMs": 237,
+     "endMs": 24066
+    }
+   },
+   "legs": [
+    {
+     "action": "cfo.financial_health",
+     "startMs": 167,
+     "endMs": 220,
+     "status": "COMPLETE"
+    }
+   ],
+   "extras": {
+    "synthesisModelMs": 23829
+   }
+  },
+  {
+   "scenario": "UI action: playbook, 3 parallel legs + composition",
+   "wallSeconds": 18.1,
+   "status": "DELIVERED",
+   "route": "PLAYBOOK",
+   "routeKey": "PROFIT_DIAGNOSIS",
+   "compositionMode": "TEMPLATE_FALLBACK",
+   "totalMs": 18091,
+   "classificationModelMs": null,
+   "classificationTtftMs": null,
+   "firstFindingAtMs": 338,
+   "answerReadyAtMs": 18091,
+   "stages": {
+    "admission": {
+     "startMs": 0,
+     "endMs": 13
+    },
+    "capabilities": {
+     "startMs": 19,
+     "endMs": 181
+    },
+    "context": {
+     "startMs": 181,
+     "endMs": 187
+    },
+    "route_resolution": {
+     "startMs": 187,
+     "endMs": 187
+    },
+    "dispatch": {
+     "startMs": 226,
+     "endMs": 386
+    },
+    "synthesis": {
+     "startMs": 414,
+     "endMs": 18057
+    }
+   },
+   "legs": [
+    {
+     "action": "cfo.financial_health",
+     "startMs": 235,
+     "endMs": 345,
+     "status": "COMPLETE"
+    },
+    {
+     "action": "cfo.anomaly_check",
+     "startMs": 237,
+     "endMs": 382,
+     "status": "COMPLETE"
+    },
+    {
+     "action": "cfo.strategic_briefing",
+     "startMs": 238,
+     "endMs": 386,
+     "status": "COMPLETE"
+    }
+   ],
+   "extras": {
+    "synthesisModelMs": 17641
+   }
+  },
+  {
+   "scenario": "Typed, COLD model: saved-result question",
+   "wallSeconds": 39.3,
+   "status": "DELIVERED",
+   "route": "ACTION",
+   "routeKey": "cfo.strategic_briefing",
+   "compositionMode": "TEMPLATE_FALLBACK",
+   "totalMs": 39265,
+   "classificationModelMs": 26476,
+   "classificationTtftMs": 17354,
+   "firstFindingAtMs": 26851,
+   "answerReadyAtMs": 39265,
+   "stages": {
+    "admission": {
+     "startMs": 0,
+     "endMs": 34
+    },
+    "capabilities": {
+     "startMs": 48,
+     "endMs": 260
+    },
+    "context": {
+     "startMs": 260,
+     "endMs": 267
+    },
+    "classification": {
+     "startMs": 267,
+     "endMs": 26744
+    },
+    "dispatch": {
+     "startMs": 26774,
+     "endMs": 26851
+    },
+    "synthesis": {
+     "startMs": 26858,
+     "endMs": 39216
+    }
+   },
+   "legs": [
+    {
+     "action": "cfo.strategic_briefing",
+     "startMs": 26774,
+     "endMs": 26851,
+     "status": "COMPLETE"
+    }
+   ],
+   "extras": {
+    "classificationModelMs": 26476,
+    "classificationTtftMs": 17354,
+    "synthesisModelMs": 12357
+   }
+  },
+  {
+   "scenario": "Typed, WARM model: same question",
+   "wallSeconds": 24.4,
+   "status": "DELIVERED",
+   "route": "ACTION",
+   "routeKey": "cfo.strategic_briefing",
+   "compositionMode": "TEMPLATE_FALLBACK",
+   "totalMs": 24406,
+   "classificationModelMs": 12498,
+   "classificationTtftMs": 3444,
+   "firstFindingAtMs": 12873,
+   "answerReadyAtMs": 24406,
+   "stages": {
+    "admission": {
+     "startMs": 0,
+     "endMs": 19
+    },
+    "capabilities": {
+     "startMs": 27,
+     "endMs": 255
+    },
+    "context": {
+     "startMs": 255,
+     "endMs": 266
+    },
+    "classification": {
+     "startMs": 266,
+     "endMs": 12765
+    },
+    "dispatch": {
+     "startMs": 12792,
+     "endMs": 12873
+    },
+    "synthesis": {
+     "startMs": 12881,
+     "endMs": 24367
+    }
+   },
+   "legs": [
+    {
+     "action": "cfo.strategic_briefing",
+     "startMs": 12792,
+     "endMs": 12873,
+     "status": "COMPLETE"
+    }
+   ],
+   "extras": {
+    "classificationModelMs": 12498,
+    "classificationTtftMs": 3444,
+    "synthesisModelMs": 11485
+   }
+  },
+  {
+   "scenario": "Typed, warm: single-agent question",
+   "wallSeconds": 23.9,
+   "status": "DELIVERED",
+   "route": "ACTION",
+   "routeKey": "cfo.financial_health",
+   "compositionMode": "LLM",
+   "totalMs": 23885,
+   "classificationModelMs": 12543,
+   "classificationTtftMs": 4173,
+   "firstFindingAtMs": 12952,
+   "answerReadyAtMs": 23885,
+   "stages": {
+    "admission": {
+     "startMs": 0,
+     "endMs": 23
+    },
+    "capabilities": {
+     "startMs": 32,
+     "endMs": 261
+    },
+    "context": {
+     "startMs": 261,
+     "endMs": 270
+    },
+    "classification": {
+     "startMs": 270,
+     "endMs": 12814
+    },
+    "dispatch": {
+     "startMs": 12855,
+     "endMs": 12952
+    },
+    "synthesis": {
+     "startMs": 12973,
+     "endMs": 23840
+    }
+   },
+   "legs": [
+    {
+     "action": "cfo.financial_health",
+     "startMs": 12855,
+     "endMs": 12952,
+     "status": "COMPLETE"
+    }
+   ],
+   "extras": {
+    "classificationModelMs": 12543,
+    "classificationTtftMs": 4173,
+    "synthesisModelMs": 10866
+   }
+  },
+  {
+   "scenario": "Typed, warm: multi-agent diagnosis",
+   "wallSeconds": 24.0,
+   "status": "DELIVERED",
+   "route": "ACTION",
+   "routeKey": "cfo.strategic_briefing",
+   "compositionMode": "LLM",
+   "totalMs": 23932,
+   "classificationModelMs": 12424,
+   "classificationTtftMs": 4261,
+   "firstFindingAtMs": 12804,
+   "answerReadyAtMs": 23932,
+   "stages": {
+    "admission": {
+     "startMs": 0,
+     "endMs": 31
+    },
+    "capabilities": {
+     "startMs": 40,
+     "endMs": 242
+    },
+    "context": {
+     "startMs": 242,
+     "endMs": 249
+    },
+    "classification": {
+     "startMs": 249,
+     "endMs": 12674
+    },
+    "dispatch": {
+     "startMs": 12709,
+     "endMs": 12804
+    },
+    "synthesis": {
+     "startMs": 12811,
+     "endMs": 23900
+    }
+   },
+   "legs": [
+    {
+     "action": "cfo.strategic_briefing",
+     "startMs": 12709,
+     "endMs": 12804,
+     "status": "COMPLETE"
+    }
+   ],
+   "extras": {
+    "classificationModelMs": 12424,
+    "classificationTtftMs": 4261,
+    "synthesisModelMs": 11089
+   }
+  }
+ ]
+}
