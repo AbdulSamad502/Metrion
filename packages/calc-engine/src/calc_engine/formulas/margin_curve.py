@@ -40,10 +40,10 @@ def margin_at_price(
     gst_rate: Fraction | None,
     cogs: Paise | Unavailable,
     fee_reference: FeeReference | Unavailable,
-    shipping_logistics: Paise,
-    advertising_costs: Paise,
+    shipping_logistics: Paise | Unavailable,
+    advertising_costs: Paise | Unavailable,
     return_rto_losses: Paise | Unavailable,
-    other_allocated_costs: Paise,
+    other_allocated_costs: Paise | Unavailable,
 ) -> Paise | Unavailable:
     """Contribution Profit implied by selling at `candidate_price`, using an
     already-resolved `fee_reference` (this function does not call
@@ -71,6 +71,12 @@ def margin_at_price(
         )
 
     fee_amount = round_half_up_paise(Fraction(taxable_revenue.value) * fee_reference.rate_pct / 100)
+
+    # A cost the seller marked "unknown" is UNAVAILABLE, never a zero (spec ceo 6.33 / Q31). The order matches `contribution_profit`'s own precedence
+    # (cogs, then return/RTO) so existing results are unchanged; the three allocated costs follow.
+    for cost in (cogs, return_rto_losses, shipping_logistics, advertising_costs, other_allocated_costs):
+        if isinstance(cost, Unavailable):
+            return cost
 
     return contribution_profit(
         net_realized_revenue=taxable_revenue,

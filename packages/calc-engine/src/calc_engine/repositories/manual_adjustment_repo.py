@@ -28,11 +28,13 @@ _INSERT_SQL = text(
     """
 )
 
+# "Active" = status ACTIVE and not superseded by a later row. The table is append-only for the app role (no UPDATE), so a superseded row keeps status ACTIVE
+# and is retired by the row that names it in `supersedes_id`; checking only `status` left both rows active (found in the 2026-10-10 security review).
 _ACTIVE_FOR_TARGET_SQL = text(
     """
     SELECT id, target_type, target_ref, field, value, reason, created_by, created_at, supersedes_id, status
     FROM manual_adjustment
-    WHERE target_type = :target_type AND target_ref = :target_ref AND field = :field AND status = 'ACTIVE'
+    WHERE target_type = :target_type AND target_ref = :target_ref AND field = :field AND status = 'ACTIVE' AND NOT EXISTS (SELECT 1 FROM manual_adjustment newer WHERE newer.supersedes_id = manual_adjustment.id)
     ORDER BY created_at DESC
     """
 )
@@ -43,7 +45,7 @@ _ACTIVE_FOR_TARGETS_SQL = text(
     FROM manual_adjustment
     WHERE tenant_id = :tenant_id AND target_type = :target_type
       AND target_ref = ANY(CAST(:target_refs AS text[])) AND field = ANY(CAST(:fields AS text[]))
-      AND status = 'ACTIVE'
+      AND status = 'ACTIVE' AND NOT EXISTS (SELECT 1 FROM manual_adjustment newer WHERE newer.supersedes_id = manual_adjustment.id)
     ORDER BY created_at DESC
     """
 )
@@ -52,7 +54,7 @@ _ACTIVE_BY_EXACT_FIELD_SQL = text(
     """
     SELECT id, target_type, target_ref, field, value, reason, created_by, created_at, supersedes_id, status
     FROM manual_adjustment
-    WHERE field = :field AND status = 'ACTIVE'
+    WHERE field = :field AND status = 'ACTIVE' AND NOT EXISTS (SELECT 1 FROM manual_adjustment newer WHERE newer.supersedes_id = manual_adjustment.id)
     ORDER BY created_at DESC
     """
 )
@@ -61,7 +63,7 @@ _ACTIVE_BY_FIELD_PREFIX_SQL = text(
     """
     SELECT id, target_type, target_ref, field, value, reason, created_by, created_at, supersedes_id, status
     FROM manual_adjustment
-    WHERE field LIKE :field_prefix ESCAPE '\\' AND status = 'ACTIVE'
+    WHERE field LIKE :field_prefix ESCAPE '\\' AND status = 'ACTIVE' AND NOT EXISTS (SELECT 1 FROM manual_adjustment newer WHERE newer.supersedes_id = manual_adjustment.id)
     ORDER BY created_at DESC
     """
 )
@@ -83,6 +85,15 @@ def insert_adjustment(
     repository does not interpret the §7.2.1 field registry's shapes, it only persists them."""
     new_id = uuid4()
     with tenant_scope(tenant_id) as conn:
+        if supersedes_id is not None:
+            # A row may retire only an earlier row of THIS tenant for the SAME target and field. A foreign or missing id is refused identically (no existence
+            # oracle), and no cross-tenant reference is ever written (security review, 2026-10-10).
+            found = conn.execute(
+                text("SELECT 1 FROM manual_adjustment WHERE id = :id AND tenant_id = :t AND target_type = :tt AND target_ref = :tr AND field = :f"),
+                {"id": str(supersedes_id), "t": str(tenant_id), "tt": target_type, "tr": target_ref, "f": field},
+            ).first()
+            if found is None:
+                raise ValueError("supersedes_id does not name an earlier input of yours for this target and field")
         conn.execute(
             _INSERT_SQL,
             {

@@ -199,3 +199,34 @@ def test_landed_cost_per_unit_sum_exactness_within_rounding_tolerance(unit_cost,
     exact_total = unit_cost * quantity + shipping
     approx_total = per_unit.value * quantity
     assert abs(approx_total - exact_total) <= quantity // 2
+
+
+# --- duties (Q30, 2026-10-10): an optional order total, spread over the quantity like shipping ----------------------------
+def test_duties_are_parsed_as_an_optional_non_negative_order_total():
+    base = {"supplier_name": "Acme", "unit_cost_paise": 10_000}
+    assert parse_supplier_quote_adjustment({**base, "duties_paise": 5_000}).duties_paise == Paise(5_000)
+    assert parse_supplier_quote_adjustment(base).duties_paise is None  # absent stays absent: never assumed to be zero
+    for bad in (-1, "5000", 12.5, True, None):
+        assert parse_supplier_quote_adjustment({**base, "duties_paise": bad}).duties_paise is None
+
+
+def test_landed_cost_adds_duties_and_shipping_spread_over_the_quantity():
+    # 10000 + (3000 + 5000) / 10 = 10800
+    assert landed_cost_per_unit(_quote(shipping_paise=Paise(3_000), duties_paise=Paise(5_000)), 10) == Paise(10_800)
+    # duties alone
+    assert landed_cost_per_unit(_quote(duties_paise=Paise(5_000)), 10) == Paise(10_500)
+
+
+def test_landed_cost_without_duties_is_exactly_what_it_was_before():
+    assert landed_cost_per_unit(_quote(shipping_paise=Paise(3_001)), 7) == landed_cost_per_unit(_quote(shipping_paise=Paise(3_001), duties_paise=None), 7)
+    assert landed_cost_per_unit(_quote(), 7) == Paise(10_000)
+
+
+def test_shipping_and_duties_are_rounded_once_not_twice():
+    # (1 + 1) / 4 = 0.5 -> rounds half up to 1; rounding each term separately would give 0 + 0 = 0 (a systematic downward bias)
+    assert landed_cost_per_unit(_quote(shipping_paise=Paise(1), duties_paise=Paise(1)), 4) == Paise(10_001)
+
+
+def test_the_result_names_the_formula_version_that_includes_duties():
+    result = compute_landed_cost(_quote(duties_paise=Paise(5_000)), 10, sku="S", active_adjustment_ids=[uuid4()], computed_at=NOW)
+    assert result.formula_version == "LANDED_COST_PER_UNIT.v2" and result.value_paise == 10_500 and "duties_paise" in result.calculation_basis

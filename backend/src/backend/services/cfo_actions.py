@@ -565,10 +565,10 @@ class PricingCurveRequest:
     fee_type: str
     as_of_date: date
     cogs: Paise | Unavailable
-    shipping_logistics: Paise
-    advertising_costs: Paise
+    shipping_logistics: Paise | Unavailable
+    advertising_costs: Paise | Unavailable
     return_rto_losses: Paise | Unavailable
-    other_allocated_costs: Paise
+    other_allocated_costs: Paise | Unavailable
     ingestion_run_ids: Sequence[UUID | str]
     adapter_versions: Sequence[str]
     active_adjustment_ids: Sequence[UUID | str]
@@ -660,6 +660,15 @@ def compute_pricing_curve(tenant_id: UUID, request: PricingCurveRequest) -> Pric
             reason=fee_reference.reason,
             blocking_metric="MARGIN_AT_PRICE",
         )
+    else:
+        for field_name, cost in (
+            ("shipping_logistics", request.shipping_logistics),
+            ("advertising_costs", request.advertising_costs),
+            ("other_allocated_costs", request.other_allocated_costs),
+        ):
+            if isinstance(cost, Unavailable):  # marked "unknown" by the seller: named, never a zero
+                data_request_id = insert_data_request(tenant_id, requested_field=field_name, reason=cost.reason, blocking_metric="MARGIN_AT_PRICE")
+                break
 
     return PricingCurveOutcome(curve=curve, data_request_id=data_request_id)
 

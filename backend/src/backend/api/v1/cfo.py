@@ -39,7 +39,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from data_foundation.adapters.registry import ADAPTER_REGISTRY
 from data_foundation.ingestion.file_reader import read_csv_file
@@ -705,14 +705,24 @@ class PricingCurveHttpRequest(BaseModel):
     as_of_date: date
     cogs_paise: int | None = None
     cogs_unavailable_reason: str | None = None
-    shipping_logistics_paise: int = 0
-    advertising_costs_paise: int = 0
+    # Q31: no silent zero. Each of the three is REQUIRED: an amount (0 is a deliberate, sent zero), or null = "unknown" (with an optional reason), which
+    # makes every figure that depends on it UNAVAILABLE and raises a named data request.
+    shipping_logistics_paise: int | None
+    shipping_logistics_unavailable_reason: str | None = None
+    advertising_costs_paise: int | None
+    advertising_costs_unavailable_reason: str | None = None
     return_rto_losses_paise: int | None = None
     return_rto_losses_unavailable_reason: str | None = None
-    other_allocated_costs_paise: int = 0
+    other_allocated_costs_paise: int | None
+    other_allocated_costs_unavailable_reason: str | None = None
     ingestion_run_ids: list[str] = Field(default_factory=list)
     adapter_versions: list[str] = Field(default_factory=list)
     active_adjustment_ids: list[str] = Field(default_factory=list)
+
+
+def _cost_or_unavailable(paise: int | None, reason: str | None, name: str) -> Paise | Unavailable:
+    """An explicit amount, or "unknown" (UNAVAILABLE with the seller's reason). Never a default zero (Q31)."""
+    return Paise(paise) if paise is not None else Unavailable(reason=reason or f"{name} marked unknown by the seller", missing_inputs=(name,))
 
 
 @router.post("/pricing")
@@ -753,10 +763,10 @@ def post_pricing_curve(
         fee_type=body.fee_type,
         as_of_date=body.as_of_date,
         cogs=cogs,
-        shipping_logistics=Paise(body.shipping_logistics_paise),
-        advertising_costs=Paise(body.advertising_costs_paise),
+        shipping_logistics=_cost_or_unavailable(body.shipping_logistics_paise, body.shipping_logistics_unavailable_reason, "shipping_logistics"),
+        advertising_costs=_cost_or_unavailable(body.advertising_costs_paise, body.advertising_costs_unavailable_reason, "advertising_costs"),
         return_rto_losses=return_rto_losses,
-        other_allocated_costs=Paise(body.other_allocated_costs_paise),
+        other_allocated_costs=_cost_or_unavailable(body.other_allocated_costs_paise, body.other_allocated_costs_unavailable_reason, "other_allocated_costs"),
         ingestion_run_ids=body.ingestion_run_ids,
         adapter_versions=body.adapter_versions,
         active_adjustment_ids=body.active_adjustment_ids,
@@ -1363,10 +1373,19 @@ class BatchSizeHttpRequest(BaseModel):
     budget_target_type: str = Field(pattern="^(SKU|ACCOUNT)$")
     budget_target_ref: str = Field(min_length=1)
     lines: list[GstPeriodSummaryLineRequest] = Field(default_factory=list)
+    # The same sales history in the engine's FULL line shape, including return / RTO / cancellation status. `lines` drops that status, so a history built from it
+    # would count returned units as sold; the CEO playbook sends this field. At most one of the two may be non-empty.
+    canonical_lines: list[PeriodPnlLineRequest] = Field(default_factory=list)
     period_start: date
     period_end: date
     as_of_date: date
     active_adjustment_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _one_history_shape(self) -> "BatchSizeHttpRequest":
+        if self.lines and self.canonical_lines:
+            raise ValueError("send the sales history as `lines` or as `canonical_lines`, not both")
+        return self
 
 
 @router.post("/batch-size")
@@ -1389,7 +1408,7 @@ def post_batch_size(
     assert ctx.tenant_id is not None
     _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_BATCH_SIZE)
 
-    lines = [_gst_period_summary_line_to_canonical(line) for line in body.lines]
+    lines = [_period_pnl_line_to_canonical(line) for line in body.canonical_lines] or [_gst_period_summary_line_to_canonical(line) for line in body.lines]
     request = BatchSizeRequest(
         sku=body.sku,
         supplier_quote_target_type=body.supplier_quote_target_type,

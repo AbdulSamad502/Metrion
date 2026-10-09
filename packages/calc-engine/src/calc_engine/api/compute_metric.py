@@ -994,11 +994,11 @@ def compute_landed_cost(
         confidence=Confidence.MANUAL.value,
         calculation_basis=(
             f"LandedCostPerUnit(sku={sku}, supplier={quote.supplier_name!r}, quantity={quantity}) "
-            "= unit_cost_paise + (shipping_paise / quantity), rounded half-up to one paise "
+            "= unit_cost_paise + ((shipping_paise + duties_paise) / quantity), each term only if the quote states it, rounded half-up to one paise "
             "(round_half_up_paise, §5.11) — every unit priced identically, not a per-recipient "
             "largest-remainder split — deterministic-engine.md §5.13.1"
         ),
-        formula_version="LANDED_COST_PER_UNIT.v1",
+        formula_version="LANDED_COST_PER_UNIT.v2",
         canonical_data_version="non-canonical",
         as_of_date=as_of_date,
         input_refs=(),
@@ -1136,10 +1136,10 @@ def compute_margin_curve(
     gst_rate: Fraction | None,
     cogs: Paise | Unavailable,
     fee_reference: FeeReference | Unavailable,
-    shipping_logistics: Paise,
-    advertising_costs: Paise,
+    shipping_logistics: Paise | Unavailable,
+    advertising_costs: Paise | Unavailable,
     return_rto_losses: Paise | Unavailable,
-    other_allocated_costs: Paise,
+    other_allocated_costs: Paise | Unavailable,
     ingestion_run_ids: Sequence[UUID | str],
     adapter_versions: Sequence[str],
     active_adjustment_ids: Sequence[UUID | str],

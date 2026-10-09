@@ -72,6 +72,9 @@ def test_post_pricing_curve_returns_402_and_never_computes_when_entitlement_deni
         category="Electronics",
         fee_type="referral",
         as_of_date=date(2026, 9, 25),
+        shipping_logistics_paise=0,
+        advertising_costs_paise=0,
+        other_allocated_costs_paise=0,
     )
 
     with pytest.raises(HTTPException) as exc_info:

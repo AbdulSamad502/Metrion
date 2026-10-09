@@ -186,6 +186,23 @@ def resolve_fee_reference(
         return dict(row._mapping) if row is not None else None
 
 
+_FEE_REFERENCE_OPTIONS_SQL = text(
+    """
+    SELECT DISTINCT marketplace, category, fee_type
+    FROM fee_reference
+    WHERE effective_from <= :as_of_date AND (effective_to IS NULL OR effective_to >= :as_of_date)
+    ORDER BY marketplace, category, fee_type
+    """
+)
+
+
+def fee_reference_options(tenant_id: UUID, *, as_of_date: date) -> list[dict[str, str]]:
+    """The distinct (marketplace, category, fee_type) triples with a fee reference in effect on `as_of_date` (platform-owned data; `tenant_id` only opens the
+    scope, as in `resolve_fee_reference`). For a form to offer real choices; it resolves nothing."""
+    with tenant_scope(tenant_id) as conn:
+        return [dict(r._mapping) for r in conn.execute(_FEE_REFERENCE_OPTIONS_SQL, {"as_of_date": as_of_date})]
+
+
 _HSN_GST_REFERENCE_CANDIDATES_SQL = text(
     """
     SELECT hsn_code, description, rate_pct, source_url, source_title, retrieved_at,

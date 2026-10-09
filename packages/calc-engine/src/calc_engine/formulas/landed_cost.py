@@ -25,7 +25,8 @@ from calc_engine.types import Paise
 @dataclass(frozen=True, slots=True)
 class LandedCostQuote:
     """One `supplier.quote` manual_adjustment (§7.2.1): `{supplier_name, sku?, unit_cost_paise,
-    moq?, lead_time_days?, shipping_paise?, payment_terms?, reliability_note?}`."""
+    moq?, lead_time_days?, shipping_paise?, duties_paise?, payment_terms?, reliability_note?}`.
+    `shipping_paise` and `duties_paise` are each a TOTAL for the whole quoted order (spread over `quantity` by `landed_cost_per_unit`), not per unit."""
 
     supplier_name: str
     sku: str | None
@@ -35,6 +36,7 @@ class LandedCostQuote:
     shipping_paise: Paise | None
     payment_terms: str | None
     reliability_note: str | None
+    duties_paise: Paise | None = None  # customs/import duties for the whole order; absent = the quote states none (never assumed)
 
 
 def parse_supplier_quote_adjustment(value: dict[str, object]) -> LandedCostQuote:
@@ -55,6 +57,7 @@ def parse_supplier_quote_adjustment(value: dict[str, object]) -> LandedCostQuote
     moq = value.get("moq")
     lead_time_days = value.get("lead_time_days")
     shipping_raw = value.get("shipping_paise")
+    duties_raw = value.get("duties_paise")
     payment_terms = value.get("payment_terms")
     reliability_note = value.get("reliability_note")
 
@@ -71,12 +74,13 @@ def parse_supplier_quote_adjustment(value: dict[str, object]) -> LandedCostQuote
         ),
         payment_terms=payment_terms if isinstance(payment_terms, str) else None,
         reliability_note=reliability_note if isinstance(reliability_note, str) else None,
+        duties_paise=Paise(duties_raw) if isinstance(duties_raw, int) and not isinstance(duties_raw, bool) and duties_raw >= 0 else None,
     )
 
 
 def landed_cost_per_unit(quote: LandedCostQuote, quantity: int) -> Paise:
-    """`unit_cost_paise` plus `shipping_paise` (if any) divided evenly across `quantity` units,
-    rounded to one paise via `round_half_up_paise` (§5.11) — the primitive this codebase uses
+    """`unit_cost_paise` plus the order's `shipping_paise` and `duties_paise` (each if stated) divided evenly across `quantity` units,
+    rounded ONCE to one paise via `round_half_up_paise` (§5.11) — the primitive this codebase uses
     wherever a division must collapse to a single representative value, as distinct from
     `largest_remainder_allocate`, which is for splitting a pool across multiple named
     recipients that each keep their own persisted, sum-exact share (D8). Landed cost per unit
@@ -92,8 +96,8 @@ def landed_cost_per_unit(quote: LandedCostQuote, quantity: int) -> Paise:
             f"landed_cost_per_unit requires quantity > 0 for supplier {quote.supplier_name!r}: "
             f"quantity={quantity}"
         )
-    if quote.shipping_paise is None:
+    if quote.shipping_paise is None and quote.duties_paise is None:
         return quote.unit_cost_paise
 
-    shipping_per_unit = round_half_up_paise(Fraction(quote.shipping_paise.value, quantity))
-    return quote.unit_cost_paise + shipping_per_unit
+    order_extras = (quote.shipping_paise.value if quote.shipping_paise is not None else 0) + (quote.duties_paise.value if quote.duties_paise is not None else 0)
+    return quote.unit_cost_paise + round_half_up_paise(Fraction(order_extras, quantity))
