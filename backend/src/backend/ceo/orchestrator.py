@@ -397,6 +397,7 @@ def _run_admitted(
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, direct, now)
         if _ACKS.get() and not text.rstrip().endswith("?") and intent_router.route(text, cat) is None:  # only a statement about their business: acknowledged, nothing to answer
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, "Noted.", now)
+    ref_notes: list[str] = []
     routed_text = text  # what the router and classifier see: earlier results referred to by position ("#3") are replaced by their names (spec 6.35)
     if ui_action is None:
         try:
@@ -462,6 +463,8 @@ def _run_admitted(
     form_playbook = (route == "PLAYBOOK" and key is not None and key in PLAYBOOKS and PLAYBOOKS[key].needs_form) or (route == "ACTION" and key is not None and key in ACTIONS and ACTIONS[key].session)
     invalid_form: str | None = None
     addons: tuple[str, ...] = tuple(ui_action.addons) if ui_action is not None else tuple(decision.addons)  # spec agent-needs 5.3: filtered by the catalog before they run
+    if ref_notes and decision.key == "NEW_PRODUCT_DECISION" and "LANDED_COST_FOR_IDEA" not in addons:
+        addons = (*addons, "LANDED_COST_FOR_IDEA")  # the seller named a PI idea: carried through the questions so the link is recorded when the flow runs (spec 5.2, S2)
     ask_sku: str | None = None  # the product the question was about, for a missing-figure follow-up (spec 6.37)
     ask_inputs: dict[str, Any] | None = None
     session_card: dict[str, Any] | None = None
@@ -653,6 +656,8 @@ def _run_admitted(
             collector.add_entry(entry)
         for g in need_gaps:
             collector.add_gap(g)
+        if route == "PLAYBOOK" and key in _FLOW_NEEDS:  # the PI idea / competitor link (spec 5.2, S2) is recorded, with its outcome, beside the others
+            _record_flow_need(tenant, inv_id, user_msg, key, legs, "LANDED_COST_FOR_IDEA" in addons)
         for k in leg_keys:
             if not any(l.action_key == k for l in legs):  # a leg that missed its deadline: named, never silently absent (E36, L9)
                 collector.add_gap(f"{_label(k)} is still running; its result will appear in this investigation's findings when it finishes.")
@@ -766,6 +771,24 @@ def _run_needs(
         if status != "FULFILLED":
             gaps.append("I could not get the GST rate this time" + (f": {leg.reason}." if leg.reason else "."))
     return legs, gaps
+
+
+_FLOW_NEEDS = {"NEW_PRODUCT_DECISION": "LANDED_COST_FOR_IDEA", "COMPETITOR_PRICE_IMPACT": "MARGIN_AT_PRICE"}
+
+
+def _record_flow_need(tenant: UUID, inv_id: UUID, user_msg: UUID, key: str, legs: Sequence[LegResult], from_idea: bool) -> None:
+    """A decision playbook that answers a link between two agents is recorded as a need (who asked whom, and how it ended). The "idea" link is recorded only when the
+    seller's words named an idea from PI's list ("is #3 worth stocking?"); a competitor margin is always CI's observation with the CFO's margin. Bookkeeping only."""
+    nk = _FLOW_NEEDS[key]
+    if nk == "LANDED_COST_FOR_IDEA" and not from_idea:
+        return
+    try:
+        ok = bool(legs) and all(l.status in (LegStatus.COMPLETE, LegStatus.PARTIAL) for l in legs)
+        spec = needs.NEEDS[nk]
+        ceo_need_repo.record(tenant, investigation_id=inv_id, turn_message_id=user_msg, need_key=nk, requester_agent=spec.requester, mode=spec.mode, provider_key=spec.provider_key,
+                             idempotency_key=f"ceo-need-{user_msg}-{nk}-1", status="FULFILLED" if ok else "FAILED")
+    except Exception:  # noqa: BLE001
+        logger.exception("could not record a flow need")
 
 
 _TREND_LABELS = {"NICHE": "your niche", "MARKET_NEWS": "marketplace news", "REPORTED_TACTICS": "tactics sellers report", "NEW_PRODUCTS_BUZZ": "new product buzz", "ADJACENT": "related niches"}

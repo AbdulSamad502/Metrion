@@ -33,11 +33,15 @@ NEEDS: Mapping[str, NeedSpec] = {
     n.need_key: n
     for n in (
         NeedSpec("GST_RATE_FOR_PRODUCT", "CMO", ("cmo.generate_description",), GST_KEY, "PARALLEL", "The CEO asked for the GST rate for your product"),
+        # The next two are playbook-level links the seller starts from a PI idea ("is #3 worth stocking?") or a competitor ("what is my margin at X's price?"). They are not
+        # add-ons on another action (no requester_actions), so `valid_addons` never accepts them; the orchestrator records them when those flows run (spec 5.2, S2).
+        NeedSpec("LANDED_COST_FOR_IDEA", "PI", (), "NEW_PRODUCT_DECISION", "OFFER", "The CEO asked the CFO for the landed cost and batch size of this idea"),
+        NeedSpec("MARGIN_AT_PRICE", "CI", (), "COMPETITOR_PRICE_IMPACT", "PARALLEL", "The CEO asked the CFO for your margin at the competitor's price"),
     )
 }
 
 # a need whose requester and provider are the same agent could loop: refused when this module loads
-_PROVIDER_AGENT = {GST_KEY: "CFO"}
+_PROVIDER_AGENT = {GST_KEY: "CFO", "NEW_PRODUCT_DECISION": "CFO", "COMPETITOR_PRICE_IMPACT": "CFO"}
 for _n in NEEDS.values():
     assert _PROVIDER_AGENT.get(_n.provider_key) != _n.requester, f"{_n.need_key}: requester and provider are the same agent"
 

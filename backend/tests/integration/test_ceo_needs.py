@@ -145,3 +145,32 @@ def test_the_catalog_decides_what_an_add_on_can_be():
     assert needs.valid_addons("cmo.generate_description", ["GST_RATE_FOR_PRODUCT", "GST_RATE_FOR_PRODUCT", "DROP_TABLE", "CEO_READ"]) == ["GST_RATE_FOR_PRODUCT"]  # unknown and repeated: dropped
     assert needs.valid_addons("cmo.generate_hashtags", ["GST_RATE_FOR_PRODUCT"]) == []  # only the requester's own actions may carry it
     assert needs.product_text({"seller_title": "x" * 201}) is None and needs.product_text({"product_name": "Bottle"}) == "Bottle"  # too long: asked about, never truncated
+
+
+# ------------------------------------------------------------------------------------------------ S2: the PI idea and competitor links are recorded
+def test_the_idea_link_is_recorded_only_when_the_seller_named_a_pi_idea(two_tenants, app_user):
+    from tests.integration.test_ceo_cmo_chat import registry as cmo_registry  # noqa: F401
+    from tests.integration.test_ceo_decision_playbooks import recording_registry
+    from tests.integration.test_ceo_pi_chat import registry as pi_registry, run_through
+
+    a, _ = two_tenants
+    calls: dict = {}
+    for sku in ("Leather Formal Shoes", "Cotton Kurti Set"):  # a stored quote and budget, so only the quantity and window are asked
+        cfo_actions.enter_expense(a, target_type="SKU", target_ref=sku, field="supplier.quote", value={"supplier_name": "S", "unit_cost_paise": 20000}, created_by=app_user)
+    cfo_actions.enter_expense(a, target_type="ACCOUNT", target_ref=str(a), field="batch.budget", value={"amount_paise": 5000000}, created_by=app_user)
+    ctx = ctx_for(a, user_id=app_user)
+    both = ActionRegistry([*pi_registry(calls).specs(), *recording_registry(calls).specs()])
+    rt = dataclasses.replace(runtime(Scripted({}), Grounded(), registry=both), max_candidate_prices=5)
+    inv = start(ctx, rt)
+    run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "quick", "yes"])  # PI lists ideas
+    q = orchestrator.run_turn(ctx, rt, inv, "is #2 worth stocking?")
+    assert q.choices["pending"]["key"] == "NEW_PRODUCT_DECISION" and q.choices["addons"] == ["LANDED_COST_FOR_IDEA"]
+    q = orchestrator.run_turn(ctx, rt, inv, "200")
+    done = orchestrator.run_turn(ctx, rt, inv, "(chose an option)", clarification=orchestrator.ClarificationReply(q.message_id, q.choices["options"][0]["key"]))
+    assert done.status == "DELIVERED"
+    assert [(n["need_key"], n["requester_agent"], n["status"]) for n in needs_of(a, inv)] == [("LANDED_COST_FOR_IDEA", "PI", "FULFILLED")]
+    inv2 = start(ctx, rt)  # a plain stock question with no PI idea behind it is not a PI link
+    q2 = orchestrator.run_turn(ctx, rt, inv2, "should I stock Cotton Kurti Set?")
+    q2 = orchestrator.run_turn(ctx, rt, inv2, "100")
+    orchestrator.run_turn(ctx, rt, inv2, "(chose an option)", clarification=orchestrator.ClarificationReply(q2.message_id, q2.choices["options"][0]["key"]))
+    assert needs_of(a, inv2) == []
