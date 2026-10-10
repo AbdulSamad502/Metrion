@@ -335,3 +335,23 @@ The Hub has a "Decide" area: two buttons open the price-impact and new-product r
 ## C11 agent memory v1 (2026-10-10, spec `agent-memory.md`)
 **Built:** migration `20261010_0011` (`agent_memory`, FORCE RLS, append-only, shared-memory gate as database CHECKs), `repositories/agent_memory_repo.py`, `ceo/memory.py` (deterministic capture of business name / niche / where the seller sells, promote-to-shared gate, forget, recall context without money, direct answer to "what is my business name"), CEO hooks (capture + same-answer acknowledgement, direct memory answers with no model, shared profile in the composer context), PI private notes of a confirmed research offered as choices next time, `GET /api/v1/ceo/memory` and `POST /api/v1/ceo/memory/{id}/forget`, Hub "What I remember" panel. Mechanism exists for all five agents; V1 populates the CEO (shared) and PI (private).
 **Verified:** `test_ceo_memory.py` 15 passed (database gate, isolation, supersede, forget, capture through a real turn, no money in model context, HTTP edge); frontend 154 vitest, tsc, eslint clean. **Not verified:** real-model behaviour with memory in the prompt; CFO/CMO/CI private memory is not populated yet.
+
+## C12 cross-agent flows from chat: C1-C8 (2026-10-10, specs 6.36-6.40, agent-memory addendum C6)
+
+**Built and verified (each checkpoint was committed only after its tests passed):**
+- **C1 PI to CFO** (6.36): "is #3 worth stocking?" asks the supplier quote and budget only when none is stored, shows a confirm card, saves through the CFO's own write path (`financials.adjust` + CFO entitlement) after "yes", then the real landed-cost / ranking / batch legs run. Cancel or no permission: nothing saved, nothing run. `services/ceo_inputs.py`.
+- **C2 CFO data requests** (6.37): when a CFO leg returns an open data request the CEO can collect (cost per unit, supplier quote, batch budget) and nothing is stored, the answer ends with exactly that question, saves after confirm, closes the request and re-runs the same question. `ceo/data_requests.py`.
+- **C3 CI to CFO** (6.38): "what is my margin at <competitor>'s price?" starts the price-impact conversation with the competitor (and a stated price) taken from the question; CI's last captured price is offered as one dated, "not verified" option, never filled in.
+- **C4 CMO seeding** (6.39): the titles category-hint question offers PI's keyword themes for the idea and a tracked competitor's listing keywords, labelled "not verified", never filled in.
+- **C5 market trends** (6.40): rule + one marketplace question, then the zero-cost preview is shown as a confirm card with the exact outbound searches; "yes" runs the report bound to the preview digest; cancel runs nothing; the report is shown quoted and labelled.
+- **C6 private memory** (agent-memory.md section 11, built by a parallel agent and merged): CMO last marketplaces, CI last competitor, CFO last GST basis, offered first as "What you chose last time", never filled in, per-agent private, forgettable.
+- **C7 Hub polish**: follow-up chips ("Write titles for #n", "Is #n worth stocking?") under a product-idea list, honest labelling of public-web content, "What I remember" grouped by who keeps it. Confirm cards use the existing decision-card component.
+- **C8 regression and build:** CEO unit + integration **4100 passed, 0 failed, 7 expected failures** (scratch Postgres); frontend **158 vitest**, `tsc`, `eslint`, **production `next build` clean**.
+
+**Not done / open (stated, not hidden):**
+- PI feasibility shown as a labelled estimate in C1 (needs a PI read that relays estimates; 6.35 relays none today).
+- C2 is tested end to end for the cost-per-unit case only; the quote and budget variants share the code but have no test of their own.
+- C4 seeds titles only (description / keywords are grounded on the seller's own title); the competitor option is the first tracked competitor with an insight and may not match the product.
+- C5: niche-term confirmation stays on the CMO page; the trend run is tested with a recording handler, not against the real search providers.
+- C6: the hashtags question drops "Skip" from the list when a remembered value is offered (the seller can still type it); multi-marketplace memory is offered on the titles question only. Two tests were order-dependent in one agent run and passed alone (`test_ceo_api_b4` entitlement, `test_ceo_clarification` malformed reference); they passed in the final full run.
+- No flow here was run with a real model or in a signed-in browser. The evaluation (partner's C7 run, the 60-80 case shipped-path suite, qwen35-4b-q4 vs qwen3:8b, the owner's manual check) is next and not started.

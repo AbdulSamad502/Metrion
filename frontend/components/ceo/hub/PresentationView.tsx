@@ -4,10 +4,14 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { Presentation } from "@/lib/ceo";
 import { asOfLabel, registerView } from "@/lib/ceoModel";
 
+const MAX_IDEA_CHIPS = 3; // the first ideas only: the numbers are the numbers of the list the seller sees (the backend turns "#2" back into the idea's name)
+const isIdeaList = (title: string) => title.startsWith("Product ideas found");
+const isWebFinding = (title: string) => isIdeaList(title) || title.startsWith("Market trends:") || title.startsWith("What the CMO makes of it");
+
 /** One verified result as the seller sees it: the figures (each with its register and as-of date), the facts, what could not be checked, and
  * what the seller could ask next. Every string here is the backend's own snapshot, shown verbatim: the UI never computes, rounds or
  * re-formats a figure, and a figure the backend could not verify never reaches this component (it arrives as a gap instead). */
-export function PresentationView({ presentation, compact = false }: { presentation: Presentation; compact?: boolean }) {
+export function PresentationView({ presentation, compact = false, onAsk, askDisabled = false }: { presentation: Presentation; compact?: boolean; onAsk?: (text: string) => void; askDisabled?: boolean }) {
   const { figures, facts, gaps, offers } = presentation;
   const conflicts = presentation.conflicts ?? [];
   const artefacts = presentation.artefacts ?? [];
@@ -22,7 +26,22 @@ export function PresentationView({ presentation, compact = false }: { presentati
             ))}
           </ol>
           {a.note && <p className="m-0 mt-1.5 t-meta" style={{ color: "var(--text-5)" }}>{a.note}</p>}
-          <p className="m-0 mt-1 t-meta" style={{ color: "var(--text-6)" }}>Written by the specialist from the details you gave. Read it before you use it; Metrion has not checked it against your marketplace account.</p>
+          {isWebFinding(a.title) ? (
+            <p className="m-0 mt-1 t-meta" style={{ color: "var(--text-6)" }}>Quoted from public web sources and the specialist&apos;s reading of them. Metrion has not checked it against your marketplace account.</p>
+          ) : (
+            <p className="m-0 mt-1 t-meta" style={{ color: "var(--text-6)" }}>Written by the specialist from the details you gave. Read it before you use it; Metrion has not checked it against your marketplace account.</p>
+          )}
+          {onAsk && isIdeaList(a.title) && (
+            <ul className="m-0 mt-2 flex list-none flex-wrap gap-1.5 p-0" aria-label="Follow up on an idea" data-testid="idea-chips">
+              {a.items.slice(0, MAX_IDEA_CHIPS).flatMap((_, i) => [`Write titles for #${i + 1}`, `Is #${i + 1} worth stocking?`]).map((q) => (
+                <li key={q}>
+                  <button type="button" disabled={askDisabled} onClick={() => onAsk(q)} className="mt-chip mt-focus rounded-full px-2.5 py-1 t-meta" style={{ color: "var(--text-3)", border: "1px solid var(--border-subtle)", opacity: askDisabled ? 0.5 : 1 }}>
+                    {q}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       ))}
       {conflicts.length > 0 && (

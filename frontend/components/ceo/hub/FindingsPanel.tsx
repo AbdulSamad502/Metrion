@@ -31,6 +31,7 @@ export function FindingsPanel({
   processing,
   flows,
   onShowFlow,
+  onAsk,
 }: {
   findings: FindingRow[];
   messages: CeoMessage[];
@@ -41,6 +42,7 @@ export function FindingsPanel({
   processing: boolean;
   flows: Record<string, FlowState>;
   onShowFlow: (turnId: string) => void;
+  onAsk?: (text: string) => void;
 }) {
   const turnById = new Map(turns.map((t) => [t.id, t]));
   const groups = groupFindings(findings, messages, turns, inFlightQuestion);
@@ -59,14 +61,14 @@ export function FindingsPanel({
           description={processing ? "Each specialist's result appears here the moment it finishes." : "Findings appear here as the CEO runs specialists or reads your saved results. They stay with the investigation as history."}
         />
       ) : (
-        groups.map((g, gi) => <Group key={g.key} group={g} agents={agents} arrived={arrived} defaultOpen={gi === 0} turn={g.turnId ? turnById.get(g.turnId) : undefined} flow={g.turnId ? flows[g.turnId] : undefined} onShowFlow={onShowFlow} />)
+        groups.map((g, gi) => <Group key={g.key} group={g} agents={agents} arrived={arrived} defaultOpen={gi === 0} turn={g.turnId ? turnById.get(g.turnId) : undefined} flow={g.turnId ? flows[g.turnId] : undefined} onShowFlow={onShowFlow} onAsk={onAsk} processing={processing} />)
       )}
     </div>
   );
 }
 
 function Group({
-  group, agents, arrived, defaultOpen, turn, flow, onShowFlow,
+  group, agents, arrived, defaultOpen, turn, flow, onShowFlow, onAsk, processing,
 }: {
   group: FindingGroup;
   agents: Partial<Record<AgentCode, boolean>> | null;
@@ -75,6 +77,8 @@ function Group({
   turn: TurnRow | undefined;
   flow: FlowState | undefined;
   onShowFlow: (turnId: string) => void;
+  onAsk?: (text: string) => void;
+  processing: boolean;
 }) {
   return (
     <section aria-label={group.question ?? "Findings"} className="flex flex-col gap-2">
@@ -95,7 +99,7 @@ function Group({
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {group.findings.map((f) => (
           <li key={f.id}>
-            <FindingCard finding={f} historical={isHistorical(f, agents)} arrived={arrived.has(f.id)} defaultOpen={defaultOpen} />
+            <FindingCard finding={f} historical={isHistorical(f, agents)} arrived={arrived.has(f.id)} defaultOpen={defaultOpen} onAsk={onAsk} askDisabled={processing} />
           </li>
         ))}
       </ul>
@@ -103,7 +107,7 @@ function Group({
   );
 }
 
-function FindingCard({ finding: f, historical, arrived, defaultOpen }: { finding: FindingRow; historical: boolean; arrived: boolean; defaultOpen: boolean }) {
+function FindingCard({ finding: f, historical, arrived, defaultOpen, onAsk, askDisabled }: { finding: FindingRow; historical: boolean; arrived: boolean; defaultOpen: boolean; onAsk?: (text: string) => void; askDisabled?: boolean }) {
   const shown = hasPresentation(f);
   const [open, setOpen] = useState(defaultOpen && !shown); // when figures are shown, the references stay one click away
   const status = findingStatusView(f.status);
@@ -140,7 +144,7 @@ function FindingCard({ finding: f, historical, arrived, defaultOpen }: { finding
       )}
       {shown && f.presentation && (
         <div className="mt-2">
-          <PresentationView presentation={f.presentation} />
+          <PresentationView presentation={f.presentation} onAsk={historical ? undefined : onAsk} askDisabled={askDisabled} />
         </div>
       )}
       {f.gap_reason && !(f.presentation && f.presentation.gaps.length > 0) && (

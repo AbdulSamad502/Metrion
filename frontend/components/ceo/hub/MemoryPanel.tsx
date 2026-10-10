@@ -4,6 +4,20 @@ import { Icon } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { MemoryItem } from "@/lib/ceo";
 
+const OWNER_NAMES: Record<string, string> = { PI: "Product Intelligence", CFO: "The CFO", CMO: "The CMO", CI: "Competitor Intelligence", CEO: "The CEO" };
+
+/** Shared items first, then each agent's own, in a fixed order. Grouping only: nothing is changed or computed. */
+function groupByOwner(items: MemoryItem[]): [string, MemoryItem[]][] {
+  const order = ["SHARED", "CEO", "PI", "CFO", "CMO", "CI"];
+  const by = new Map<string, MemoryItem[]>();
+  for (const m of items) {
+    const k = m.shared ? "SHARED" : m.agent;
+    by.set(k, [...(by.get(k) ?? []), m]);
+  }
+  const rank = (k: string) => (order.indexOf(k) < 0 ? 99 : order.indexOf(k));
+  return [...by.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
+}
+
 /** What the agents remember about this business, exactly as the seller gave it. Nothing is hidden and everything can be forgotten here. Shared items are visible to
  * every agent; the rest belong to one agent. The values are shown verbatim: this panel never computes or rewrites anything. */
 export function MemoryPanel({ items, onForget }: { items: MemoryItem[]; onForget: (id: string) => void }) {
@@ -15,8 +29,12 @@ export function MemoryPanel({ items, onForget }: { items: MemoryItem[]; onForget
           Nothing yet. Tell me about your business, for example “my business name is …” or “my niche is …”, and I will remember it for next time.
         </p>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-          {items.map((m) => (
+        <div className="flex flex-col gap-3">
+          {groupByOwner(items).map(([owner, rows]) => (
+            <div key={owner} data-testid={`memory-group-${owner}`}>
+              <h4 className="m-0 mb-1 t-meta font-semibold" style={{ color: "var(--text-4)" }}>{owner === "SHARED" ? "Shared by every agent" : `${OWNER_NAMES[owner] ?? owner} keeps privately`}</h4>
+              <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+          {rows.map((m) => (
             <li key={m.id} data-testid={`memory-${m.id}`} className="flex items-center justify-between gap-2 rounded-lg px-3 py-2" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-card)" }}>
               <span className="min-w-0">
                 <span className="block truncate t-meta" style={{ color: "var(--text-5)" }}>{m.label}</span>
@@ -30,7 +48,10 @@ export function MemoryPanel({ items, onForget }: { items: MemoryItem[]; onForget
               </span>
             </li>
           ))}
-        </ul>
+              </ul>
+            </div>
+          ))}
+        </div>
       )}
     </section>
   );

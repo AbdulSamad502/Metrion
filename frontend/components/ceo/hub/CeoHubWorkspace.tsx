@@ -119,6 +119,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs }: { client: CeoCl
           <FindingsPanel
             findings={data.findings} messages={data.messages} turns={data.turns} agents={data.agents} arrivedIds={hub.turn.arrivedIds}
             inFlightQuestion={hub.turn.question} processing={processing} flows={hub.flows} onShowFlow={(id) => void hub.loadFlow(id)}
+            onAsk={closed ? undefined : (t) => void send(t, null)}
           />
         ) : (
           <p className="m-0 p-2 text-center t-body-sm" style={{ color: "var(--text-5)" }} data-testid="canvas-idle">
