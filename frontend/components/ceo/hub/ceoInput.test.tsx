@@ -43,7 +43,7 @@ describe("input questions", () => {
     expect(screen.getByText(/type your answer in the chat bar/i)).toBeInTheDocument();
     expect(screen.queryByTestId("card-option-other")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Ask the CEO")).toBeEnabled();
-    expect(screen.getByTestId("agent-strip")).toHaveTextContent("Needs your input");
+    expect(screen.getByTestId("ceo-status")).toHaveTextContent("Needs your input");
   });
 
   it("choosing an option answers that question", async () => {

@@ -10,8 +10,21 @@ import { asOfLabel, registerView } from "@/lib/ceoModel";
 export function PresentationView({ presentation, compact = false }: { presentation: Presentation; compact?: boolean }) {
   const { figures, facts, gaps, offers } = presentation;
   const conflicts = presentation.conflicts ?? [];
+  const artefacts = presentation.artefacts ?? [];
   return (
     <div className="flex flex-col gap-2" data-testid="presentation">
+      {artefacts.map((a) => (
+        <section key={a.title} data-testid="artefact" aria-label={a.title} className="rounded-lg px-3 py-2.5" style={{ border: "1px solid var(--border-subtle)", background: "var(--fill-hover)" }}>
+          <h4 className="m-0 mb-1 t-body-sm font-semibold" style={{ color: "var(--text-2)" }}>{a.title}</h4>
+          <ol className="m-0 flex list-decimal flex-col gap-1 pl-5">
+            {a.items.map((text, i) => (
+              <li key={`${i}-${text}`} className="t-body-sm" style={{ color: "var(--text-1)" }}>{text}</li>
+            ))}
+          </ol>
+          {a.note && <p className="m-0 mt-1.5 t-meta" style={{ color: "var(--text-5)" }}>{a.note}</p>}
+          <p className="m-0 mt-1 t-meta" style={{ color: "var(--text-6)" }}>Written by the specialist from the details you gave. Read it before you use it; Metrion has not checked it against your marketplace account.</p>
+        </section>
+      ))}
       {conflicts.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Values that disagree">
           {conflicts.map((c) => (

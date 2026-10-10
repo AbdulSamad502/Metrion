@@ -5,6 +5,8 @@ import { FlowView } from "@/components/ceo/hub/FlowView";
 import { PresentationView } from "@/components/ceo/hub/PresentationView";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import Link from "next/link";
+import { agentMeta } from "@/lib/agents";
 import type { AgentCode, FindingRow } from "@/lib/ceo";
 import {
   actionLabel, findingStatusView, groupFindings, hasPresentation, isHistorical, isProblemFinding, refLabel, sourceLabel, type FindingGroup,
@@ -107,6 +109,8 @@ function FindingCard({ finding: f, historical, arrived, defaultOpen }: { finding
   const status = findingStatusView(f.status);
   const problem = isProblemFinding(f);
   const refs = f.figure_refs ?? [];
+  const meta = agentMeta(f.source);
+  const workspace = meta.href && f.status !== "DENIED" ? { href: meta.href, label: meta.workspaceLabel ?? "Open" } : null; // only a page that exists (lib/agents.ts) is ever linked
   return (
     <article
       data-testid={`finding-${f.id}`}
@@ -149,10 +153,15 @@ function FindingCard({ finding: f, historical, arrived, defaultOpen }: { finding
           This part did not complete. Other results are unaffected.
         </div>
       )}
+      {workspace && (
+        <div className="mt-2">
+          <Link href={workspace.href} data-testid={`open-${f.source}`} className="mt-focus t-meta font-semibold underline" style={{ color: "var(--accent)" }}>{workspace.label}</Link>
+        </div>
+      )}
       <div className="mt-2">
         {refs.length === 0 ? (
           <span className="t-meta" style={{ color: "var(--text-6)" }}>
-            No figures cited.
+            {(f.presentation?.artefacts?.length ?? 0) > 0 ? "Written content: no figures to cite." : "No figures cited."}
           </span>
         ) : (
           <>

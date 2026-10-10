@@ -2,8 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
-import { AgentsPanel } from "@/components/ceo/hub/AgentsPanel";
-import { AgentStrip } from "@/components/ceo/hub/AgentStrip";
+import { AgentCanvas } from "@/components/ceo/hub/AgentCanvas";
 import { Composer } from "@/components/ceo/hub/Composer";
 import { Conversation } from "@/components/ceo/hub/Conversation";
 import { DecidePanel, type DecideKind } from "@/components/ceo/hub/DecidePanel";
@@ -12,9 +11,10 @@ import { HealthStrip } from "@/components/ceo/hub/HealthStrip";
 import { InvestigationList } from "@/components/ceo/hub/InvestigationList";
 import { Welcome } from "@/components/ceo/hub/Welcome";
 import { Icon } from "@/components/ui/Icon";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api";
 import { createCeoClient, type AgentCode, type CeoClient, type UiAction } from "@/lib/ceo";
-import { canvasNodes } from "@/lib/ceoModel";
+import { canvasNodes, QUICK_ACTIONS, quickActionState } from "@/lib/ceoModel";
 import type { FeedFactory } from "@/lib/ceoPolling";
 import { useCeoHub } from "@/lib/useCeoHub";
 
@@ -78,31 +78,69 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs }: { client: CeoCl
     await hub.setAttached(code, attach);
   };
 
+  const ceoTone = needsInput ? "input" : processing ? "working" : "idle";
+  const ceoStatus = needsInput ? "Needs your input" : processing ? hub.turn.stage ?? "Working…" : hub.selectedId ? "Ready" : "Start a conversation";
+  const connected = nodes.filter((n) => n.state === "ATTACHED");
+  const quick = QUICK_ACTIONS.filter((q) => ["pnl", "research", "competitors"].includes(q.id));
+
   return (
-    <div className="flex flex-col gap-3" data-testid="ceo-hub" style={{ minHeight: "calc(100vh - 150px)" }}>
-      <AgentStrip
-        nodes={nodes} busy={hub.busyAgent} onToggle={(c, a) => void toggleAgent(c, a)} workingByAgent={workingByAgent}
-        ceoWorking={processing ? hub.turn.stage ?? "Working…" : null} ceoNeedsInput={needsInput} hasConversation={!!hub.selectedId} onMenu={() => setDrawer(true)}
-      />
-
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-12" style={{ height: "calc(100vh - 330px)", minHeight: 420 }}>
-        <section className="mt-panel min-h-[260px] min-w-0 overflow-y-auto p-4 lg:col-span-7" aria-label="Agent results" data-testid="work-area">
-          <div className="flex flex-col gap-5">
-            <AgentsPanel nodes={nodes} busy={hub.busyAgent} working={workingByAgent} onToggle={(c, attach) => void toggleAgent(c, attach)} />
-            {data ? (
-              <FindingsPanel
-                findings={data.findings} messages={data.messages} turns={data.turns} agents={data.agents} arrivedIds={hub.turn.arrivedIds}
-                inFlightQuestion={hub.turn.question} processing={processing} flows={hub.flows} onShowFlow={(id) => void hub.loadFlow(id)}
-              />
-            ) : (
-              <p className="m-0 p-2 text-center t-body-sm" style={{ color: "var(--text-5)" }} data-testid="canvas-idle">
-                What the agents find appears here, with the figures and where they came from.
-              </p>
-            )}
+    <div className="grid gap-3 lg:grid-cols-12" data-testid="ceo-hub" style={{ minHeight: "calc(100vh - 150px)" }}>
+      {/* LEFT: the orchestration — the CEO and its agents on wires. Remove or connect an agent right on its wire. */}
+      <section className="mt-panel flex min-w-0 flex-col gap-4 p-4 lg:col-span-7" aria-label="Agent orchestration" data-testid="work-area" style={{ maxHeight: "calc(100vh - 150px)", overflowY: "auto" }}>
+        <header className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="m-0 t-card-title font-bold" style={{ color: "var(--text-1)" }}>Agent orchestration</h2>
+            <p className="m-0 mt-0.5 t-meta" style={{ color: "var(--text-5)" }}>
+              {data ? `Conversation · ${new Date(data.investigation.created_at).toLocaleDateString()}` : "Remove or connect agents here; a new conversation starts with all of them connected."}
+            </p>
           </div>
-        </section>
+          <div className="flex items-center gap-2">
+            {data && <StatusBadge tone={data.investigation.status === "ACTIVE" ? "accent" : "neutral"} dot={data.investigation.status === "ACTIVE"}>{data.investigation.status === "ACTIVE" ? "Active" : data.investigation.status.toLowerCase()}</StatusBadge>}
+            <button type="button" onClick={() => setDrawer(true)} aria-label="Conversations and business overview" data-testid="open-drawer" className="mt-btn mt-focus flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 t-meta font-bold" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
+              <Icon name="menu" size={14} /> Conversations
+            </button>
+          </div>
+        </header>
 
-        <section className="mt-panel flex min-h-[320px] min-w-0 flex-col p-4 lg:col-span-5" aria-label="CEO conversation">
+        <AgentCanvas
+          nodes={nodes} busy={hub.busyAgent} onToggle={(c, attach) => void toggleAgent(c, attach)}
+          working={workingByAgent} ceoStatus={ceoStatus} ceoTone={ceoTone}
+        />
+
+        <ul className="m-0 flex list-none flex-wrap items-center gap-x-4 gap-y-1 p-0 t-meta" style={{ color: "var(--text-5)" }} aria-label="Legend">
+          <li className="flex items-center gap-1.5"><span aria-hidden className="h-2 w-2 rounded-full" style={{ background: "var(--positive)" }} /> Connected</li>
+          <li className="flex items-center gap-1.5"><span aria-hidden className="h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} /> Working</li>
+          <li className="flex items-center gap-1.5"><span aria-hidden className="h-2 w-2 rounded-full" style={{ background: "var(--warning)" }} /> Needs your input</li>
+          <li className="flex items-center gap-1.5"><span aria-hidden className="h-2 w-2 rounded-full" style={{ background: "var(--text-6)" }} /> Removed or locked</li>
+        </ul>
+
+        {data ? (
+          <FindingsPanel
+            findings={data.findings} messages={data.messages} turns={data.turns} agents={data.agents} arrivedIds={hub.turn.arrivedIds}
+            inFlightQuestion={hub.turn.question} processing={processing} flows={hub.flows} onShowFlow={(id) => void hub.loadFlow(id)}
+          />
+        ) : (
+          <p className="m-0 p-2 text-center t-body-sm" style={{ color: "var(--text-5)" }} data-testid="canvas-idle">
+            What the agents find appears here, with the figures and where they came from.
+          </p>
+        )}
+        <section aria-labelledby="ceo-health-inline">
+          <h3 id="ceo-health-inline" className="mb-2 mt-eyebrow">Business at a glance</h3>
+          <HealthStrip health={hub.health} onRefresh={() => void hub.refreshHealth()} />
+        </section>
+      </section>
+
+      {/* RIGHT: the conversation, quick actions, who is connected, and the chat bar. */}
+      <section className="mt-panel flex min-h-[420px] min-w-0 flex-col gap-3 p-4 lg:col-span-5" aria-label="CEO conversation" style={{ height: "calc(100vh - 150px)" }}>
+        <header className="flex items-center gap-3 pb-1" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: "var(--fill-hover)", color: "var(--accent)" }}><Icon name="ceo" size={18} /></span>
+          <div className="min-w-0">
+            <div className="t-body font-bold" style={{ color: "var(--text-1)" }}>CEO</div>
+            <div className="t-meta" style={{ color: "var(--text-5)" }}>Your AI business co-pilot</div>
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {empty ? (
             <Welcome agents={{ CI: true, CFO: true, PI: true, CMO: true }} onAsk={(t) => void send(t, null)} onAction={(l, a) => void send(l, null, a)} onOpenForm={(f) => setForm(f as DecideKind)} />
           ) : (
@@ -111,23 +149,46 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs }: { client: CeoCl
               onSend={hub.sendTurn} onResolve={hub.resolve} onReopen={hub.reopen} onArchive={hub.archive} onRetry={() => void hub.retryDetail()}
             />
           )}
-        </section>
-      </div>
-
-      {form && (
-        <div className="mx-auto w-full max-w-[1100px]">
-          <DecidePanel client={client} kind={form} disabled={processing} onClose={() => setForm(null)} onRun={(label, action) => { void send(label, null, action); setForm(null); }} />
         </div>
-      )}
 
-      <div className="sticky bottom-0 pb-2 pt-1" style={{ background: "linear-gradient(to top, var(--bg-base) 70%, transparent)" }}>
+        {form && (
+          <DecidePanel client={client} kind={form} disabled={processing} onClose={() => setForm(null)} onRun={(label, action) => { void send(label, null, action); setForm(null); }} />
+        )}
+
+        {!empty && (
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick actions" data-testid="quick-row">
+            {quick.map((q) => {
+              const st = quickActionState(q, data?.agents ?? null, null);
+              return (
+                <button key={q.id} type="button" disabled={!st.enabled || processing || closed} title={st.reason ?? undefined} onClick={() => void send(q.label, null, q.action)}
+                  className="mt-chip mt-focus rounded-full px-2.5 py-1 t-meta" style={{ color: "var(--text-3)", border: "1px solid var(--border-subtle)", opacity: st.enabled ? 1 : 0.45 }}>
+                  {q.label}
+                </button>
+              );
+            })}
+            <button type="button" disabled={processing || closed} onClick={() => void send("Should I stock a new product?", null, { kind: "PLAYBOOK", key: "NEW_PRODUCT_DECISION" })}
+              className="mt-chip mt-focus rounded-full px-2.5 py-1 t-meta" style={{ color: "var(--text-3)", border: "1px solid var(--border-subtle)" }}>
+              New product decision
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2 t-meta" style={{ color: "var(--text-5)" }} data-testid="connected-row">
+          <span className="flex items-center gap-1.5">
+            {connected.map((n) => (
+              <span key={n.code} title={n.name} className="flex h-6 w-6 items-center justify-center rounded-full font-bold" style={{ background: "var(--fill-hover)", color: "var(--text-2)", fontSize: 10 }}>{n.code}</span>
+            ))}
+          </span>
+          <span>{connected.length}/{nodes.length} agents connected</span>
+        </div>
+
         <Composer
           disabled={processing || closed}
-          placeholder={closed ? "This conversation is closed. Reopen it to continue." : needsInput ? "Answer here, or pick an option above…" : "Ask anything about your business…"}
+          placeholder={closed ? "This conversation is closed. Reopen it to continue." : needsInput ? "Answer here, or pick an option above…" : "Ask the CEO anything…"}
           onSend={(t, files) => void send(t, null, null, null, files)}
           error={uploadError}
         />
-      </div>
+      </section>
 
       {drawer && (
         <div className="fixed inset-0 z-40 flex" role="dialog" aria-modal="true" aria-label="Conversations and business overview" data-testid="drawer">
@@ -140,10 +201,6 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs }: { client: CeoCl
               status={hub.list.status} items={hub.list.items} error={hub.list.error} selectedId={hub.selectedId} showArchived={hub.showArchived}
               onToggleArchived={hub.setShowArchived} onSelect={(id) => { hub.select(id); setDrawer(false); }} onCreate={(t) => { void hub.create(t); setDrawer(false); }} onRetry={hub.refreshList}
             />
-            <section aria-labelledby="ceo-health">
-              <h3 id="ceo-health" className="mb-2 mt-eyebrow">Business at a glance</h3>
-              <HealthStrip health={hub.health} onRefresh={() => void hub.refreshHealth()} />
-            </section>
           </div>
           <button type="button" aria-label="Close panel" className="flex-1" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setDrawer(false)} />
         </div>

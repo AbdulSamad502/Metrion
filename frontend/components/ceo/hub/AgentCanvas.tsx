@@ -8,8 +8,8 @@ import type { AgentCode } from "@/lib/ceo";
 import { findingStatusView, type CanvasNode, type NodeState } from "@/lib/ceoModel";
 
 const STATE_LABEL: Record<NodeState, string> = {
-  ATTACHED: "Attached to this investigation",
-  DETACHED: "Detached: not used for new work",
+  ATTACHED: "Connected",
+  DETACHED: "Removed: not used for new work",
   LOCKED: "Locked: not on your plan",
   NO_ACCESS: "No access for you",
   UNKNOWN: "Checking availability…",
@@ -30,26 +30,35 @@ export function AgentCanvas({
   nodes,
   busy,
   onToggle,
+  working = {},
+  ceoStatus = "Ready",
+  ceoTone = "idle",
 }: {
   nodes: CanvasNode[];
   busy: AgentCode | null;
   onToggle: (code: AgentCode, attach: boolean) => void;
+  working?: Partial<Record<AgentCode, string>>;
+  ceoStatus?: string;
+  ceoTone?: "idle" | "working" | "input";
 }) {
+  const dot = ceoTone === "input" ? "var(--warning)" : ceoTone === "working" ? "var(--accent)" : "var(--positive)";
   return (
     <div className="relative" data-testid="agent-canvas" aria-label="CEO orchestration canvas">
       <AddAgent nodes={nodes} busy={busy} onToggle={onToggle} />
       <div className="relative mx-auto w-full max-w-[880px]">
         <div className="flex justify-center">
-          <div className="mt-panel mt-panel--elevated flex items-center gap-3 rounded-2xl px-5 py-3" style={{ boxShadow: "var(--glass-shadow-hover)" }} data-testid="ceo-node">
-            <span style={{ color: "var(--text-1)" }}>
-              <Icon name="ceo" size={22} />
+          <div className="mt-panel mt-panel--elevated flex items-center gap-3 rounded-2xl px-5 py-3" style={{ boxShadow: "var(--glass-shadow-hover)", borderColor: "var(--accent-border-default)" }} data-testid="ceo-node">
+            <span className="relative" style={{ color: "var(--accent)" }}>
+              <Icon name="ceo" size={24} />
+              <span aria-hidden className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full" style={{ background: dot }} />
             </span>
             <div>
               <div className="t-card-title font-bold leading-none" style={{ color: "var(--text-1)" }}>
                 CEO
               </div>
-              <div className="mt-1 t-meta" style={{ color: "var(--text-4)" }}>
-                Orchestrates only the agents wired in
+              <div className="mt-1 flex items-center gap-1 t-meta" style={{ color: ceoTone === "input" ? "var(--warning)" : "var(--text-4)" }} data-testid="ceo-status">
+                {ceoTone === "working" && <Spinner size={10} />}
+                {ceoStatus}
               </div>
             </div>
           </div>
@@ -67,10 +76,12 @@ export function AgentCanvas({
                   fill="none"
                   vectorEffect="non-scaling-stroke"
                   strokeWidth={2}
-                  strokeDasharray={attached ? undefined : "5 5"}
+                  strokeDasharray={working[n.code] ? "6 6" : attached ? undefined : "5 5"}
                   stroke={attached ? "var(--accent-border-strong)" : "var(--connector-inactive)"}
                   opacity={dead ? 0.5 : 1}
-                />
+                >
+                  {working[n.code] && <animate attributeName="stroke-dashoffset" from="12" to="0" dur="0.8s" repeatCount="indefinite" />}
+                </path>
               );
             })}
           </svg>
@@ -82,7 +93,7 @@ export function AgentCanvas({
         <ul className="m-0 mt-3 grid list-none grid-cols-2 gap-3 p-0 md:mt-0 md:grid-cols-4" aria-label="Specialist agents">
           {nodes.map((n) => (
             <li key={n.code}>
-              <AgentNode node={n} busy={busy === n.code} onToggle={onToggle} />
+              <AgentNode node={n} busy={busy === n.code} onToggle={onToggle} working={working[n.code] ?? null} />
             </li>
           ))}
         </ul>
@@ -160,7 +171,7 @@ function WireControl({ node, busy, onToggle }: { node: CanvasNode; busy: boolean
   );
 }
 
-function AgentNode({ node, busy, onToggle }: { node: CanvasNode; busy: boolean; onToggle: (c: AgentCode, attach: boolean) => void }) {
+function AgentNode({ node, busy, onToggle, working }: { node: CanvasNode; busy: boolean; onToggle: (c: AgentCode, attach: boolean) => void; working: string | null }) {
   const meta = agentMeta(node.code);
   const live = node.state === "ATTACHED";
   const dead = node.state === "LOCKED" || node.state === "NO_ACCESS";
@@ -174,15 +185,20 @@ function AgentNode({ node, busy, onToggle }: { node: CanvasNode; busy: boolean; 
       style={{ borderColor: live ? "var(--accent-border-default)" : undefined, borderStyle: node.state === "DETACHED" || dead ? "dashed" : undefined, opacity: dead ? 0.75 : 1 }}
     >
       <span className="flex items-center gap-2">
-        <span style={{ color: live ? "var(--accent)" : dead ? "var(--text-7)" : "var(--text-4)" }}>
-          <Icon name={icon} size={16} />
+        <span className="relative" style={{ color: live ? "var(--accent)" : dead ? "var(--text-7)" : "var(--text-4)" }}>
+          <Icon name={icon} size={18} />
+          <span aria-hidden className="absolute -right-1 -top-1 h-2 w-2 rounded-full" style={{ background: live ? (working ? "var(--accent)" : "var(--positive)") : "var(--text-6)" }} />
         </span>
-        <span className="t-body font-semibold leading-tight" style={{ color: dead ? "var(--text-5)" : "var(--text-1)" }}>
-          {node.name}
+        <span className="min-w-0">
+          <span className="block truncate t-body font-semibold leading-tight" style={{ color: dead ? "var(--text-5)" : "var(--text-1)" }}>
+            {node.name}
+          </span>
+          <span className="block truncate t-meta" style={{ color: "var(--text-5)" }}>{meta.role}</span>
         </span>
       </span>
-      <span className="t-meta" style={{ color: live ? "var(--accent)" : "var(--text-5)" }}>
-        {STATE_LABEL[node.state]}
+      <span className="flex items-center gap-1 t-meta" style={{ color: live ? "var(--accent)" : "var(--text-5)" }}>
+        {working && <Spinner size={10} />}
+        {working ?? STATE_LABEL[node.state]}
       </span>
       {node.state === "ATTACHED" && node.chatActions === 0 && (
         <span className="t-meta" style={{ color: "var(--text-6)" }}>
@@ -233,10 +249,10 @@ function AgentNode({ node, busy, onToggle }: { node: CanvasNode; busy: boolean; 
           type="button"
           disabled={busy}
           onClick={() => onToggle(node.code, !attached)}
-          className="mt-btn mt-focus mt-1 self-start rounded-lg px-2.5 py-1 t-meta font-bold md:hidden"
+          className="mt-btn mt-focus mt-1 self-start rounded-lg px-2.5 py-1 t-meta font-bold"
           style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}
         >
-          {attached ? "Detach" : "Attach"}
+          {attached ? "Remove" : "Connect"}
         </button>
       )}
     </div>

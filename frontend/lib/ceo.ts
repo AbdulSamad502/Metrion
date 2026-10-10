@@ -82,6 +82,8 @@ export type Presentation = {
   facts: PresentationFact[];
   gaps: string[];
   offers: { key: string; label: string }[];
+  /** Content a specialist WROTE (titles, hashtags...). Shown quoted and labelled, never as a figure. Absent on snapshots written before it existed. */
+  artefacts?: { title: string; items: string[]; note: string | null }[];
 };
 
 export type FindingRow = {

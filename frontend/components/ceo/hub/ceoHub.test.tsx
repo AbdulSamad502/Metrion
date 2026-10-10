@@ -28,7 +28,7 @@ async function openList() {
 }
 
 async function openAgent(code: string) {
-  await user().click(screen.getByTestId(`agent-node-${code}`)); // an agent chip opens its on/off control
+  await screen.findByTestId(`agent-node-${code}`); // the remove / connect control is always on the agent's wire: nothing to open first
 }
 
 async function openInvestigation(id: string) {
@@ -50,7 +50,7 @@ describe("empty and new states", () => {
     expect(await screen.findByText("No investigations yet")).toBeInTheDocument();
     expect(screen.getByTestId("welcome")).toBeInTheDocument(); // nothing selected: what the CEO can do, as things to click
     expect(screen.getByTestId("canvas-idle")).toBeInTheDocument();
-    expect(screen.queryByTestId("agent-canvas")).not.toBeInTheDocument(); // no investigation: no wires are claimed
+    expect(screen.getByTestId("agent-canvas")).toBeInTheDocument(); // the agents are always shown; a new conversation connects all of them
     expect(screen.queryByText(/₹/)).not.toBeInTheDocument();
     expect(fake.count("postTurn")).toBe(0);
   });
@@ -214,7 +214,7 @@ describe("a turn: processing, progressive findings, completion", () => {
     await openInvestigation(id);
     await ask("Why are my margins down?");
     fake.completeTurn({ route: "CLARIFY", status: "CLARIFIED", kind: "CLARIFICATION", answer: "Which period do you mean?", compositionMode: null });
-    expect((await screen.findAllByText("Needs your input")).length).toBeGreaterThanOrEqual(2); // the CEO chip and the message
+    await waitFor(() => expect(screen.getByTestId("ceo-status")).toHaveTextContent("Needs your input")); // the CEO node says so
     expect(screen.getByText("Which period do you mean?")).toBeInTheDocument();
     expect(screen.getByLabelText("Ask the CEO")).toBeEnabled(); // the seller can answer immediately
   });
@@ -292,7 +292,7 @@ describe("agents on the canvas", () => {
     await openInvestigation(id);
     expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "DETACHED");
     expect(screen.getByTestId("finding-old")).toHaveAttribute("data-historical", "true");
-    expect(within(screen.getByTestId("agent-node-CFO")).getByText("Off for this conversation")).toBeInTheDocument();
+    expect(within(screen.getByTestId("agent-node-CFO")).getByText("Removed: not used for new work")).toBeInTheDocument();
   });
 
   it("a locked (not entitled) agent is shown as locked, has no wire to add, and is never shown as attached", async () => {
@@ -302,7 +302,7 @@ describe("agents on the canvas", () => {
     await openInvestigation(id);
     const node = screen.getByTestId("agent-node-CFO");
     expect(node).toHaveAttribute("data-state", "LOCKED");
-    expect(within(node).getByText("Locked · not on your plan")).toBeInTheDocument();
+    expect(within(node).getByText("Locked: not on your plan")).toBeInTheDocument();
     expect(screen.queryByTestId("wire-CFO")).not.toBeInTheDocument();
     expect(within(node).queryByRole("button")).not.toBeInTheDocument();
     expect(fake.count("setAgentAttached")).toBe(0);
@@ -557,7 +557,7 @@ describe("turning an agent on", () => {
     await openInvestigation(id);
     expect(screen.getByTestId("agent-node-PI").tagName).toBe("DIV"); // locked: nothing to click, never offered
     await openAgent("CFO");
-    await user().click(screen.getByRole("menuitem", { name: /Attach CFO/ }));
+    await user().click(screen.getByTestId("wire-CFO"));
     await waitFor(() => expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "ATTACHED"));
     expect(fake.calls.find((c) => c.method === "setAgentAttached")?.args).toEqual([id, "CFO", true]);
   });

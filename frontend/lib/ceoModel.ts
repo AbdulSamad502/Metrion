@@ -52,9 +52,9 @@ export type NodeResult = {
   noCompleteResult: boolean;
 };
 
-/** A finding is a usable result when it completed AND its snapshot holds a figure or a fact (a gap sentence alone is not a result). */
+/** A finding is a usable result when it completed AND its snapshot holds a figure, a fact or written content (a gap sentence alone is not a result). */
 const isUsableResult = (f: FindingRow): boolean =>
-  f.status === "COMPLETE" && !!f.presentation && (f.presentation.figures.length > 0 || f.presentation.facts.length > 0) && !!f.presentation.headline;
+  f.status === "COMPLETE" && !!f.presentation && (f.presentation.figures.length > 0 || f.presentation.facts.length > 0 || (f.presentation.artefacts?.length ?? 0) > 0) && !!f.presentation.headline;
 
 /** Selection only, nothing combined, counted or derived: the newest complete usable finding supplies the headline; the newest finding of any
  * status is reported beside it (status, time, which check) so the seller sees that a newer check happened and how it ended. Timestamps,
@@ -229,7 +229,7 @@ export const asOfLabel = (asOf: string | null): string | null => (asOf ? `as of 
 /** Does this finding have anything beyond references to show? */
 export function hasPresentation(f: FindingRow): boolean {
   const p = f.presentation;
-  return !!p && (p.figures.length > 0 || p.facts.length > 0 || p.gaps.length > 0 || p.offers.length > 0 || (p.conflicts?.length ?? 0) > 0);
+  return !!p && (p.figures.length > 0 || p.facts.length > 0 || p.gaps.length > 0 || p.offers.length > 0 || (p.conflicts?.length ?? 0) > 0 || (p.artefacts?.length ?? 0) > 0);
 }
 
 // ------------------------------------------------------------------------------------------------ quick actions
