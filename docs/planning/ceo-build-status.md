@@ -355,3 +355,16 @@ The Hub has a "Decide" area: two buttons open the price-impact and new-product r
 - C5: niche-term confirmation stays on the CMO page; the trend run is tested with a recording handler, not against the real search providers.
 - C6: the hashtags question drops "Skip" from the list when a remembered value is offered (the seller can still type it); multi-marketplace memory is offered on the titles question only. Two tests were order-dependent in one agent run and passed alone (`test_ceo_api_b4` entitlement, `test_ceo_clarification` malformed reference); they passed in the final full run.
 - No flow here was run with a real model or in a signed-in browser. The evaluation (partner's C7 run, the 60-80 case shipped-path suite, qwen35-4b-q4 vs qwen3:8b, the owner's manual check) is next and not started.
+
+## C13 agent needs, shared findings and CEO business Q&A: S1, S2, S3, S5, S6a and a PI slice of S4 (2026-10-10; spec `agent-needs-and-shared-knowledge.md`)
+
+**Built (committed on `feat/ceo-foundation`, not pushed):**
+- **S1 needs broker:** `ceo/needs.py` catalog, `ceo_need` table (migration 0013, append-only), rule-routed add-on "the description along with the GST %": the CEO runs the CMO description, then the GST lookup (Route A/B by code) with the seller's own title as the only slot; refusals are named gaps; `CEO_NEEDS_MAX_PER_TURN` has no default.
+- **S2:** the PI idea link (`LANDED_COST_FOR_IDEA`) and the competitor margin link (`MARGIN_AT_PRICE`) are catalogued and recorded when those flows run.
+- **S3 shared findings ledger:** `shared_finding` (migration 0012; database CHECKs and trigger: no digits in agent text, ENGINE_VERIFIED needs same-tenant ENGINE_RESULT refs, seller-stated rows supersede and cite a message, forgotten sources are not re-recorded; append-only for the app role), `ceo/findings.py`, `GET /api/v1/ceo/findings`, `POST /api/v1/ceo/findings/{id}/forget`.
+- **S4, PI only:** a PI research run with ideas is noted as one fixed-text AGENT_REPORTED finding (no number, no idea name) sourced to the stored run.
+- **S5 CEO business Q&A:** nine question types in `ceo/question_types.py`, entries `BS_PNL_RECENT`, `BS_SELLER_FACTS`, `BS_CMO_CONTENT_LATEST`, `BS_SHARED_FINDINGS`, code-written "Not stored yet" sentences, `python -m backend.ceo_eval qa`.
+- **S6a:** the Hub shows each follow-up lookup as a step (`GET /api/v1/ceo/investigations/{id}/needs`).
+- **Defect found and fixed:** the app role could UPDATE/DELETE `agent_memory` despite the "append-only" claim (default privileges); migration 0014 and a test pin the fix; `ceo_need` revokes at creation.
+
+**Deviations and gaps (stated):** add-ons are raised by the rules router only (no classifier enum); the add-on runs after the main leg and admission is per leg, not all-or-nothing; no reuse of an earlier GST result and no "this product" resolution; S4 writers for CFO, CI and CMO are not built; S6b (findings panel) and the correct endpoint (Q13) are not built; the canvas shows no need edges; the profit chip for BS_PNL is not in the chat actions and period choice is not supported in state reads; findings figures are shown as refs only; no real-model run of any of this and no signed-in browser run.

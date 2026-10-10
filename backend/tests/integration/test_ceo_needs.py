@@ -184,3 +184,33 @@ def test_the_append_only_tables_cannot_be_updated_or_deleted_by_the_app_role(mig
             for priv in ("UPDATE", "DELETE", "TRUNCATE"):
                 assert c.execute(text("SELECT has_table_privilege('metrion_app', :t, :p)"), {"t": table, "p": priv}).scalar() is False, (table, priv)
             assert c.execute(text("SELECT has_table_privilege('metrion_app', :t, 'INSERT')"), {"t": table}).scalar() is True
+
+
+# ------------------------------------------------------------------------------------------------ S4 (PI only): a research run is noted in the shared findings
+def test_the_pi_finding_is_recorded_once_and_is_labelled_not_verified(two_tenants, app_user, migrate_engine, monkeypatch):
+    from backend.ceo import findings
+    from tests.integration import test_ceo_pi_chat as pc
+    from tests.integration.test_ceo_state_specialists import _scope
+    from sqlalchemy import text as sql
+
+    a, _ = two_tenants
+    rid, bid = uuid.uuid4(), uuid.uuid4()
+    with _scope(migrate_engine, a) as c:  # a real research run: a finding's source must be a row of this tenant
+        c.execute(sql("INSERT INTO niche_brief (id, tenant_id, status, created_by) VALUES (:id, :t, 'READY', :by)"), {"id": str(bid), "t": str(a), "by": str(app_user)})
+        c.execute(sql("INSERT INTO pi_research_run (id, tenant_id, niche_brief_id, depth, trigger, candidate_cap, status, started_at, finished_at) VALUES (:id, :t, :b, 'STANDARD', 'MANUAL', 10, 'COMPLETE', now(), now())"),
+                  {"id": str(rid), "t": str(a), "b": str(bid)})
+    try:
+        monkeypatch.setattr(pc, "RUN_ID", str(rid))
+        calls: dict = {}
+        ctx = ctx_for(a, user_id=app_user)
+        rt = runtime(Scripted({}), Grounded(), registry=pc.registry(calls))
+        inv = start(ctx, rt)
+        pc.run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "quick", "yes"])
+        visible = findings.list_visible(a, ["PI"])
+        [row] = [r for r in visible.items if r["kind"] == "PRODUCT_IDEA"]
+        assert row["trust"] == "AGENT_REPORTED" and "not verified" in row["text"] and not any(ch.isdigit() for ch in row["text"])
+        assert "Leather" not in row["text"]  # no idea name: specialist free text is not evidence
+    finally:
+        with _scope(migrate_engine, a) as c:
+            for stmt in ("DELETE FROM shared_finding WHERE tenant_id = :t", "DELETE FROM pi_research_run WHERE id = :r", "DELETE FROM niche_brief WHERE id = :b"):
+                c.execute(sql(stmt), {"t": str(a), "r": str(rid), "b": str(bid)})

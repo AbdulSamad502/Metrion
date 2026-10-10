@@ -30,7 +30,7 @@ from uuid import UUID
 from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
-from backend.ceo import business_state, classifier, clarification, data_requests, input_session, intent_router, memory, needs, references
+from backend.ceo import business_state, classifier, clarification, data_requests, findings, input_session, intent_router, memory, needs, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
 from backend.ceo.contract import AgentCode, BusinessStateEntry, Denial, LegResult, LegStatus, TurnDenied
@@ -648,6 +648,7 @@ def _run_admitted(
             legs = [*legs, *need_legs]
         if key == "pi.discover":  # the run's candidates are read back from what it saved (the report), never taken from the run call's own return
             legs = _with_pi_report(runtime, turn, tenant, now, legs, attached, clock, log)
+            _record_pi_finding(tenant, ctx.app_user_id, legs)
         for leg in legs:
             collector.add_leg(leg)
             if leg.action_key in GST_ROUTE_KEYS and leg.payload and (leg.payload.get("result") or {}).get("disclaimer"):
@@ -708,6 +709,22 @@ def _run_admitted(
 
 
 # ------------------------------------------------------------------------------------------------ pieces
+PI_FINDING_TEXT = "Product Intelligence found product ideas for the niche you asked about. They come from public web sources and are not verified."
+
+
+def _record_pi_finding(tenant: UUID, user_id: UUID | None, legs: Sequence[LegResult]) -> None:
+    """Product Intelligence's result is noted in the shared findings (spec agent-needs 6.4) so the other agents and the CEO know a research run produced ideas. The text is
+    fixed and carries no number or idea name; the source is the stored research run. Best-effort: it never costs the seller their answer."""
+    try:
+        run = next((l for l in legs if l.action_key == "pi.discover" and l.status in (LegStatus.COMPLETE, LegStatus.PARTIAL) and (l.payload or {}).get("runId")), None)
+        report = next((l for l in legs if l.action_key == "pi.report" and l.payload), None)
+        if run is None or report is None or not (report.payload or {}).get("candidates"):
+            return
+        findings.record(tenant, agent="PI", kind="PRODUCT_IDEA", text=PI_FINDING_TEXT, source_ref={"kind": "pi_research_run", "id": str((run.payload or {})["runId"])}, created_by=user_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("could not record a PI finding")
+
+
 NEEDS_NOT_CONFIGURED_TEXT = "The CEO's limit for follow-up lookups is not configured, so the extra lookup was not run. Your main request was."
 _NEED_STATUS = {LegStatus.COMPLETE: "FULFILLED", LegStatus.PARTIAL: "FULFILLED", LegStatus.DENIED: "DENIED", LegStatus.NOT_ENTITLED: "NOT_ENTITLED", LegStatus.FAILED: "FAILED", LegStatus.UNAVAILABLE: "UNAVAILABLE"}
 
