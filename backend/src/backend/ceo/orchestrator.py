@@ -506,6 +506,7 @@ def _run_admitted(
         elif route == "ACTION":
             resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct=dict(run_inputs))
             notes = list(resolved.echoes())
+            input_session.remember_confirmed(tenant, key, run_inputs, source_ref={"message_id": str(user_msg)}, user_id=ctx.app_user_id)  # CMO's private choice, best-effort (agent-memory C6)
         else:
             run_inputs = dict(run_inputs)
             saved_notes: list[str] = []
@@ -532,6 +533,7 @@ def _run_admitted(
                 else:
                     resolved = r
                     notes = [*saved_notes, *r.echoes()]
+                    input_session.remember_confirmed(tenant, key, run_inputs, source_ref={"message_id": str(user_msg)}, user_id=ctx.app_user_id)  # CFO/CI private choices, best-effort (agent-memory C6)
     elif route in ("ACTION", "PLAYBOOK"):
         r = resolve_slots(decision.slots, required, tenant_id=tenant, today=now.date(), resolves=resolves, refs=ui_refs)
         if isinstance(r, Clarification):

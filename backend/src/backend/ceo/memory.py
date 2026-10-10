@@ -143,6 +143,13 @@ _LABELS: Mapping[str, str] = {
 }
 
 
+_AGENT_LABELS: Mapping[tuple[str, str], str] = {
+    ("CMO", "last_marketplaces"): "Marketing: last marketplaces you wrote listing content for",
+    ("CI", "last_competitor"): "Competitor Intelligence: last competitor you compared against",
+    ("CFO", "last_basis"): "Finance: whether your prices include GST (last choice)",
+}
+
+
 def describe(row: Mapping[str, Any]) -> dict[str, Any]:
     """One memory item as the seller sees it: a plain label and the value as they gave it (a stored budget is shown as rupees by the same formatter as everywhere)."""
     value = str(row["value"])
@@ -154,7 +161,7 @@ def describe(row: Mapping[str, Any]) -> dict[str, Any]:
         except ValueError:
             pass
     return {
-        "id": str(row["id"]), "label": _LABELS.get(str(row["key"]), str(row["key"]).replace("_", " ").capitalize()), "value": value,
+        "id": str(row["id"]), "label": _AGENT_LABELS.get((str(row["agent_code"]), str(row["key"])), _LABELS.get(str(row["key"]), str(row["key"]).replace("_", " ").capitalize())), "value": value,
         "shared": row["scope"] == "SHARED", "agent": row["agent_code"], "basis": row["basis"], "createdAt": row["created_at"].isoformat(),
     }
 
@@ -166,3 +173,42 @@ def list_for_seller(tenant: UUID) -> list[dict[str, Any]]:
 def pi_defaults(tenant: UUID) -> dict[str, str]:
     """What the seller confirmed for their last product research (PI's own private notes): used only to OFFER a choice next time, never filled in silently."""
     return {r["key"]: r["value"] for r in repo.list_active(tenant, scope="PRIVATE", agent="PI", kind="NOTE")}
+
+
+# ------------------------------------------------------------------------------------------------ C6: private choices of CFO, CMO and CI (spec agent-memory.md section 11)
+BASES = ("INCLUSIVE", "EXCLUSIVE")
+
+
+def _valid_marketplaces(v: str) -> bool:
+    parts = [p.strip() for p in v.split(",")]
+    return bool(parts) and all(p in MARKETPLACES for p in parts) and len(set(parts)) == len(parts)
+
+
+def _valid_label(v: str) -> bool:
+    return 0 < len(v) <= MAX_VALUE and v == v.strip() and not _BAD_CHARS.search(v)
+
+
+# The closed list of private choice keys per agent and what a valid value looks like. PI's three keys are written by the orchestrator as before and are not validated here.
+PRIVATE_KEYS: Mapping[str, Mapping[str, Any]] = {
+    "CMO": {"last_marketplaces": _valid_marketplaces},
+    "CI": {"last_competitor": _valid_label},
+    "CFO": {"last_basis": lambda v: v in BASES},
+}
+
+
+def note_choice(tenant: UUID, *, agent: str, key: str, value: str, source_ref: Mapping[str, Any], created_by: UUID | None) -> bool:
+    """Save one confirmed choice as the agent's private note. Only a listed (agent, key) with a valid short value is accepted; anything else is refused, never stored."""
+    check = PRIVATE_KEYS.get(agent, {}).get(key)
+    if check is None or not isinstance(value, str) or not check(value):
+        raise ValueError("not a rememberable choice")
+    return note(tenant, agent=agent, key=key, value=value, basis="CONFIRMED_DECISION", source_ref=source_ref, created_by=created_by)
+
+
+def offered(tenant: UUID, agent: str, key: str) -> str | None:
+    """What this agent's own private memory holds for `key`, or None when it holds nothing or the stored value is not valid. Reads only that agent's rows."""
+    check = PRIVATE_KEYS.get(agent, {}).get(key)
+    if check is None:
+        return None
+    rows = repo.list_active(tenant, scope="PRIVATE", agent=agent, kind="NOTE", key=key, limit=1)
+    v = str(rows[0]["value"]) if rows else None
+    return v if v is not None and check(v) else None

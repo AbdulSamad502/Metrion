@@ -170,7 +170,8 @@ def _cost_field(name: str, question: str) -> Field:
 
 def _competitor_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
     rows = [r for r in ceo_reads.list_active_competitors(ctx.tenant_id, limit=MAX_OPTIONS) if r.get("label")]
-    return tuple(Option(str(r["label"]), str(r["label"]), "A competitor you track") for r in rows)
+    base = tuple(Option(str(r["label"]), str(r["label"]), "A competitor you track") for r in rows)
+    return _with_remembered(base, _remembered_choice(ctx, "CI", "last_competitor", lambda v: Option(v, v, _LAST_TIME), valid=lambda v: _is_tracked(ctx, v)))
 
 
 def _fee_choices(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
@@ -210,7 +211,8 @@ PRICE_IMPACT: tuple[Field, ...] = (
     Field("fee", lambda c, g: "Which marketplace, category and fee type should I price it under?", _fee, _fee_choices,
           lambda c, g: None if _fee_options(c) else "No marketplace fee rates are set up yet, so I cannot price a margin. Ask your account owner to add them."),
     Field("basis", lambda c, g: "Do the prices you will give me include GST?", _basis,
-          lambda c, g: (Option("Prices include GST", "inclusive"), Option("Prices exclude GST", "exclusive"))),
+          lambda c, g: _with_remembered((Option("Prices include GST", "inclusive"), Option("Prices exclude GST", "exclusive")),
+                                        _remembered_choice(c, "CFO", "last_basis", lambda v: Option("Prices include GST" if v == "INCLUSIVE" else "Prices exclude GST", v.lower(), _LAST_TIME)))),
     Field("gst_rate_pct", lambda c, g: "What GST rate applies? Type a number such as 18.", _gst, lambda c, g: (Option("I do not know", "unknown", "GST-dependent margins will show as unavailable"),)),
     Field("current_price_paise", lambda c, g: "What is your current selling price, in rupees?", _amount),
     Field("candidate_prices_paise", lambda c, g: "Which prices should I compare? Give rupee amounts separated by commas"
@@ -256,6 +258,40 @@ def _optional_text(max_len: int) -> Callable[[str, Ctx, Mapping[str, Any]], Any]
 
 
 _MARKETPLACE_OPTIONS = lambda ctx, got: tuple(Option(m.title(), m.title()) for m in _MARKETPLACE_NAMES)  # noqa: E731
+_LAST_TIME = "What you chose last time"
+
+
+def _remembered_choice(ctx: Ctx, agent: str, key: str, make: Callable[[str], Option], valid: Callable[[str], bool] | None = None) -> Option | None:
+    """An agent's own remembered choice (spec agent-memory.md section 11) as ONE option, or None. Memory is a convenience: a failure or an invalid value offers nothing."""
+    try:
+        v = memory.offered(ctx.tenant_id, agent, key)
+        return make(v) if v is not None and (valid is None or valid(v)) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _with_remembered(base: Sequence[Option], mine: Option | None) -> tuple[Option, ...]:
+    """The remembered option first, then the existing options (one with the same text is not repeated), at most MAX_OPTIONS in all."""
+    if mine is None:
+        return tuple(base)[:MAX_OPTIONS]
+    return (mine, *(o for o in base if o.text.casefold() != mine.text.casefold()))[:MAX_OPTIONS]
+
+
+def _is_tracked(ctx: Ctx, label: str) -> bool:
+    return any(str(r.get("label")) == label for r in ceo_reads.list_active_competitors(ctx.tenant_id, limit=200))
+
+
+def _cmo_marketplace_options(single: bool, *, skip: bool = False) -> Callable[[Ctx, Mapping[str, Any]], Sequence[Option]]:
+    """The marketplace question's options with CMO's remembered choice first. A one-marketplace question only offers a remembered single marketplace."""
+    def options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+        base = (*_MARKETPLACE_OPTIONS(ctx, got), *((Option("Skip", "skip", "Not tied to one marketplace"),) if skip else ()))
+        mine = _remembered_choice(ctx, "CMO", "last_marketplaces", lambda v: Option(", ".join(p.title() for p in v.split(", ")), ", ".join(p.title() for p in v.split(", ")), _LAST_TIME),
+                                  valid=(lambda v: "," not in v) if single else None)
+        return _with_remembered(base, mine)
+
+    return options
+
+
 _SKIP = lambda why: (lambda ctx, got: (Option("Skip", "skip", why),))  # noqa: E731
 _PRODUCT = Field("product_name", lambda c, g: "What is the product? Name it the way a buyer would search for it.", _text(200))
 _SELLER_TITLE = Field("seller_title", lambda c, g: "What title do you use for it today (or want to use)? I will write from it, so what you give me is what the copy is based on.", _text(500))
@@ -293,15 +329,15 @@ def _theme_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
 CMO_TITLES: tuple[Field, ...] = (
     _PRODUCT,
     Field("category_hint", lambda c, g: "Which category is it in? For example kitchen, apparel, electronics. Or choose themes I already hold.", _optional_text(100), _theme_options),
-    Field("marketplaces", lambda c, g: "Which marketplace should the titles be written for? You can name more than one.", _marketplaces, _MARKETPLACE_OPTIONS),
+    Field("marketplaces", lambda c, g: "Which marketplace should the titles be written for? You can name more than one.", _marketplaces, _cmo_marketplace_options(False)),
 )
 CMO_HASHTAGS: tuple[Field, ...] = (
     _PRODUCT,
-    Field("marketplace", lambda c, g: "Which marketplace are the hashtags for?", _optional_marketplace, lambda c, g: (*_MARKETPLACE_OPTIONS(c, g), Option("Skip", "skip", "Not tied to one marketplace"))[:MAX_OPTIONS]),
+    Field("marketplace", lambda c, g: "Which marketplace are the hashtags for?", _optional_marketplace, _cmo_marketplace_options(True, skip=True)),
 )
 CMO_GROUNDED: tuple[Field, ...] = (
     _PRODUCT,
-    Field("marketplace", lambda c, g: "Which marketplace is this for?", _one_marketplace, _MARKETPLACE_OPTIONS),
+    Field("marketplace", lambda c, g: "Which marketplace is this for?", _one_marketplace, _cmo_marketplace_options(True)),
     _SELLER_TITLE,
 )
 def _niche(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
@@ -660,3 +696,30 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
         "gst_rate_pct": c["gst_rate_pct"], "current_price_paise": c["current_price_paise"], "candidate_prices_paise": c["candidate_prices_paise"],
         "shipping": c["shipping"], "advertising": c["advertising"], "return_rto": c["return_rto"], "other": c["other"],
     }
+
+
+def remember_confirmed(tenant: UUID, session: str, inputs: Mapping[str, Any], *, source_ref: Mapping[str, Any], user_id: UUID | None) -> None:
+    """The seller finished a session with their own answers: save the short choices offered next time (CMO marketplaces, CI competitor, CFO GST basis; spec
+    agent-memory.md section 11). Best-effort: never raises, never blocks the turn, stores no free text and no money."""
+    try:
+        picks: list[tuple[str, str, str]] = []
+        if session in CMO_SESSIONS:
+            mp = inputs.get("marketplaces") if "marketplaces" in inputs else inputs.get("marketplace")
+            mp = [mp] if isinstance(mp, str) else mp
+            if mp:
+                picks.append(("CMO", "last_marketplaces", ", ".join(str(m).upper() for m in mp)))
+        elif session == "COMPETITOR_PRICE_IMPACT":
+            if inputs.get("basis") in memory.BASES:
+                picks.append(("CFO", "last_basis", str(inputs["basis"])))
+            label = next((str(r["label"]) for r in ceo_reads.list_active_competitors(tenant, limit=200) if str(r.get("id")) == str(inputs.get("competitor_url_id")) and r.get("label")), None)
+            if label:
+                picks.append(("CI", "last_competitor", label))
+        for agent, key, value in picks:
+            try:
+                memory.note_choice(tenant, agent=agent, key=key, value=value, source_ref=source_ref, created_by=user_id)
+            except ValueError:
+                continue  # not in its closed form: not remembered
+    except Exception:  # noqa: BLE001
+        import logging
+
+        logging.getLogger(__name__).exception("could not save agent memory")

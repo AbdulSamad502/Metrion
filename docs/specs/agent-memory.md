@@ -44,3 +44,24 @@ Isolation and constraint tests against Postgres; capture and recall through a re
 
 ## 10. Explicit open questions
 Q1 Should specialist agents be allowed to *propose* a shared fact (for example PI noticing the seller's niche) for the seller to confirm? V1: no. Q2 Retention: how long is memory kept after an account closes? Note: because memory is append-only, a forgotten item's original text stays in the superseded row (it is excluded from every recall and from the seller's view); true erasure on request needs a retention/erasure decision before launch. Q3 Is the auto-capture list (§4.3) right for launch?
+
+## 11. agent-memory.md addendum: C6 (private memory for CFO, CMO and CI)
+Status: specified before coding, 2026-10-10. Extends §4.3 and §4.4; changes nothing about PI.
+
+**Decisions.** CFO, CMO and CI each get a short closed list of PRIVATE `NOTE` keys, written exactly like PI's (basis `CONFIRMED_DECISION`, source = the message, by code only) and used only to OFFER a choice next time. They are never filled in, never shared, never a figure source and never contain money or free text.
+
+| Agent | Key | Value (closed form) | Offered as the first option of |
+|---|---|---|---|
+| CMO | `last_marketplaces` | one or more of AMAZON, FLIPKART, MEESHO, joined by ", " | the marketplace question of CMO titles, hashtags and grounded (description, keywords) |
+| CI | `last_competitor` | the label of a tracked competitor (the seller's own label, 120 characters at most) | the competitor question of the price-impact conversation |
+| CFO | `last_basis` | INCLUSIVE or EXCLUSIVE | the GST basis question of the price-impact conversation |
+
+**Rules.**
+1. *Write only on confirmation.* A key is written only when a session finished with the seller's own answers (the session produced its final inputs and the run was accepted for resolution), in the same place and on the same basis as PI's note, best-effort: a failure is logged and never blocks or alters the turn. A session that is cancelled, blocked or still asking writes nothing.
+2. *Offered, never filled.* The remembered value is added as the FIRST option, with the reason "What you chose last time". The field stays unanswered (`collected` does not contain it) until the seller picks or types. The total stays at `MAX_OPTIONS` (3); an existing option with the same text is not repeated, and the existing options otherwise stay in their order.
+3. *Validated on read.* A remembered value that is not in its closed form (an unknown marketplace, a basis that is not INCLUSIVE or EXCLUSIVE, a competitor label that is no longer tracked, or a multi-marketplace value for a one-marketplace question) is simply not offered.
+4. *Private per agent.* Each key is read and written only under its own agent (`agent_code` CMO, CI, CFO) with scope PRIVATE; one agent's key is never visible to another's lookup, and PI's keys are unchanged. The allowlist of (agent, key) pairs lives in `memory.PRIVATE_KEYS`; any other pair is refused by `memory.note_choice`.
+5. *Control.* These items appear in `GET /api/v1/ceo/memory` with plain labels and are forgotten with `POST /api/v1/ceo/memory/{id}/forget`, through the existing mechanism. A forgotten item is no longer offered.
+6. *No money.* None of these keys holds a money value. The competitor's captured price is not remembered (it is read fresh from CI, spec 6.38).
+
+**Acceptance (C6).** AC-C6-1 nothing is collected until the seller chooses the offered option. AC-C6-2 CMO, CI and CFO memories are isolated from each other, from PI's, and between tenants. AC-C6-3 forgetting removes the offer. AC-C6-4 an invalid stored value is not offered. AC-C6-5 a note is written only for a finished, confirmed session.
