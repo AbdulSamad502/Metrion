@@ -260,9 +260,39 @@ _SKIP = lambda why: (lambda ctx, got: (Option("Skip", "skip", why),))  # noqa: E
 _PRODUCT = Field("product_name", lambda c, g: "What is the product? Name it the way a buyer would search for it.", _text(200))
 _SELLER_TITLE = Field("seller_title", lambda c, g: "What title do you use for it today (or want to use)? I will write from it, so what you give me is what the copy is based on.", _text(500))
 
+def _fit(words: Sequence[str], limit: int = 100) -> str:
+    out: list[str] = []
+    for w in words:
+        if len(", ".join([*out, w])) > limit:
+            break
+        out.append(w)
+    return ", ".join(out)
+
+
+def _theme_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    """Themes the seller's other agents already hold, OFFERED as the category hint (spec 6.39): Product Intelligence's keyword themes for this idea, and the keywords of a
+    tracked competitor's captured listing. Both are labelled as not verified; neither is ever filled in."""
+    from datetime import datetime, timezone
+
+    out: list[Option] = []
+    try:
+        pi = ceo_reads.pi_idea_keywords(ctx.tenant_id, str(got.get("product_name", "")))
+        if pi:
+            out.append(Option("Use Product Intelligence's themes", _fit(pi), "Keyword themes from public web sources for this idea. Not verified"))
+    except Exception:  # noqa: BLE001 - an offer is a convenience; the question is still asked
+        pass
+    try:
+        ci = ceo_reads.ci_listing_keywords(ctx.tenant_id, now=datetime.now(timezone.utc))
+        if ci:
+            out.append(Option(f"Use {ci[0]}'s listing keywords", _fit(ci[1]), "From a competitor listing you track; it may not match your product. Not verified"))
+    except Exception:  # noqa: BLE001
+        pass
+    return (*out, Option("Skip", "skip", "Titles are written without a category hint"))[:MAX_OPTIONS]
+
+
 CMO_TITLES: tuple[Field, ...] = (
     _PRODUCT,
-    Field("category_hint", lambda c, g: "Which category is it in? For example kitchen, apparel, electronics.", _optional_text(100), _SKIP("Titles are written without a category hint")),
+    Field("category_hint", lambda c, g: "Which category is it in? For example kitchen, apparel, electronics. Or choose themes I already hold.", _optional_text(100), _theme_options),
     Field("marketplaces", lambda c, g: "Which marketplace should the titles be written for? You can name more than one.", _marketplaces, _MARKETPLACE_OPTIONS),
 )
 CMO_HASHTAGS: tuple[Field, ...] = (
@@ -428,7 +458,20 @@ DR_BUDGET: tuple[Field, ...] = (
     Field("confirm", _dr_summary(lambda g: f"a batch budget of {_money(g['budget'])}"), _yes, _DR_CONFIRM_OPTIONS),
 )
 
-CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords")
+def _optional_marketplaces(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    return [] if raw.strip().casefold() in _SKIP_WORDS else _marketplaces(raw, ctx, got)
+
+
+CMO_TRENDS: tuple[Field, ...] = (
+    Field("marketplaces", lambda c, g: "Which marketplace should the market research focus on? You can name more than one, or skip to cover all.", _optional_marketplaces,
+          lambda c, g: (Option("All three", "all"), Option("Amazon", "Amazon"), Option("Flipkart", "Flipkart"))),
+)
+DR_TREND_RUN: tuple[Field, ...] = (
+    Field("preview", lambda c, g: "", _text(4000)),
+    Field("confirm", lambda c, g: str(g.get("preview", "")), _yes, lambda c, g: (Option("Yes, run the research", "yes", "Sends exactly these searches"),)),
+)
+
+CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords", "cmo.market_trends")
 # classifier slot name -> session field it can pre-fill (the seller already said it); the answer still goes through the same parser
 PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget", "candidate_prices_paise"),
                                           "competitor": ("competitor",)}
@@ -437,6 +480,7 @@ PLAYBOOK_PREFILL: Mapping[str, frozenset[str]] = {"NEW_PRODUCT_DECISION": frozen
 SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "COMPETITOR_PRICE_IMPACT": PRICE_IMPACT, "NEW_PRODUCT_DECISION": NEW_PRODUCT,
     "pi.discover": PI_DISCOVER,
+    "cmo.market_trends": CMO_TRENDS, "dr.trend_run": DR_TREND_RUN,
     "dr.cogs_per_unit": DR_COGS, "dr.supplier_quote": DR_QUOTE, "dr.batch_budget": DR_BUDGET,
     "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_GROUNDED, "cmo.generate_keywords": CMO_GROUNDED,
 }
@@ -522,6 +566,14 @@ def start_data_request(session: str, sku: str, ctx: Ctx, resume: Mapping[str, An
     return ask
 
 
+def start_confirm(session: str, ctx: Ctx, text: str, resume: Mapping[str, Any]) -> Ask:
+    """A confirm card whose text was written by code from a preview (spec 6.40); `resume` is the request that runs when the seller says yes."""
+    ask = _ask(session, SESSIONS[session], ctx, {"preview": text}, prefix="")
+    assert isinstance(ask, Ask)
+    ask.card["resume"] = dict(resume)
+    return ask
+
+
 def _ask(playbook: str, fields: Sequence[Field], ctx: Ctx, collected: Mapping[str, Any], *, prefix: str) -> Ask | Blocked:
     f = _next_field(fields, ctx, collected)
     assert f is not None
@@ -569,6 +621,8 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
 
 def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
     """The same shape `playbook_inputs.validate_inputs` checks for the form (§6.33). Nothing is added that the seller did not give."""
+    if playbook == "dr.trend_run":
+        return {}
     if playbook == "dr.cogs_per_unit":
         return {"save": {"cost_paise": c["cost"]}, "sku": c["sku"]}
     if playbook == "dr.batch_budget":

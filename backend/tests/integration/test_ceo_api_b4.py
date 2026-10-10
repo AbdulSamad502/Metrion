@@ -103,7 +103,7 @@ def test_availability_reflects_the_members_permissions_and_truthful_chat_actions
     client, ha, _, a, _ = api
     full = client.get("/api/v1/ceo/agents/availability", headers=ha).json()
     assert {k: v["status"] for k, v in full.items()} == {"CFO": "PRESENT", "CI": "PRESENT", "PI": "PRESENT", "CMO": "PRESENT"}
-    assert {k: v["chatActions"] for k, v in full.items()} == {"CFO": 6, "CI": 1, "PI": 2, "CMO": 4}  # CFO +GST lookup (Route A), CI price positioning, PI report + discovery (spec 6.35), CMO titles / hashtags / description / keywords
+    assert {k: v["chatActions"] for k, v in full.items()} == {"CFO": 6, "CI": 1, "PI": 2, "CMO": 6}  # CFO +GST lookup (Route A), CI price positioning, PI report + discovery (spec 6.35), CMO titles / hashtags / description / keywords + market trends and its preview (spec 6.40)
     member = login(clerk, a, role=PARTNER_ROLE, permissions={AGENT_CEO: True, INVESTIGATION_VIEW: True})
     assert client.get("/api/v1/ceo/agents/availability", headers=member).json()["CFO"]["status"] == "NOT_PERMITTED"
     assert client.get("/api/v1/ceo/agents/availability", headers={}).status_code == 401

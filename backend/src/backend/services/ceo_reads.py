@@ -14,9 +14,9 @@ from calc_engine.formulas.cost_components import weighted_average_cost
 from calc_engine.repositories import config_repo, manual_adjustment_repo
 from calc_engine.types import Unavailable
 from competitor_intelligence.handoff import CiHandoffSnapshot, build_ci_handoff_snapshot
-from competitor_intelligence.repositories import competitor_url_repo
+from competitor_intelligence.repositories import competitor_listing_insight_repo, competitor_url_repo
 from competitor_intelligence.types import Unavailable as CiUnavailable
-from product_intelligence.repositories import pi_research_run_repo
+from product_intelligence.repositories import pi_research_run_repo, product_candidate_repo
 from slim_cmo.repositories import generation_repo as cmo_generation_repo
 
 from cfo.repositories import agent_data_request_repo
@@ -112,6 +112,32 @@ def open_data_request(tenant_id: UUID, request_id: UUID) -> dict[str, Any] | Non
 
 def answer_data_request(tenant_id: UUID, request_id: UUID, adjustment_id: UUID) -> None:
     agent_data_request_repo.mark_answered(tenant_id, request_id, answered_with_kind="MANUAL_ADJUSTMENT", answered_with_id=adjustment_id)
+
+
+def pi_idea_keywords(tenant_id: UUID, name: str, *, limit: int = 6) -> list[str]:
+    """The keyword themes Product Intelligence stored for the idea of that name in the latest finished run (names matched case-insensitively), else []. Public-web
+    themes, not verified."""
+    run = pi_research_run_repo.latest_run_for_tenant(tenant_id, finished_only=True)
+    if run is None:
+        return []
+    for c in product_candidate_repo.list_candidates_for_run(tenant_id, UUID(str(run["id"]))):
+        if str(c.get("candidate_title", "")).casefold() == name.strip().casefold():
+            return [str(k) for k in ((c.get("keyword_themes") or {}).get("top_keywords") or [])][:limit]
+    return []
+
+
+def ci_listing_keywords(tenant_id: UUID, *, now: Any, limit: int = 6) -> tuple[str, list[str]] | None:
+    """(competitor label, keyword themes) from the most recent listing insight of the first tracked competitor that has one, else None. Derived from a captured
+    listing; not verified."""
+    for u in competitor_url_repo.list_active(tenant_id, limit=10):
+        snap = build_ci_handoff_snapshot(tenant_id, UUID(str(u["id"])), now=now)
+        if isinstance(snap, CiUnavailable):
+            continue
+        insight = competitor_listing_insight_repo.get_by_snapshot(tenant_id, snap.snapshot_id)
+        words = list(((insight or {}).get("keyword_themes") or {}).keys())[:limit]
+        if words:
+            return str(u.get("label") or "a competitor"), [str(w) for w in words]
+    return None
 
 
 def stored_cost(tenant_id: UUID, sku: str) -> list[dict[str, Any]]:

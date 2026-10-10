@@ -264,7 +264,8 @@ def _run_turn_locked(
                 rs = input_outcome.resume  # spec 6.37: save what the seller confirmed, then ask the very same question again
                 ui_action = UiAction(
                     str(rs["route"]), rs.get("key"), dict(rs.get("slots") or {}), dict(rs.get("refs") or {}), rs.get("inputs"),
-                    save={**input_outcome.inputs["save"], "request_id": rs.get("request_id")}, save_sku=str(input_outcome.inputs["sku"]), save_ref=f"ceo-{clarification.card_id}",
+                    save={**input_outcome.inputs["save"], "request_id": rs.get("request_id")} if input_outcome.inputs.get("save") else None,
+                    save_sku=str(input_outcome.inputs.get("sku", "")), save_ref=f"ceo-{clarification.card_id}",
                 )
                 input_outcome = None
             elif isinstance(input_outcome, input_session.Done):  # every field collected: the same validated inputs as the form, and the playbook / action runs
@@ -481,6 +482,13 @@ def _run_admitted(
             pass
         elif run_inputs is None or (key == "COMPETITOR_PRICE_IMPACT" and runtime.max_candidate_prices is None):
             resolved = ResolvedSlots(tenant_id=tenant, today=now.date())  # refused below with CONFIG_MISSING: the bound has no default (Q32)
+        elif route == "ACTION" and key == "cmo.market_trends" and not run_inputs.get("plan_digest"):
+            # spec 6.40: the exact outbound searches are shown first (a zero-cost preview) and nothing is sent until the seller confirms them
+            pv = _trend_preview(ctx, runtime, turn, tenant, now, attached, clock, log, run_inputs)
+            if isinstance(pv, str):
+                invalid_form = pv
+            else:
+                route, key, clarify_slot, clarify_text, session_card = "CLARIFY", None, pv.card["slot"], pv.text, pv.card
         elif route == "ACTION" and key == "pi.discover":
             try:  # the seller confirmed these answers: they become their saved research brief, which Product Intelligence then runs from
                 brief = ceo_briefs.create_ready_brief(tenant, created_by=ctx.app_user_id, inputs=run_inputs, ref=str(run_inputs.get("ceo_ref")))
@@ -641,7 +649,8 @@ def _run_admitted(
             notes.append("To continue with any of these, say for example “write titles for #2”, “hashtags for #5” or “GST rate for #3”.")
         if route == "ACTION" and ACTIONS[key].session:
             template_only_answer = True  # what the specialist wrote is shown as it is, quoted and labelled, never re-worded by a second model
-            heading = "Here is what Product Intelligence found for your niche." if key == "pi.discover" else "Here is what was written for the details you gave."
+            heading = ("Here is what Product Intelligence found for your niche." if key == "pi.discover"
+                       else "Here is what the market-trend research found." if key == "cmo.market_trends" else "Here is what was written for the details you gave.")
         if route == "PLAYBOOK" and PLAYBOOKS[key].needs_form:
             # Several figures of one metric (one margin per candidate price, one cost per supplier) can only be told apart by their labels, which the fixed
             # layout carries and prose with markers cannot. The answer is therefore the deterministic layout, with no model call (spec 6.33).
@@ -679,6 +688,38 @@ def _run_admitted(
 
 
 # ------------------------------------------------------------------------------------------------ pieces
+_TREND_LABELS = {"NICHE": "your niche", "MARKET_NEWS": "marketplace news", "REPORTED_TACTICS": "tactics sellers report", "NEW_PRODUCTS_BUZZ": "new product buzz", "ADJACENT": "related niches"}
+MAX_QUERIES_SHOWN = 12
+
+
+def _trend_preview(
+    ctx: AuthContext, runtime: CeoRuntime, turn: CeoTurn, tenant: UUID, now: datetime, attached: frozenset[str], clock: StageClock, log: EventLog, run_inputs: Mapping[str, Any],
+) -> input_session.Ask | str:
+    """Runs the zero-cost preview through the one choke point and turns it into a confirm card written by code. A string is the plain reason it could not be prepared."""
+    key = "cmo.market_trends_preview"
+    if not _preflight(ctx, runtime, key, attached, now):
+        return "market research is not available to you here"
+    leg = _run_leg(turn, runtime, ResolvedSlots(tenant_id=tenant, today=now.date(), direct={"marketplaces": list(run_inputs.get("marketplaces") or [])}), key, attached, clock, log)
+    p = leg.payload or {}
+    if leg.status not in (LegStatus.COMPLETE, LegStatus.PARTIAL) or not p.get("digest"):
+        return "the search plan could not be prepared"
+    queries = p.get("queries") or []
+    lines = [f"{n}. {_TREND_LABELS.get(str(q.get('section')), str(q.get('section')).lower())}: \u201c{q.get('query')}\u201d" for n, q in enumerate(queries[:MAX_QUERIES_SHOWN], start=1)]
+    more = f" (and {len(queries) - MAX_QUERIES_SHOWN} more)" if len(queries) > MAX_QUERIES_SHOWN else ""
+    off = [f"{_TREND_LABELS.get(str(s).upper(), str(s).lower())} ({r})" for s, r in (p.get("unavailableSections") or {}).items() if r and r != "NOT_REQUESTED"]
+    text = (
+        ("I will send exactly these searches to the web search providers" + more + ". Only your confirmed niche terms and marketplace names are sent:\n" + "\n".join(lines) if lines else
+         "No searches can be sent yet.")
+        + ("\nNot covered: " + "; ".join(off) + "." if off else "")
+        + "\nThis uses one market-research run from your plan. Shall I go ahead?"
+    )
+    if not lines:
+        return "there is nothing to research yet: confirm your niche terms on the CMO page first"
+    resume = {"route": "ACTION", "key": "cmo.market_trends", "slots": {}, "refs": {},
+              "inputs": {**{k: v for k, v in run_inputs.items()}, "plan_digest": str(p["digest"])}}
+    return input_session.start_confirm("dr.trend_run", input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices), text, resume)
+
+
 def _missing_figure_question(
     ctx: AuthContext, runtime: CeoRuntime, tenant: UUID, now: datetime, turn: CeoTurn, route: str, key: str | None, slots: Mapping[str, str], refs: Mapping[str, Any],
     sku: str | None, inputs: Mapping[str, Any] | None,

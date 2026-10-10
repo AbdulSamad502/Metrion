@@ -84,9 +84,11 @@ def test_every_planned_action_is_a_wired_registry_action_with_valid_slots():
         "cmo.generate_hashtags": {"request_key": "k", "product_name": "bottle"},
         "cmo.generate_description": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
         "cmo.generate_keywords": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
+        "cmo.market_trends": {"request_key": "k", "marketplaces": ["AMAZON"], "plan_digest": "a" * 64},  # spec 6.40: the run is bound to a confirmed preview
+        "cmo.market_trends_preview": {"marketplaces": ["AMAZON"]},
     }
     for key, plan in ACTIONS.items():
-        built = plan.build_slots(dataclasses.replace(resolved, direct=sample[key]) if plan.session else resolved)
+        built = plan.build_slots(dataclasses.replace(resolved, direct=sample[key]) if key in sample else resolved)
         specs = [reg.get(k) for k in GST_ROUTE_KEYS] if key == GST_KEY else [reg.get(key)]  # GST is one action to the model; code picks the route
         for spec in specs:
             assert spec.wired and not spec.denial_surface

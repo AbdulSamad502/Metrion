@@ -60,6 +60,7 @@ _PI_LIMITS: Mapping[str, str] = {
     "marketplace_price_and_competition": "These ideas have not been checked against live marketplace listings, so their prices and competition are unknown.",
     "demand_signal": "Real sales and demand numbers are not available for these ideas.",
 }
+MAX_TREND_ITEMS = 4
 _CMO_KINDS: Mapping[str, str] = {
     "TITLE_SET": "Title options", "DESCRIPTION": "Description", "KEYWORDS": "Search keywords", "HASHTAGS": "Hashtags", "BULLETS": "Bullet points",
     "LISTING_COPY": "Listing copy", "BACKEND_TERMS": "Backend search terms",
@@ -269,6 +270,10 @@ class EvidenceCollector:
             self._gst_result(payload)
         elif leg.action_key == "pi.report":
             self._pi_candidates(payload)
+        elif leg.action_key == "cmo.market_trends_preview":
+            self.add_fact("Market research plan", "the exact searches were prepared and shown for confirmation; nothing was sent", "SOURCE_DERIVED")
+        elif leg.action_key == "cmo.market_trends":
+            self._trend_report(payload)
         elif leg.action_key.startswith("cmo."):
             self._cmo_artefacts(payload)
         elif leg.action_key == "cfo.strategic_briefing":
@@ -300,6 +305,27 @@ class EvidenceCollector:
         for u in payload.get("unavailable") or []:  # PI's own notes are for developers; the seller is told the plain consequence, by field
             field = str(u.get("field") or "")
             self.add_gap(_PI_LIMITS.get(field, "The research run was only partly complete, so some ideas may be missing." if field == "run_completeness" else "Some information was not available for these ideas."))
+
+    def _trend_report(self, payload: Mapping[str, Any]) -> None:
+        """The market-trend report (spec 6.40): what public web sources said, quoted and labelled. Findings are attention in the press and online, never demand or sales,
+        and are not verified here; a section that could not be built is a named gap, never filled in."""
+        if payload.get("status") != "COMPLETE":
+            self.add_gap("The market research did not complete" + (f": {payload['failureReason']}." if payload.get("failureReason") else "."))
+            return
+        report = payload.get("report") or {}
+        labels = {"NICHE": "Your niche", "MARKET_NEWS": "Marketplace news", "REPORTED_TACTICS": "Tactics sellers report", "NEW_PRODUCTS_BUZZ": "New product buzz", "ADJACENT": "Related niches"}
+        note = "From public web sources and not verified. This shows attention in the press and online, not demand or your sales."
+        for sec, body in (report.get("sections") or {}).items():
+            label = labels.get(str(sec), str(sec).replace("_", " ").title())
+            items = [" ".join(f"{f.get('theme', '')}. {f.get('summary', '')}".split())[:260] for f in (body.get("findings") or [])[:MAX_TREND_ITEMS]]
+            if body.get("state") == "COMPLETE" and items:
+                self.artefacts.append((f"Market trends: {label}", tuple(items), note))
+            else:
+                self.add_gap(f"{label}: " + (str(body.get("reason")) if body.get("reason") else "nothing supported by the sources was found") + ".")
+        interp = report.get("interpretation") or {}
+        stmts = [" ".join(str(i.get("statement", "")).split())[:260] for i in (interp.get("items") or [])[:MAX_TREND_ITEMS] if i.get("statement")]
+        if stmts:
+            self.artefacts.append(("What the CMO makes of it", tuple(stmts), "The CMO's reading of the findings above, not verified. Decide for yourself before acting on it."))
 
     def _cmo_artefacts(self, payload: Mapping[str, Any]) -> None:
         """What CMO wrote. The text is the specialist's own content, shown quoted and labelled; it is never a figure and is not run through the money provenance path.

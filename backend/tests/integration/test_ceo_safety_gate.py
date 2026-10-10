@@ -42,7 +42,7 @@ def _run(ctx, rt, text):
 
 # ============================================================================== class 1: forbidden execution
 HOSTILE_KEYS = (
-    *sorted(FORBIDDEN_ACTION_KEYS), "cfo.pricing", "cfo.landed_cost", "cfo.gst_override", "pi.discover", "pi.supplier_lookup", "cmo.generate_title_sets", "cmo.market_trends",
+    *sorted(FORBIDDEN_ACTION_KEYS), "cfo.pricing", "cfo.landed_cost", "cfo.gst_override", "pi.discover", "pi.supplier_lookup", "cmo.generate_title_sets", "cmo.approve_title",
     "ci.discover_competitors", "ci.research_now", "service.gst_lookup", "cfo.gst_lookup", "CFO.FINANCIAL_HEALTH", "cfo.financial_health​", "cfo.financial_health;DROP TABLE tenant",
     "../../admin", "", "ceo.write_anything", "agent_run.delete",
 )

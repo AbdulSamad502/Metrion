@@ -251,6 +251,8 @@ ACTIONS: Mapping[str, ActionPlan] = {
         ActionPlan("cmo.generate_hashtags", "Suggest hashtags for a product (CMO). The CEO asks the seller for the product details", (), _direct, session=True),
         ActionPlan("cmo.generate_description", "Write a product description for a marketplace from the seller's own title (CMO). The CEO asks for the details", (), _direct, session=True),
         ActionPlan("cmo.generate_keywords", "Suggest search keywords for a product on a marketplace from the seller's own title (CMO). The CEO asks for the details", (), _direct, session=True),
+        ActionPlan("cmo.market_trends", "Research current market trends for the seller's niche (marketplace news, tactics sellers report, new product buzz) from public web search (CMO). The CEO first shows the exact searches and asks the seller to confirm", (), _direct, session=True),
+        ActionPlan("cmo.market_trends_preview", "Preview the exact web searches a market-trends run would send; nothing is sent and nothing is used up", (), _direct),
         ActionPlan("cfo.cash_reconciliation", "Cash reconciliation: is the marketplace paying what it owes, for a marketplace and period", ("marketplace", "period"), _period_marketplace),
     )
 }

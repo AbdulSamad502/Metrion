@@ -43,6 +43,7 @@ RULES: tuple[Rule, ...] = (
     Rule("cmo.generate_title_sets", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing |product |amazon |flipkart |meesho )?titles?\b|\btitles? (?:options?|ideas?|for)\b")),
     Rule("cmo.generate_description", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:product |listing )?descriptions?\b")),
     Rule("cmo.generate_keywords", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:search |seo )?keywords?\b|\bkeywords? (?:for|ideas?)\b")),
+    Rule("cmo.market_trends", "CMO", _rx(r"\b(?:market|niche|category|marketplace) trends?\b|\btrend (?:report|research|analysis)\b|\bwhat(?:'s| is) (?:happening|trending|new) in (?:my|the) (?:market|niche|category)\b")),
     Rule(
         "pi.discover", "PI",
         _rx(
