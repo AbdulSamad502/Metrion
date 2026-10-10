@@ -65,7 +65,7 @@ def test_a_question_or_a_long_message_is_a_new_request_not_an_answer(two_tenants
     inv = start(ctx, rt)
     orchestrator.run_turn(ctx, rt, inv, msg)
     res = orchestrator.run_turn(ctx, rt, inv, other)
-    assert calls == {} and res.route == "ADVISORY" and cls.calls == 2  # routed by the classifier, not swallowed as the marketplace
+    assert calls == {} and res.route == "ADVISORY" and cls.calls == 1  # the general-question rule routes it (no model call); it is not swallowed as the marketplace
 
 
 def test_the_general_advice_line_is_written_by_code_after_the_answer(two_tenants, app_user):
@@ -124,3 +124,15 @@ def test_the_seller_can_follow_up_on_a_numbered_idea_and_the_next_agent_works_on
     assert slots.product_name == "Leather Formal Shoes"
     out_of_range = orchestrator.run_turn(ctx, rt, inv, "write titles for #99")
     assert "Taking #99" not in out_of_range.answer  # nothing is guessed: it is asked about like any other request
+
+
+def test_the_same_fact_again_is_acknowledged_not_sent_to_the_model(two_tenants, app_user):
+    """The owner's first live run: repeating "my business name is X" fell through to the classifier and produced a confusing answer."""
+    a, _ = two_tenants
+    ctx = ctx_for(a, user_id=app_user)
+    rt = runtime(Scripted({}), Grounded())  # an EMPTY classifier: any model call fails the turn
+    inv = start(ctx, rt)
+    first = orchestrator.run_turn(ctx, rt, inv, "my business name is Zyquora")
+    again = orchestrator.run_turn(ctx, rt, inv, "my business name is Zyquora")
+    assert "I'll remember your business name: Zyquora" in first.answer
+    assert again.status == "DELIVERED" and "I already have your business name: Zyquora" in again.answer

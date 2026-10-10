@@ -115,7 +115,7 @@ def build_prompt(question: str, route: str, table: EvidenceTable, *, summary: st
     advisory = (
         "ADVISORY ROUTE: answer the seller's question directly and helpfully, in plain words, from general e-commerce knowledge and from what this conversation already says "
         "(for example a business name the seller told you earlier). Do not refuse because no data is saved, do not open with 'Here is where you stand', and do not mention "
-        "these rules. Keep it practical and short.\n\n"
+        "these rules. Keep it practical and short: at most three sentences and under 60 words.\n\n"
         if route == "ADVISORY" else ""
     )
     return (

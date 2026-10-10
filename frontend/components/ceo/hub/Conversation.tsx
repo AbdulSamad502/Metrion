@@ -1,13 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Welcome } from "@/components/ceo/hub/Welcome";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState, Spinner } from "@/components/ui/LoadingState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import type { AgentCode, CeoMessage, ClarificationCard, ClarificationReply, ExplicitPeriod, InvestigationDetail, NeedRow, TurnRow, UiAction } from "@/lib/ceo";
-import { investigationTitle, messageView, needStepView, needsByMessage, type HubState } from "@/lib/ceoModel";
+import type { AgentCode, CeoMessage, ClarificationCard, ClarificationReply, ExplicitPeriod, FindingRow, InvestigationDetail, NeedRow, TurnRow, UiAction } from "@/lib/ceo";
+import { findingLink, investigationTitle, messageView, needStepView, needsByMessage, type HubState } from "@/lib/ceoModel";
 import type { TurnProgress } from "@/lib/useCeoHub";
 
 /** CENTER: the CEO conversation, the investigation's status and the composer.
@@ -87,6 +88,7 @@ export function Conversation({
 
       <Thread
         messages={detail.messages}
+        findings={detail.findings}
         turnById={turnById}
         answerableCardId={closed ? null : lastCardId(detail.messages)}
         cardDisabled={state === "PROCESSING"}
@@ -134,9 +136,10 @@ function lastCardId(messages: CeoMessage[]): string | null {
 }
 
 function Thread({
-  messages, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs,
+  messages, findings, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs,
 }: {
   messages: CeoMessage[];
+  findings: FindingRow[];
   turnById: Map<string, TurnRow>;
   answerableCardId: string | null;
   cardDisabled: boolean;
@@ -158,6 +161,7 @@ function Thread({
       {messages.map((m) => (
         <li key={m.id}>
           <Bubble message={m} turnById={turnById} />
+          {m.role === "CEO" && m.kind === "ANSWER" && <ReportButtons links={reportLinks(findings, m.turn_id)} />}
           <NeedSteps needs={placed.byMessage.get(m.id) ?? []} />
           {m.id === answerableCardId && m.choices && <DecisionCard messageId={m.id} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
         </li>
@@ -184,6 +188,30 @@ function NeedSteps({ needs }: { needs: NeedRow[] }) {
         );
       })}
     </ul>
+  );
+}
+
+/** One button per agent page that holds the full analysis behind this answer (for example the whole research report with images, reviews and suppliers). */
+function reportLinks(findings: FindingRow[], turnId: string | null | undefined): { href: string; label: string }[] {
+  if (!turnId) return [];
+  const out: { href: string; label: string }[] = [];
+  for (const f of findings) {
+    const l = f.turn_id === turnId ? findingLink(f) : null;
+    if (l && !out.some((o) => o.href === l.href)) out.push(l);
+  }
+  return out;
+}
+
+function ReportButtons({ links }: { links: { href: string; label: string }[] }) {
+  if (links.length === 0) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-2" data-testid="report-buttons">
+      {links.map((l) => (
+        <Link key={l.href} href={l.href} data-testid="report-button" className="mt-btn mt-focus inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 t-body-sm font-bold" style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}>
+          {l.label} &rarr;
+        </Link>
+      ))}
+    </div>
   );
 }
 

@@ -203,7 +203,9 @@ def _turn_context(tenant: UUID, inv: dict[str, Any], current_msg: UUID) -> tuple
     )
     earlier_questions = [str(m["content"])[:200] for m in msgs if m["role"] == "USER"][-3:]  # questions only: CEO answers carry figures
     summary = inv.get("summary")
-    composer_ctx = " | ".join(x for x in (summary, memory.context_line(tenant), ("Earlier the seller asked: " + "; ".join(earlier_questions)) if earlier_questions else None) if x) or None
+    ideas = references.latest_ideas(repo.list_findings(tenant, inv["id"]))  # what the seller was shown earlier ("the list above"), quoted as data so the CEO does not forget it
+    ideas_line = ("Product ideas shown earlier in this conversation (from public web sources, not verified): " + "; ".join(f"#{n} {name}" for n, name in enumerate(ideas[:10], start=1))) if ideas else None
+    composer_ctx = " | ".join(x for x in (summary, memory.context_line(tenant), ideas_line, ("Earlier the seller asked: " + "; ".join(earlier_questions)) if earlier_questions else None) if x) or None
     return classifier.TurnContext(summary, recent, findings), composer_ctx
 
 

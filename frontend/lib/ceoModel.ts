@@ -210,6 +210,18 @@ export function groupFindings(findings: FindingRow[], messages: CeoMessage[], tu
 }
 
 // ------------------------------------------------------------------------------------------------ presentation
+/** Where a finding's full analysis lives (spec 6.35 workspace link): the owning agent's own page, deep-linked to the exact stored record when the finding points at one
+ * (a research run for Product Intelligence). Only pages that exist are ever linked; a finding that was refused or has no page returns null. */
+export function findingLink(f: Pick<FindingRow, "source" | "action_key" | "status" | "report_ref">): { href: string; label: string } | null {
+  if (f.status === "DENIED" || f.status === "FAILED" || f.status === "UNAVAILABLE") return null;
+  const run = f.report_ref?.runId;
+  if (f.source === "PI") return { href: run ? `/dashboard/pi?run=${encodeURIComponent(run)}#discover` : "/dashboard/pi", label: "View the full research report" };
+  if (f.source === "CFO") return { href: "/dashboard/cfo", label: "Open the full finance analysis" };
+  if (f.source === "CI") return { href: "/dashboard/competitors", label: "Open the competitor details" };
+  if (f.source === "CMO") return { href: "/dashboard/cmo", label: "Open the written content" };
+  return null;
+}
+
 /** The five registers a figure can carry (cfo-agent.md 7.4.7). The chip says how much to trust the number and where it came from. */
 const REGISTER_VIEW: Record<string, { label: string; tone: "accent" | "info" | "warning" | "neutral" }> = {
   VERIFIED: { label: "Verified", tone: "accent" },

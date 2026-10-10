@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Icon } from "@/components/ui/Icon";
 import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
@@ -74,6 +74,19 @@ function PiWorkspace() {
       setReportBusy(false);
     }
   };
+
+  useEffect(() => {
+    // "View the full research report" in the CEO Hub links here with ?run=<research run id>: open exactly that run
+    const id = new URLSearchParams(window.location.search).get("run");
+    if (id && /^[0-9a-f-]{36}$/i.test(id)) {
+      const open = async () => {
+        setRunId(id);
+        await reloadReport(id);
+      };
+      void open();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="mt-content flex flex-col gap-7">

@@ -366,9 +366,14 @@ def _depth(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     return Reject("Choose a quick scan or a complete research run.")
 
 
+_YES_WORDS = frozenset({"yes", "y", "yeah", "yep", "yup", "ok", "okay", "sure", "confirm", "confirmed", "proceed", "go", "run", "do", "save", "please", "ahead", "it", "now", "and"})
+_NO_WORDS = frozenset({"no", "not", "dont", "don't", "cancel", "stop", "wait", "never", "nope"})
+
+
 def _yes(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
-    if raw.strip().casefold().rstrip(".!") in ("yes", "y", "yes, run it", "run it", "confirm", "ok", "okay", "go", "do it", "sure"):
-        return True
+    words = re.findall(r"[a-z']+", raw.casefold())
+    if words and len(words) <= 6 and not (set(words) & _NO_WORDS) and words[0] in _YES_WORDS and all(w in _YES_WORDS for w in words):
+        return True  # "yes", "yes run it", "yes, run it", "ok go ahead"
     return Reject("Say yes to run it, or cancel.")
 
 

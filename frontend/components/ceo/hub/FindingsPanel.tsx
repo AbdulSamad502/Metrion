@@ -9,7 +9,7 @@ import Link from "next/link";
 import { agentMeta } from "@/lib/agents";
 import type { AgentCode, FindingRow } from "@/lib/ceo";
 import {
-  actionLabel, findingStatusView, groupFindings, hasPresentation, isHistorical, isProblemFinding, refLabel, sourceLabel, type FindingGroup,
+  actionLabel, findingLink, findingStatusView, groupFindings, hasPresentation, isHistorical, isProblemFinding, refLabel, sourceLabel, type FindingGroup,
 } from "@/lib/ceoModel";
 import type { CeoMessage, TurnRow } from "@/lib/ceo";
 import type { FlowState } from "@/lib/useCeoHub";
@@ -114,7 +114,8 @@ function FindingCard({ finding: f, historical, arrived, defaultOpen, onAsk, askD
   const problem = isProblemFinding(f);
   const refs = f.figure_refs ?? [];
   const meta = agentMeta(f.source);
-  const workspace = meta.href && f.status !== "DENIED" ? { href: meta.href, label: meta.workspaceLabel ?? "Open" } : null; // only a page that exists (lib/agents.ts) is ever linked
+  const link = findingLink(f); // the owning agent's own page, deep-linked to the stored record when there is one; null when the finding was refused or failed
+  const workspace = link ?? (meta.href && f.status !== "DENIED" ? { href: meta.href, label: meta.workspaceLabel ?? "Open" } : null);
   return (
     <article
       data-testid={`finding-${f.id}`}
@@ -159,7 +160,7 @@ function FindingCard({ finding: f, historical, arrived, defaultOpen, onAsk, askD
       )}
       {workspace && (
         <div className="mt-2">
-          <Link href={workspace.href} data-testid={`open-${f.source}`} className="mt-focus t-meta font-semibold underline" style={{ color: "var(--accent)" }}>{workspace.label}</Link>
+          <Link href={workspace.href} data-testid={`open-${f.source}`} className="mt-btn mt-focus inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 t-body-sm font-bold" style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}>{workspace.label} &rarr;</Link>
         </div>
       )}
       <div className="mt-2">

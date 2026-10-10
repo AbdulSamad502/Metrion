@@ -22,6 +22,11 @@ _MARKETPLACE = re.compile(r"\b(amazon|flipkart|meesho)\b", re.IGNORECASE)
 _WRITE = r"(?:write|give|generate|create|make|suggest|need|want|get|draft|find|show)"
 
 
+# A general "how should I think about..." question has no data in it: it is answered as general guidance (ADVISORY), never turned into a request for a marketplace or period.
+_GENERAL_ASK = re.compile(r"^\W*(?:how (?:should|do|can|would|could) (?:i|we)\b|what(?:'s| is) the best way to\b|any tips\b|tips (?:for|on)\b|explain\b|why is it important\b|what should i (?:think|know) about\b)", re.IGNORECASE)
+_DATA_WORDS = re.compile(r"\b(?:my|our|mine)\b.*\b(?:profit|margin|sales?|revenue|orders?|returns?|data|reports?|stock|inventory|costs?|competitors?|settlements?|gst|skus?)\b|\b(?:september|october|august|july|june|last month|this month|last week|today|yesterday)\b", re.IGNORECASE)
+
+
 @dataclass(frozen=True, slots=True)
 class Rule:
     key: str
@@ -74,6 +79,7 @@ RULES: tuple[Rule, ...] = STATE_RULES + (
     Rule("cmo.generate_description", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:product |listing )?descriptions?\b")),
     Rule("cmo.generate_keywords", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:search |seo )?keywords?\b|\bkeywords? (?:for|ideas?)\b")),
     Rule("cmo.market_trends", "CMO", _rx(r"\b(?:market|niche|category|marketplace) trends?\b|\btrend (?:report|research|analysis)\b|\bwhat(?:'s| is) (?:happening|trending|new) in (?:my|the) (?:market|niche|category)\b")),
+    Rule("pi.report", "PI", _rx(r"\b(?:show|see|open|view|display|get|give)\b.*\b(?:research|discovery|product ideas?|ideas)\b.*\b(?:report|results?|details?|run)\b|\b(?:latest|last|previous)\b.*\b(?:product )?research\b.*\b(?:report|results?)\b|\bresearch report\b")),
     Rule(
         "pi.discover", "PI",
         _rx(
@@ -152,6 +158,9 @@ def _slots(rule: Rule, text: str) -> dict[str, str]:
 def route(text: str, cat: Catalog) -> Decision | None:
     """A decision when a rule recognises the request, else None (the model decides)."""
     t = " ".join(text.split())
+    if _GENERAL_ASK.search(t) and not _DATA_WORDS.search(t) and not any(r.pattern.search(t) for r in RULES):
+        d = parse_decision(json.dumps({"route": "ADVISORY", "route_key": None, "slots": {}, "needs_agent": None, "clarify_for": None}), cat)
+        return Decision(d.parse_ok, d.raw_route, d.raw_key, d.route, d.key, d.slots, d.needs_agent, d.clarify_for, frozenset({*d.flags, "RULE_ROUTED"}))
     for rule in RULES:
         if not rule.pattern.search(t):
             continue

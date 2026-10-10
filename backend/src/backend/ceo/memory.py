@@ -94,9 +94,11 @@ def remember_from_message(tenant: UUID, user_id: UUID | None, message_id: UUID, 
     """Capture what the seller just stated; returns the acknowledgement lines to append to the answer (written by code, quoting the seller's own words)."""
     acks: list[str] = []
     for c in extract(text):
+        label = {"business_name": "your business name", "niche": "your niche", "marketplaces": "where you sell"}[c.key]
         if promote(tenant, agent="CEO", kind=c.kind, key=c.key, value=c.value, basis="SELLER_STATED", source_ref={"message_id": str(message_id)}, created_by=user_id):
-            label = {"business_name": "your business name", "niche": "your niche", "marketplaces": "where you sell"}[c.key]
             acks.append(f"I'll remember {label}: {c.value}. You can change or remove it under “What I remember”.")
+        else:
+            acks.append(f"I already have {label}: {c.value}.")  # the same fact again: acknowledged, nothing new saved
     return acks
 
 
