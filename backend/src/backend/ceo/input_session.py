@@ -186,6 +186,23 @@ def _window_choices(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
     )
 
 
+def _rival_price_option(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    """CI's last captured price for the chosen competitor, offered as ONE choice (spec 6.38): the seller picks it, it is never filled in. The figure is CI's, shown with
+    its date and a plain note when it is out of date."""
+    from datetime import datetime, timezone
+
+    from backend.ceo.figure_format import format_paise
+
+    try:
+        snap = ceo_reads.competitor_handoff(ctx.tenant_id, UUID(str(got.get("competitor"))), now=datetime.now(timezone.utc))
+    except Exception:  # noqa: BLE001 - an offer is a convenience; the question is still asked
+        return ()
+    if isinstance(snap, ceo_reads.CiUnavailable) or snap.listed_price_paise is None or snap.capture_status not in ("COMPLETE", "PARTIAL"):
+        return ()
+    stale = "; out of date, captured before the usual freshness window" if snap.is_stale else ""
+    return (Option(f"Match {snap.label or 'their'} price ({format_paise(snap.listed_price_paise)})", format_paise(snap.listed_price_paise), f"Their last captured price, {snap.captured_at.date().isoformat()}{stale}. Not verified by the marketplace"),)
+
+
 PRICE_IMPACT: tuple[Field, ...] = (
     Field("competitor", lambda c, g: "Which competitor changed their price?", _competitor, _competitor_options,
           lambda c, g: None if ceo_reads.list_active_competitors(c.tenant_id, limit=1) else "No competitors are being tracked yet. Add one on the Competitor Intelligence page first."),
@@ -198,7 +215,7 @@ PRICE_IMPACT: tuple[Field, ...] = (
     Field("current_price_paise", lambda c, g: "What is your current selling price, in rupees?", _amount),
     Field("candidate_prices_paise", lambda c, g: "Which prices should I compare? Give rupee amounts separated by commas"
           + (f", up to {c.max_candidate_prices}." if c.max_candidate_prices else "."), _prices,
-          lambda c, g: ()),
+          _rival_price_option),
     _cost_field("shipping", "What is the shipping cost per unit? Type an amount, or choose an option."),
     _cost_field("advertising", "What is the advertising cost per unit?"),
     _cost_field("return_rto", "What do returns and RTO cost you per unit?"),
@@ -413,7 +430,9 @@ DR_BUDGET: tuple[Field, ...] = (
 
 CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords")
 # classifier slot name -> session field it can pre-fill (the seller already said it); the answer still goes through the same parser
-PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget",)}
+PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget", "candidate_prices_paise"),
+                                          "competitor": ("competitor",)}
+PLAYBOOK_PREFILL: Mapping[str, frozenset[str]] = {"NEW_PRODUCT_DECISION": frozenset({"sku"}), "COMPETITOR_PRICE_IMPACT": frozenset({"competitor", "candidate_prices_paise"})}  # what a decision playbook may be told up front
 
 SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "COMPETITOR_PRICE_IMPACT": PRICE_IMPACT, "NEW_PRODUCT_DECISION": NEW_PRODUCT,
@@ -486,7 +505,7 @@ def start(playbook: str, ctx: Ctx, prefill: Mapping[str, str] | None = None) -> 
     for f in fields:
         slot = next((k for k, v in PREFILL.items() if f.name in v), None)
         raw = (prefill or {}).get(slot) if slot else None
-        if raw and ("." in playbook or (playbook == "NEW_PRODUCT_DECISION" and f.name == "sku")):  # a specialist session, or the product of a stock question
+        if raw and ("." in playbook or f.name in PLAYBOOK_PREFILL.get(playbook, frozenset())):  # a specialist session, or what a decision playbook was told up front
             parsed = f.parse(raw, ctx, collected)
             if not isinstance(parsed, Reject):
                 collected[f.name] = parsed

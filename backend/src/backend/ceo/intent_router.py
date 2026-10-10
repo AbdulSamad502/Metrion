@@ -38,6 +38,7 @@ def _rx(p: str) -> re.Pattern[str]:
 RULES: tuple[Rule, ...] = (
     Rule("gst_lookup", "CFO", _rx(r"\bgst\b.*\b(?:rate|percent|percentage|%|slab|apply|applies|applicable|charge)\b|\b(?:rate|percent|percentage|slab)\b.*\bgst\b|\bgst (?:on|for|of)\b")),
     Rule("NEW_PRODUCT_DECISION", "CFO", _rx(r"\bworth (?:stocking|buying|importing|selling)\b|\bshould i (?:stock|buy|import|order)\b"), "PLAYBOOK"),
+    Rule("COMPETITOR_PRICE_IMPACT", "CI", _rx(r"(?=.*\bmargin\b)(?:.*\b(?:at|match|matched|matching|beat|undercut)\b.*\bprice\b|.*\b(?:is|are|dropped|cut|lowered)\b.*\b(?:at|to)\s*(?:₹|rs\.?)?\s*\d)"), "PLAYBOOK"),
     Rule("cmo.generate_hashtags", "CMO", _rx(r"\bhash\s?tags?\b")),
     Rule("cmo.generate_title_sets", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing |product |amazon |flipkart |meesho )?titles?\b|\btitles? (?:options?|ideas?|for)\b")),
     Rule("cmo.generate_description", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:product |listing )?descriptions?\b")),
@@ -73,12 +74,22 @@ def _product_text(raw: str | None) -> str | None:
     return v
 
 
+_RIVAL_PRICE_OF = re.compile(r"\b(?:at|if i match(?:ed)?|matching|match|beat|undercut)\s+(?:the\s+)?(?P<c>[\w][\w \-']{1,40}?)(?:'s|\u2019s|s')\s+(?:new\s+|current\s+)?price", re.IGNORECASE)
+_RIVAL_AT_PRICE = re.compile(r"^\W*(?:so\s+|ok\s+)?(?P<c>[\w][\w \-']{1,40}?)\s+(?:is|are|dropped|cut|lowered)\b.*?\b(?:at|to)\s*(?P<p>(?:₹|rs\.?)?\s*\d+(?:,\d+)*(?:\.\d+)?)", re.IGNORECASE)
 _STOCK_BEFORE = re.compile(r"^\W*(?:is|are)\s+(?:the\s+|my\s+|a\s+)?(?P<p>[\w][\w \-']{1,60}?)\s+worth\s+(?:stocking|buying|importing|selling)", re.IGNORECASE)
 _STOCK_AFTER = re.compile(r"\bshould i (?:stock|buy|import|order)\s+(?:the\s+|some\s+|a\s+|an\s+|my\s+)?(?P<p>[\w][\w \-']{1,60}?)(?=\s*(?:[?.!,]|or not\b|from\b|$))", re.IGNORECASE)
 
 
 def _slots(rule: Rule, text: str) -> dict[str, str]:
     out: dict[str, str] = {}
+    if rule.key == "COMPETITOR_PRICE_IMPACT":
+        m = _RIVAL_PRICE_OF.search(text)
+        if m:
+            c = _product_text(m.group("c"))
+            return {"competitor": c} if c else {}
+        m = _RIVAL_AT_PRICE.search(text)
+        c = _product_text(m.group("c")) if m else None
+        return {"competitor": c, "amount": m.group("p").strip()} if m and c else {}
     if rule.key == "NEW_PRODUCT_DECISION":
         m = _STOCK_BEFORE.search(text) or _STOCK_AFTER.search(text)
         product = _product_text(m.group("p") if m else None)
