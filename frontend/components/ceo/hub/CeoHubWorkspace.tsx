@@ -10,6 +10,7 @@ import { FindingsPanel } from "@/components/ceo/hub/FindingsPanel";
 import { HealthStrip } from "@/components/ceo/hub/HealthStrip";
 import { InvestigationList } from "@/components/ceo/hub/InvestigationList";
 import { Welcome } from "@/components/ceo/hub/Welcome";
+import { MemoryPanel } from "@/components/ceo/hub/MemoryPanel";
 import { Icon } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api";
@@ -128,6 +129,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs }: { client: CeoCl
           <h3 id="ceo-health-inline" className="mb-2 mt-eyebrow">Business at a glance</h3>
           <HealthStrip health={hub.health} onRefresh={() => void hub.refreshHealth()} />
         </section>
+        <MemoryPanel items={hub.memory} onForget={(id) => void hub.forgetMemory(id)} />
       </section>
 
       {/* RIGHT: the conversation, quick actions, who is connected, and the chat bar. */}

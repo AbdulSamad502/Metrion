@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import type {
-  AgentAvailability, AgentCode, CeoClient, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationSummary, TurnEvent, TurnFlow, TurnResponse,
+  AgentAvailability, AgentCode, CeoClient, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationSummary, MemoryItem, TurnEvent, TurnFlow, TurnResponse,
   UiAction,
 } from "@/lib/ceo";
 import { describeError, hubStateOf, mergeFindings, stageLabel, withPendingMessage, type HubState } from "@/lib/ceoModel";
@@ -49,6 +49,7 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
   const [notice, setNotice] = useState<string | null>(null);
   const [health, setHealth] = useState<HealthState>({ status: "loading", entries: [] });
   const [flows, setFlows] = useState<Record<string, FlowState>>({});
+  const [memory, setMemory] = useState<MemoryItem[]>([]);
   const selectedRef = useRef<string | null>(null);
   const findingsRef = useRef<FindingRow[]>([]);
   useEffect(() => {
@@ -92,6 +93,26 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
     [loadDetail],
   );
 
+  const refreshMemory = useCallback(async () => {
+    try {
+      setMemory((await client.getMemory()).items);
+    } catch {
+      /* memory is a convenience panel: if it cannot load, the Hub works without it */
+    }
+  }, [client]);
+
+  const forgetMemory = useCallback(
+    async (id: string) => {
+      try {
+        await client.forgetMemory(id);
+      } catch {
+        /* already gone or not allowed: the refresh below shows the truth */
+      }
+      await refreshMemory();
+    },
+    [client, refreshMemory],
+  );
+
   const refreshHealth = useCallback(async () => {
     try {
       const { entries } = await client.getHealth();
@@ -104,8 +125,9 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
   useEffect(() => {
     void refreshList();
     void refreshHealth();
+    void refreshMemory();
     client.getAvailability().then(setAvailability, () => setAvailability(null));
-  }, [client, refreshList, refreshHealth]);
+  }, [client, refreshList, refreshHealth, refreshMemory]);
 
   /** "Show flow": read the audit rows for one turn, once, on demand. */
   const loadFlow = useCallback(
@@ -194,8 +216,9 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
       }
       void refreshList();
       void refreshHealth(); // a turn can read or trigger saved results; the strip is a cheap persisted read
+      void refreshMemory(); // a turn can remember something the seller stated
     },
-    [client, feedFactory, pollMs, loadDetail, refreshList, refreshHealth],
+    [client, feedFactory, pollMs, loadDetail, refreshList, refreshHealth, refreshMemory],
   );
 
   const setAttached = useCallback(
@@ -255,7 +278,7 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
   const state: HubState = hubStateOf({ selectedId, status: detail.status, detail: detail.data, processing: turn.phase === "processing" });
 
   return {
-    state, list, availability, health, flows, loadFlow, refreshHealth, selectedId, detail, turn, showArchived, setShowArchived, busyAgent, notice, dismissNotice: () => setNotice(null),
+    state, list, availability, health, memory, forgetMemory, flows, loadFlow, refreshHealth, selectedId, detail, turn, showArchived, setShowArchived, busyAgent, notice, dismissNotice: () => setNotice(null),
     refreshList, select, create, sendTurn, setAttached, resolve, reopen, archive, retryDetail: () => selectedRef.current && loadDetail(selectedRef.current, false),
   };
 }

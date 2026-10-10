@@ -69,6 +69,9 @@ export type FindingStatus = "COMPLETE" | "PARTIAL" | "DENIED" | "FAILED" | "UNAV
 
 /** The display snapshot stored with a finding (spec R7 as amended). Every `value` is the backend's own formatting of a figure it resolved
  * through `ref` for this tenant: the UI shows it verbatim and never computes, rounds or re-formats it. */
+/** One remembered item (spec agent-memory.md), as the seller gave it. `shared` items are visible to every agent; the rest belong to one agent. */
+export type MemoryItem = { id: string; label: string; value: string; shared: boolean; agent: string; basis: string; createdAt: string };
+
 export type PresentationFigure = { label: string; value: string; register: string; as_of: string | null; note: string | null; ref: Ref };
 export type PresentationFact = { label: string; text: string; basis: string };
 /** Two stored values for one quantity that disagree. `text` is the block the backend rendered from both verified values; neither is chosen or averaged. */
@@ -221,6 +224,8 @@ export function createCeoClient(getToken: GetToken) {
         }),
       ),
     getHealth: () => call<{ entries: HealthEntry[] }>("/state/health"),
+    getMemory: () => call<{ items: MemoryItem[] }>("/memory"),
+    forgetMemory: (id: string) => call<{ forgotten: string }>(`/memory/${encodeURIComponent(id)}/forget`, json("POST", {})),
     getPriceImpactForm: (sku?: string) => call<PriceImpactFormSupport>(`/forms/price-impact${sku ? `?sku=${encodeURIComponent(sku)}` : ""}`),
     getNewProductForm: (sku?: string) => call<NewProductFormSupport>(`/forms/new-product${sku ? `?sku=${encodeURIComponent(sku)}` : ""}`),
     saveInput: async (body: SaveInputBody) => apiFetch<{ manualAdjustmentId?: string }>("/api/v1/cfo/expenses", await getToken(), { method: "PUT", body: JSON.stringify(body) }),

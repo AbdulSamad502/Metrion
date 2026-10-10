@@ -3,6 +3,7 @@
  * no orchestration of its own: tests script what the "server" persisted and when, exactly as the real turn endpoint would. */
 
 import { ApiError } from "@/lib/api";
+import type { MemoryItem } from "@/lib/ceo";
 import type {
   AgentAvailability, AgentCode, CeoClient, UploadedAttachment, NewProductFormSupport, PriceImpactFormSupport, SaveInputBody, CeoMessage, CeoRoute, ClarificationCard, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationStatus,
   InvestigationSummary, TurnEvent, TurnFlow, TurnResponse, TurnRow, UiAction,
@@ -45,6 +46,7 @@ export class FakeCeo {
   failNextTurn: ApiError | null = null;
   health: HealthEntry[] = [];
   healthError: ApiError | null = null;
+  memory: MemoryItem[] = [];
   flows = new Map<string, TurnFlow>();
   /** live-event stream: tests push events; `streamFails` makes it refuse to open (the poll must still do the whole job) */
   streamFails = false;
@@ -230,6 +232,14 @@ export class FakeCeo {
           });
         });
       },
+      getMemory: () => rec("getMemory", [], () => ({ items: structuredClone(this.memory) })),
+      forgetMemory: (id: string) =>
+        rec("forgetMemory", [id], () => {
+          const before = this.memory.length;
+          this.memory = this.memory.filter((m) => m.id !== id);
+          if (this.memory.length === before) throw new ApiError(404, { detail: "Not found" });
+          return { forgotten: id };
+        }),
       getHealth: () =>
         rec("getHealth", [], () => {
           if (this.healthError) throw this.healthError;

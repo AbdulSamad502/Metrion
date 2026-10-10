@@ -351,8 +351,8 @@ export function messageView(message: CeoMessage, turnById: Map<string, TurnRow>)
     footnote:
       turn?.composition_mode === "TEMPLATE_FALLBACK"
         ? "Shown from verified data only: the written summary did not pass the safety check."
-        : turn?.composition_mode === "TEMPLATE"
-          ? "Read directly from your saved, verified results."
+        : turn?.composition_mode === "TEMPLATE" && !/^(cmo|pi)\./.test(turn.route_key ?? "")
+          ? "Read directly from your saved, verified results." // not for written content or web findings: those say what they are in the answer itself
           : null,
   };
 }
