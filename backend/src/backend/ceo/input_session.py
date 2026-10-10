@@ -378,6 +378,39 @@ NEW_PRODUCT: tuple[Field, ...] = (
 )
 
 
+def _dr_summary(what: Callable[[Mapping[str, Any]], str]) -> Callable[[Ctx, Mapping[str, Any]], str]:
+    def q(ctx: Ctx, got: Mapping[str, Any]) -> str:
+        return f"Here is what I will save as your own figure: {what(got)}. Then I will run your question again with it. Shall I go ahead?"
+
+    return q
+
+
+def _money(paise: Any) -> str:
+    from backend.ceo.figure_format import format_paise
+
+    return format_paise(int(paise))
+
+
+_DR_CONFIRM_OPTIONS = lambda c, g: (Option("Yes, save and run again", "yes"),)  # noqa: E731
+
+DR_COGS: tuple[Field, ...] = (
+    Field("sku", lambda c, g: "", _text()),
+    Field("cost", lambda c, g: f"I need your cost per unit for {g.get('sku')} to work out the margin. What does one unit cost you, in rupees?", _amount),
+    Field("confirm", _dr_summary(lambda g: f"a cost per unit of {_money(g['cost'])} for {g['sku']}"), _yes, _DR_CONFIRM_OPTIONS),
+)
+DR_QUOTE: tuple[Field, ...] = (
+    Field("sku", lambda c, g: "", _text()),
+    Field("supplier_name", lambda c, g: f"I need a supplier quote for {g.get('sku')}. Which supplier is it from?", _text(80)),
+    Field("unit_cost", lambda c, g: "What is that supplier's price per unit, in rupees?", _amount),
+    Field("order_shipping", lambda c, g: "What is the shipping for the whole order, in rupees? Skip it if the quote does not state it.", _optional_amount, _SKIP("Not stated; margins that need it stay unavailable")),
+    Field("confirm", _dr_summary(lambda g: f"a supplier quote from {g['supplier_name']} at {_money(g['unit_cost'])} per unit for {g['sku']}"), _yes, _DR_CONFIRM_OPTIONS),
+)
+DR_BUDGET: tuple[Field, ...] = (
+    Field("sku", lambda c, g: "", _text()),
+    Field("budget", lambda c, g: "I need your budget for this batch. How much can you spend, in rupees?", _amount),
+    Field("confirm", _dr_summary(lambda g: f"a batch budget of {_money(g['budget'])}"), _yes, _DR_CONFIRM_OPTIONS),
+)
+
 CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords")
 # classifier slot name -> session field it can pre-fill (the seller already said it); the answer still goes through the same parser
 PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget",)}
@@ -385,6 +418,7 @@ PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category"
 SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "COMPETITOR_PRICE_IMPACT": PRICE_IMPACT, "NEW_PRODUCT_DECISION": NEW_PRODUCT,
     "pi.discover": PI_DISCOVER,
+    "dr.cogs_per_unit": DR_COGS, "dr.supplier_quote": DR_QUOTE, "dr.batch_budget": DR_BUDGET,
     "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_GROUNDED, "cmo.generate_keywords": CMO_GROUNDED,
 }
 
@@ -407,6 +441,7 @@ class Ask:
 class Done:
     playbook: str
     inputs: dict[str, Any]
+    resume: Mapping[str, Any] | None = None  # a data-request session: the original request to re-run after the save (spec 6.37)
 
 
 @dataclass(frozen=True, slots=True)
@@ -460,6 +495,14 @@ def start(playbook: str, ctx: Ctx, prefill: Mapping[str, str] | None = None) -> 
     return _ask(playbook, fields, ctx, collected, prefix="")
 
 
+def start_data_request(session: str, sku: str, ctx: Ctx, resume: Mapping[str, Any]) -> Ask:
+    """Begin a data-request session about `sku` (known from the original question). `resume` is carried on every card until the end."""
+    ask = _ask(session, SESSIONS[session], ctx, {"sku": sku}, prefix="")
+    assert isinstance(ask, Ask)
+    ask.card["resume"] = dict(resume)
+    return ask
+
+
 def _ask(playbook: str, fields: Sequence[Field], ctx: Ctx, collected: Mapping[str, Any], *, prefix: str) -> Ask | Blocked:
     f = _next_field(fields, ctx, collected)
     assert f is not None
@@ -492,15 +535,30 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
     parsed = f.parse(raw, ctx, collected)
     if isinstance(parsed, Reject):
         again = _card(playbook, f, ctx, collected)
+        if card.get("resume"):
+            again["resume"] = card["resume"]
         return Ask(f"{parsed.why} {f.question(ctx, collected)}", again)
     collected[f.name] = parsed
+    resume = card.get("resume")
     if _next_field(fields, ctx, collected) is not None:
-        return _ask(playbook, fields, ctx, collected, prefix="")
-    return Done(playbook, _to_inputs(playbook, collected))
+        nxt = _ask(playbook, fields, ctx, collected, prefix="")
+        if isinstance(nxt, Ask) and resume:
+            nxt.card["resume"] = resume
+        return nxt
+    return Done(playbook, _to_inputs(playbook, collected), resume)
 
 
 def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
     """The same shape `playbook_inputs.validate_inputs` checks for the form (§6.33). Nothing is added that the seller did not give."""
+    if playbook == "dr.cogs_per_unit":
+        return {"save": {"cost_paise": c["cost"]}, "sku": c["sku"]}
+    if playbook == "dr.batch_budget":
+        return {"save": {"budget_paise": c["budget"]}, "sku": c["sku"]}
+    if playbook == "dr.supplier_quote":
+        quote: dict[str, Any] = {"supplier_name": c["supplier_name"], "unit_cost_paise": c["unit_cost"], "sku": c["sku"]}
+        if c.get("order_shipping") is not None:
+            quote["shipping_paise"] = c["order_shipping"]
+        return {"save": {"quote": quote}, "sku": c["sku"]}
     if playbook == "pi.discover":
         rng = c.get("price_range")
         return {

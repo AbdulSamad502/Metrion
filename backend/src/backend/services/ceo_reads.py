@@ -19,6 +19,8 @@ from competitor_intelligence.types import Unavailable as CiUnavailable
 from product_intelligence.repositories import pi_research_run_repo
 from slim_cmo.repositories import generation_repo as cmo_generation_repo
 
+from cfo.repositories import agent_data_request_repo
+
 from backend.services import cfo_actions
 
 __all__ = [
@@ -101,6 +103,20 @@ def sales_history(tenant_id: UUID, sku: str, *, period_start: date, period_end: 
         lines=tuple(_line_dict(ln) for ln in mine), blocked_count=len(blocked), blocked_reasons=tuple(dict.fromkeys(b.reason for b in blocked)),
         active_adjustment_ids=tuple(str(i) for i in out.active_adjustment_ids),
     )
+
+
+def open_data_request(tenant_id: UUID, request_id: UUID) -> dict[str, Any] | None:
+    """One OPEN `agent_data_request` of this tenant (RLS-scoped), or None."""
+    return next((r for r in agent_data_request_repo.list_for_tenant(tenant_id) if str(r["id"]) == str(request_id) and r["status"] == "OPEN"), None)
+
+
+def answer_data_request(tenant_id: UUID, request_id: UUID, adjustment_id: UUID) -> None:
+    agent_data_request_repo.mark_answered(tenant_id, request_id, answered_with_kind="MANUAL_ADJUSTMENT", answered_with_id=adjustment_id)
+
+
+def stored_cost(tenant_id: UUID, sku: str) -> list[dict[str, Any]]:
+    """Every ACTIVE `cogs_per_unit` at (SKU, sku), newest first."""
+    return manual_adjustment_repo.active_adjustments_for_target(tenant_id, target_type="SKU", target_ref=sku, field="cogs_per_unit")
 
 
 def stored_quotes(tenant_id: UUID, sku: str) -> list[dict[str, Any]]:

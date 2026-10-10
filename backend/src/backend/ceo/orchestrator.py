@@ -30,7 +30,7 @@ from uuid import UUID
 from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
-from backend.ceo import business_state, classifier, clarification, input_session, intent_router, memory, references
+from backend.ceo import business_state, classifier, clarification, data_requests, input_session, intent_router, memory, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
 from backend.ceo.contract import AgentCode, BusinessStateEntry, Denial, LegResult, LegStatus, TurnDenied
@@ -62,6 +62,9 @@ class UiAction:
     slots: Mapping[str, str] = field(default_factory=dict)
     refs: Mapping[str, str] = field(default_factory=dict)  # validated references chosen through a control (spec 6.12): ids, checked against the caller's tenant
     inputs: Mapping[str, Any] | None = None  # a decision playbook's structured form inputs (spec 6.33): validated by code, never produced by a model
+    save: Mapping[str, Any] | None = None  # what the seller just confirmed for a data request (spec 6.37): saved FIRST, then this same request runs again
+    save_sku: str | None = None
+    save_ref: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,7 +260,14 @@ def _run_turn_locked(
                 input_outcome = input_session.advance(card_msg["choices"], option_key=clarification.option, text=text, ctx=input_session.Ctx(tenant, runtime.clock().date(), runtime.max_candidate_prices))
             except ValueError as exc:
                 raise InvalidClarification(str(exc)) from None
-            if isinstance(input_outcome, input_session.Done):  # every field collected: the same validated inputs as the form, and the playbook / action runs
+            if isinstance(input_outcome, input_session.Done) and input_outcome.playbook.startswith("dr.") and input_outcome.resume:
+                rs = input_outcome.resume  # spec 6.37: save what the seller confirmed, then ask the very same question again
+                ui_action = UiAction(
+                    str(rs["route"]), rs.get("key"), dict(rs.get("slots") or {}), dict(rs.get("refs") or {}), rs.get("inputs"),
+                    save={**input_outcome.inputs["save"], "request_id": rs.get("request_id")}, save_sku=str(input_outcome.inputs["sku"]), save_ref=f"ceo-{clarification.card_id}",
+                )
+                input_outcome = None
+            elif isinstance(input_outcome, input_session.Done):  # every field collected: the same validated inputs as the form, and the playbook / action runs
                 ui_action = UiAction(input_session.route_of(input_outcome.playbook), input_outcome.playbook, {}, {}, _with_request_key(input_outcome, str(clarification.card_id)))
                 input_outcome = None
         else:
@@ -354,6 +364,17 @@ def _run_admitted(
     _ACKS.set([])  # nothing remembered yet this turn (the context variable must not carry over from an earlier turn)
     if input_outcome is not None:  # the next question of a guided input, or its end: no model, no specialist
         return _answer_input(ctx, runtime, inv_id, user_msg, turn, clock, log, input_outcome, reply_meta, now)
+    pre_notes: list[str] = []
+    if ui_action is not None and ui_action.save:  # the seller confirmed a missing figure: it is saved as their own, and only then does the question run again
+        try:
+            pre_notes = ceo_inputs.save_new_product_inputs(tenant, created_by=ctx.app_user_id, role=ctx.role, permissions=ctx.permissions, sku=str(ui_action.save_sku), save=ui_action.save, ref=str(ui_action.save_ref))
+        except ceo_inputs.CannotSave as exc:
+            return _finish(ctx, runtime, turn, clock, log, status="FAILED", route="PLAYBOOK", route_key=None, answer=BAD_FORM_TEXT + str(exc) + ".", kind="ANSWER", composition=None,
+                           anchor_status="FAILED", error_reason="could not save")
+        except Exception:  # noqa: BLE001
+            logger.exception("could not save a confirmed figure")
+            return _finish(ctx, runtime, turn, clock, log, status="FAILED", route="PLAYBOOK", route_key=None, answer=BAD_FORM_TEXT + "I could not save that figure, so I did not run it.", kind="ANSWER",
+                           composition=None, anchor_status="FAILED", error_reason="could not save")
     with clock.span("capabilities"):  # attached ∩ permitted ∩ entitled: the entitlement lookups are the cost here (a caching candidate, §6.26 L7)
         attached = repo.attached_agents(tenant, inv_id)
         caps = compute_capabilities(ctx, runtime.registry, attached, now=now)
@@ -436,6 +457,8 @@ def _run_admitted(
         required = PLAYBOOKS[key].required_slots
     form_playbook = (route == "PLAYBOOK" and key is not None and key in PLAYBOOKS and PLAYBOOKS[key].needs_form) or (route == "ACTION" and key is not None and key in ACTIONS and ACTIONS[key].session)
     invalid_form: str | None = None
+    ask_sku: str | None = None  # the product the question was about, for a missing-figure follow-up (spec 6.37)
+    ask_inputs: dict[str, Any] | None = None
     session_card: dict[str, Any] | None = None
     if form_playbook:
         assert key is not None
@@ -452,6 +475,8 @@ def _run_admitted(
                     clarify_slot, clarify_text, session_card = started.card["slot"], started.text, started.card
                 else:
                     clarify_slot, clarify_text = "INPUT", started.text
+        if run_inputs is not None and run_inputs.get("sku"):
+            ask_sku, ask_inputs = str(run_inputs["sku"]), {k: v for k, v in run_inputs.items() if k not in ("save", "ceo_ref", "request_key")}
         if route == "CLARIFY":
             pass
         elif run_inputs is None or (key == "COMPETITOR_PRICE_IMPACT" and runtime.max_candidate_prices is None):
@@ -628,7 +653,7 @@ def _run_admitted(
 
     # What the seller attached is UNTRUSTED quoted data: shown to the composer only inside delimited evidence, never as a figure or an instruction (R9, spec 6.34).
     untrusted = [(f"your attached file {a['filename']}", str(a["extracted_text"])[:ATTACHMENT_EVIDENCE_CHARS]) for a in attachments if a.get("extracted_text")]
-    notes = [*notes, *_attachment_notes(attachments)]
+    notes = [*pre_notes, *notes, *_attachment_notes(attachments)]
     table = collector.table(untrusted=untrusted, disclaimers=disclaimers, attach=attach)
     if refused_required:
         # §6.12 rule 3 / E23: a required leg is missing, so no model synthesis is attempted — the seller gets what IS verified plus the named gaps.
@@ -645,11 +670,33 @@ def _run_admitted(
         if comp.completion is not None:
             clock.note("synthesisModelMs", comp.completion.wall_ms)  # the model-only part of the synthesis span (the rest is the gate and rendering)
     answer = comp.text + ("\n\n" + "\n".join(notes) if notes else "")
+    follow_up = _missing_figure_question(ctx, runtime, tenant, now, turn, route, key, decision.slots, ui_refs, ask_sku, ask_inputs)
+    if follow_up is not None:  # a CFO leg said what it is missing and the CEO can collect it: the answer ends with that one question (spec 6.37)
+        return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route=route, route_key=key, answer=answer + "\n\n" + follow_up.text, kind="CLARIFICATION", composition=comp,
+                       anchor_status=turn.derive_status(), clarify_for=follow_up.card["slot"], classifier_flags=flags, notes=notes, choices=follow_up.card)
     return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route=route, route_key=key, answer=answer, kind="ANSWER", composition=comp,
                    anchor_status=turn.derive_status(), classifier_flags=flags, notes=notes)
 
 
 # ------------------------------------------------------------------------------------------------ pieces
+def _missing_figure_question(
+    ctx: AuthContext, runtime: CeoRuntime, tenant: UUID, now: datetime, turn: CeoTurn, route: str, key: str | None, slots: Mapping[str, str], refs: Mapping[str, Any],
+    sku: str | None, inputs: Mapping[str, Any] | None,
+) -> input_session.Ask | None:
+    try:
+        if route not in ("ACTION", "PLAYBOOK") or key is None:
+            return None
+        found = data_requests.collectable(tenant, turn.legs, sku)
+        if found is None:
+            return None
+        session, row = found
+        resume = {"route": route, "key": key, "slots": dict(slots), "refs": {k: str(v) for k, v in refs.items()}, "inputs": dict(inputs) if inputs else None, "request_id": str(row["id"])}
+        return input_session.start_data_request(session, sku or "", input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices), resume)
+    except Exception:  # noqa: BLE001 - the follow-up is a convenience: the answer stands without it
+        logger.exception("could not build the missing-figure question")
+        return None
+
+
 def _label(action_key: str) -> str:
     from backend.ceo.evidence import LEG_LABELS
 
