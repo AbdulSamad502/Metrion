@@ -174,3 +174,13 @@ def test_the_idea_link_is_recorded_only_when_the_seller_named_a_pi_idea(two_tena
     q2 = orchestrator.run_turn(ctx, rt, inv2, "100")
     orchestrator.run_turn(ctx, rt, inv2, "(chose an option)", clarification=orchestrator.ClarificationReply(q2.message_id, q2.choices["options"][0]["key"]))
     assert needs_of(a, inv2) == []
+
+
+def test_the_append_only_tables_cannot_be_updated_or_deleted_by_the_app_role(migrate_engine):
+    from sqlalchemy import text
+
+    with migrate_engine.connect() as c:
+        for table in ("ceo_need", "agent_memory", "shared_finding"):
+            for priv in ("UPDATE", "DELETE", "TRUNCATE"):
+                assert c.execute(text("SELECT has_table_privilege('metrion_app', :t, :p)"), {"t": table, "p": priv}).scalar() is False, (table, priv)
+            assert c.execute(text("SELECT has_table_privilege('metrion_app', :t, 'INSERT')"), {"t": table}).scalar() is True

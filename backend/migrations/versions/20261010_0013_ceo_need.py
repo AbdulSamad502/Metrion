@@ -4,7 +4,7 @@ Append-only (SELECT, INSERT for the app role), FORCE RLS on tenant_id. One row i
 "the CEO asked the GST lookup for the rate", and the unique idempotency key stops a retried turn from recording (or metering) it twice.
 
 Revision ID: 20261010_0013
-Revises: 20261010_0011
+Revises: 20261010_0012
 Create Date: 2026-10-10
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20261010_0013"
-down_revision = "20261010_0011"  # re-pointed to 20261010_0012 (shared_finding) when that slice is merged
+down_revision = "20261010_0012"
 branch_labels = None
 depends_on = None
 
@@ -47,6 +47,7 @@ def upgrade() -> None:
         CREATE POLICY tenant_isolation ON ceo_need
           USING      (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
           WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+        REVOKE ALL ON ceo_need FROM metrion_app;
         GRANT SELECT, INSERT ON ceo_need TO metrion_app;
         """
     )
