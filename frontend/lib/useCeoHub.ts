@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import type {
-  AgentAvailability, AgentCode, CeoClient, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationSummary, MemoryItem, TurnEvent, TurnFlow, TurnResponse,
+  AgentAvailability, AgentCode, CeoClient, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationSummary, MemoryItem, NeedRow, TurnEvent, TurnFlow, TurnResponse,
   UiAction,
 } from "@/lib/ceo";
 import { describeError, hubStateOf, mergeFindings, stageLabel, withPendingMessage, type HubState } from "@/lib/ceoModel";
@@ -50,6 +50,7 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
   const [health, setHealth] = useState<HealthState>({ status: "loading", entries: [] });
   const [flows, setFlows] = useState<Record<string, FlowState>>({});
   const [memory, setMemory] = useState<MemoryItem[]>([]);
+  const [needs, setNeeds] = useState<NeedRow[]>([]);
   const selectedRef = useRef<string | null>(null);
   const findingsRef = useRef<FindingRow[]>([]);
   useEffect(() => {
@@ -65,19 +66,35 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
     }
   }, [client]);
 
+  /** The CEO's follow-up lookups: a convenience read. If it cannot load, the conversation still shows everything else. */
+  const loadNeeds = useCallback(
+    async (id: string) => {
+      try {
+        const { items } = await client.getNeeds(id);
+        if (selectedRef.current === id) setNeeds(items);
+      } catch {
+        if (selectedRef.current === id) setNeeds([]);
+      }
+    },
+    [client],
+  );
+
   const loadDetail = useCallback(
     async (id: string, quiet: boolean) => {
       if (!quiet) setDetail({ status: "loading", data: null, error: null });
       try {
         const data = await client.getInvestigation(id);
-        if (selectedRef.current === id) setDetail({ status: "ready", data, error: null });
+        if (selectedRef.current === id) {
+          setDetail({ status: "ready", data, error: null });
+          void loadNeeds(id);
+        }
       } catch (e) {
         if (selectedRef.current !== id) return;
         if (e instanceof ApiError && e.status === 404) setDetail({ status: "notfound", data: null, error: null });
         else setDetail((d) => ({ status: "error", data: quiet ? d.data : null, error: failure(e) }));
       }
     },
-    [client],
+    [client, loadNeeds],
   );
 
   const select = useCallback(
@@ -87,6 +104,7 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
       setTurn(IDLE_TURN);
       setNotice(null);
       setFlows({});
+      setNeeds([]);
       if (id) void loadDetail(id, false);
       else setDetail({ status: "idle", data: null, error: null });
     },
@@ -278,7 +296,7 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
   const state: HubState = hubStateOf({ selectedId, status: detail.status, detail: detail.data, processing: turn.phase === "processing" });
 
   return {
-    state, list, availability, health, memory, forgetMemory, flows, loadFlow, refreshHealth, selectedId, detail, turn, showArchived, setShowArchived, busyAgent, notice, dismissNotice: () => setNotice(null),
+    state, list, availability, health, memory, needs, forgetMemory, flows, loadFlow, refreshHealth, selectedId, detail, turn, showArchived, setShowArchived, busyAgent, notice, dismissNotice: () => setNotice(null),
     refreshList, select, create, sendTurn, setAttached, resolve, reopen, archive, retryDetail: () => selectedRef.current && loadDetail(selectedRef.current, false),
   };
 }

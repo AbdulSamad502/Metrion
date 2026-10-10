@@ -148,7 +148,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs }: { client: CeoCl
             <Welcome agents={{ CI: true, CFO: true, PI: true, CMO: true }} onAsk={(t) => void send(t, null)} onAction={(l, a) => void send(l, null, a)} onOpenForm={(f) => setForm(f as DecideKind)} />
           ) : (
             <Conversation
-              onOpenForm={(f) => setForm(f as DecideKind)} state={hub.state} detail={data} turn={hub.turn} notice={hub.notice} onDismissNotice={hub.dismissNotice}
+              onOpenForm={(f) => setForm(f as DecideKind)} state={hub.state} detail={data} turn={hub.turn} needs={hub.needs} notice={hub.notice} onDismissNotice={hub.dismissNotice}
               onSend={hub.sendTurn} onResolve={hub.resolve} onReopen={hub.reopen} onArchive={hub.archive} onRetry={() => void hub.retryDetail()}
             />
           )}

@@ -3,7 +3,7 @@
 
 import type {
   AgentAvailability, AgentCode, CeoMessage, ExplicitPeriod, FindingRow, FindingStatus, FlowRun, InvestigationDetail, InvestigationStatus, InvestigationSummary,
-  Ref, TurnFlow, TurnRow, UiAction,
+  NeedRow, Ref, TurnFlow, TurnRow, UiAction,
 } from "@/lib/ceo";
 import { AGENT_CODES } from "@/lib/ceo";
 
@@ -426,4 +426,46 @@ export function describeError(status: number | null, detail: unknown): string {
   if (status === 422) return "That request was not valid.";
   if (status === 503) return "The CEO is temporarily unavailable.";
   return "Could not reach the backend.";
+}
+
+// ------------------------------------------------------------------------------------------------ follow-up lookups (needs)
+/** Fixed labels for what the CEO looked up on a specialist's behalf. An unknown key is shown as its own key, never guessed at. */
+const NEED_THING: Record<string, string> = { GST_RATE_FOR_PRODUCT: "the GST rate", LANDED_COST_FOR_IDEA: "the landed cost", MARGIN_AT_PRICE: "the margin at that price", CEO_READ: "a saved result" };
+const PROVIDER_NAME: Record<string, string> = { "cfo.gst_lookup": "the CFO's GST lookup", "service.gst_lookup": "the GST lookup" };
+const REQUESTER_NAME: Record<string, string> = { CEO: "The CEO", CMO: "The Slim CMO", PI: "Product Intelligence", CI: "Competitor Intelligence", CFO: "The CFO" };
+type NeedTone = "positive" | "neutral" | "warning";
+const NEED_OUTCOME: Record<string, { text: string; tone: NeedTone }> = {
+  FULFILLED: { text: "Done: the result is in the findings.", tone: "positive" },
+  REUSED: { text: "Looked up earlier in this conversation.", tone: "positive" },
+  DENIED: { text: "Not available to you.", tone: "warning" },
+  NOT_ATTACHED: { text: "That agent is turned off for this conversation.", tone: "warning" },
+  NOT_ENTITLED: { text: "Your plan does not include it.", tone: "warning" },
+  UNAVAILABLE: { text: "Not available right now.", tone: "warning" },
+  FAILED: { text: "It could not be completed.", tone: "warning" },
+  TIMED_OUT: { text: "It took too long, so nothing was filled in.", tone: "warning" },
+  CONFIG_MISSING: { text: "Not configured yet by your operator.", tone: "warning" },
+  OFFERED: { text: "Offered to you; it runs only if you accept.", tone: "neutral" },
+  DROPPED: { text: "Left out of this answer.", tone: "neutral" },
+};
+
+export type NeedStepView = { id: string; text: string; outcome: string; tone: NeedTone; requester: string; provider: string };
+
+export function needStepView(n: NeedRow): NeedStepView {
+  const requester = REQUESTER_NAME[n.requesterAgent] ?? n.requesterAgent;
+  const provider = PROVIDER_NAME[n.providerKey] ?? n.providerKey;
+  const thing = NEED_THING[n.needKey] ?? n.needKey;
+  const o = NEED_OUTCOME[n.status] ?? { text: n.status, tone: "neutral" as NeedTone };
+  return { id: n.id, text: `${requester} asked ${provider} for ${thing}.`, outcome: o.text, tone: o.tone, requester, provider };
+}
+
+/** Needs placed with the message (turn) that produced them; the rest (no matching message) are returned separately, in the order received. */
+export function needsByMessage(needs: NeedRow[], messages: CeoMessage[]): { byMessage: Map<string, NeedRow[]>; unplaced: NeedRow[] } {
+  const ids = new Set(messages.map((m) => m.id));
+  const byMessage = new Map<string, NeedRow[]>();
+  const unplaced: NeedRow[] = [];
+  for (const n of needs) {
+    if (n.turnMessageId && ids.has(n.turnMessageId)) byMessage.set(n.turnMessageId, [...(byMessage.get(n.turnMessageId) ?? []), n]);
+    else unplaced.push(n);
+  }
+  return { byMessage, unplaced };
 }

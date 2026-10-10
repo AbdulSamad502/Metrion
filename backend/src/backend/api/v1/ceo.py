@@ -212,6 +212,18 @@ def get_findings(investigation_id: UUID, turn_id: UUID | None = None, ctx: AuthC
     return [_j(f) for f in repo.list_findings(_tenant(ctx), investigation_id, turn_id=turn_id)]
 
 
+@router.get("/investigations/{investigation_id}/needs")
+def get_needs(investigation_id: UUID, ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW)) -> dict[str, Any]:
+    """The CEO's follow-up lookups for one investigation (spec agent-needs 9.1 / 13): who asked whom for what and how it ended. No money, no text."""
+    from backend.repositories import ceo_need_repo
+
+    _also(ctx, AGENT_CEO)
+    _require_visible(ctx, investigation_id)
+    rows = ceo_need_repo.list_for_investigation(_tenant(ctx), investigation_id)
+    return {"items": [_jd({"id": r["id"], "needKey": r["need_key"], "requesterAgent": r["requester_agent"], "providerKey": r["provider_key"], "status": r["status"],
+                           "createdAt": r["created_at"], "turnMessageId": r["turn_message_id"]}) for r in rows]}
+
+
 @router.post("/investigations/{investigation_id}/turns")
 def post_turn(
     investigation_id: UUID, body: TurnBody, background: BackgroundTasks, ctx: AuthContext = require_auth(permission=AGENT_CEO),

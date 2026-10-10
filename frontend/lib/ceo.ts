@@ -166,6 +166,10 @@ export type InvestigationDetail = {
   findings: FindingRow[];
 };
 
+export type NeedStatus = "FULFILLED" | "REUSED" | "DENIED" | "NOT_ATTACHED" | "NOT_ENTITLED" | "UNAVAILABLE" | "FAILED" | "TIMED_OUT" | "CONFIG_MISSING" | "OFFERED" | "DROPPED";
+/** One follow-up lookup the CEO made for a specialist (a `ceo_need` row). It holds no money and no text: who asked whom, for what, and how it ended. */
+export type NeedRow = { id: string; needKey: string; requesterAgent: string; providerKey: string; status: NeedStatus | string; createdAt: string; turnMessageId: string | null };
+
 export type AvailabilityStatus = "PRESENT" | "NOT_PERMITTED" | "NOT_ENTITLED";
 export type AgentAvailability = Record<AgentCode, { status: AvailabilityStatus; chatActions: number }>;
 
@@ -207,6 +211,7 @@ export function createCeoClient(getToken: GetToken) {
     getInvestigation: (id: string) => call<InvestigationDetail>(`/investigations/${id}`),
     getFindings: (id: string, turnId?: string) =>
       call<FindingRow[]>(`/investigations/${id}/findings${turnId ? `?turn_id=${encodeURIComponent(turnId)}` : ""}`),
+    getNeeds: (id: string) => call<{ items: NeedRow[] }>(`/investigations/${id}/needs`),
     uploadAttachment: async (id: string, file: File) => {
       const form = new FormData();
       form.append("file", file);
