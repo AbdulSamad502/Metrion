@@ -31,7 +31,7 @@ ASK = "ok now i want the top trending products to sell my nich is mens shoes"
 def registry(calls):
     real = get_registry()
     discover = {"runId": RUN_ID, "agentRunId": str(uuid4()), "status": "COMPLETE", "candidateIds": [], "shortlistedCandidateIds": [], "partialReason": None, "failedReason": None}
-    report = {"runId": RUN_ID, "status": "COMPLETE", "unavailable": [{"field": "demand", "reason": "Real sales demand is not available from public sources."}],
+    report = {"runId": RUN_ID, "status": "COMPLETE", "unavailable": [{"field": "demand_signal", "reason": "Google Ads API access pending brand verification"}],
               "candidates": [{"candidate": {"candidate_title": "Men's Running Shoes Lightweight", "opportunity_label": "RISING"}}, {"candidate": {"candidate_title": "Leather Formal Shoes"}}]}
     specs = []
     for k, out in (("pi.discover", discover), ("pi.report", report)):
@@ -79,7 +79,7 @@ def test_after_the_seller_confirms_the_brief_is_saved_pi_runs_and_the_ideas_are_
     [rep] = calls["pi.report"]
     assert str(rep.run_id) == RUN_ID
     assert "Men's Running Shoes Lightweight" in done.answer and "not verified" in done.answer and "Leather Formal Shoes" in done.answer
-    assert "Real sales demand is not available" in done.answer  # PI's own stated limits are carried, not hidden
+    assert "Real sales and demand numbers are not available" in done.answer and "Google Ads" not in done.answer  # the limit is said in plain words, not as PI's developer note
     [pi_finding] = [f for f in done.findings if f["action_key"] == "pi.report"]
     assert pi_finding["presentation"]["figures"] == [] and pi_finding["presentation"]["artefacts"][0]["items"][0].startswith("Men's Running Shoes")
 

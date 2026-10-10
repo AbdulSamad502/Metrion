@@ -85,6 +85,7 @@ Evidence: figure {{F1}} Revenue (VERIFIED); gap {{G1}}; disclaimer {{D1}}.
 Answer: Here is where you stand. Your revenue is {{F1}}. One thing is missing: {{G1}} {{D1}}"""
 
 
+WEB_ARTEFACT_TITLE = "Product ideas found on the public web"
 ARTEFACT_NOTICE = "Written by the specialist from the details you gave. Read it before you use it: Metrion has not checked it against your marketplace account."
 _PERIOD_IN_LABEL = re.compile(r"\s*\(\d{4}-\d{2}-\d{2}/\d{4}-\d{2}-\d{2}\)")
 
@@ -151,7 +152,7 @@ def render_template(table: EvidenceTable, *, heading: str | None = None, ai_note
         lines.extend(f"  {i}. {text}" for i, text in enumerate(items, start=1))
         if note:
             lines.append(f"  ({note})")
-    if table.artefacts:
+    if any(not title.startswith(WEB_ARTEFACT_TITLE) for title, _, _ in table.artefacts):  # web findings carry their own, stronger note
         lines.append(ARTEFACT_NOTICE)
     for _, msg in table.gaps:
         lines.append(f"- Not available: {msg}")

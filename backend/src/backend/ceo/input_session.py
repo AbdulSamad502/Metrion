@@ -19,7 +19,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
-from backend.ceo import slot_resolvers
+from backend.ceo import memory, slot_resolvers
 from backend.ceo.periods import PeriodUnresolvable, resolve_period
 from backend.services import ceo_reads
 
@@ -221,7 +221,7 @@ def _marketplaces(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     found = [m for m in _MARKETPLACE_NAMES if m in t]
     if "ALL" in re.findall(r"[A-Z]+", t) and not found:
         found = list(_MARKETPLACE_NAMES)
-    return found or Reject("Which marketplace: Amazon, Flipkart or Meesho? You can name more than one.")
+    return found or Reject("I could not find a marketplace in that (Amazon, Flipkart or Meesho).")
 
 
 def _one_marketplace(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
@@ -306,10 +306,30 @@ def _pi_summary(ctx: Ctx, got: Mapping[str, Any]) -> str:
             "I will save this as your research brief and run Product Intelligence. Shall I go ahead?")
 
 
+def _remembered(key: str, label: Callable[[str], str], text: Callable[[str], str]) -> Callable[[Ctx, Mapping[str, Any]], Sequence[Option]]:
+    """Offer what the seller confirmed last time (PI's private memory) as ONE choice; it is never filled in silently."""
+    def options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+        try:
+            v = memory.pi_defaults(ctx.tenant_id).get(key)
+        except Exception:  # noqa: BLE001 - memory is a convenience; the question is still asked
+            v = None
+        return (Option(label(v), text(v), "What you chose last time"),) if v else ()
+
+    return options
+
+
+def _rupees(paise: str) -> str:
+    from backend.ceo.figure_format import format_paise
+
+    return format_paise(int(paise))
+
+
 PI_DISCOVER: tuple[Field, ...] = (
-    Field("category", lambda c, g: "Which niche or category should I find products in? For example mens shoes.", _niche),
-    Field("budget", lambda c, g: "What is your budget for stocking a product, in rupees? For example 20,000.", _amount),
-    Field("marketplaces", lambda c, g: "Which marketplace will you sell on? You can name more than one.", _marketplaces, _MARKETPLACE_OPTIONS),
+    Field("category", lambda c, g: "Which niche or category should I find products in? For example mens shoes.", _niche, _remembered("last_category", lambda v: v, lambda v: v)),
+    Field("budget", lambda c, g: "What is your budget for stocking a product, in rupees? For example 20,000.", _amount,
+          _remembered("last_budget_paise", _rupees, lambda v: f"{int(v) // 100}.{int(v) % 100:02d}")),
+    Field("marketplaces", lambda c, g: "Which marketplace will you sell on? You can name more than one.", _marketplaces,
+          lambda c, g: (*_remembered("last_marketplaces", lambda v: v.title(), lambda v: v)(c, g), *_MARKETPLACE_OPTIONS(c, g))[:MAX_OPTIONS]),
     Field("price_range", lambda c, g: "Roughly what selling price range do you have in mind? For example 500 to 1,500. You can skip this.", _price_range, _SKIP("The search is not limited to a price range")),
     Field("depth", lambda c, g: "How thorough should the research be?", _depth,
           lambda c, g: (Option("Quick scan", "quick", "Faster and lighter; a good first look"), Option("Complete run", "complete", "Slower and uses more of your research allowance"))),

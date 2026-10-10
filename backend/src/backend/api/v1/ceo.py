@@ -38,7 +38,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CEO, AGENT_CFO, AGENT_CI, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
-from backend.ceo import business_state, orchestrator, summary
+from backend.ceo import business_state, memory as agent_memory, orchestrator, summary
 from backend.ceo.capabilities import NOT_ENTITLED, compute_capabilities
 from backend.ceo.contract import AgentCode
 from backend.ceo.periods import PeriodUnresolvable, resolve_period
@@ -419,6 +419,20 @@ def form_price_impact(sku: str | None = Query(default=None, max_length=120), run
                         "effectiveFrom": stored.effective_from, "reason": stored.reason} if stored is not None else None),
         "maxCandidatePrices": runtime.max_candidate_prices,
     })
+
+
+@router.get("/memory")
+def get_memory(ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+    """What the agents remember for this business (spec agent-memory.md): the shared profile and each agent's own notes, as the seller gave them. Tenant from the session only."""
+    return _jd({"items": agent_memory.list_for_seller(_tenant(ctx))})
+
+
+@router.post("/memory/{memory_id}/forget")
+def forget_memory(memory_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+    """Forget one remembered item. A foreign, unknown or already-forgotten id is a plain not-found."""
+    if not agent_memory.forget(_tenant(ctx), memory_id, ctx.app_user_id):
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"forgotten": str(memory_id)}
 
 
 @router.get("/forms/new-product")

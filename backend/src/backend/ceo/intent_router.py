@@ -35,6 +35,7 @@ def _rx(p: str) -> re.Pattern[str]:
 
 # Ordered: the first match wins. Each pattern needs a clear verb or noun for the work, not just a keyword anywhere.
 RULES: tuple[Rule, ...] = (
+    Rule("gst_lookup", "CFO", _rx(r"\bgst\b.*\b(?:rate|percent|percentage|%|slab|apply|applies|applicable|charge)\b|\b(?:rate|percent|percentage|slab)\b.*\bgst\b|\bgst (?:on|for|of)\b")),
     Rule("cmo.generate_hashtags", "CMO", _rx(r"\bhash\s?tags?\b")),
     Rule("cmo.generate_title_sets", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing |product |amazon |flipkart |meesho )?titles?\b|\btitles? (?:options?|ideas?|for)\b")),
     Rule("cmo.generate_description", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:product |listing )?descriptions?\b")),
@@ -56,8 +57,26 @@ _NICHE = re.compile(r"\b(?:niche|nich|category|segment)\s*(?:is|:|=|-)?\s*([\w][
 _BUDGET = re.compile(r"(?:under|below|within|upto|up to|budget(?: of| is)?|max(?:imum)?)\s*((?:₹|rs\.?|inr)?\s*[\d,]+(?:\.\d+)?)", re.IGNORECASE)
 
 
+_GST_PRODUCT_AFTER = re.compile(r"\bgst\b.*?\b(?:on|for|of|to|in)\s+(?:my\s+|the\s+|a\s+|an\s+|our\s+)?(?P<p>[\w][\w \-']{1,80}?)(?=\s+(?:is|are|apply|applies|be)\b|[?.!,]|$)", re.IGNORECASE)
+_GST_PRODUCT_BEFORE = re.compile(r"^\W*(?:ok\s+|so\s+)?(?P<p>[\w][\w \-']{1,60}?)\s+gst\b", re.IGNORECASE)
+_REQUEST_WORDS = frozenset({"tell", "give", "show", "what", "which", "how", "can", "could", "please", "ok", "okay", "so", "and", "also", "now", "is", "are", "does", "do", "whats", "what's"})
+_NOT_A_PRODUCT = frozenset({"this", "that", "it", "these", "those", "them", "this product", "that product", "the product", "my product", "my products", "products"})
+
+
+def _product_text(raw: str | None) -> str | None:
+    """A product named in the message, or None when it is a pronoun, a number or a rate (then the CEO asks which product instead of guessing)."""
+    v = " ".join((raw or "").split()).strip(" .,'\"")
+    if not v or v.casefold() in _NOT_A_PRODUCT or re.search(r"\d|%", v) or len(v.split()) > 8 or v.split()[0].casefold() in _REQUEST_WORDS:
+        return None
+    return v
+
+
 def _slots(rule: Rule, text: str) -> dict[str, str]:
     out: dict[str, str] = {}
+    if rule.key == "gst_lookup":
+        m = _GST_PRODUCT_AFTER.search(text) or _GST_PRODUCT_BEFORE.search(text)
+        product = _product_text(m.group("p") if m else None)
+        return {"product": product} if product else {}
     m = _MARKETPLACE.search(text)
     if m:
         out["marketplace"] = m.group(1)
@@ -87,5 +106,6 @@ def route(text: str, cat: Catalog) -> Decision | None:
         else:
             payload = {"route": "ACTION", "route_key": rule.key, "slots": _slots(rule, t), "needs_agent": None, "clarify_for": None}
         d = parse_decision(json.dumps(payload), cat)
-        return Decision(d.parse_ok, d.raw_route, d.raw_key, d.route, d.key, d.slots, d.needs_agent, d.clarify_for, frozenset({*d.flags, "RULE_ROUTED"}))
+        extra = {"GST_UNAVAILABLE"} if item is None and rule.key == "gst_lookup" else set()  # the wall for GST is code, never general knowledge
+        return Decision(d.parse_ok, d.raw_route, d.raw_key, d.route, d.key, d.slots, d.needs_agent, d.clarify_for, frozenset({*d.flags, "RULE_ROUTED", *extra}))
     return None

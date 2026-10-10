@@ -30,14 +30,14 @@ from uuid import UUID
 from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
-from backend.ceo import business_state, classifier, clarification, input_session, intent_router
+from backend.ceo import business_state, classifier, clarification, input_session, intent_router, memory, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
-from backend.ceo.composer import Composition, compose, template_only
+from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
 from backend.ceo.contract import AgentCode, BusinessStateEntry, Denial, LegResult, LegStatus, TurnDenied
 from backend.ceo.dispatch import CeoTurn, dispatch, open_turn
 from backend.ceo.evidence import EvidenceCollector, finding_status_for_entry
 from backend.ceo.presentation import present_entry, present_leg, safe
-from backend.ceo.plans import ACTIONS, GST_KEY, GST_ROUTE_KEYS, PLAYBOOK_LEG_SLOTS, PLAYBOOKS, SLOT_QUESTIONS, Clarification, ResolvedSlots, gst_route_key, resolve_playbook_run, resolve_slots
+from backend.ceo.plans import ACTIONS, GST_KEY, SLOT_VOCAB, GST_ROUTE_KEYS, PLAYBOOK_LEG_SLOTS, PLAYBOOKS, SLOT_QUESTIONS, Clarification, ResolvedSlots, gst_route_key, resolve_playbook_run, resolve_slots
 from backend.ceo.playbook_inputs import InvalidInputs
 from backend.ceo.runtime import CeoRuntime, EventLog, EventSink, StageClock, TurnEvent
 from backend.ceo.turn_lock import investigation_turn_lock
@@ -47,6 +47,7 @@ from backend.services import ceo_briefs
 
 logger = logging.getLogger(__name__)
 
+_ACKS: contextvars.ContextVar[list[str]] = contextvars.ContextVar("ceo_memory_acks", default=[])
 MAX_MESSAGE_CHARS = 4000  # a request-size bound, not a business threshold
 GENERAL_GUIDANCE_TEXT = "This is general advice, not derived from your data."
 
@@ -157,6 +158,23 @@ FORM_TEXT = "This one needs exact prices and costs, which are entered in a form 
 BAD_FORM_TEXT = "That form could not be used, so nothing was run: "
 
 
+def _resume_plain_question(tenant: UUID, investigation_id: UUID, text: str) -> UiAction | None:
+    """When the CEO's last message is a plain question for one missing slot (a product, a marketplace, an amount, a period...), a SHORT reply is that slot's value and the
+    task that asked resumes with it. A long message or a question is a new request and is routed normally. The slot value is still parsed by code like any other."""
+    if len(text) > 80 or len(text.split()) > 8 or text.rstrip().endswith("?"):
+        return None
+    msgs = repo.list_messages(tenant, investigation_id)
+    last = msgs[-1] if msgs else None
+    if last is None or last["role"] != "CEO" or last["kind"] != "CLARIFICATION" or last.get("choices") or not last.get("turn_id"):
+        return None
+    turn = repo.get_turn(tenant, last["turn_id"]) or {}
+    result = turn.get("classifier_result") or {}
+    pending, slot = result.get("pending"), result.get("pendingSlot")
+    if not isinstance(pending, dict) or slot not in SLOT_VOCAB or pending.get("route") not in ("ACTION", "PLAYBOOK") or not pending.get("key"):
+        return None
+    return UiAction(str(pending["route"]), str(pending["key"]), {**(pending.get("slots") or {}), str(slot): text.strip()}, pending.get("refs") or {})
+
+
 def _with_request_key(done: Any, anchor: str) -> dict[str, Any]:
     """The collected inputs plus an idempotency key derived from the message that finished them: answering the same card twice reuses the finished result."""
     out = dict(done.inputs)
@@ -180,7 +198,7 @@ def _turn_context(tenant: UUID, inv: dict[str, Any], current_msg: UUID) -> tuple
     )
     earlier_questions = [str(m["content"])[:200] for m in msgs if m["role"] == "USER"][-3:]  # questions only: CEO answers carry figures
     summary = inv.get("summary")
-    composer_ctx = " | ".join(x for x in (summary, ("Earlier the seller asked: " + "; ".join(earlier_questions)) if earlier_questions else None) if x) or None
+    composer_ctx = " | ".join(x for x in (summary, memory.context_line(tenant), ("Earlier the seller asked: " + "; ".join(earlier_questions)) if earlier_questions else None) if x) or None
     return classifier.TurnContext(summary, recent, findings), composer_ctx
 
 
@@ -220,6 +238,8 @@ def _run_turn_locked(
 
     reply_meta: dict[str, Any] | None = None
     input_outcome: Any = None
+    if clarification is None and ui_action is None and has_permission(role=ctx.role, permissions=ctx.permissions, key=INVESTIGATION_VIEW):
+        ui_action = _resume_plain_question(tenant, investigation_id, text)  # a short answer to the CEO's plain question resumes that task
     if clarification is None and ui_action is None and has_permission(role=ctx.role, permissions=ctx.permissions, key=INVESTIGATION_VIEW):
         # Guided input (spec 6.34): when the CEO's last message is an open input question, whatever the seller types is the ANSWER to it, parsed by code.
         tail = repo.list_messages(tenant, investigation_id)
@@ -300,6 +320,10 @@ def _finish(
     assert ctx.tenant_id is not None
     tenant = ctx.tenant_id
     assert turn.investigation_id is not None
+    pending_acks = _ACKS.get()
+    if pending_acks and kind in ("ANSWER", "CLARIFICATION"):  # what was just remembered is said in the same answer, written by code (spec agent-memory 4.3)
+        answer = answer + "\n\n" + "\n".join(pending_acks)
+        _ACKS.set([])
     msg = repo.append_message(tenant, turn.investigation_id, role="CEO", kind=kind, content=answer, agent_run_id=turn.anchor_run_id, turn_id=turn.turn_id,
                               choices=choices, now=runtime.clock())
     safety = dict(composition.safety) if composition else {}
@@ -327,6 +351,7 @@ def _run_admitted(
     assert tenant is not None
     inv_id: UUID = inv["id"]
     now = runtime.clock()
+    _ACKS.set([])  # nothing remembered yet this turn (the context variable must not carry over from an earlier turn)
     if input_outcome is not None:  # the next question of a guided input, or its end: no model, no specialist
         return _answer_input(ctx, runtime, inv_id, user_msg, turn, clock, log, input_outcome, reply_meta, now)
     with clock.span("capabilities"):  # attached ∩ permitted ∩ entitled: the entitlement lookups are the cost here (a caching candidate, §6.26 L7)
@@ -335,6 +360,25 @@ def _run_admitted(
     with clock.span("context"):
         tctx, composer_ctx = _turn_context(tenant, inv, user_msg)
     cat = classifier.build_catalog(caps.allowed_actions, caps.allowed_playbooks, caps.allowed_state)
+    _ACKS.set([])
+    if ui_action is None:
+        try:  # remembering is best-effort: a failure here never costs the seller their answer
+            _ACKS.set(memory.remember_from_message(tenant, ctx.app_user_id, user_msg, text))
+            direct = memory.answer_profile_question(tenant, text)
+        except Exception:  # noqa: BLE001
+            logger.exception("memory capture failed")
+            direct = None
+        if direct is not None:  # "what is my business name?": answered by code from what the seller told us, with no model call
+            return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, direct, now)
+        if _ACKS.get() and not text.rstrip().endswith("?") and intent_router.route(text, cat) is None:  # only a statement about their business: acknowledged, nothing to answer
+            return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, "Noted.", now)
+    routed_text = text  # what the router and classifier see: earlier results referred to by position ("#3") are replaced by their names (spec 6.35)
+    if ui_action is None:
+        try:
+            routed_text, ref_notes = references.expand(repo.list_findings(tenant, inv_id), text)
+            _ACKS.set([*_ACKS.get(), *ref_notes])
+        except Exception:  # noqa: BLE001
+            logger.exception("reference expansion failed")
     preset: dict[str, str] = {}
     if period is not None:
         preset["period"] = f"{period[0].isoformat()} to {period[1].isoformat()}"
@@ -349,7 +393,7 @@ def _run_admitted(
             decision = classifier.decision_from_ui_action(ui_action.route, ui_action.key, ui_action.slots, cat, preset)
         classifier_model = "none (UI action)"
         log.emit("CLASSIFIED", route=decision.route, routeKey=decision.key, source="UI_ACTION")
-    elif (ruled := intent_router.route(text, cat)) is not None:  # an unmistakable request: the explicit rule decides, instantly (spec 6.35)
+    elif (ruled := intent_router.route(routed_text, cat)) is not None:  # an unmistakable request: the explicit rule decides, instantly (spec 6.35)
         decision = ruled
         classifier_model = "rules"
         log.emit("CLASSIFIED", route=decision.route, routeKey=decision.key, source="RULES")
@@ -357,7 +401,7 @@ def _run_admitted(
         classifier_model = runtime.classifier.name
         with clock.span("classification"):
             try:
-                outcome = classifier.classify(runtime.classifier, cat, text, tctx, preset_slots=preset)
+                outcome = classifier.classify(runtime.classifier, cat, routed_text, tctx, preset_slots=preset)
                 decision = outcome.decision
                 clock.note("classificationModelMs", outcome.completion.wall_ms)
                 if outcome.completion.ttft_ms is not None:
@@ -419,6 +463,12 @@ def _run_admitted(
                 invalid_form = f"the research brief could not be saved ({exc})"
             else:
                 resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct={"niche_brief_id": str(brief), "depth": run_inputs["depth"]})
+                try:  # PI's own private memory of what the seller just confirmed: offered as a choice next time, never filled in silently
+                    src = {"message_id": str(user_msg)}
+                    for k, v in (("last_category", str(run_inputs["category_text"])), ("last_budget_paise", str(run_inputs["budget_paise"])), ("last_marketplaces", ", ".join(run_inputs["marketplaces"]))):
+                        memory.note(tenant, agent="PI", key=k, value=v, basis="CONFIRMED_DECISION", source_ref=src, created_by=ctx.app_user_id)
+                except Exception:  # noqa: BLE001
+                    logger.exception("could not save PI memory")
                 notes = [f"Researching: {run_inputs['category_text']} on " + ", ".join(str(m).title() for m in run_inputs["marketplaces"]) + "."]
         elif route == "ACTION":
             resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct=dict(run_inputs))
@@ -445,6 +495,8 @@ def _run_admitted(
         else:
             resolved = r
             notes = list(r.echoes())
+    if route == "CLARIFY" and pending is None and "MISSING_SLOT" in decision.flags and decision.raw_route in ("ACTION", "PLAYBOOK") and decision.raw_key:
+        pending = clarification.pending_intent(decision.raw_route, decision.raw_key, decision.slots, {k: str(v) for k, v in ui_refs.items()})
     if attachments and route == "CLARIFY" and pending is None and clarify_slot in (None, "UNCLEAR_REQUEST"):
         route, clarify_slot, clarify_text = "ADVISORY", None, None  # the seller showed a file and asked about it: the CEO answers qualitatively from what it read
     turn.turn_id = repo.create_turn(
@@ -452,12 +504,17 @@ def _run_admitted(
         route_source="UI_ACTION" if ui_action is not None else "CLASSIFIER",
         classifier_result={**decision.to_json(), "effectiveRoute": route, "effectiveKey": key, "model": classifier_model, **(reply_meta or {}),
                            **({"inputs": resolved.run.inputs.model_dump(mode="json")} if resolved is not None and resolved.run is not None else {}),
-                           **({"attachments": [str(a["id"]) for a in attachments]} if attachments else {})},
+                           **({"attachments": [str(a["id"]) for a in attachments]} if attachments else {}),
+                           # what a plain question is waiting for, so the seller's short answer resumes THIS task instead of starting a new one (spec 6.35)
+                           **({"pending": pending, "pendingSlot": clarify_slot} if route == "CLARIFY" and pending is not None and clarify_slot in SLOT_VOCAB else {})},
         status="PLAN_VALIDATED", now=now,
     )
     log.emit("PLAN_VALIDATED", route=route, routeKey=key)
     flags = tuple(decision.flags)
 
+    if "GST_UNAVAILABLE" in flags:  # a GST question this member cannot have looked up: the wall stands, and it is never answered from general knowledge (spec C11, G1)
+        return _finish(ctx, runtime, turn, clock, log, status="DENIED", route="ADVISORY", route_key=None, answer=GST_WALL_TEXT, kind="ANSWER", composition=None,
+                       anchor_status="DENIED", error_reason="no GST route available", classifier_flags=flags)
     if ui_action is not None and route == "CLARIFY" and "OUT_OF_CATALOG" in flags:
         # The chip named something this member cannot use here (detached / not entitled / no permission): say so plainly; nothing was dispatched.
         return _finish(ctx, runtime, turn, clock, log, status="DENIED", route="CLARIFY", route_key=None, answer=UI_ACTION_UNAVAILABLE_TEXT, kind="ANSWER",
@@ -492,7 +549,7 @@ def _run_admitted(
         template_only_answer = True  # a pure read is rendered from the template: no model call (§6.26 L3)
         heading = "Here is what your saved, verified results show."
     elif route == "ADVISORY":
-        disclaimers.append(("GENERAL_GUIDANCE", GENERAL_GUIDANCE_TEXT))
+        notes.append(GENERAL_GUIDANCE_TEXT)  # written by code after the answer, never placed by the model
         _explain_needed_agent(decision.needs_agent, caps, collector, attach)
         if "BS_SELLER_CONTEXT" in caps.allowed_state:
             seller = business_state.read_entry(ctx, "BS_SELLER_CONTEXT", attached=attached, now=now)  # K2: what the seller told us
@@ -542,9 +599,11 @@ def _run_admitted(
                     refused_required = True
         if route == "PLAYBOOK" and not leg_keys:
             heading = None
+        if key == "pi.discover" and any(t.startswith(WEB_ARTEFACT_TITLE) for t, _, _ in collector.artefacts):
+            notes.append("To continue with any of these, say for example “write titles for #2”, “hashtags for #5” or “GST rate for #3”.")
         if route == "ACTION" and ACTIONS[key].session:
             template_only_answer = True  # what the specialist wrote is shown as it is, quoted and labelled, never re-worded by a second model
-            heading = "Here is what was written for the details you gave."
+            heading = "Here is what Product Intelligence found for your niche." if key == "pi.discover" else "Here is what was written for the details you gave."
         if route == "PLAYBOOK" and PLAYBOOKS[key].needs_form:
             # Several figures of one metric (one margin per candidate price, one cost per supplier) can only be told apart by their labels, which the fixed
             # layout carries and prose with markers cannot. The answer is therefore the deterministic layout, with no model call (spec 6.33).
@@ -637,6 +696,20 @@ def _attachment_notes(attachments: Sequence[Mapping[str, Any]]) -> list[str]:
             cut = text[:ATTACHMENT_EXCERPT_CHARS] + ("…" if len(text) > ATTACHMENT_EXCERPT_CHARS else "")
             out.append(f"Your file says (quoted from {a['filename']}, not checked by Metrion): “{cut}”")
     return out
+
+
+def _answer_direct(
+    ctx: AuthContext, runtime: CeoRuntime, inv_id: UUID, user_msg: UUID, turn: CeoTurn, clock: StageClock, log: EventLog, text: str, now: datetime,
+) -> TurnResult:
+    """An answer written by code from memory: no classifier, no composer, nothing run."""
+    tenant = ctx.tenant_id
+    assert tenant is not None
+    turn.turn_id = repo.create_turn(
+        tenant, inv_id, user_message_id=user_msg, agent_run_id=turn.anchor_run_id, route="ADVISORY", route_key=None, slots={}, route_source="CLASSIFIER",
+        classifier_result={"directMemoryAnswer": True, "model": "rules"}, status="PLAN_VALIDATED", now=now,
+    )
+    log.emit("PLAN_VALIDATED", route="ADVISORY", routeKey=None)
+    return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route="ADVISORY", route_key=None, answer=text, kind="ANSWER", composition=None, anchor_status="COMPLETE")
 
 
 def _answer_input(

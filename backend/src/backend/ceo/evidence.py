@@ -18,7 +18,7 @@ from uuid import UUID
 
 from backend.ceo import conflicts as conflict_rules
 from backend.ceo import provenance
-from backend.ceo.composer import EvidenceTable, figures_with_tokens
+from backend.ceo.composer import WEB_ARTEFACT_TITLE, EvidenceTable, figures_with_tokens
 from backend.ceo.contract import (
     BusinessStateEntry, Conflict, Denial, EntryStatus, Fact, Figure, Gap, LegResult, LegStatus, Ref, RefKind, Register,
 )
@@ -56,6 +56,10 @@ def _label_for_row(code: str, row: Mapping[str, Any]) -> str:
         return f"{base} ({m.group(1) or m.group(2)})"
     return base
 
+_PI_LIMITS: Mapping[str, str] = {
+    "marketplace_price_and_competition": "These ideas have not been checked against live marketplace listings, so their prices and competition are unknown.",
+    "demand_signal": "Real sales and demand numbers are not available for these ideas.",
+}
 _CMO_KINDS: Mapping[str, str] = {
     "TITLE_SET": "Title options", "DESCRIPTION": "Description", "KEYWORDS": "Search keywords", "HASHTAGS": "Hashtags", "BULLETS": "Bullet points",
     "LISTING_COPY": "Listing copy", "BACKEND_TERMS": "Backend search terms",
@@ -283,21 +287,19 @@ class EvidenceCollector:
             title = " ".join(str(c.get("candidate_title") or "").split())
             if not title:
                 continue
-            label = str(c.get("opportunity_label") or "").replace("_", " ").lower()
-            names.append(f"{title[:140]}" + (f" ({label})" if label else ""))
+            names.append(title[:140])  # the name only: the label PI stores is internal ("candidate opportunity") and says nothing to a seller
         if not names:
             self.add_gap("The research run finished but found no product ideas to show for that niche. Try a broader niche.")
         else:
             more = len(rows) - len(names)
             self.artefacts.append((
-                "Product ideas found on the public web", tuple(names),
+                WEB_ARTEFACT_TITLE, tuple(names),
                 "From public web sources and not verified: this is not your sales data, and Product Intelligence has not measured demand or margin for these."
                 + (f" {more} more are on the Product Intelligence page." if more > 0 else ""),
             ))
-        for u in payload.get("unavailable") or []:
-            reason = " ".join(str(u.get("reason") or "").split())
-            if reason:
-                self.add_gap(reason)
+        for u in payload.get("unavailable") or []:  # PI's own notes are for developers; the seller is told the plain consequence, by field
+            field = str(u.get("field") or "")
+            self.add_gap(_PI_LIMITS.get(field, "The research run was only partly complete, so some ideas may be missing." if field == "run_completeness" else "Some information was not available for these ideas."))
 
     def _cmo_artefacts(self, payload: Mapping[str, Any]) -> None:
         """What CMO wrote. The text is the specialist's own content, shown quoted and labelled; it is never a figure and is not run through the money provenance path.

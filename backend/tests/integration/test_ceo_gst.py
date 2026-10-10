@@ -143,7 +143,7 @@ def test_a_member_without_the_lookup_permission_gets_a_wall_and_no_lookup_runs(t
     member = partner_ctx(a, AGENT_CEO, INVESTIGATION_VIEW, AGENT_CFO)  # agent.cfo but NOT service.gst_lookup
     res = _turn(a, member, rt, inv)
     assert fake_lookup.calls == [] and repo.list_findings(a, inv) == []  # nothing ran, nothing was answered from general knowledge
-    assert res.status == "CLARIFIED"  # the closed catalog does not offer the action to this member, so the model's pick is refused
+    assert res.status == "DENIED" and "GST lookup permission" in res.answer  # the closed catalog does not offer it to this member: the wall, never general knowledge
     assert "18" not in res.answer and "%" not in res.answer
 
 
@@ -176,11 +176,10 @@ def test_an_empty_or_overlong_product_is_asked_about_not_looked_up(two_tenants, 
     a, _ = two_tenants
     fake_lookup(cfo_actions.GstLookupOutcome(result=_stored(a)))
     ctx = partner_ctx(a, *KEYS)
-    for slots in ({"product": "   "}, {"product": "x" * 201}):
-        table = {MSG: decision(route="ACTION", route_key="gst_lookup", slots=slots)}
-        rt = runtime(Scripted(table), Grounded())
+    for slots in ({"product": "   "}, {"product": "x" * 201}):  # the seller-chosen action path: the same slot validation as a typed message
+        rt = runtime(Scripted({}), Grounded())
         inv = start(ctx, rt)
-        res = _turn(a, ctx, rt, inv)
+        res = orchestrator.run_turn(ctx, rt, inv, "GST rate", ui_action=orchestrator.UiAction("ACTION", "gst_lookup", slots))
         assert res.status == "CLARIFIED" and res.clarify_for == "product"
     assert fake_lookup.calls == []
 
