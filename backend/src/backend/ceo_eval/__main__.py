@@ -63,6 +63,20 @@ def _report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _qa(args: argparse.Namespace) -> int:
+    """The CEO business Q&A answer suite (spec agent-needs-and-shared-knowledge.md 8.3): deterministic, needs no model server and no database."""
+    from backend.ceo_eval import business_qa, fixtures
+
+    cases = fixtures.load_business_qa_cases()
+    results = business_qa.run_cases(cases)
+    summary = business_qa.summarize(results, {c.id: c for c in cases})
+    print(json.dumps(summary, indent=2, ensure_ascii=False))
+    bad = [r.case_id for r in results if not r.ok]
+    if bad:
+        print("not clean: " + ", ".join(bad), file=sys.stderr)
+    return 1 if bad else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m backend.ceo_eval")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -82,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--db-ok", action="store_true")
     r.add_argument("--merge-into", help="path of an existing run record to extend")
     r.set_defaults(fn=_run)
+    q = sub.add_parser("qa", help="the business Q&A answer suite (no model, no database)")
+    q.set_defaults(fn=_qa)
     g = sub.add_parser("report")
     g.add_argument("record")
     g.add_argument("--output", required=True)

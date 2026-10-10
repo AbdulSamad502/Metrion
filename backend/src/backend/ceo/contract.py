@@ -175,6 +175,10 @@ class BusinessStateEntry:
     gaps: tuple[Gap, ...] = ()
     conflicts: tuple[Conflict, ...] = ()
     preview_hint: str | None = None  # NOT_ENTITLED CFO-class entries point at cfo.preview (spec C17)
+    # Content a specialist WROTE for the seller (title, items, note): shown quoted and labelled, never a figure (spec 6.35, R9). Only BS_CMO_CONTENT_LATEST sets it.
+    artefacts: tuple[tuple[str, tuple[str, ...], str | None], ...] = ()
+    # (registry key, label) actions that could produce a missing result: OFFERED to the seller, never run in this turn (spec 6.13 rule 4, AC26)
+    offers: tuple[tuple[str, str], ...] = ()
 
 
 # ---------------------------------------------------------------------------------- dispatch contracts

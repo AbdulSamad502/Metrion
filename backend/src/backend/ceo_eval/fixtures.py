@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from backend.ceo_eval import classifier, composer
+from backend.ceo_eval import business_qa, classifier, composer
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 
@@ -30,6 +30,11 @@ def _read_optional(name: str) -> list[dict]:
 def load_classifier_cases() -> list[classifier.ClassifierCase]:
     """The hand-written cases plus the template-expanded ones (`classifier_gen.jsonl`, produced by `generate.py`; each carries its family)."""
     return [classifier.case_from_json(r) for r in (*_read("classifier.jsonl"), *_read_optional("classifier_gen.jsonl"))]
+
+
+def load_business_qa_cases() -> list[business_qa.QaCase]:
+    """The CEO business Q&A answer cases (spec agent-needs-and-shared-knowledge.md 8.3 a, b, c): a deterministic suite, no model needed."""
+    return [business_qa.case_from_json(r) for r in _read("business_qa.jsonl")]
 
 
 def load_composer_cases() -> list[composer.ComposerCase]:

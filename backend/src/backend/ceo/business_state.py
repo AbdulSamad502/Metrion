@@ -33,7 +33,7 @@ from cfo.repositories import agent_data_request_repo, leak_finding_repo
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, AGENT_CFO, FILES_VIEW, has_permission
 from backend.ceo import conflicts as conflict_rules
-from backend.ceo import derived_reads, provenance, state_cache
+from backend.ceo import derived_reads, memory, provenance, question_types, state_cache
 from backend.ceo.contract import (
     AGENT_PERMISSION_KEY,
     AgentCode,
@@ -77,6 +77,7 @@ class StateRead:
     facts: tuple[Fact, ...] = ()
     gaps: tuple[Gap, ...] = ()
     conflicts: tuple[Conflict, ...] = ()
+    artefacts: tuple[tuple[str, tuple[str, ...], str | None], ...] = ()  # content a specialist wrote, quoted and labelled (never a figure)
 
 
 Loader = Callable[[AuthContext, datetime], StateRead]
@@ -399,7 +400,85 @@ def _load_cmo_workflow(ctx: AuthContext, now: datetime) -> StateRead:
     return StateRead(EntryStatus.AVAILABLE, as_of=rows[0]["created_at"], facts=facts)
 
 
+# Presentation bounds, not business thresholds. 3 periods x 3 P&L metrics + the 3 health bands = the 12 figures one answer carries (evidence.MAX_FIGURES).
+_PNL_RECENT_PERIODS = 3
+_CMO_CONTENT_ITEMS = 3
+_CMO_CONTENT_CLIP = 1500
+_SELLER_FACT_LABELS: Mapping[str, str] = {
+    "business_name": "Business name", "niche": "Your niche", "marketplaces": "Where you sell", "goal": "Your goal", "brand_tone": "Brand tone",
+}
+
+
+def _valid_period_label(period: str) -> bool:
+    return period.count("/") == 1 and all(len(p) == 10 for p in period.split("/"))
+
+
+def _load_pnl_recent(ctx: AuthContext, now: datetime) -> StateRead:
+    """The newest persisted P&L periods (a presentation bound), newest first, each metric's newest-computed `metric_result` row for that period. Ordering only:
+    no computation, no aggregation across periods, no substitution of one period for another (every figure's label names its own period)."""
+    assert ctx.tenant_id is not None
+    rows_by_code = {
+        code: [r for r in metric_result_repo.list_by_metric_code(ctx.tenant_id, metric_code=code) if _valid_period_label(str(r.get("period") or ""))]
+        for code in _PNL_METRICS
+    }
+    all_periods = sorted({str(r["period"]) for rows in rows_by_code.values() for r in rows}, reverse=True)
+    if not all_periods:
+        return StateRead(EntryStatus.UNAVAILABLE, gaps=(Gap("NO_PNL", "No profit & loss has been computed yet — upload your reports and run the P&L first."),))
+    shown = all_periods[:_PNL_RECENT_PERIODS]
+    figures: list[Figure] = []
+    gaps: list[Gap] = []
+    for period in shown:
+        for code, label in _PNL_METRICS.items():
+            match = [r for r in rows_by_code[code] if str(r["period"]) == period]
+            if not match:
+                gaps.append(Gap(f"NO_{code}", f"{label} has not been computed for {period}."))
+                continue
+            row = max(match, key=lambda r: r["computed_at"])
+            figures.append(_figure_from_metric_row(f"{label} ({period})", row))
+            if not row["is_available"]:
+                gaps.append(Gap(f"UNAVAILABLE_{code}", f"{label} is unavailable for {period}: {row.get('unavailable_reason') or 'unavailable'}."))
+    if len(all_periods) > len(shown):
+        gaps.append(Gap("TRUNCATED", "Older periods have saved results that are not listed here."))
+    return StateRead(
+        EntryStatus.PARTIAL if gaps else EntryStatus.AVAILABLE,
+        as_of=max((f.as_of for f in figures if f.as_of is not None), default=None), period=shown[0], figures=tuple(figures), gaps=tuple(gaps),
+    )
+
+
+def _load_seller_facts(ctx: AuthContext, now: datetime) -> StateRead:
+    """What the seller told us (shared memory tier 1, `memory.profile`): quoted and labelled "you said". Words, never figures: no money, no ref."""
+    assert ctx.tenant_id is not None
+    profile = memory.profile(ctx.tenant_id)
+    if not profile:
+        return StateRead(EntryStatus.UNAVAILABLE, gaps=(Gap("NO_SELLER_FACTS", "You have not told me anything about your business yet."),))
+    ordered = sorted(profile.items(), key=lambda kv: _SELLER_FACT_LABELS.get(kv[0], kv[0].replace("_", " ").capitalize()))
+    facts = tuple(
+        Fact(f"{_SELLER_FACT_LABELS.get(k, k.replace('_', ' ').capitalize())} (you said)", f"“{v['value']}”", "SELLER_PROVIDED", v["created_at"])
+        for k, v in ordered
+    )
+    return StateRead(EntryStatus.AVAILABLE, as_of=max(v["created_at"] for v in profile.values()), facts=facts)
+
+
+def _load_cmo_content_latest(ctx: AuthContext, now: datetime) -> StateRead:
+    """The text Slim CMO wrote for the seller (COMPLETE generations, newest first), as quoted artefacts. Content is NEVER a Figure and NEVER evidence (R9): it is
+    shown as the seller's own deliverable, labelled as written by Slim CMO and not verified."""
+    assert ctx.tenant_id is not None
+    rows = ceo_reads.recent_cmo_content(ctx.tenant_id, limit=_CMO_CONTENT_ITEMS)
+    if not rows:
+        return StateRead(EntryStatus.UNAVAILABLE, gaps=(Gap("NO_CONTENT", "No listing content has been written yet."),))
+    artefacts: list[tuple[str, tuple[str, ...], str | None]] = []
+    for r in rows:
+        kind = _CMO_OUTPUT_LABEL.get(str(r["output_type"]), str(r["output_type"]).lower().replace("_", " "))
+        where = (f" for SKU {r['sku']}" if r.get("sku") else "") + (f" on {str(r['marketplace']).title()}" if r.get("marketplace") else "")
+        items = tuple(i if len(i) <= _CMO_CONTENT_CLIP else i[:_CMO_CONTENT_CLIP] + "…" for i in (str(x) for x in r["items"]))
+        artefacts.append((f"Written by Slim CMO: {kind}{where} ({r['created_at'].date().isoformat()})", items, "Quoted as written; not verified by Metrion."))
+    return StateRead(EntryStatus.AVAILABLE, as_of=rows[0]["created_at"], artefacts=tuple(artefacts))
+
+
 _CACHE_SOURCES: Mapping[str, tuple[str, ...]] = {
+    "BS_PNL_RECENT": ("metric_result",),
+    "BS_SELLER_FACTS": ("agent_memory",),
+    "BS_CMO_CONTENT_LATEST": ("cmo_generation",),
     "BS_PNL_LATEST": ("metric_result",),
     "BS_HEALTH_BANDS": ("metric_result", "financial_health_config"),
     "BS_LEAK_OPEN": ("leak_finding",),
@@ -428,6 +507,12 @@ ENTRIES: Mapping[str, StateEntrySpec] = {
                        "pi_research_run via pi_research_run_repo.latest_run_for_tenant", _load_pi_report_latest),
         StateEntrySpec("BS_CMO_WORKFLOW", AgentCode.CMO, "What Slim CMO last generated and how each ended (never the copy itself)",
                        "cmo_generation via generation_repo.list_recent_for_tenant", _load_cmo_workflow),
+        StateEntrySpec("BS_PNL_RECENT", AgentCode.CFO, "The newest saved profit & loss periods: revenue, contribution profit, marketplace fees for each",
+                       "metric_result (Brain 1) via metric_result_repo.list_by_metric_code", _load_pnl_recent),
+        StateEntrySpec("BS_CMO_CONTENT_LATEST", AgentCode.CMO, "The listing text Slim CMO last wrote (quoted, labelled, never a figure)",
+                       "cmo_generation + cmo_title_option via generation_repo.list_recent_content_for_tenant", _load_cmo_content_latest),
+        StateEntrySpec("BS_SELLER_FACTS", None, "What the seller told us about their business (business name, niche, marketplaces, goal), quoted",
+                       "agent_memory scope=SHARED via memory.profile", _load_seller_facts),
         StateEntrySpec("BS_SELLER_CONTEXT", None, "Seller-declared context (goal, priority, note)",
                        "manual_adjustment field seller.goal", _load_seller_context),
         StateEntrySpec("BS_INGEST_STATUS", None, "What data the CEO has to reason on (latest report uploads and ingestion status)",
@@ -485,8 +570,10 @@ def read_entry(
     """Reads ONE Business State entry for this member, applying the full gating order. Never raises for a refusal: it returns the
     status that explains it. An unknown key raises KeyError (a value outside the closed catalog is never read)."""
     catalog = entries if entries is not None else ENTRIES
-    spec = catalog[key]
     at = now or datetime.now(timezone.utc)
+    if entries is None and key in question_types.QUESTION_TYPES:  # a question type: a closed list of entries, each read through the full gating below
+        return _read_question_type(ctx, question_types.QUESTION_TYPES[key], attached=attached, now=at, resolvers=resolvers)
+    spec = catalog[key]
     assert ctx.tenant_id is not None and ctx.role is not None
 
     owner_key = (AGENT_PERMISSION_KEY[spec.owner],) if spec.owner is not None else ()
@@ -522,7 +609,94 @@ def read_entry(
         status = EntryStatus.UNAVAILABLE  # every figure failed verification: nothing citable remains
     return BusinessStateEntry(
         key=key, status=status, as_of=read.as_of, period=read.period, figures=gated.kept, facts=read.facts, gaps=gaps, conflicts=tuple(kept_conflicts),
+        artefacts=read.artefacts,
     )
+
+
+_REFUSALS = (EntryStatus.NOT_PERMITTED, EntryStatus.NOT_ENTITLED, EntryStatus.NOT_ATTACHED)  # most restrictive first: say "no access" before "not stored"
+
+
+def _has_result(entry: BusinessStateEntry) -> bool:
+    """A stored result the seller can be shown. AVAILABLE always is (an open list of missing inputs is a result); PARTIAL/STALE only when something is actually shown."""
+    if entry.status is EntryStatus.AVAILABLE:
+        return True
+    return entry.status in (EntryStatus.PARTIAL, EntryStatus.STALE) and bool(entry.figures or entry.facts or entry.artefacts or entry.conflicts)
+
+
+def _only_facts(entry: BusinessStateEntry, labels: tuple[str, ...]) -> BusinessStateEntry:
+    kept = tuple(f for f in entry.facts if f.label in labels)
+    out = dataclasses.replace(entry, facts=kept, figures=(), conflicts=(), artefacts=())
+    if entry.status in (EntryStatus.AVAILABLE, EntryStatus.PARTIAL) and not kept:
+        return dataclasses.replace(out, status=EntryStatus.UNAVAILABLE, gaps=())  # the part asked about is not stored
+    return out
+
+
+def _read_question_type(
+    ctx: AuthContext, qt: question_types.QuestionType, *, attached: frozenset[str], now: datetime, resolvers: Mapping[Any, Any] | None,
+) -> BusinessStateEntry:
+    """Business Q&A (spec agent-needs-and-shared-knowledge.md section 7): the entries of ONE question type, each read through the unchanged gating order
+    (permission, attachment, entitlement, loader, provenance gate), merged into one entry. Every missing part is answered by a sentence WRITTEN BY CODE
+    (`question_types`); an action that could produce it is OFFERED, never run. Nothing is computed, written or generated here (AC-Q1)."""
+    assert ctx.tenant_id is not None and ctx.role is not None
+    if not has_permission(role=ctx.role, permissions=ctx.permissions, key=AGENT_CEO):
+        return BusinessStateEntry(qt.id, EntryStatus.NOT_PERMITTED, gaps=(Gap("NOT_PERMITTED", question_types.NOT_PERMITTED_TEXT),))
+    parts: list[tuple[question_types.EntryUse, BusinessStateEntry]] = []
+    for use in qt.entries:
+        if use.key in ENTRIES:
+            entry = read_entry(ctx, use.key, attached=attached, now=now, resolvers=resolvers)
+        else:  # a catalog entry that does not exist yet: that part is "not stored yet", never an invention (extension point for BS_SHARED_FINDINGS)
+            entry = BusinessStateEntry(use.key, EntryStatus.UNAVAILABLE)
+        parts.append((use, _only_facts(entry, use.fact_labels) if use.fact_labels is not None else entry))
+
+    results = [(u, e) for u, e in parts if _has_result(e)]
+    figures: list[Figure] = []
+    facts: list[Fact] = []
+    gaps: list[Gap] = []
+    artefacts: list[tuple[str, tuple[str, ...], str | None]] = []
+    conflicts: list[Conflict] = []
+    for use, entry in parts:
+        if _has_result(entry):
+            figures += entry.figures
+            facts += entry.facts
+            artefacts += entry.artefacts
+            conflicts += entry.conflicts
+            gaps += entry.gaps
+        elif entry.status is EntryStatus.UNAVAILABLE:
+            gaps.append(Gap("NOT_STORED", use.not_stored or qt.not_stored))
+            gaps += entry.gaps  # the entry's own specifics (which competitor has no capture, why a metric is unavailable) follow the fixed sentence
+        elif entry.status is EntryStatus.NOT_PERMITTED:
+            gaps.append(Gap("NOT_PERMITTED", question_types.NOT_PERMITTED_TEXT))
+        elif entry.status is EntryStatus.NOT_ENTITLED:
+            gaps.append(Gap("NOT_ENTITLED", question_types.NOT_ENTITLED_TEXT.format(agent=_owner_code(use.key))))
+        elif entry.status is EntryStatus.NOT_ATTACHED:
+            gaps.append(Gap("NOT_ATTACHED", question_types.NOT_ATTACHED_TEXT.format(agent=_owner_code(use.key))))
+        else:  # PARTIAL / STALE with nothing to show: its own named reason stands (for example a goal that needs the CFO permission)
+            gaps += entry.gaps
+    if not parts:  # the "no saved result covers this" type
+        gaps.append(Gap("NOT_STORED", qt.not_stored))
+    gaps += [Gap("NOT_STORED", text) for text in qt.always_gaps]
+
+    if results:
+        status = EntryStatus.AVAILABLE if len(results) == len(parts) and all(e.status is EntryStatus.AVAILABLE for _, e in results) and not qt.always_gaps else EntryStatus.PARTIAL
+    else:
+        refused = [e.status for _, e in parts if e.status in _REFUSALS]
+        status = next((s for s in _REFUSALS if s in refused), EntryStatus.UNAVAILABLE)
+    offers: list[tuple[str, str]] = []
+    if any(e.status is EntryStatus.UNAVAILABLE and u.not_stored is None for u, e in parts) or not parts:  # only for the part the type's own sentence is about
+        offers += [qt.offer] if qt.offer else []
+    if status is EntryStatus.AVAILABLE and qt.available_offer:
+        offers.append(qt.available_offer)
+    unique_gaps = tuple(dict.fromkeys(gaps))
+    return BusinessStateEntry(
+        key=qt.id, status=status, as_of=max((e.as_of for _, e in results if e.as_of is not None), default=None), period=next((e.period for _, e in results if e.period), None),
+        figures=tuple(figures), facts=tuple(facts), gaps=unique_gaps, conflicts=tuple(conflicts), artefacts=tuple(artefacts),
+        preview_hint=next((e.preview_hint for _, e in parts if e.preview_hint), None), offers=tuple(offers),
+    )
+
+
+def _owner_code(entry_key: str) -> str:
+    spec = ENTRIES.get(entry_key)
+    return spec.owner.value if spec is not None and spec.owner is not None else "The owning agent"
 
 
 def read_entries(

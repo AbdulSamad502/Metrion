@@ -24,7 +24,7 @@ from cfo.repositories import agent_data_request_repo
 from backend.services import cfo_actions
 
 __all__ = [
-    "CiHandoffSnapshot", "CiUnavailable", "competitor_handoff", "list_active_competitors", "latest_pi_run", "recent_cmo_generations",
+    "CiHandoffSnapshot", "CiUnavailable", "competitor_handoff", "list_active_competitors", "latest_pi_run", "recent_cmo_generations", "recent_cmo_content",
     "StoredCogs", "stored_cogs", "SalesHistory", "sales_history", "stored_quotes", "stored_budget", "fee_reference_options",
 ]
 
@@ -43,6 +43,11 @@ def latest_pi_run(tenant_id: UUID, *, finished_only: bool = False) -> dict[str, 
 
 def recent_cmo_generations(tenant_id: UUID, *, limit: int) -> list[dict[str, Any]]:
     return cmo_generation_repo.list_recent_for_tenant(tenant_id, limit=limit)
+
+
+def recent_cmo_content(tenant_id: UUID, *, limit: int) -> list[dict[str, Any]]:
+    """The text Slim CMO wrote (COMPLETE generations only), for `BS_CMO_CONTENT_LATEST`: shown quoted and labelled, never as a figure."""
+    return cmo_generation_repo.list_recent_content_for_tenant(tenant_id, limit=limit)
 
 
 # ---- stored seller inputs and assembled history for the two decision playbooks (spec 6.33). Reads only; the engine selects and computes. ----

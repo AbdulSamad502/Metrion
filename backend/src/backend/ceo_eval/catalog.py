@@ -110,6 +110,12 @@ _STATE_ROUTE_HINT: dict[str, str] = {
     "BS_HEALTH_BANDS": "Saved good / watch / at-risk health bands for the latest period",
     "BS_SELLER_CONTEXT": "What the seller has told us: their goal, priority, notes",
     "BS_INGEST_STATUS": "Which reports the seller has uploaded and their processing status",
+    "BS_PNL_RECENT": "The newest saved profit & loss periods side by side: revenue, contribution profit, marketplace fees",
+    "BS_SELLER_FACTS": "What the seller told us about their business: name, niche, marketplaces, goal",
+    "BS_CMO_CONTENT_LATEST": "The listing titles, descriptions, keywords or hashtags Slim CMO last wrote",
+    "BS_COMPETITOR_SNAPSHOT": "The latest captured listed price of each tracked competitor",
+    "BS_PI_REPORT_LATEST": "The state of the most recent product research run",
+    "BS_CMO_WORKFLOW": "What Slim CMO last produced and how each ended",
 }
 
 
@@ -153,12 +159,16 @@ def chat_action_keys() -> frozenset[str]:
 
 def state_entries() -> dict[str, str | None]:
     """Built Business State entry id -> owning agent code (None = CEO-owned, always readable)."""
-    from backend.ceo import business_state
+    from backend.ceo import business_state, question_types
 
-    return {k: (e.owner.value if e.owner is not None else None) for k, e in business_state.ENTRIES.items()}
+    owners: dict[str, str | None] = {k: (e.owner.value if e.owner is not None else None) for k, e in business_state.ENTRIES.items()}
+    owners.update({qt_id: None for qt_id in question_types.QUESTION_TYPES})  # the business Q&A question types are always offered to the CEO's member
+    return owners
 
 
 def build_catalog(scenario: str) -> Catalog:
+    from backend.ceo import question_types
+
     if scenario not in SCENARIOS:
         raise KeyError(f"unknown scenario {scenario!r}")
     present = SCENARIOS[scenario]
@@ -174,7 +184,7 @@ def build_catalog(scenario: str) -> Catalog:
         if needs <= present
     )
     state = tuple(
-        CatalogItem(k, "STATE", _STATE_ROUTE_HINT.get(k, k), (), frozenset({owner}) if owner else frozenset())
+        CatalogItem(k, "STATE", _STATE_ROUTE_HINT.get(k) or question_types.descriptions().get(k, k), (), frozenset({owner}) if owner else frozenset())
         for k, owner in state_entries().items()
         if owner is None or owner in present
     )

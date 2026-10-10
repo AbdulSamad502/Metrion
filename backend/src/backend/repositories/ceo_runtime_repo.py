@@ -14,7 +14,7 @@ from backend.tenant_context import get_engine, tenant_scope
 # Table names are interpolated into SQL, so only names from this fixed list may ever be fingerprinted (never a value from a request).
 FINGERPRINT_TABLES: frozenset[str] = frozenset({
     "metric_result", "financial_health_config", "leak_finding", "agent_data_request", "manual_adjustment", "report_file", "ingestion_run",
-    "competitor_url", "competitor_snapshot", "pi_research_run", "cmo_generation",
+    "competitor_url", "competitor_snapshot", "pi_research_run", "cmo_generation", "agent_memory",
 })
 
 

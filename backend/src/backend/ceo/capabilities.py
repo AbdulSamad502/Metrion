@@ -12,7 +12,7 @@ from datetime import datetime
 
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, has_permission
-from backend.ceo import business_state
+from backend.ceo import business_state, question_types
 from backend.ceo.contract import AGENT_PERMISSION_KEY, AgentCode
 from backend.ceo.plans import ACTIONS, PLAYBOOKS, VIRTUAL_ROUTES
 from backend.ceo.registry import ActionRegistry
@@ -24,6 +24,12 @@ STATE_DESCRIPTIONS: dict[str, str] = {
     "BS_HEALTH_BANDS": "Saved good / watch / at-risk health bands for the latest period",
     "BS_SELLER_CONTEXT": "What the seller has told us: their goal, priority, notes",
     "BS_INGEST_STATUS": "Which reports the seller has uploaded and their processing status",
+    "BS_PNL_RECENT": "The newest saved profit & loss periods side by side: revenue, contribution profit, marketplace fees",
+    "BS_SELLER_FACTS": "What the seller told us about their business: name, niche, marketplaces, goal",
+    "BS_CMO_CONTENT_LATEST": "The listing titles, descriptions, keywords or hashtags Slim CMO last wrote",
+    "BS_COMPETITOR_SNAPSHOT": "The latest captured listed price of each tracked competitor",
+    "BS_PI_REPORT_LATEST": "The state of the most recent product research run",
+    "BS_CMO_WORKFLOW": "What Slim CMO last produced and how each ended",
 }
 
 PRESENT, NOT_ATTACHED, NOT_PERMITTED, NOT_ENTITLED = "PRESENT", "NOT_ATTACHED", "NOT_PERMITTED", "NOT_ENTITLED"
@@ -57,6 +63,9 @@ def compute_capabilities(ctx: AuthContext, registry: ActionRegistry, attached: f
                 continue
             if all(permitted(k) for k in spec.extra_permissions):
                 state[key] = STATE_DESCRIPTIONS.get(key, key)
+        # The business Q&A question types (spec agent-needs-and-shared-knowledge.md 7.2) are always offered to a member who may talk to the CEO: a type whose agent is
+        # detached, not permitted or not on the plan is answered by a code-written sentence saying so (attach / upgrade / no access), never silently absent.
+        state.update(question_types.descriptions())
 
     status: dict[str, str] = {}
     for agent in AgentCode:

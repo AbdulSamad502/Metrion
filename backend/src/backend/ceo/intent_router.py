@@ -34,8 +34,36 @@ def _rx(p: str) -> re.Pattern[str]:
     return re.compile(p, re.IGNORECASE)
 
 
+# Business Q&A (spec agent-needs-and-shared-knowledge.md section 7.2): a plain question about the seller's own saved results routes to its QUESTION TYPE
+# (`question_types`), a closed id the Business State read expands to a fixed list of entries. These come FIRST because their wording ("what product ideas
+# did you FIND", "what titles did we WRITE") would otherwise match the verbs of the work rules below and start a new, possibly metered, run. They are question
+# phrasings about what is already saved (past tense, "my ...", "where am I ..."); a request to DO the work still falls through to the rules below.
+_NOT_A_WHY = r"^(?!.*\b(?:why|drop|dropped|fall|fell|declin\w*|decreas\w*|increas\w*|improv\w*|compar\w*)\b)"
+STATE_RULES: tuple[Rule, ...] = (
+    Rule("QT_PROFIT_BY_PERIOD", "CFO", _rx(
+        _NOT_A_WHY + r".*(?:\b(?:what|how much)\b.*\b(?:profit|revenue|earnings|income)\b|\b(?:my|our) (?:profit|revenue|earnings|income)\b|\bhow much (?:did i|have i|did we) (?:make|made|earn|earned)\b)"), "BUSINESS_STATE"),
+    Rule("QT_LEAKS", "CFO", _rx(
+        r"\bwhere (?:am i|are we) (?:losing|leaking|bleeding)\b|\b(?:losing|leaking) money\b|\b(?:my|our|open) (?:leaks?|leak findings?)\b|\bwhat(?:'s| is| are) (?:my )?leaks?\b"), "BUSINESS_STATE"),
+    Rule("QT_DATA_GAPS", "CFO", _rx(
+        r"\bwhat (?:data|inputs?|information|reports?|details?) (?:are you|is|do you) (?:still )?(?:missing|need|needed|required)\b|\bwhat (?:are you|do you) (?:still )?(?:missing|need)\b|\bwhat(?:'s| is) missing\b|\bdata gaps?\b"), "BUSINESS_STATE"),
+    Rule("QT_COMPETITORS_PRICES", "CI", _rx(
+        r"^(?!.*\bmargin\b).*(?:\bwhat(?:'s| is| are)? (?:my |our |the )?competitors?\b.*\b(?:charg\w*|pric\w*|sell\w* (?:at|for))\b|\bcompetitors?'? prices?\b|\bhow much (?:are|is|do) (?:my |our |the )?competitors?\b.*\b(?:charg\w*|sell\w*)\b)"), "BUSINESS_STATE"),
+    Rule("QT_PRODUCT_IDEAS", "PI", _rx(
+        r"\bwhat (?:product )?(?:ideas?|products?)\b.*\b(?:did you|have you|you) (?:find|found|list|listed|come up with)\b|\bproduct ideas? (?:you|we) (?:found|listed|have)\b|\bwhat did (?:you|the research|product intelligence) (?:find|found)\b"), "BUSINESS_STATE"),
+    Rule("QT_LISTING_CONTENT", "CMO", _rx(
+        r"\bwhat (?:titles?|descriptions?|hashtags?|keywords?|listing (?:content|copy)|content)\b.*\b(?:did|have) (?:we|you|i)\b.*\b(?:write|wrote|written|generat\w+|made|create\w*)\b|\b(?:titles?|descriptions?|hashtags?) (?:we|you) (?:wrote|made|generated|created)\b"), "BUSINESS_STATE"),
+    Rule("QT_GOALS", "CFO", _rx(r"\bwhat(?:'s| is| are) (?:my|our) (?:goals?|targets?|target margin)\b|\bwhat (?:goal|target) (?:did i|have i|did we) (?:set|give|gave)\b"), "BUSINESS_STATE"),
+    Rule("QT_AGENT_FINDINGS", "CFO", _rx(
+        r"\bwhat (?:has|have|did) (?:each|every|the|all)(?: of the)? (?:agents?|specialists?)\b.*\b(?:found|find|report\w*)\b|\bwhat (?:has|have) (?:the )?agents? found\b"), "BUSINESS_STATE"),
+    Rule("QT_SELLER_FACTS", "CFO", _rx(
+        r"\bwhat do you (?:know|remember) about (?:my|our) (?:business|store|brand|company|shop)\b|\bwhat have i told you\b|\bwhat do you know about me\b"), "BUSINESS_STATE"),
+    # The seller's own operational data that no saved result covers: answered "not stored yet", never from general knowledge.
+    Rule("QT_NOT_STORED", "CFO", _rx(
+        r"\b(?:my|our) (?:inventory|stock levels?|ad spend|advertising spend|customers?|order count|sales volume|best[- ]?selling (?:sku|product)s?)\b|\bhow (?:much|many) (?:stock|inventory|orders?|units|customers?)\b.*\b(?:do i|have i|did i|do we|have we|did we)\b"), "BUSINESS_STATE"),
+)
+
 # Ordered: the first match wins. Each pattern needs a clear verb or noun for the work, not just a keyword anywhere.
-RULES: tuple[Rule, ...] = (
+RULES: tuple[Rule, ...] = STATE_RULES + (
     Rule("gst_lookup", "CFO", _rx(r"\bgst\b.*\b(?:rate|percent|percentage|%|slab|apply|applies|applicable|charge)\b|\b(?:rate|percent|percentage|slab)\b.*\bgst\b|\bgst (?:on|for|of)\b")),
     Rule("NEW_PRODUCT_DECISION", "CFO", _rx(r"\bworth (?:stocking|buying|importing|selling)\b|\bshould i (?:stock|buy|import|order)\b"), "PLAYBOOK"),
     Rule("COMPETITOR_PRICE_IMPACT", "CI", _rx(r"(?=.*\bmargin\b)(?:.*\b(?:at|match|matched|matching|beat|undercut)\b.*\bprice\b|.*\b(?:is|are|dropped|cut|lowered)\b.*\b(?:at|to)\s*(?:₹|rs\.?)?\s*\d)"), "PLAYBOOK"),
@@ -83,6 +111,8 @@ _STOCK_AFTER = re.compile(r"\bshould i (?:stock|buy|import|order)\s+(?:the\s+|so
 
 def _slots(rule: Rule, text: str) -> dict[str, str]:
     out: dict[str, str] = {}
+    if rule.kind == "BUSINESS_STATE":
+        return out  # a state read takes no slots: the question type decides what is read
     if rule.key == "COMPETITOR_PRICE_IMPACT":
         m = _RIVAL_PRICE_OF.search(text)
         if m:

@@ -176,3 +176,35 @@ def list_recent_for_tenant(tenant_id: UUID, *, limit: int) -> list[dict[str, Any
             {"tenant_id": str(tenant_id), "limit": limit},
         ).mappings().all()
     return [dict(r) for r in rows]
+
+
+def list_recent_content_for_tenant(tenant_id: UUID, *, limit: int) -> list[dict[str, Any]]:
+    """The tenant's most recent COMPLETE generations WITH the text the seller was given (`output_text`, or the ranked title options of a title set), newest
+    first. A read for the CEO's `BS_CMO_CONTENT_LATEST` (agent-needs-and-shared-knowledge.md 7.3): the CEO shows it quoted and labelled as written by Slim CMO,
+    never as a figure. Rows with no stored text (structured-only packs, failed attempts) are not returned. Tenant-scoped; read-only."""
+    from slim_cmo.repositories.tenant_context import tenant_scope
+
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                "SELECT id, sku, marketplace, output_type, created_at, output_text FROM cmo_generation "
+                "WHERE tenant_id = :tenant_id AND status = 'COMPLETE' "
+                "AND (output_type = 'TITLE_SET' OR (output_text IS NOT NULL AND output_text <> '')) "
+                "ORDER BY created_at DESC, id LIMIT :limit"
+            ),
+            {"tenant_id": str(tenant_id), "limit": limit},
+        ).mappings().all()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            item = dict(r)
+            if item["output_type"] == OutputType.TITLE_SET.value:
+                opts = conn.execute(
+                    text("SELECT title_text FROM cmo_title_option WHERE tenant_id = :tenant_id AND generation_id = :gid ORDER BY rank"),
+                    {"tenant_id": str(tenant_id), "gid": str(item["id"])},
+                ).all()
+                item["items"] = [str(o.title_text) for o in opts]
+            else:
+                item["items"] = [str(item["output_text"])]
+            if item["items"]:
+                out.append(item)
+    return out

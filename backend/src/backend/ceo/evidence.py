@@ -174,6 +174,9 @@ class EvidenceCollector:
             self.add_gap(g.message)
         if entry.preview_hint:
             self._offer(entry.preview_hint, "See the free CFO preview")
+        for key, label in entry.offers:
+            self._offer(key, label)
+        self.artefacts.extend(entry.artefacts)
 
     def add_leg(self, leg: LegResult) -> None:
         label = LEG_LABELS.get(leg.action_key, leg.action_key)
