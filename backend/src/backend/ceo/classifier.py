@@ -155,6 +155,7 @@ class Decision:
     needs_agent: str | None
     clarify_for: str | None
     flags: frozenset[str] = field(default_factory=frozenset)  # PARSE_FAIL, UNKNOWN_ROUTE, OUT_OF_CATALOG, KEY_ROUTE_MISMATCH, MISSING_SLOT, UNKNOWN_SLOT
+    addons: tuple[str, ...] = ()  # need keys the request also asks for (spec agent-needs 5.3), set by code from the rules; filtered against the catalog before use
 
     def to_json(self) -> dict[str, Any]:
         return {

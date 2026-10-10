@@ -541,6 +541,7 @@ class Done:
     playbook: str
     inputs: dict[str, Any]
     resume: Mapping[str, Any] | None = None  # a data-request session: the original request to re-run after the save (spec 6.37)
+    addons: tuple[str, ...] = ()  # add-on lookups the request also asked for, carried through the questions (spec agent-needs 5.3)
 
 
 @dataclass(frozen=True, slots=True)
@@ -644,15 +645,20 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
         again = _card(playbook, f, ctx, collected)
         if card.get("resume"):
             again["resume"] = card["resume"]
+        if card.get("addons"):
+            again["addons"] = list(card["addons"])
         return Ask(f"{parsed.why} {f.question(ctx, collected)}", again)
     collected[f.name] = parsed
     resume = card.get("resume")
+    addons = tuple(card.get("addons") or ())
     if _next_field(fields, ctx, collected) is not None:
         nxt = _ask(playbook, fields, ctx, collected, prefix="")
         if isinstance(nxt, Ask) and resume:
             nxt.card["resume"] = resume
+        if isinstance(nxt, Ask) and addons:
+            nxt.card["addons"] = list(addons)
         return nxt
-    return Done(playbook, _to_inputs(playbook, collected), resume)
+    return Done(playbook, _to_inputs(playbook, collected), resume, addons)
 
 
 def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
