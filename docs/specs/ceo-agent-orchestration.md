@@ -884,6 +884,22 @@ Owner direction: the Hub is one conversation. **Top:** the CEO and every agent, 
 
 ---
 
+### 6.35 Specialists from chat: CMO listing content first (2026-10-10, approved by the owner)
+
+**Why.** The CEO must be the single front door. Until now the classifier sent product discovery, listing writing, market trends and competitor research to OUT_OF_SCOPE ("use the agent's own page"). This section opens them one slice at a time; slice 1 is CMO.
+
+**Rule (extends 6.34).** An action may declare `session=True`. The classifier only chooses it (it supplies no input); the CEO then asks for what the specialist's own request model needs, one question at a time through the guided input session, every answer parsed by code; anything the seller already said (classifier `product`/`marketplace` slot text) is offered to the same parsers first and skipped when it reads cleanly. A skipped optional field is absent, never defaulted. The finished inputs plus an idempotency key (`ceo-<card or message id>`) become the specialist's slots and go through the one dispatch choke point, so attachment, permission, entitlement and quota are checked exactly as for the direct route. A detached or unavailable specialist is refused before any question is asked.
+
+**Slice 1 actions:** `cmo.generate_title_sets`, `cmo.generate_hashtags`, `cmo.generate_description`, `cmo.generate_keywords`. Description and keywords are grounded on the title the seller types (`seller_title`); the approve-title path (a recorded choice) stays outside chat.
+
+**R9 amendment (written content).** Specialist free text is still never evidence or a figure. Content CMO *wrote for the seller* is the product, so it is shown **verbatim, quoted and labelled** ("Written by the specialist from the details you gave. Read it before you use it; Metrion has not checked it against your marketplace account.") as an *artefact* in the answer and the finding's snapshot. It is never composed, reworded or numerically gated by a second model (the answer is the fixed template: no composer call), carries the marketplace-rule citation CMO stored, and is never counted as a figure. A failed artefact is a named gap with the missing detail, never a result.
+
+**Workspace link.** A finding shows an "Open <agent page>" link only when that page exists (`frontend/lib/agents.ts` `href`).
+
+**Still not in chat (each its own slice):** PI discovery (needs the niche brief, decided: the CEO may create it from the seller's confirmed chat answers, after a confirm card), CMO market trends (preview, confirm, run), CI research over uploaded images, financial-report ingestion from chat.
+
+**6.35 addendum (same day).** (1) *Explicit intent rules* (`ceo/intent_router.py`) run before the model for unmistakable requests (hashtags, titles, descriptions, keywords, trending products); the verdict goes through `parse_decision`, so the closed catalog still binds; a rule whose agent is unavailable yields an ADVISORY turn naming it. (2) *General questions are answered:* a model `CLARIFY/WHICH_AGENT` becomes ADVISORY; a model `needs_agent` for an available agent no longer produces a refusal; an empty goal is not a gap in a general answer; the ADVISORY composer prompt says to answer from general knowledge and the conversation. (3) *PI discovery from chat* (`pi.discover`, session of six questions ending in a summary the seller confirms): on "yes" the CEO saves the seller's own research brief (`services/ceo_briefs.py`, the one declared chat write, owner-approved, idempotent on the answering message) and runs `pi.discover`, then reads the candidates back through `pi.report`. Candidate names are shown quoted, labelled "from public web sources and not verified", at most ten, with PI's own stated limits as gaps; no scores or estimates are relayed.
+
 ## 7. AI requirements
 
 | Brain | Role in orchestration |
