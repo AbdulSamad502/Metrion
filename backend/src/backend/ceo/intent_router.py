@@ -28,6 +28,7 @@ class Rule:
     agent: str
     pattern: re.Pattern[str]
     kind: str = "ACTION"  # a decision playbook is routed the same way (spec 6.36)
+    addons: tuple[str, ...] = ()  # need keys the matching request also asks for (spec agent-needs 5.3)
 
 
 def _rx(p: str) -> re.Pattern[str]:
@@ -64,6 +65,7 @@ STATE_RULES: tuple[Rule, ...] = (
 
 # Ordered: the first match wins. Each pattern needs a clear verb or noun for the work, not just a keyword anywhere.
 RULES: tuple[Rule, ...] = STATE_RULES + (
+    Rule("cmo.generate_description", "CMO", _rx(r"(?=.*\bdescriptions?\b)(?=.*\bgst\b)(?=.*\b(?:with|along|also|and|plus|together)\b)"), "ACTION", ("GST_RATE_FOR_PRODUCT",)),
     Rule("gst_lookup", "CFO", _rx(r"\bgst\b.*\b(?:rate|percent|percentage|%|slab|apply|applies|applicable|charge)\b|\b(?:rate|percent|percentage|slab)\b.*\bgst\b|\bgst (?:on|for|of)\b")),
     Rule("NEW_PRODUCT_DECISION", "CFO", _rx(r"\bworth (?:stocking|buying|importing|selling)\b|\bshould i (?:stock|buy|import|order)\b"), "PLAYBOOK"),
     Rule("COMPETITOR_PRICE_IMPACT", "CI", _rx(r"(?=.*\bmargin\b)(?:.*\b(?:at|match|matched|matching|beat|undercut)\b.*\bprice\b|.*\b(?:is|are|dropped|cut|lowered)\b.*\b(?:at|to)\s*(?:₹|rs\.?)?\s*\d)"), "PLAYBOOK"),
@@ -89,6 +91,7 @@ _NICHE = re.compile(r"\b(?:niche|nich|category|segment)\s*(?:is|:|=|-)?\s*([\w][
 _BUDGET = re.compile(r"(?:under|below|within|upto|up to|budget(?: of| is)?|max(?:imum)?)\s*((?:₹|rs\.?|inr)?\s*[\d,]+(?:\.\d+)?)", re.IGNORECASE)
 
 
+_ADDON_TAIL = re.compile(r"\s+(?:along\s+|together\s+)?(?:with|and|plus|also)\b.*$", re.IGNORECASE)
 _GST_PRODUCT_AFTER = re.compile(r"\bgst\b.*?\b(?:on|for|of|to|in)\s+(?:my\s+|the\s+|a\s+|an\s+|our\s+)?(?P<p>[\w][\w \-']{1,80}?)(?=\s+(?:is|are|apply|applies|be)\b|[?.!,]|$)", re.IGNORECASE)
 _GST_PRODUCT_BEFORE = re.compile(r"^\W*(?:ok\s+|so\s+)?(?P<p>[\w][\w \-']{1,60}?)\s+gst\b", re.IGNORECASE)
 _REQUEST_WORDS = frozenset({"tell", "give", "show", "what", "which", "how", "can", "could", "please", "ok", "okay", "so", "and", "also", "now", "is", "are", "does", "do", "whats", "what's"})
@@ -140,7 +143,7 @@ def _slots(rule: Rule, text: str) -> dict[str, str]:
         if budget:
             out["amount"] = budget.group(1).strip()
     else:
-        product = _PRODUCT_AFTER_FOR.search(text)
+        product = _PRODUCT_AFTER_FOR.search(_ADDON_TAIL.sub("", text) if rule.addons else text)  # "... for a steel bottle along with the GST %": the add-on is not part of the product
         if product:
             out["product"] = product.group(1).strip()
     return out
@@ -161,5 +164,6 @@ def route(text: str, cat: Catalog) -> Decision | None:
             payload = {"route": rule.kind, "route_key": rule.key, "slots": _slots(rule, t), "needs_agent": None, "clarify_for": None}
         d = parse_decision(json.dumps(payload), cat)
         extra = {"GST_UNAVAILABLE"} if item is None and rule.key == "gst_lookup" else set()  # the wall for GST is code, never general knowledge
-        return Decision(d.parse_ok, d.raw_route, d.raw_key, d.route, d.key, d.slots, d.needs_agent, d.clarify_for, frozenset({*d.flags, "RULE_ROUTED", *extra}))
+        return Decision(d.parse_ok, d.raw_route, d.raw_key, d.route, d.key, d.slots, d.needs_agent, d.clarify_for, frozenset({*d.flags, "RULE_ROUTED", *extra}),
+                        addons=rule.addons if item is not None else ())
     return None

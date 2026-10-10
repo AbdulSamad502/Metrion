@@ -3,7 +3,7 @@
  * no orchestration of its own: tests script what the "server" persisted and when, exactly as the real turn endpoint would. */
 
 import { ApiError } from "@/lib/api";
-import type { MemoryItem } from "@/lib/ceo";
+import type { MemoryItem, NeedRow } from "@/lib/ceo";
 import type {
   AgentAvailability, AgentCode, CeoClient, UploadedAttachment, NewProductFormSupport, PriceImpactFormSupport, SaveInputBody, CeoMessage, CeoRoute, ClarificationCard, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationStatus,
   InvestigationSummary, TurnEvent, TurnFlow, TurnResponse, TurnRow, UiAction,
@@ -47,6 +47,7 @@ export class FakeCeo {
   health: HealthEntry[] = [];
   healthError: ApiError | null = null;
   memory: MemoryItem[] = [];
+  needs = new Map<string, NeedRow[]>();
   flows = new Map<string, TurnFlow>();
   /** live-event stream: tests push events; `streamFails` makes it refuse to open (the poll must still do the whole job) */
   streamFails = false;
@@ -232,6 +233,11 @@ export class FakeCeo {
           });
         });
       },
+      getNeeds: (id: string) =>
+        rec("getNeeds", [id], () => {
+          this.visible(id);
+          return { items: structuredClone(this.needs.get(id) ?? []) };
+        }),
       getMemory: () => rec("getMemory", [], () => ({ items: structuredClone(this.memory) })),
       forgetMemory: (id: string) =>
         rec("forgetMemory", [id], () => {

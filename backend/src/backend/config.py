@@ -179,6 +179,12 @@ def ceo_playbook_max_legs() -> int | None:
     return _optional_positive_int("CEO_PLAYBOOK_MAX_LEGS")
 
 
+def ceo_needs_max_per_turn() -> int | None:
+    """`CEO_NEEDS_MAX_PER_TURN`: the most add-on lookups (spec agent-needs 5.4) the CEO runs for one turn. NO default: unset -> None -> no add-on runs and the answer names the gap;
+    the main request still runs. Not cached, so a test or operator change takes effect."""
+    return _optional_positive_int("CEO_NEEDS_MAX_PER_TURN")
+
+
 def ceo_max_candidate_prices() -> int | None:
     """`CEO_MAX_CANDIDATE_PRICES`: the most candidate prices one COMPETITOR_PRICE_IMPACT run may carry (spec 6.33, Q32). NO default: unset -> that playbook refuses
     with CONFIG_MISSING rather than running with an unchosen bound."""

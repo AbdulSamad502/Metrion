@@ -475,6 +475,28 @@ def _load_cmo_content_latest(ctx: AuthContext, now: datetime) -> StateRead:
     return StateRead(EntryStatus.AVAILABLE, as_of=rows[0]["created_at"], artefacts=tuple(artefacts))
 
 
+_FINDINGS_SHOWN = 10  # a presentation bound
+
+
+def _load_shared_findings(ctx: AuthContext, now: datetime) -> StateRead:
+    """Active shared findings the member could see by running that agent directly (D6), as labelled text. Agent text carries no digit and numbers stay in refs, which this
+    entry does not render: findings are words, each labelled by trust ("Reported by the CFO, not verified"). Hidden-agent findings are counted, never described."""
+    from backend.ceo import findings  # lazy: findings imports capabilities, which imports this module
+    from backend.ceo.registry import get_registry
+
+    assert ctx.tenant_id is not None
+    listed = findings.list_visible(ctx.tenant_id, findings.visible_agents(ctx, get_registry(), now=now), limit=_FINDINGS_SHOWN)
+    gaps = tuple(Gap("FINDINGS_HIDDEN", h["message"]) for h in listed.hidden)
+    if not listed.items:
+        return StateRead(EntryStatus.UNAVAILABLE, gaps=gaps)
+    facts = tuple(
+        Fact(f"{i['trustLabel']}" + (f" — “{i['subject']}”" if i["subject"] else ""), i["text"], "SELLER_PROVIDED" if i["trust"] == "SELLER_STATED" else "SOURCE_DERIVED",
+             datetime.fromisoformat(i["createdAt"]))
+        for i in listed.items
+    )
+    return StateRead(EntryStatus.PARTIAL if gaps else EntryStatus.AVAILABLE, as_of=max(f.as_of for f in facts if f.as_of is not None), facts=facts, gaps=gaps)
+
+
 _CACHE_SOURCES: Mapping[str, tuple[str, ...]] = {
     "BS_PNL_RECENT": ("metric_result",),
     "BS_SELLER_FACTS": ("agent_memory",),
@@ -513,6 +535,8 @@ ENTRIES: Mapping[str, StateEntrySpec] = {
                        "cmo_generation + cmo_title_option via generation_repo.list_recent_content_for_tenant", _load_cmo_content_latest),
         StateEntrySpec("BS_SELLER_FACTS", None, "What the seller told us about their business (business name, niche, marketplaces, goal), quoted",
                        "agent_memory scope=SHARED via memory.profile", _load_seller_facts),
+        StateEntrySpec("BS_SHARED_FINDINGS", None, "What the agents have found, labelled by trust (not seller-stated); only agents the member could run directly",
+                       "shared_finding via findings.list_visible (per-member visibility, so never cached)", _load_shared_findings),
         StateEntrySpec("BS_SELLER_CONTEXT", None, "Seller-declared context (goal, priority, note)",
                        "manual_adjustment field seller.goal", _load_seller_context),
         StateEntrySpec("BS_INGEST_STATUS", None, "What data the CEO has to reason on (latest report uploads and ingestion status)",

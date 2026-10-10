@@ -38,7 +38,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CEO, AGENT_CFO, AGENT_CI, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
-from backend.ceo import business_state, memory as agent_memory, orchestrator, summary
+from backend.ceo import business_state, findings as ceo_findings, memory as agent_memory, orchestrator, summary
 from backend.ceo.capabilities import NOT_ENTITLED, compute_capabilities
 from backend.ceo.contract import AgentCode
 from backend.ceo.periods import PeriodUnresolvable, resolve_period
@@ -210,6 +210,18 @@ def get_findings(investigation_id: UUID, turn_id: UUID | None = None, ctx: AuthC
     _also(ctx, AGENT_CEO)
     _require_visible(ctx, investigation_id)
     return [_j(f) for f in repo.list_findings(_tenant(ctx), investigation_id, turn_id=turn_id)]
+
+
+@router.get("/investigations/{investigation_id}/needs")
+def get_needs(investigation_id: UUID, ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW)) -> dict[str, Any]:
+    """The CEO's follow-up lookups for one investigation (spec agent-needs 9.1 / 13): who asked whom for what and how it ended. No money, no text."""
+    from backend.repositories import ceo_need_repo
+
+    _also(ctx, AGENT_CEO)
+    _require_visible(ctx, investigation_id)
+    rows = ceo_need_repo.list_for_investigation(_tenant(ctx), investigation_id)
+    return {"items": [_jd({"id": r["id"], "needKey": r["need_key"], "requesterAgent": r["requester_agent"], "providerKey": r["provider_key"], "status": r["status"],
+                           "createdAt": r["created_at"], "turnMessageId": r["turn_message_id"]}) for r in rows]}
 
 
 @router.post("/investigations/{investigation_id}/turns")
@@ -433,6 +445,23 @@ def forget_memory(memory_id: UUID, ctx: AuthContext = require_auth(permission=AG
     if not agent_memory.forget(_tenant(ctx), memory_id, ctx.app_user_id):
         raise HTTPException(status_code=404, detail="Not found")
     return {"forgotten": str(memory_id)}
+
+
+@router.get("/findings")
+def get_findings(limit: int = Query(default=100, ge=1, le=200), runtime: CeoRuntime = Depends(get_runtime), ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+    """What the agents have reported (spec agent-needs-and-shared-knowledge.md 6.3): active shared findings with their trust label, limited to the agents this member could
+    use directly (permission and entitlement, D6); the rest are only counted. Tenant from the session only."""
+    visible = ceo_findings.visible_agents(ctx, runtime.registry, now=runtime.clock())
+    return _jd(ceo_findings.list_visible(_tenant(ctx), visible, limit=limit).as_dict())
+
+
+@router.post("/findings/{finding_id}/forget")
+def forget_finding(finding_id: UUID, runtime: CeoRuntime = Depends(get_runtime), ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+    """Forget one finding; its source is not recorded again. A foreign, unknown, already-forgotten or hidden-agent id is a plain not-found."""
+    visible = ceo_findings.visible_agents(ctx, runtime.registry, now=runtime.clock())
+    if not ceo_findings.forget(_tenant(ctx), finding_id, visible_agents=visible, created_by=ctx.app_user_id):
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"forgotten": str(finding_id)}
 
 
 @router.get("/forms/new-product")

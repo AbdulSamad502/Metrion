@@ -163,7 +163,7 @@ def test_authorization_is_checked_before_any_cache_read(two_tenants):
 
 def test_a_clock_dependent_entry_is_never_cached():
     assert bs.ENTRIES["BS_COMPETITOR_SNAPSHOT"].source_tables is None  # its 'out of date' label depends on the clock, not only on stored rows
-    assert all(s.source_tables for k, s in bs.ENTRIES.items() if k != "BS_COMPETITOR_SNAPSHOT")
+    assert all(s.source_tables for k, s in bs.ENTRIES.items() if k not in ("BS_COMPETITOR_SNAPSHOT", "BS_SHARED_FINDINGS"))  # findings visibility is per member: never cached
 
 
 def test_only_whitelisted_tables_can_be_fingerprinted(two_tenants):

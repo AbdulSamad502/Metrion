@@ -115,6 +115,7 @@ _STATE_ROUTE_HINT: dict[str, str] = {
     "BS_CMO_CONTENT_LATEST": "The listing titles, descriptions, keywords or hashtags Slim CMO last wrote",
     "BS_COMPETITOR_SNAPSHOT": "The latest captured listed price of each tracked competitor",
     "BS_PI_REPORT_LATEST": "The state of the most recent product research run",
+    "BS_SHARED_FINDINGS": "What each agent has found and reported, labelled by trust",
     "BS_CMO_WORKFLOW": "What Slim CMO last produced and how each ended",
 }
 

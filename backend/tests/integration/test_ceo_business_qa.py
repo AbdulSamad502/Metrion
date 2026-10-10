@@ -241,14 +241,21 @@ def test_the_goals_type_always_says_progress_is_not_stored(two_tenants, app_user
     assert "Not stored yet. Progress against your goal is not tracked yet." in [g.message for g in entry.gaps]
 
 
-def test_the_findings_type_is_unavailable_until_its_entry_exists_and_reads_it_when_it_does(two_tenants, app_user, monkeypatch):
-    a, _ = two_tenants
-    assert "BS_SHARED_FINDINGS" not in bs.ENTRIES  # built by the findings slice
+def test_the_findings_type_is_unavailable_when_nothing_was_recorded_then_shows_labelled_visible_findings_only(two_tenants, app_user, seed):
+    from backend.ceo import findings
+
+    a, b = two_tenants
     assert read(ctx_for(a, user_id=app_user), "QT_AGENT_FINDINGS").gaps[0].message == QT["QT_AGENT_FINDINGS"].not_stored
-    spec = bs.StateEntrySpec("BS_SHARED_FINDINGS", None, "test", "test", lambda ctx, now: bs.StateRead(EntryStatus.AVAILABLE, as_of=NOW, facts=(bs.Fact("Reported by CFO, not verified", "A leak was found.", "SOURCE_DERIVED"),)))
-    monkeypatch.setitem(bs.ENTRIES, "BS_SHARED_FINDINGS", spec)  # the extension point: registering the entry is all that is needed
+    run = seed.run(a, "COMPLETE")
+    findings.record(a, agent="PI", kind="PRODUCT_IDEA", text="Product Intelligence listed this idea in its latest research.", subject="Steel Bottle 1 L",
+                    source_ref={"kind": "pi_research_run", "id": str(run)})
     entry = read(ctx_for(a, user_id=app_user), "QT_AGENT_FINDINGS")
-    assert entry.status is EntryStatus.AVAILABLE and entry.facts[0].label == "Reported by CFO, not verified"
+    assert entry.status is EntryStatus.AVAILABLE and entry.figures == ()
+    [fact] = entry.facts
+    assert fact.label.startswith("Reported by Product Intelligence, not verified") and "“Steel Bottle 1 L”" in fact.label  # never described as verified
+    assert read(ctx_for(b, user_id=app_user), "QT_AGENT_FINDINGS").status is EntryStatus.UNAVAILABLE  # tenant isolation
+    hidden = read(partner_ctx(a, AGENT_CEO), "QT_AGENT_FINDINGS")  # no agent.pi: counted, never described
+    assert hidden.facts == () and any("not shown: no access" in g.message for g in hidden.gaps) and "Steel Bottle" not in repr(hidden)
 
 
 # ------------------------------------------------------------------------------------------- question types: populated

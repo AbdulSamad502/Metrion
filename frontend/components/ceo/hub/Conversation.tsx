@@ -6,8 +6,8 @@ import { Welcome } from "@/components/ceo/hub/Welcome";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState, Spinner } from "@/components/ui/LoadingState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import type { AgentCode, CeoMessage, ClarificationCard, ClarificationReply, ExplicitPeriod, InvestigationDetail, TurnRow, UiAction } from "@/lib/ceo";
-import { investigationTitle, messageView, type HubState } from "@/lib/ceoModel";
+import type { AgentCode, CeoMessage, ClarificationCard, ClarificationReply, ExplicitPeriod, InvestigationDetail, NeedRow, TurnRow, UiAction } from "@/lib/ceo";
+import { investigationTitle, messageView, needStepView, needsByMessage, type HubState } from "@/lib/ceoModel";
 import type { TurnProgress } from "@/lib/useCeoHub";
 
 /** CENTER: the CEO conversation, the investigation's status and the composer.
@@ -21,6 +21,7 @@ export function Conversation({
   state,
   detail,
   turn,
+  needs = [],
   notice,
   onDismissNotice,
   onSend,
@@ -33,6 +34,8 @@ export function Conversation({
   state: HubState;
   detail: InvestigationDetail | null;
   turn: TurnProgress;
+  /** the CEO's follow-up lookups for this investigation (read from the backend) */
+  needs?: NeedRow[];
   notice: string | null;
   onDismissNotice: () => void;
   onSend: (message: string, period: ExplicitPeriod | null, action?: UiAction | null, clarification?: ClarificationReply | null) => void;
@@ -92,6 +95,7 @@ export function Conversation({
         onSuggest={(label, action) => onSend(label, null, action)}
         onAsk={(text) => onSend(text, null)}
         agents={detail.agents}
+        needs={needs}
       />
 
 
@@ -130,7 +134,7 @@ function lastCardId(messages: CeoMessage[]): string | null {
 }
 
 function Thread({
-  messages, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents,
+  messages, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs,
 }: {
   messages: CeoMessage[];
   turnById: Map<string, TurnRow>;
@@ -141,7 +145,9 @@ function Thread({
   onSuggest: (label: string, action: UiAction) => void;
   onAsk: (text: string) => void;
   agents: Partial<Record<AgentCode, boolean>> | null;
+  needs: NeedRow[];
 }) {
+  const placed = needsByMessage(needs, messages);
   const end = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: "end" });
@@ -152,11 +158,32 @@ function Thread({
       {messages.map((m) => (
         <li key={m.id}>
           <Bubble message={m} turnById={turnById} />
+          <NeedSteps needs={placed.byMessage.get(m.id) ?? []} />
           {m.id === answerableCardId && m.choices && <DecisionCard messageId={m.id} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
         </li>
       ))}
+      {placed.unplaced.length > 0 && <li><NeedSteps needs={placed.unplaced} /></li>}
       <div ref={end} />
     </ol>
+  );
+}
+
+/** The CEO's follow-up lookups made for a specialist, one plain line each: who asked whom for what, and how it ended. Text is fixed labels plus the
+ * backend's status; the specialist's own result is a separate finding and is never merged into this line. */
+function NeedSteps({ needs }: { needs: NeedRow[] }) {
+  if (needs.length === 0) return null;
+  return (
+    <ul className="m-0 mt-1.5 flex list-none flex-col gap-1 p-0" aria-label="Follow-up lookups" data-testid="need-steps">
+      {needs.map((n) => {
+        const v = needStepView(n);
+        return (
+          <li key={n.id} data-testid={`need-step-${n.id}`} data-status={n.status} className="flex flex-wrap items-center gap-x-2 t-meta" style={{ color: "var(--text-5)" }}>
+            <span>{v.text}</span>
+            <StatusBadge tone={v.tone === "positive" ? "accent" : v.tone === "warning" ? "warning" : "neutral"}>{v.outcome}</StatusBadge>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

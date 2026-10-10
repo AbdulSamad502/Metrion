@@ -30,7 +30,7 @@ from uuid import UUID
 from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
-from backend.ceo import business_state, classifier, clarification, data_requests, input_session, intent_router, memory, references
+from backend.ceo import business_state, classifier, clarification, data_requests, input_session, intent_router, memory, needs, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
 from backend.ceo.contract import AgentCode, BusinessStateEntry, Denial, LegResult, LegStatus, TurnDenied
@@ -43,6 +43,7 @@ from backend.ceo.runtime import CeoRuntime, EventLog, EventSink, StageClock, Tur
 from backend.ceo.turn_lock import investigation_turn_lock
 from backend.entitlement import meter_ceo_turn
 from backend.repositories import investigation_repo as repo
+from backend.repositories import ceo_need_repo
 from backend.services import ceo_briefs, ceo_inputs
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ class UiAction:
     save: Mapping[str, Any] | None = None  # what the seller just confirmed for a data request (spec 6.37): saved FIRST, then this same request runs again
     save_sku: str | None = None
     save_ref: str | None = None
+    addons: tuple[str, ...] = ()  # add-on lookups the request also asks for (spec agent-needs 5.3); filtered against the needs catalog before anything runs
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,7 +271,8 @@ def _run_turn_locked(
                 )
                 input_outcome = None
             elif isinstance(input_outcome, input_session.Done):  # every field collected: the same validated inputs as the form, and the playbook / action runs
-                ui_action = UiAction(input_session.route_of(input_outcome.playbook), input_outcome.playbook, {}, {}, _with_request_key(input_outcome, str(clarification.card_id)))
+                ui_action = UiAction(input_session.route_of(input_outcome.playbook), input_outcome.playbook, {}, {}, _with_request_key(input_outcome, str(clarification.card_id)),
+                                     addons=input_outcome.addons)
                 input_outcome = None
         else:
             try:
@@ -394,6 +397,7 @@ def _run_admitted(
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, direct, now)
         if _ACKS.get() and not text.rstrip().endswith("?") and intent_router.route(text, cat) is None:  # only a statement about their business: acknowledged, nothing to answer
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, "Noted.", now)
+    ref_notes: list[str] = []
     routed_text = text  # what the router and classifier see: earlier results referred to by position ("#3") are replaced by their names (spec 6.35)
     if ui_action is None:
         try:
@@ -458,6 +462,9 @@ def _run_admitted(
         required = PLAYBOOKS[key].required_slots
     form_playbook = (route == "PLAYBOOK" and key is not None and key in PLAYBOOKS and PLAYBOOKS[key].needs_form) or (route == "ACTION" and key is not None and key in ACTIONS and ACTIONS[key].session)
     invalid_form: str | None = None
+    addons: tuple[str, ...] = tuple(ui_action.addons) if ui_action is not None else tuple(decision.addons)  # spec agent-needs 5.3: filtered by the catalog before they run
+    if ref_notes and decision.key == "NEW_PRODUCT_DECISION" and "LANDED_COST_FOR_IDEA" not in addons:
+        addons = (*addons, "LANDED_COST_FOR_IDEA")  # the seller named a PI idea: carried through the questions so the link is recorded when the flow runs (spec 5.2, S2)
     ask_sku: str | None = None  # the product the question was about, for a missing-figure follow-up (spec 6.37)
     ask_inputs: dict[str, Any] | None = None
     session_card: dict[str, Any] | None = None
@@ -474,10 +481,13 @@ def _run_admitted(
                 route, key = "CLARIFY", None
                 if isinstance(started, input_session.Ask):
                     clarify_slot, clarify_text, session_card = started.card["slot"], started.text, started.card
+                    if addons:
+                        session_card["addons"] = list(addons)
                 else:
                     clarify_slot, clarify_text = "INPUT", started.text
-        if run_inputs is not None and run_inputs.get("sku"):
-            ask_sku, ask_inputs = str(run_inputs["sku"]), {k: v for k, v in run_inputs.items() if k not in ("save", "ceo_ref", "request_key")}
+        if run_inputs is not None:
+            ask_inputs = {k: v for k, v in run_inputs.items() if k not in ("save", "ceo_ref", "request_key")}
+            ask_sku = str(run_inputs["sku"]) if run_inputs.get("sku") else None
         if route == "CLARIFY":
             pass
         elif run_inputs is None or (key == "COMPETITOR_PRICE_IMPACT" and runtime.max_candidate_prices is None):
@@ -632,6 +642,10 @@ def _run_admitted(
             return _finish(ctx, runtime, turn, clock, log, status="FAILED", route=route, route_key=key, answer=CONFIG_TEXT, kind="ANSWER", composition=None,
                            anchor_status="FAILED", error_reason="CONFIG_MISSING: max legs", classifier_flags=flags)
         legs, entries, refused_required = _execute(ctx, runtime, turn, resolved, leg_keys, required_keys, reads, attached, now, clock, log)
+        need_gaps: list[str] = []
+        if addons and route == "ACTION" and not refused_required:  # spec agent-needs 5: the CEO fetches what the request also asked for from the agent that provides it
+            need_legs, need_gaps = _run_needs(ctx, runtime, turn, inv_id, user_msg, key, addons, ask_inputs, legs, caps, attached, now, clock, log)
+            legs = [*legs, *need_legs]
         if key == "pi.discover":  # the run's candidates are read back from what it saved (the report), never taken from the run call's own return
             legs = _with_pi_report(runtime, turn, tenant, now, legs, attached, clock, log)
         for leg in legs:
@@ -640,6 +654,10 @@ def _run_admitted(
                 disclaimers.append(("GST_LOOKUP", str(leg.payload["result"]["disclaimer"])))  # the stored text, rendered by code, never retyped by the model
         for entry in entries:
             collector.add_entry(entry)
+        for g in need_gaps:
+            collector.add_gap(g)
+        if route == "PLAYBOOK" and key in _FLOW_NEEDS:  # the PI idea / competitor link (spec 5.2, S2) is recorded, with its outcome, beside the others
+            _record_flow_need(tenant, inv_id, user_msg, key, legs, "LANDED_COST_FOR_IDEA" in addons)
         for k in leg_keys:
             if not any(l.action_key == k for l in legs):  # a leg that missed its deadline: named, never silently absent (E36, L9)
                 collector.add_gap(f"{_label(k)} is still running; its result will appear in this investigation's findings when it finishes.")
@@ -690,6 +708,89 @@ def _run_admitted(
 
 
 # ------------------------------------------------------------------------------------------------ pieces
+NEEDS_NOT_CONFIGURED_TEXT = "The CEO's limit for follow-up lookups is not configured, so the extra lookup was not run. Your main request was."
+_NEED_STATUS = {LegStatus.COMPLETE: "FULFILLED", LegStatus.PARTIAL: "FULFILLED", LegStatus.DENIED: "DENIED", LegStatus.NOT_ENTITLED: "NOT_ENTITLED", LegStatus.FAILED: "FAILED", LegStatus.UNAVAILABLE: "UNAVAILABLE"}
+
+
+def _run_needs(
+    ctx: AuthContext, runtime: CeoRuntime, turn: CeoTurn, inv_id: UUID, user_msg: UUID, key: str, addons: Sequence[str], inputs: Mapping[str, Any] | None,
+    primary: Sequence[LegResult], caps: Capabilities, attached: frozenset[str], now: datetime, clock: StageClock, log: EventLog,
+) -> tuple[list[LegResult], list[str]]:
+    """Fulfils the add-ons of the request through the one choke point (spec agent-needs 5). The provider is chosen by code, the slot is the seller's own text, every
+    check is the provider's own, and a refusal is a named gap: never a guessed or model-known value. The add-on never runs when the main request did not complete."""
+    tenant = ctx.tenant_id
+    assert tenant is not None
+    legs: list[LegResult] = []
+    gaps: list[str] = []
+    wanted = needs.valid_addons(key, addons)
+    if not wanted:
+        return legs, gaps
+
+    def record(nk: str, n: int, status: str, leg: LegResult | None = None, provider: str | None = None) -> None:
+        try:
+            ceo_need_repo.record(tenant, investigation_id=inv_id, turn_message_id=user_msg, need_key=nk, requester_agent=needs.NEEDS[nk].requester, mode=needs.NEEDS[nk].mode,
+                                 provider_key=provider, idempotency_key=f"ceo-need-{user_msg}-{nk}-{n}", status=status, provider_run_id=leg.agent_run_id if leg else None)
+        except Exception:  # noqa: BLE001 - the record is bookkeeping: it never costs the seller their answer
+            logger.exception("could not record a need")
+
+    limit = config.ceo_needs_max_per_turn()
+    if limit is None:
+        for n, nk in enumerate(wanted, start=1):
+            record(nk, n, "CONFIG_MISSING")
+        return legs, [NEEDS_NOT_CONFIGURED_TEXT]
+    if not all(l.status in (LegStatus.COMPLETE, LegStatus.PARTIAL) for l in primary):
+        for n, nk in enumerate(wanted, start=1):
+            record(nk, n, "DROPPED")
+        return legs, ["The extra lookup was not run because your main request did not complete."]
+    for n, nk in enumerate(wanted, start=1):
+        spec = needs.NEEDS[nk]
+        if n > limit:
+            record(nk, n, "DROPPED")
+            gaps.append("An extra lookup was dropped: more were asked for than the CEO's limit allows in one turn.")
+            continue
+        log.emit("NEED_RAISED", need=nk, requester=spec.requester)
+        text_in = needs.product_text(inputs)
+        if text_in is None:
+            record(nk, n, "UNAVAILABLE")
+            gaps.append("I could not look up the GST rate: there is no product text to look up, or it is too long to pass on whole.")
+            continue
+        provider = gst_route_key(caps.entitled_registry_keys)
+        if provider is None:
+            record(nk, n, "DENIED")
+            gaps.append(GST_WALL_TEXT)
+            continue
+        if not _preflight(ctx, runtime, provider, attached, now):
+            record(nk, n, "DENIED", provider=provider)
+            gaps.append("I could not get the GST rate: that lookup is not available to you here (the agent may be turned off for this conversation, or not part of your plan).")
+            continue
+        leg = _run_leg(turn, runtime, ResolvedSlots(tenant_id=tenant, today=now.date(), product_text=text_in), provider, attached, clock, log)
+        legs.append(leg)
+        status = _NEED_STATUS.get(leg.status, "FAILED")
+        record(nk, n, status, leg, provider)
+        log.emit("NEED_FULFILLED" if status == "FULFILLED" else "NEED_DROPPED", need=nk, status=status)
+        if status != "FULFILLED":
+            gaps.append("I could not get the GST rate this time" + (f": {leg.reason}." if leg.reason else "."))
+    return legs, gaps
+
+
+_FLOW_NEEDS = {"NEW_PRODUCT_DECISION": "LANDED_COST_FOR_IDEA", "COMPETITOR_PRICE_IMPACT": "MARGIN_AT_PRICE"}
+
+
+def _record_flow_need(tenant: UUID, inv_id: UUID, user_msg: UUID, key: str, legs: Sequence[LegResult], from_idea: bool) -> None:
+    """A decision playbook that answers a link between two agents is recorded as a need (who asked whom, and how it ended). The "idea" link is recorded only when the
+    seller's words named an idea from PI's list ("is #3 worth stocking?"); a competitor margin is always CI's observation with the CFO's margin. Bookkeeping only."""
+    nk = _FLOW_NEEDS[key]
+    if nk == "LANDED_COST_FOR_IDEA" and not from_idea:
+        return
+    try:
+        ok = bool(legs) and all(l.status in (LegStatus.COMPLETE, LegStatus.PARTIAL) for l in legs)
+        spec = needs.NEEDS[nk]
+        ceo_need_repo.record(tenant, investigation_id=inv_id, turn_message_id=user_msg, need_key=nk, requester_agent=spec.requester, mode=spec.mode, provider_key=spec.provider_key,
+                             idempotency_key=f"ceo-need-{user_msg}-{nk}-1", status="FULFILLED" if ok else "FAILED")
+    except Exception:  # noqa: BLE001
+        logger.exception("could not record a flow need")
+
+
 _TREND_LABELS = {"NICHE": "your niche", "MARKET_NEWS": "marketplace news", "REPORTED_TACTICS": "tactics sellers report", "NEW_PRODUCTS_BUZZ": "new product buzz", "ADJACENT": "related niches"}
 MAX_QUERIES_SHOWN = 12
 
