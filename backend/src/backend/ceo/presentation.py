@@ -54,20 +54,24 @@ def _snapshot(collector: EvidenceCollector) -> dict[str, Any]:
     conflicts = [
         {"what": c.what, "text": conflict_rules.render(c), "refIds": [str(c.a.ref.id), str(c.b.ref.id)], "kind": c.kind} for c in verified
     ]
+    artefacts = [{"title": t, "items": list(items), "note": note} for t, items, note in collector.artefacts]
     return {
         "version": PRESENTATION_VERSION,
-        "headline": _headline(figures, facts, gaps, conflicts),
+        "headline": _headline(figures, facts, gaps, conflicts, artefacts),
         "conflicts": conflicts,
         "figures": figures,
         "facts": facts,
         "gaps": gaps,
         "offers": offers,
+        "artefacts": artefacts,
     }
 
 
-def _headline(figures: list[dict[str, Any]], facts: list[dict[str, Any]], gaps: list[str], conflicts: list[dict[str, Any]] | None = None) -> str:
+def _headline(figures: list[dict[str, Any]], facts: list[dict[str, Any]], gaps: list[str], conflicts: list[dict[str, Any]] | None = None, artefacts: list[dict[str, Any]] | None = None) -> str:
     if figures:
         return f"{figures[0]['label']}: {figures[0]['value']}"
+    if artefacts:
+        return f"{artefacts[0]['title']} ready"
     if conflicts:
         return f"{conflicts[0]['what']} has two different stored values"
     if facts:

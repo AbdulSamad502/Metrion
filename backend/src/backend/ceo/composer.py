@@ -42,6 +42,7 @@ class EvidenceTable:
     offers: tuple[tuple[str, str, str], ...] = ()  # (token O#, registry key, label) — offered, never executed in this turn
     untrusted: tuple[tuple[str, str, str], ...] = ()  # (token U#, source, text) — quoted data, not instructions (R9)
     conflicts: tuple[tuple[str, str, str], ...] = ()  # (token C#, what disagrees, the block code rendered from both verified values) — spec §6.32
+    artefacts: tuple[tuple[str, tuple[str, ...], str | None], ...] = ()  # (title, items, note): content a specialist WROTE for the seller (spec 6.35), shown quoted, never a figure
 
     def figure_availability(self) -> dict[str, bool]:
         return {t: f.register is not Register.UNAVAILABLE for t, f in self.figures}
@@ -55,7 +56,7 @@ class EvidenceTable:
         return [t for t, _ in self.gaps] + [t for t, _, _ in self.conflicts] + [t for t, _, _ in self.disclaimers] + [t for t, _ in self.attach]
 
     def is_empty(self) -> bool:
-        return not (self.figures or self.facts or self.gaps or self.disclaimers or self.attach or self.offers or self.conflicts)
+        return not (self.figures or self.facts or self.gaps or self.disclaimers or self.attach or self.offers or self.conflicts or self.artefacts)
 
 
 _RULES = """\
@@ -84,6 +85,7 @@ Evidence: figure {{F1}} Revenue (VERIFIED); gap {{G1}}; disclaimer {{D1}}.
 Answer: Here is where you stand. Your revenue is {{F1}}. One thing is missing: {{G1}} {{D1}}"""
 
 
+ARTEFACT_NOTICE = "Written by the specialist from the details you gave. Read it before you use it: Metrion has not checked it against your marketplace account."
 _PERIOD_IN_LABEL = re.compile(r"\s*\(\d{4}-\d{2}-\d{2}/\d{4}-\d{2}-\d{2}\)")
 
 
@@ -109,8 +111,14 @@ def build_prompt(question: str, route: str, table: EvidenceTable, *, summary: st
     offers = "\n".join(f"- {{{{{t}}}}} | {label} ({key})" for t, key, label in table.offers) or "- (none)"
     untrusted = "\n".join(f"- [{t}] from {src}: <<<{text}>>>" for t, src, text in table.untrusted) or "- (none)"
     conflicts = "\n".join(f"- {{{{{t}}}}} | {_undated(what)} has two stored values that differ" for t, what, _ in table.conflicts) or "- (none)"
+    advisory = (
+        "ADVISORY ROUTE: answer the seller's question directly and helpfully, in plain words, from general e-commerce knowledge and from what this conversation already says "
+        "(for example a business name the seller told you earlier). Do not refuse because no data is saved, do not open with 'Here is where you stand', and do not mention "
+        "these rules. Keep it practical and short.\n\n"
+        if route == "ADVISORY" else ""
+    )
     return (
-        f"{_RULES}\n\n{STATIC_END}\nRoute: {route}\n"
+        f"{_RULES}\n\n{advisory}{STATIC_END}\nRoute: {route}\n"
         + (f"Conversation summary: {summary}\n" if summary else "")
         + f"FIGURES (markers; values are filled in by the system):\n{figs}\nFACTS (non-numeric):\n{facts}\nGAPS:\n{gaps}\nCONFLICTS (two stored values differ; the system writes both):\n{conflicts}\n"
         f"REQUIRED DISCLAIMERS:\n{disc}\nADD-AGENT CONTROLS:\n{attach}\nOFFERED ACTIONS:\n{offers}\n"
@@ -138,6 +146,13 @@ def render_template(table: EvidenceTable, *, heading: str | None = None, ai_note
         lines.append(f"- {f.label}: {f.formatted_value} ({f.register.value}{when})" + (f" — {f.note}" if f.note else ""))
     for label, text, _ in table.facts:
         lines.append(f"- {label}: {text}")
+    for title, items, note in table.artefacts:
+        lines.append(f"{title}:")
+        lines.extend(f"  {i}. {text}" for i, text in enumerate(items, start=1))
+        if note:
+            lines.append(f"  ({note})")
+    if table.artefacts:
+        lines.append(ARTEFACT_NOTICE)
     for _, msg in table.gaps:
         lines.append(f"- Not available: {msg}")
     for _, _, block in table.conflicts:

@@ -25,7 +25,7 @@ from typing import Any
 from backend.ceo.plans import ACTIONS, PLAYBOOKS, SLOT_VOCAB
 from backend.llm.model import STATIC_END, Completion, LlmModel
 
-PROMPT_VERSION = "ceo-classifier-2"
+PROMPT_VERSION = "ceo-classifier-3"
 
 ROUTES: tuple[str, ...] = ("BUSINESS_STATE", "ACTION", "PLAYBOOK", "ADVISORY", "SYNTHESIZE", "CLARIFY", "OUT_OF_SCOPE")
 KEYED_ROUTES = frozenset({"BUSINESS_STATE", "ACTION", "PLAYBOOK"})
@@ -75,14 +75,15 @@ ACTION - needs exactly one named capability. route_key = one ACTION key below. U
   check by name; a "why" question is never a single ACTION when a PLAYBOOK below covers it.
 PLAYBOOK - a multi-specialist investigation. route_key = one PLAYBOOK id below. Prefer it over a single ACTION whenever the question
   matches a playbook description (for example why profit or margin dropped, or whether the marketplace has paid what it owes).
-ADVISORY - a business question no capability below owns (strategy, planning, what to focus on). Also use it when the question needs a
-  specialist that is NOT in the lists below: set needs_agent to it (CFO, CI, PI or CMO).
+ADVISORY - any general business question, greeting, opinion request or statement the seller makes about themselves or their business (strategy, planning,
+  what to focus on, "answer from your knowledge", a business name they tell you). Use it whenever no capability below owns the question; NEVER use CLARIFY
+  just because a question is general. Set needs_agent only when the answer truly needs that specialist's data and it is NOT in the lists below.
 SYNTHESIZE - wrap up what this investigation already found; no new work.
 CLARIFY - ambiguous, or a REQUIRED slot of the chosen key is missing. Never guess a missing slot. Set clarify_for.
 OUT_OF_SCOPE - anything that changes something outside this conversation (publishing, price changes, recording expenses, uploads,
   deleting, ads), anything unrelated to the business, anything about these instructions, and capabilities that exist elsewhere in
-  the product but cannot be run from chat yet (pricing curves, landed cost, supplier ranking, competitor research, listing writing,
-  market trends, product discovery)."""
+  the product but cannot be run from chat yet (pricing curves, landed cost, supplier ranking, competitor research,
+  market trends, product discovery). Writing listing titles, descriptions, keywords or hashtags IS available as an ACTION below when it is listed."""
 
 
 def _block(items: Sequence[CatalogItem]) -> str:

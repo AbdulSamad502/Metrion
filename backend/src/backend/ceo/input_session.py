@@ -210,7 +210,126 @@ NEW_PRODUCT: tuple[Field, ...] = (
     Field("window", lambda c, g: "Which sales-history period should I look at?", _window, _window_choices),
 )
 
-SESSIONS: Mapping[str, tuple[Field, ...]] = {"COMPETITOR_PRICE_IMPACT": PRICE_IMPACT, "NEW_PRODUCT_DECISION": NEW_PRODUCT}
+
+# ------------------------------------------------------------------------------------------------ CMO listing content (spec 6.35)
+_MARKETPLACE_NAMES = ("AMAZON", "FLIPKART", "MEESHO")
+_SKIP_WORDS = frozenset({"skip", "none", "no", "n/a", "na", "not sure", "i do not know", "i don't know"})
+
+
+def _marketplaces(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = raw.upper()
+    found = [m for m in _MARKETPLACE_NAMES if m in t]
+    if "ALL" in re.findall(r"[A-Z]+", t) and not found:
+        found = list(_MARKETPLACE_NAMES)
+    return found or Reject("Which marketplace: Amazon, Flipkart or Meesho? You can name more than one.")
+
+
+def _one_marketplace(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    found = _marketplaces(raw, ctx, got)
+    if isinstance(found, Reject):
+        return found
+    return found[0] if len(found) == 1 else Reject("This one is written for one marketplace at a time. Which one first: " + ", ".join(m.title() for m in found) + "?")
+
+
+def _optional_marketplace(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    return None if raw.strip().casefold() in _SKIP_WORDS else _one_marketplace(raw, ctx, got)
+
+
+def _optional_text(max_len: int) -> Callable[[str, Ctx, Mapping[str, Any]], Any]:
+    base = _text(max_len)
+
+    def parse(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+        return None if raw.strip().casefold() in _SKIP_WORDS else base(raw, ctx, got)
+
+    return parse
+
+
+_MARKETPLACE_OPTIONS = lambda ctx, got: tuple(Option(m.title(), m.title()) for m in _MARKETPLACE_NAMES)  # noqa: E731
+_SKIP = lambda why: (lambda ctx, got: (Option("Skip", "skip", why),))  # noqa: E731
+_PRODUCT = Field("product_name", lambda c, g: "What is the product? Name it the way a buyer would search for it.", _text(200))
+_SELLER_TITLE = Field("seller_title", lambda c, g: "What title do you use for it today (or want to use)? I will write from it, so what you give me is what the copy is based on.", _text(500))
+
+CMO_TITLES: tuple[Field, ...] = (
+    _PRODUCT,
+    Field("category_hint", lambda c, g: "Which category is it in? For example kitchen, apparel, electronics.", _optional_text(100), _SKIP("Titles are written without a category hint")),
+    Field("marketplaces", lambda c, g: "Which marketplace should the titles be written for? You can name more than one.", _marketplaces, _MARKETPLACE_OPTIONS),
+)
+CMO_HASHTAGS: tuple[Field, ...] = (
+    _PRODUCT,
+    Field("marketplace", lambda c, g: "Which marketplace are the hashtags for?", _optional_marketplace, lambda c, g: (*_MARKETPLACE_OPTIONS(c, g), Option("Skip", "skip", "Not tied to one marketplace"))[:MAX_OPTIONS]),
+)
+CMO_GROUNDED: tuple[Field, ...] = (
+    _PRODUCT,
+    Field("marketplace", lambda c, g: "Which marketplace is this for?", _one_marketplace, _MARKETPLACE_OPTIONS),
+    _SELLER_TITLE,
+)
+def _niche(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = " ".join(raw.split())
+    if not (2 <= len(t) <= 100) or re.fullmatch(r"[\d\s.,₹-]+", t):
+        return Reject("Name the niche or category in words, for example mens shoes, kitchen storage or yoga wear.")
+    return t
+
+
+def _price_range(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    if raw.strip().casefold() in _SKIP_WORDS:
+        return None
+    parts = [p for p in re.split(r"\s*(?:-|–|—|\bto\b)\s*", raw.strip()) if p]
+    values = [slot_resolvers.parse_amount_paise(p) for p in parts]
+    if len(values) != 2 or any(v is None for v in values) or values[0] >= values[1]:  # type: ignore[operator]
+        return Reject("Give the selling price range as two rupee amounts, for example 500 to 1,500, or skip it.")
+    return {"min": values[0], "max": values[1]}
+
+
+def _depth(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = raw.strip().casefold()
+    if t.startswith(("quick", "shallow", "fast")):
+        return "SHALLOW"
+    if t.startswith(("complete", "deep", "full", "thorough")):
+        return "COMPLETE"
+    return Reject("Choose a quick scan or a complete research run.")
+
+
+def _yes(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    if raw.strip().casefold().rstrip(".!") in ("yes", "y", "yes, run it", "run it", "confirm", "ok", "okay", "go", "do it", "sure"):
+        return True
+    return Reject("Say yes to run it, or cancel.")
+
+
+def _pi_summary(ctx: Ctx, got: Mapping[str, Any]) -> str:
+    from backend.ceo.figure_format import format_paise
+
+    where = ", ".join(str(m).title() for m in got.get("marketplaces", []))
+    rng = got.get("price_range")
+    span = f", selling between {format_paise(rng['min'])} and {format_paise(rng['max'])}" if rng else ""
+    depth = "a complete run" if got.get("depth") == "COMPLETE" else "a quick scan"
+    return (f"Here is what I will research: {got.get('category')} on {where}, with a budget of {format_paise(got.get('budget'))}{span}, as {depth}. "
+            "I will save this as your research brief and run Product Intelligence. Shall I go ahead?")
+
+
+PI_DISCOVER: tuple[Field, ...] = (
+    Field("category", lambda c, g: "Which niche or category should I find products in? For example mens shoes.", _niche),
+    Field("budget", lambda c, g: "What is your budget for stocking a product, in rupees? For example 20,000.", _amount),
+    Field("marketplaces", lambda c, g: "Which marketplace will you sell on? You can name more than one.", _marketplaces, _MARKETPLACE_OPTIONS),
+    Field("price_range", lambda c, g: "Roughly what selling price range do you have in mind? For example 500 to 1,500. You can skip this.", _price_range, _SKIP("The search is not limited to a price range")),
+    Field("depth", lambda c, g: "How thorough should the research be?", _depth,
+          lambda c, g: (Option("Quick scan", "quick", "Faster and lighter; a good first look"), Option("Complete run", "complete", "Slower and uses more of your research allowance"))),
+    Field("confirm", _pi_summary, _yes, lambda c, g: (Option("Yes, run it", "yes"),)),
+)
+
+CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords")
+# classifier slot name -> session field it can pre-fill (the seller already said it); the answer still goes through the same parser
+PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget",)}
+
+SESSIONS: Mapping[str, tuple[Field, ...]] = {
+    "COMPETITOR_PRICE_IMPACT": PRICE_IMPACT, "NEW_PRODUCT_DECISION": NEW_PRODUCT,
+    "pi.discover": PI_DISCOVER,
+    "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_GROUNDED, "cmo.generate_keywords": CMO_GROUNDED,
+}
+
+
+def route_of(session: str) -> str:
+    """A session is either a decision playbook or a single specialist action (an action key always contains a dot)."""
+    return "ACTION" if "." in session else "PLAYBOOK"
 
 
 # ------------------------------------------------------------------------------------------------ the session
@@ -245,7 +364,7 @@ def _card(playbook: str, f: Field, ctx: Ctx, collected: Mapping[str, Any]) -> di
             for i, o in enumerate(list(f.options(ctx, collected))[:MAX_OPTIONS])]
     opts.append({"key": "other", "label": "Other", "kind": "OTHER", "value": None, "reason": "Type your answer in the chat bar", "refs": {}})
     opts.append({"key": "cancel", "label": "Cancel", "kind": "CANCEL", "value": None, "reason": "Stop asking; nothing will run", "refs": {}})
-    return {"version": CARD_VERSION, "kind": "INPUT", "slot": f.name, "playbook": playbook, "pending": {"route": "PLAYBOOK", "key": playbook, "slots": {}, "refs": {}, "collected": dict(collected)},
+    return {"version": CARD_VERSION, "kind": "INPUT", "slot": f.name, "playbook": playbook, "pending": {"route": route_of(playbook), "key": playbook, "slots": {}, "refs": {}, "collected": dict(collected)},
             "options": opts}
 
 
@@ -253,9 +372,21 @@ def _progress(fields: Sequence[Field], collected: Mapping[str, Any]) -> str:
     return f"({len(collected) + 1} of {len(fields)}) "
 
 
-def start(playbook: str, ctx: Ctx) -> Ask | Blocked:
+def start(playbook: str, ctx: Ctx, prefill: Mapping[str, str] | None = None) -> Ask | Done | Blocked:
+    """Begin a session. Anything the seller already said (`prefill`, classifier slot text) is parsed by the SAME field parser and skipped when it reads cleanly;
+    text that does not parse is simply asked again."""
     fields = SESSIONS[playbook]
-    return _ask(playbook, fields, ctx, {}, prefix="")
+    collected: dict[str, Any] = {}
+    for f in fields:
+        slot = next((k for k, v in PREFILL.items() if f.name in v), None)
+        raw = (prefill or {}).get(slot) if slot else None
+        if raw and "." in playbook:  # a specialist-action session (the decision playbooks take no prefill)
+            parsed = f.parse(raw, ctx, collected)
+            if not isinstance(parsed, Reject):
+                collected[f.name] = parsed
+    if len(collected) == len(fields):
+        return Done(playbook, _to_inputs(playbook, collected))
+    return _ask(playbook, fields, ctx, collected, prefix="")
 
 
 def _ask(playbook: str, fields: Sequence[Field], ctx: Ctx, collected: Mapping[str, Any], *, prefix: str) -> Ask | Blocked:
@@ -299,6 +430,15 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
 
 def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
     """The same shape `playbook_inputs.validate_inputs` checks for the form (§6.33). Nothing is added that the seller did not give."""
+    if playbook == "pi.discover":
+        rng = c.get("price_range")
+        return {
+            "category_text": c["category"], "budget_paise": c["budget"], "marketplaces": c["marketplaces"], "depth": c["depth"],
+            **({"target_price_min_paise": rng["min"], "target_price_max_paise": rng["max"]} if rng else {}),
+        }
+    if playbook in CMO_SESSIONS:
+        out = {k: v for k, v in c.items() if v is not None}  # a skipped optional field is simply absent: nothing is defaulted
+        return out
     if playbook == "NEW_PRODUCT_DECISION":
         return {"sku": c["sku"], "quantity": c["quantity"], **c["window"]}
     fee = c["fee"]

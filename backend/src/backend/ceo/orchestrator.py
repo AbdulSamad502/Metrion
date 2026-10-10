@@ -18,6 +18,7 @@ A turn that cannot be answered safely ends in a plain explanation or a fixed tem
 from __future__ import annotations
 
 import contextvars
+import dataclasses
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -29,7 +30,7 @@ from uuid import UUID
 from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
-from backend.ceo import business_state, classifier, clarification, input_session
+from backend.ceo import business_state, classifier, clarification, input_session, intent_router
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.composer import Composition, compose, template_only
 from backend.ceo.contract import AgentCode, BusinessStateEntry, Denial, LegResult, LegStatus, TurnDenied
@@ -42,6 +43,7 @@ from backend.ceo.runtime import CeoRuntime, EventLog, EventSink, StageClock, Tur
 from backend.ceo.turn_lock import investigation_turn_lock
 from backend.entitlement import meter_ceo_turn
 from backend.repositories import investigation_repo as repo
+from backend.services import ceo_briefs
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +157,16 @@ FORM_TEXT = "This one needs exact prices and costs, which are entered in a form 
 BAD_FORM_TEXT = "That form could not be used, so nothing was run: "
 
 
+def _with_request_key(done: Any, anchor: str) -> dict[str, Any]:
+    """The collected inputs plus an idempotency key derived from the message that finished them: answering the same card twice reuses the finished result."""
+    out = dict(done.inputs)
+    if done.playbook in input_session.CMO_SESSIONS:
+        out["request_key"] = f"ceo-{anchor}"
+    if done.playbook == "pi.discover":
+        out["ceo_ref"] = f"ceo-{anchor}"
+    return out
+
+
 def _clarification_text(slot: str) -> str:
     return SLOT_QUESTIONS.get(slot) or _QUESTIONS.get(slot) or _QUESTIONS["UNCLEAR_REQUEST"]  # period / marketplace wording lives with the resolvers
 
@@ -225,8 +237,8 @@ def _run_turn_locked(
                 input_outcome = input_session.advance(card_msg["choices"], option_key=clarification.option, text=text, ctx=input_session.Ctx(tenant, runtime.clock().date(), runtime.max_candidate_prices))
             except ValueError as exc:
                 raise InvalidClarification(str(exc)) from None
-            if isinstance(input_outcome, input_session.Done):  # every field collected: the same validated inputs as the form, and the playbook runs
-                ui_action = UiAction("PLAYBOOK", input_outcome.playbook, {}, {}, input_outcome.inputs)
+            if isinstance(input_outcome, input_session.Done):  # every field collected: the same validated inputs as the form, and the playbook / action runs
+                ui_action = UiAction(input_session.route_of(input_outcome.playbook), input_outcome.playbook, {}, {}, _with_request_key(input_outcome, str(clarification.card_id)))
                 input_outcome = None
         else:
             try:
@@ -337,6 +349,10 @@ def _run_admitted(
             decision = classifier.decision_from_ui_action(ui_action.route, ui_action.key, ui_action.slots, cat, preset)
         classifier_model = "none (UI action)"
         log.emit("CLASSIFIED", route=decision.route, routeKey=decision.key, source="UI_ACTION")
+    elif (ruled := intent_router.route(text, cat)) is not None:  # an unmistakable request: the explicit rule decides, instantly (spec 6.35)
+        decision = ruled
+        classifier_model = "rules"
+        log.emit("CLASSIFIED", route=decision.route, routeKey=decision.key, source="RULES")
     else:
         classifier_model = runtime.classifier.name
         with clock.span("classification"):
@@ -349,6 +365,8 @@ def _run_admitted(
             except Exception:  # noqa: BLE001 - a model failure is a safe CLARIFY, never a guess
                 logger.exception("classifier failed")
                 decision = classifier.Decision(False, None, None, "CLARIFY", None, {}, None, "UNCLEAR_REQUEST", frozenset({"MODEL_ERROR"}))
+        if decision.route == "CLARIFY" and decision.clarify_for == "WHICH_AGENT":  # a general question: the CEO answers it, it does not ask "which area?"
+            decision = dataclasses.replace(decision, route="ADVISORY", key=None, clarify_for=None, needs_agent=None)
         log.emit("CLASSIFIED", route=decision.route, routeKey=decision.key)
 
     # ---- deterministic plan validation (slots, periods, closed catalog already enforced by parse_decision)
@@ -372,24 +390,42 @@ def _run_admitted(
         required, resolves = ACTIONS[key].required_slots, ACTIONS[key].resolves
     elif route == "PLAYBOOK" and key is not None and key in PLAYBOOKS:
         required = PLAYBOOKS[key].required_slots
-    form_playbook = route == "PLAYBOOK" and key is not None and key in PLAYBOOKS and PLAYBOOKS[key].needs_form
+    form_playbook = (route == "PLAYBOOK" and key is not None and key in PLAYBOOKS and PLAYBOOKS[key].needs_form) or (route == "ACTION" and key is not None and key in ACTIONS and ACTIONS[key].session)
     invalid_form: str | None = None
     session_card: dict[str, Any] | None = None
     if form_playbook:
         assert key is not None
-        if (ui_action is None or ui_action.inputs is None) and not (key == "COMPETITOR_PRICE_IMPACT" and runtime.max_candidate_prices is None):
-            # from typed chat or a chip: the CEO asks for what it needs, one question at a time; every answer is parsed by code (spec 6.34)
-            started = input_session.start(key, input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices))
-            route, key = "CLARIFY", None
-            if isinstance(started, input_session.Ask):
-                clarify_slot, clarify_text, session_card = started.card["slot"], started.text, started.card
+        run_inputs: Mapping[str, Any] | None = ui_action.inputs if ui_action is not None else None
+        if run_inputs is None and not (key == "COMPETITOR_PRICE_IMPACT" and runtime.max_candidate_prices is None):
+            # from typed chat or a chip: the CEO asks for what it needs, one question at a time; every answer is parsed by code (spec 6.34).
+            # What the seller already said (classifier slot text) is offered to the same parsers first, so nothing already given is asked again.
+            started = input_session.start(key, input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices), prefill=decision.slots)
+            if isinstance(started, input_session.Done):
+                run_inputs = _with_request_key(started, str(user_msg))
             else:
-                clarify_slot, clarify_text = "INPUT", started.text
-        elif ui_action is None or ui_action.inputs is None or (key == "COMPETITOR_PRICE_IMPACT" and runtime.max_candidate_prices is None):
+                route, key = "CLARIFY", None
+                if isinstance(started, input_session.Ask):
+                    clarify_slot, clarify_text, session_card = started.card["slot"], started.text, started.card
+                else:
+                    clarify_slot, clarify_text = "INPUT", started.text
+        if route == "CLARIFY":
+            pass
+        elif run_inputs is None or (key == "COMPETITOR_PRICE_IMPACT" and runtime.max_candidate_prices is None):
             resolved = ResolvedSlots(tenant_id=tenant, today=now.date())  # refused below with CONFIG_MISSING: the bound has no default (Q32)
+        elif route == "ACTION" and key == "pi.discover":
+            try:  # the seller confirmed these answers: they become their saved research brief, which Product Intelligence then runs from
+                brief = ceo_briefs.create_ready_brief(tenant, created_by=ctx.app_user_id, inputs=run_inputs, ref=str(run_inputs.get("ceo_ref")))
+            except (ValueError, KeyError) as exc:
+                invalid_form = f"the research brief could not be saved ({exc})"
+            else:
+                resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct={"niche_brief_id": str(brief), "depth": run_inputs["depth"]})
+                notes = [f"Researching: {run_inputs['category_text']} on " + ", ".join(str(m).title() for m in run_inputs["marketplaces"]) + "."]
+        elif route == "ACTION":
+            resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct=dict(run_inputs))
+            notes = list(resolved.echoes())
         else:
             try:
-                r = resolve_playbook_run(key, ui_action.inputs, tenant_id=tenant, today=now.date(), max_candidate_prices=runtime.max_candidate_prices)
+                r = resolve_playbook_run(key, run_inputs, tenant_id=tenant, today=now.date(), max_candidate_prices=runtime.max_candidate_prices)
             except InvalidInputs as exc:
                 invalid_form = "; ".join(exc.problems)
             else:
@@ -459,7 +495,8 @@ def _run_admitted(
         disclaimers.append(("GENERAL_GUIDANCE", GENERAL_GUIDANCE_TEXT))
         _explain_needed_agent(decision.needs_agent, caps, collector, attach)
         if "BS_SELLER_CONTEXT" in caps.allowed_state:
-            collector.add_entry(business_state.read_entry(ctx, "BS_SELLER_CONTEXT", attached=attached, now=now))  # K2: what the seller told us
+            seller = business_state.read_entry(ctx, "BS_SELLER_CONTEXT", attached=attached, now=now)  # K2: what the seller told us
+            collector.add_entry(dataclasses.replace(seller, gaps=()))  # an empty goal is not news in a general answer: only what exists is shown
     elif route == "SYNTHESIZE":
         findings = repo.list_findings(tenant, inv_id)
         if not findings:
@@ -490,6 +527,8 @@ def _run_admitted(
             return _finish(ctx, runtime, turn, clock, log, status="FAILED", route=route, route_key=key, answer=CONFIG_TEXT, kind="ANSWER", composition=None,
                            anchor_status="FAILED", error_reason="CONFIG_MISSING: max legs", classifier_flags=flags)
         legs, entries, refused_required = _execute(ctx, runtime, turn, resolved, leg_keys, required_keys, reads, attached, now, clock, log)
+        if key == "pi.discover":  # the run's candidates are read back from what it saved (the report), never taken from the run call's own return
+            legs = _with_pi_report(runtime, turn, tenant, now, legs, attached, clock, log)
         for leg in legs:
             collector.add_leg(leg)
             if leg.action_key in GST_ROUTE_KEYS and leg.payload and (leg.payload.get("result") or {}).get("disclaimer"):
@@ -503,6 +542,9 @@ def _run_admitted(
                     refused_required = True
         if route == "PLAYBOOK" and not leg_keys:
             heading = None
+        if route == "ACTION" and ACTIONS[key].session:
+            template_only_answer = True  # what the specialist wrote is shown as it is, quoted and labelled, never re-worded by a second model
+            heading = "Here is what was written for the details you gave."
         if route == "PLAYBOOK" and PLAYBOOKS[key].needs_form:
             # Several figures of one metric (one margin per candidate price, one cost per supplier) can only be told apart by their labels, which the fixed
             # layout carries and prose with markers cannot. The answer is therefore the deterministic layout, with no model call (spec 6.33).
@@ -562,8 +604,7 @@ def _explain_needed_agent(needs: str | None, caps: Capabilities, collector: Evid
         collector.add_gap(f"{needs} is not available on your current plan, which this question needs.")
         if needs == "CFO":
             collector.offers.append(("cfo.preview", "See the free CFO preview"))
-    else:
-        collector.add_gap(f"{needs} cannot answer this from chat yet; please use its own page.")
+    # PRESENT: the model's guess that a specialist is needed is not a reason to refuse a general answer; nothing is claimed from it
 
 
 def _read_state(ctx: AuthContext, turn: CeoTurn, key: str, attached: frozenset[str], runtime: CeoRuntime, log: EventLog) -> BusinessStateEntry:
@@ -670,6 +711,20 @@ def _execute(
                 legs.append(r)
         entries = [r for r in results if isinstance(r, BusinessStateEntry)]
     return legs, entries, refused_required
+
+
+def _with_pi_report(
+    runtime: CeoRuntime, turn: CeoTurn, tenant: UUID, now: datetime, legs: list[LegResult], attached: frozenset[str], clock: StageClock, log: EventLog,
+) -> list[LegResult]:
+    run = next((l for l in legs if l.action_key == "pi.discover" and l.status in (LegStatus.COMPLETE, LegStatus.PARTIAL) and (l.payload or {}).get("runId")), None)
+    if run is None:
+        return legs
+    try:
+        run_id = UUID(str((run.payload or {})["runId"]))
+    except ValueError:
+        return legs
+    report = _run_leg(turn, runtime, ResolvedSlots(tenant_id=tenant, today=now.date(), pi_run_id=run_id), "pi.report", attached, clock, log)
+    return [*legs, report]
 
 
 def _slots_for(key: str, resolved: ResolvedSlots) -> dict[str, object]:

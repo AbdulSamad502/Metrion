@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from datetime import date
 
@@ -77,8 +78,15 @@ def test_every_planned_action_is_a_wired_registry_action_with_valid_slots():
         tenant_id=TENANT, today=TODAY, period=base.period, marketplace=base.marketplace, competitor_url_id=uuid.uuid4(), competitor_label="Rival",
         seller_price_paise=49900, pi_run_id=uuid.uuid4(), product_text="steel water bottle",
     )
+    sample = {  # what each guided input session ends with (spec 6.35)
+        "pi.discover": {"niche_brief_id": str(uuid.uuid4()), "depth": "SHALLOW"},
+        "cmo.generate_title_sets": {"request_key": "k", "product_name": "bottle", "marketplaces": ["AMAZON"]},
+        "cmo.generate_hashtags": {"request_key": "k", "product_name": "bottle"},
+        "cmo.generate_description": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
+        "cmo.generate_keywords": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
+    }
     for key, plan in ACTIONS.items():
-        built = plan.build_slots(resolved)
+        built = plan.build_slots(dataclasses.replace(resolved, direct=sample[key]) if plan.session else resolved)
         specs = [reg.get(k) for k in GST_ROUTE_KEYS] if key == GST_KEY else [reg.get(key)]  # GST is one action to the model; code picks the route
         for spec in specs:
             assert spec.wired and not spec.denial_surface

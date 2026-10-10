@@ -24,6 +24,7 @@ from backend.ceo.contract import (
 )
 from backend.ceo.figure_format import format_paise, format_percent_number, format_units, register_for
 
+MAX_CANDIDATES_SHOWN = 10  # how many product ideas one answer lists (a display bound; the rest stay on the Product Intelligence page, said so)
 MAX_FIGURES = 12  # how many verified figures one answer carries; the rest stay on the findings (stated as a gap, never dropped silently)
 
 _METRIC_LABELS: Mapping[str, str] = {
@@ -55,7 +56,22 @@ def _label_for_row(code: str, row: Mapping[str, Any]) -> str:
         return f"{base} ({m.group(1) or m.group(2)})"
     return base
 
+_CMO_KINDS: Mapping[str, str] = {
+    "TITLE_SET": "Title options", "DESCRIPTION": "Description", "KEYWORDS": "Search keywords", "HASHTAGS": "Hashtags", "BULLETS": "Bullet points",
+    "LISTING_COPY": "Listing copy", "BACKEND_TERMS": "Backend search terms",
+}
+_CMO_ITEMS: Mapping[str, Any] = {
+    "TITLE_SET": lambda a: [str(o.get("text")) for o in a.get("options") or [] if o.get("text")],
+    "DESCRIPTION": lambda a: [str(a["description"])] if a.get("description") else [],
+    "KEYWORDS": lambda a: [str(k) for k in a.get("keywords") or []],
+    "HASHTAGS": lambda a: [str(h) for h in a.get("hashtags") or []],
+    "BULLETS": lambda a: [str(b) for b in a.get("bullets") or []],
+}
 LEG_LABELS: Mapping[str, str] = {
+    "cmo.generate_title_sets": "The title options",
+    "cmo.generate_hashtags": "The hashtags",
+    "cmo.generate_description": "The description",
+    "cmo.generate_keywords": "The search keywords",
     "cfo.financial_health": "The financial health check",
     "cfo.anomaly_check": "The anomaly check",
     "cfo.strategic_briefing": "The CFO briefing",
@@ -69,6 +85,7 @@ LEG_LABELS: Mapping[str, str] = {
     "cfo.supplier_ranking": "The supplier ranking",
     "cfo.batch_size": "The batch size estimate",
     "pi.report": "The product research report",
+    "pi.discover": "The product research",
     "BS_COMPETITOR_SNAPSHOT": "The competitor prices",
     "BS_PI_REPORT_LATEST": "The product research status",
     "BS_CMO_WORKFLOW": "The listing content status",
@@ -123,6 +140,7 @@ class EvidenceCollector:
     attach: list[str] = field(default_factory=list)
     offers: list[tuple[str, str]] = field(default_factory=list)
     conflicts: list[Conflict] = field(default_factory=list)
+    artefacts: list[tuple[str, tuple[str, ...], str | None]] = field(default_factory=list)
     _seen: set[UUID] = field(default_factory=set)
 
     # ---- sources
@@ -246,13 +264,62 @@ class EvidenceCollector:
         elif leg.action_key in ("cfo.gst_lookup", "service.gst_lookup"):
             self._gst_result(payload)
         elif leg.action_key == "pi.report":
-            # R9: a research report's candidates come from the web, so none of it is relayed here; the seller is pointed to the agent's own page.
-            self.add_fact("Product research report", "The report from your latest finished research run is ready. Open Product Intelligence to read the candidates.")
+            self._pi_candidates(payload)
+        elif leg.action_key.startswith("cmo."):
+            self._cmo_artefacts(payload)
         elif leg.action_key == "cfo.strategic_briefing":
             for signal in payload.get("signals") or []:
                 self.add_fact(f"Briefing signal: {str(signal.get('category', 'signal')).replace('_', ' ').lower()}",
                               f"{str(signal.get('severityLabel', 'unrated')).lower()} severity; suggested action type "
                               f"{str(signal.get('recommendedActionType', 'none')).replace('_', ' ').lower()}")
+
+    def _pi_candidates(self, payload: Mapping[str, Any]) -> None:
+        """Product ideas Product Intelligence found on the public web: their names, quoted and labelled. They are not figures, carry no sales data and are never
+        verified here; the scores, sources and supplier leads stay on the Product Intelligence page."""
+        rows = payload.get("candidates") or []
+        names: list[str] = []
+        for row in rows[:MAX_CANDIDATES_SHOWN]:
+            c = row.get("candidate") or {}
+            title = " ".join(str(c.get("candidate_title") or "").split())
+            if not title:
+                continue
+            label = str(c.get("opportunity_label") or "").replace("_", " ").lower()
+            names.append(f"{title[:140]}" + (f" ({label})" if label else ""))
+        if not names:
+            self.add_gap("The research run finished but found no product ideas to show for that niche. Try a broader niche.")
+        else:
+            more = len(rows) - len(names)
+            self.artefacts.append((
+                "Product ideas found on the public web", tuple(names),
+                "From public web sources and not verified: this is not your sales data, and Product Intelligence has not measured demand or margin for these."
+                + (f" {more} more are on the Product Intelligence page." if more > 0 else ""),
+            ))
+        for u in payload.get("unavailable") or []:
+            reason = " ".join(str(u.get("reason") or "").split())
+            if reason:
+                self.add_gap(reason)
+
+    def _cmo_artefacts(self, payload: Mapping[str, Any]) -> None:
+        """What CMO wrote. The text is the specialist's own content, shown quoted and labelled; it is never a figure and is not run through the money provenance path.
+        A failed artefact is a named gap, not a result."""
+        arts = payload.get("artefacts") or []
+        if not arts:
+            self.add_gap("The writing run returned nothing.")
+        for a in arts:
+            kind = _CMO_KINDS.get(str(a.get("outputType")), "Content")
+            where = f" for {str(a['marketplace']).title()}" if a.get("marketplace") else ""
+            if a.get("status") != "COMPLETE":
+                failure = a.get("failure") or {}
+                missing = ", ".join(str(m) for m in (failure.get("missingFacts") or []))
+                self.add_gap(f"{kind}{where} could not be written" + (f": more detail is needed about {missing}." if missing else "."))
+                continue
+            items = _CMO_ITEMS.get(str(a.get("outputType")), lambda x: [])(a)
+            if not items:
+                self.add_gap(f"{kind}{where} came back empty.")
+                continue
+            cite = a.get("constraint") or {}
+            note = f"Fitted to the marketplace rule from {cite['sourceUrl']}, checked {cite['verifiedAt']}" if cite.get("sourceUrl") and cite.get("verifiedAt") else None
+            self.artefacts.append((f"{kind}{where}", tuple(items), note))
 
     @staticmethod
     def _rate_text(raw: Any) -> str | None:
@@ -330,4 +397,5 @@ class EvidenceCollector:
             offers=tuple((f"O{i}", k, lbl) for i, (k, lbl) in enumerate(self.offers, start=1)),
             untrusted=tuple((f"U{i}", s, t) for i, (s, t) in enumerate(untrusted, start=1)),
             conflicts=tuple((f"C{i}", c.what, conflict_rules.render(c)) for i, c in enumerate(verified, start=1)),
+            artefacts=tuple(self.artefacts),
         )

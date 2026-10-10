@@ -86,7 +86,7 @@ def test_a_complete_grounded_draft_passes_without_the_footer_being_checked_as_mo
 
 # ------------------------------------------------------------------------------------------ routing guidance
 def test_the_classifier_is_told_to_prefer_a_playbook_and_a_saved_read_over_a_single_action():
-    assert classifier.PROMPT_VERSION == "ceo-classifier-2"
+    assert classifier.PROMPT_VERSION == "ceo-classifier-3"
     help_text = " ".join(classifier._ROUTE_HELP.split())
     assert "Prefer it for overview questions" in help_text and 'a "why" question is never a single ACTION' in help_text
     assert "Prefer it over a single ACTION whenever the question matches a playbook description" in help_text

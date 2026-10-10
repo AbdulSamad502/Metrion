@@ -29,6 +29,8 @@ ALLOWED_SPECIALIST_IMPORTS: dict[str, tuple[str, ...]] = {
     "clarification.py": ("backend.services.ceo_reads",),  # ranking candidates by their latest capture is a tenant-scoped read through that seam
     "plans.py": ("backend.services.ceo_reads",),  # resolving "the latest finished research run" is a tenant-scoped read through that seam
     "input_session.py": ("backend.services.ceo_reads",),  # real competitors and fee-rate combinations to offer, read through that seam (tenant-scoped, read-only)
+    # the ONE declared write (spec 6.35, owner-approved): the research brief a seller confirmed in chat, saved through a single tenant-scoped service
+    "orchestrator.py": ("backend.services.ceo_briefs",),
     "slot_resolvers.py": ("backend.services.ceo_reads",),  # resolving a named competitor is a tenant-scoped read through that seam
     # the GST lookup invocation: the single declared use of the CFO service function for GST (same precedent as derived_reads.py)
     "gst_lookup.py": ("backend.services.cfo_actions",),

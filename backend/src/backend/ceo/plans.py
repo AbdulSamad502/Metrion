@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
+from typing import Any
 from uuid import UUID
 
 from backend.ceo import slot_resolvers
@@ -59,6 +60,7 @@ class ResolvedSlots:
     seller_price_paise: int | None = None
     pi_run_id: UUID | None = None
     product_text: str | None = None
+    direct: Mapping[str, Any] | None = None  # slots collected by a guided input session and already parsed by code (spec 6.35): passed to the specialist as they are
 
     def echoes(self) -> tuple[str, ...]:
         """What the system understood, in the seller's terms, so a wrong reading is visible before it is acted on (AC17)."""
@@ -75,6 +77,12 @@ class ResolvedSlots:
             out.append(f"Looked up for the product you named: {self.product_text}.")
         if self.run is not None:
             out.extend(_run_echoes(self.run))
+        if self.direct is not None:
+            if self.direct.get("product_name"):
+                out.append(f"Product: {self.direct['product_name']}.")
+            named = self.direct.get("marketplaces") or ([self.direct["marketplace"]] if self.direct.get("marketplace") else [])
+            if named:
+                out.append("Marketplace: " + ", ".join(str(m).title() for m in named) + ".")
         return tuple(out)
 
 
@@ -182,6 +190,11 @@ def _price_scenario(s: ResolvedSlots) -> dict[str, object]:
     return {"competitor_url_id": str(s.competitor_url_id), "seller_price_paise": s.seller_price_paise}
 
 
+def _direct(s: ResolvedSlots) -> dict[str, object]:
+    assert s.direct is not None
+    return dict(s.direct)
+
+
 def _pi_report(s: ResolvedSlots) -> dict[str, object]:
     assert s.pi_run_id is not None
     return {"run_id": str(s.pi_run_id)}
@@ -209,6 +222,7 @@ class ActionPlan:
     required_slots: tuple[str, ...]
     build_slots: Callable[[ResolvedSlots], dict[str, object]]
     resolves: tuple[str, ...] = ()  # values code looks up itself from the caller's own data (not asked of the model, not shown as slots)
+    session: bool = False  # the inputs are collected by a guided input session in chat (spec 6.35); the model never supplies them
 
 
 ACTIONS: Mapping[str, ActionPlan] = {
@@ -232,6 +246,11 @@ ACTIONS: Mapping[str, ActionPlan] = {
             "pi.report", "Show the report of the latest finished product research run (re-rendered from saved data; no new research)", (), _pi_report,
             resolves=("pi_run",),
         ),
+        ActionPlan("pi.discover", "Find trending or top products to sell in a niche, within the seller's budget (Product Intelligence research run). The CEO asks the seller for niche, budget and marketplaces", (), _direct, session=True),
+        ActionPlan("cmo.generate_title_sets", "Write listing title options for a product on one or more marketplaces (CMO). The CEO asks the seller for the product details", (), _direct, session=True),
+        ActionPlan("cmo.generate_hashtags", "Suggest hashtags for a product (CMO). The CEO asks the seller for the product details", (), _direct, session=True),
+        ActionPlan("cmo.generate_description", "Write a product description for a marketplace from the seller's own title (CMO). The CEO asks for the details", (), _direct, session=True),
+        ActionPlan("cmo.generate_keywords", "Suggest search keywords for a product on a marketplace from the seller's own title (CMO). The CEO asks for the details", (), _direct, session=True),
         ActionPlan("cfo.cash_reconciliation", "Cash reconciliation: is the marketplace paying what it owes, for a marketplace and period", ("marketplace", "period"), _period_marketplace),
     )
 }
