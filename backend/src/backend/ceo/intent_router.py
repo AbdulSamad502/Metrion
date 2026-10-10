@@ -27,6 +27,7 @@ class Rule:
     key: str
     agent: str
     pattern: re.Pattern[str]
+    kind: str = "ACTION"  # a decision playbook is routed the same way (spec 6.36)
 
 
 def _rx(p: str) -> re.Pattern[str]:
@@ -36,6 +37,7 @@ def _rx(p: str) -> re.Pattern[str]:
 # Ordered: the first match wins. Each pattern needs a clear verb or noun for the work, not just a keyword anywhere.
 RULES: tuple[Rule, ...] = (
     Rule("gst_lookup", "CFO", _rx(r"\bgst\b.*\b(?:rate|percent|percentage|%|slab|apply|applies|applicable|charge)\b|\b(?:rate|percent|percentage|slab)\b.*\bgst\b|\bgst (?:on|for|of)\b")),
+    Rule("NEW_PRODUCT_DECISION", "CFO", _rx(r"\bworth (?:stocking|buying|importing|selling)\b|\bshould i (?:stock|buy|import|order)\b"), "PLAYBOOK"),
     Rule("cmo.generate_hashtags", "CMO", _rx(r"\bhash\s?tags?\b")),
     Rule("cmo.generate_title_sets", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing |product |amazon |flipkart |meesho )?titles?\b|\btitles? (?:options?|ideas?|for)\b")),
     Rule("cmo.generate_description", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:product |listing )?descriptions?\b")),
@@ -71,8 +73,16 @@ def _product_text(raw: str | None) -> str | None:
     return v
 
 
+_STOCK_BEFORE = re.compile(r"^\W*(?:is|are)\s+(?:the\s+|my\s+|a\s+)?(?P<p>[\w][\w \-']{1,60}?)\s+worth\s+(?:stocking|buying|importing|selling)", re.IGNORECASE)
+_STOCK_AFTER = re.compile(r"\bshould i (?:stock|buy|import|order)\s+(?:the\s+|some\s+|a\s+|an\s+|my\s+)?(?P<p>[\w][\w \-']{1,60}?)(?=\s*(?:[?.!,]|or not\b|from\b|$))", re.IGNORECASE)
+
+
 def _slots(rule: Rule, text: str) -> dict[str, str]:
     out: dict[str, str] = {}
+    if rule.key == "NEW_PRODUCT_DECISION":
+        m = _STOCK_BEFORE.search(text) or _STOCK_AFTER.search(text)
+        product = _product_text(m.group("p") if m else None)
+        return {"product": product} if product else {}
     if rule.key == "gst_lookup":
         m = _GST_PRODUCT_AFTER.search(text) or _GST_PRODUCT_BEFORE.search(text)
         product = _product_text(m.group("p") if m else None)
@@ -100,11 +110,13 @@ def route(text: str, cat: Catalog) -> Decision | None:
     for rule in RULES:
         if not rule.pattern.search(t):
             continue
-        item = cat.item("ACTION", rule.key)
+        if rule.kind == "PLAYBOOK" and not _slots(rule, t):
+            continue  # no product named ("find products worth stocking"): the model decides, nothing is guessed
+        item = cat.item(rule.kind, rule.key)
         if item is None:  # the member cannot run it here: say why, do not ask something unrelated
             payload: Mapping[str, object] = {"route": "ADVISORY", "route_key": None, "slots": {}, "needs_agent": rule.agent, "clarify_for": None}
         else:
-            payload = {"route": "ACTION", "route_key": rule.key, "slots": _slots(rule, t), "needs_agent": None, "clarify_for": None}
+            payload = {"route": rule.kind, "route_key": rule.key, "slots": _slots(rule, t), "needs_agent": None, "clarify_for": None}
         d = parse_decision(json.dumps(payload), cat)
         extra = {"GST_UNAVAILABLE"} if item is None and rule.key == "gst_lookup" else set()  # the wall for GST is code, never general knowledge
         return Decision(d.parse_ok, d.raw_route, d.raw_key, d.route, d.key, d.slots, d.needs_agent, d.clarify_for, frozenset({*d.flags, "RULE_ROUTED", *extra}))

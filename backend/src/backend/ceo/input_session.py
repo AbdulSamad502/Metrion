@@ -54,6 +54,7 @@ class Field:
     parse: Callable[[str, Ctx, Mapping[str, Any]], Any | Reject]
     options: Callable[[Ctx, Mapping[str, Any]], Sequence[Option]] = lambda ctx, got: ()
     unanswerable: Callable[[Ctx, Mapping[str, Any]], str | None] = lambda ctx, got: None  # a reason the question can never be answered (nothing to choose from)
+    applies: Callable[[Ctx, Mapping[str, Any]], bool] = lambda ctx, got: True  # False = not asked (e.g. a quote is already stored); the field is simply absent
 
 
 # ------------------------------------------------------------------------------------------------ parsers
@@ -204,13 +205,6 @@ PRICE_IMPACT: tuple[Field, ...] = (
     _cost_field("other", "Any other cost per unit?"),
 )
 
-NEW_PRODUCT: tuple[Field, ...] = (
-    Field("sku", lambda c, g: "Which SKU are you thinking of stocking? Type it the way you list it.", _text()),
-    Field("quantity", lambda c, g: "How many units are you considering?", _quantity),
-    Field("window", lambda c, g: "Which sales-history period should I look at?", _window, _window_choices),
-)
-
-
 # ------------------------------------------------------------------------------------------------ CMO listing content (spec 6.35)
 _MARKETPLACE_NAMES = ("AMAZON", "FLIPKART", "MEESHO")
 _SKIP_WORDS = frozenset({"skip", "none", "no", "n/a", "na", "not sure", "i do not know", "i don't know"})
@@ -336,9 +330,57 @@ PI_DISCOVER: tuple[Field, ...] = (
     Field("confirm", _pi_summary, _yes, lambda c, g: (Option("Yes, run it", "yes"),)),
 )
 
+def _optional_amount(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    return None if raw.strip().casefold() in _SKIP_WORDS else _amount(raw, ctx, got)
+
+
+def _needs_quote(ctx: Ctx, got: Mapping[str, Any]) -> bool:
+    try:
+        return not ceo_reads.stored_quotes(ctx.tenant_id, str(got.get("sku")))
+    except Exception:  # noqa: BLE001 - if the store cannot be read, ask: the confirm card still decides what is saved
+        return True
+
+
+def _needs_budget(ctx: Ctx, got: Mapping[str, Any]) -> bool:
+    try:
+        return not ceo_reads.stored_budget(ctx.tenant_id)
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _np_summary(ctx: Ctx, got: Mapping[str, Any]) -> str:
+    from backend.ceo.figure_format import format_paise
+
+    parts: list[str] = []
+    if "supplier_name" in got:
+        ship = f", with {format_paise(got['order_shipping'])} shipping for the whole order" if got.get("order_shipping") else ""
+        parts.append(f"a supplier quote from {got['supplier_name']} at {format_paise(got['unit_cost'])} per unit{ship}")
+    if "budget" in got:
+        parts.append(f"a batch budget of {format_paise(got['budget'])}")
+    return (f"Here is what I will save as your own figures: {' and '.join(parts)}. Then I will run the numbers (landed cost, supplier ranking and batch size) for "
+            f"{got.get('sku')}. Shall I go ahead?")
+
+
+def _quote_applies(ctx: Ctx, got: Mapping[str, Any]) -> bool:
+    return _needs_quote(ctx, got)
+
+
+NEW_PRODUCT: tuple[Field, ...] = (
+    Field("sku", lambda c, g: "Which SKU are you thinking of stocking? Type it the way you list it.", _text()),
+    Field("quantity", lambda c, g: "How many units are you considering?", _quantity),
+    Field("window", lambda c, g: "Which sales-history period should I look at?", _window, _window_choices),
+    Field("supplier_name", lambda c, g: "I have no supplier quote saved for this product. Which supplier is it from?", _text(80), applies=_quote_applies),
+    Field("unit_cost", lambda c, g: "What is that supplier's price per unit, in rupees?", _amount, applies=_quote_applies),
+    Field("order_shipping", lambda c, g: "What is the shipping for the whole order, in rupees? Skip it if the quote does not state it.", _optional_amount,
+          _SKIP("Not stated; margins that need it stay unavailable"), applies=_quote_applies),
+    Field("budget", lambda c, g: "What is your budget for this batch, in rupees? I will fit the quantity to it.", _amount, applies=lambda c, g: _needs_budget(c, g)),
+    Field("confirm", _np_summary, _yes, lambda c, g: (Option("Yes, save and run", "yes"),), applies=lambda c, g: _needs_quote(c, g) or _needs_budget(c, g)),
+)
+
+
 CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords")
 # classifier slot name -> session field it can pre-fill (the seller already said it); the answer still goes through the same parser
-PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget",)}
+PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget",)}
 
 SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "COMPETITOR_PRICE_IMPACT": PRICE_IMPACT, "NEW_PRODUCT_DECISION": NEW_PRODUCT,
@@ -388,8 +430,17 @@ def _card(playbook: str, f: Field, ctx: Ctx, collected: Mapping[str, Any]) -> di
             "options": opts}
 
 
-def _progress(fields: Sequence[Field], collected: Mapping[str, Any]) -> str:
-    return f"({len(collected) + 1} of {len(fields)}) "
+def _active(fields: Sequence[Field], ctx: Ctx, collected: Mapping[str, Any]) -> list[Field]:
+    """The fields that will be asked given what is known so far: a field that does not apply (a quote is already stored) is never asked."""
+    return [f for f in fields if f.name in collected or f.applies(ctx, collected)]
+
+
+def _next_field(fields: Sequence[Field], ctx: Ctx, collected: Mapping[str, Any]) -> Field | None:
+    return next((f for f in fields if f.name not in collected and f.applies(ctx, collected)), None)
+
+
+def _progress(fields: Sequence[Field], collected: Mapping[str, Any], ctx: Ctx) -> str:
+    return f"({len(collected) + 1} of {len(_active(fields, ctx, collected))}) "
 
 
 def start(playbook: str, ctx: Ctx, prefill: Mapping[str, str] | None = None) -> Ask | Done | Blocked:
@@ -400,22 +451,22 @@ def start(playbook: str, ctx: Ctx, prefill: Mapping[str, str] | None = None) -> 
     for f in fields:
         slot = next((k for k, v in PREFILL.items() if f.name in v), None)
         raw = (prefill or {}).get(slot) if slot else None
-        if raw and "." in playbook:  # a specialist-action session (the decision playbooks take no prefill)
+        if raw and ("." in playbook or (playbook == "NEW_PRODUCT_DECISION" and f.name == "sku")):  # a specialist session, or the product of a stock question
             parsed = f.parse(raw, ctx, collected)
             if not isinstance(parsed, Reject):
                 collected[f.name] = parsed
-    if len(collected) == len(fields):
+    if _next_field(fields, ctx, collected) is None:
         return Done(playbook, _to_inputs(playbook, collected))
     return _ask(playbook, fields, ctx, collected, prefix="")
 
 
 def _ask(playbook: str, fields: Sequence[Field], ctx: Ctx, collected: Mapping[str, Any], *, prefix: str) -> Ask | Blocked:
-    f = next((x for x in fields if x.name not in collected), None)
+    f = _next_field(fields, ctx, collected)
     assert f is not None
     blocked = f.unanswerable(ctx, collected)
     if blocked is not None:
         return Blocked(blocked)
-    return Ask(f"{prefix}{_progress(fields, collected)}{f.question(ctx, collected)}", _card(playbook, f, ctx, collected))
+    return Ask(f"{prefix}{_progress(fields, collected, ctx)}{f.question(ctx, collected)}", _card(playbook, f, ctx, collected))
 
 
 def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: Ctx) -> Ask | Done | Cancelled | Blocked:
@@ -425,7 +476,7 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
     if fields is None:
         raise ValueError("not an input session")
     collected = dict((card.get("pending") or {}).get("collected") or {})
-    f = next((x for x in fields if x.name not in collected), None)
+    f = _next_field(fields, ctx, collected)
     if f is None or str(card.get("slot")) != f.name:
         raise ValueError("the card does not match the session state")
     raw = text
@@ -443,7 +494,7 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
         again = _card(playbook, f, ctx, collected)
         return Ask(f"{parsed.why} {f.question(ctx, collected)}", again)
     collected[f.name] = parsed
-    if len(collected) < len(fields):
+    if _next_field(fields, ctx, collected) is not None:
         return _ask(playbook, fields, ctx, collected, prefix="")
     return Done(playbook, _to_inputs(playbook, collected))
 
@@ -460,7 +511,18 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
         out = {k: v for k, v in c.items() if v is not None}  # a skipped optional field is simply absent: nothing is defaulted
         return out
     if playbook == "NEW_PRODUCT_DECISION":
-        return {"sku": c["sku"], "quantity": c["quantity"], **c["window"]}
+        out: dict[str, Any] = {"sku": c["sku"], "quantity": c["quantity"], **c["window"]}
+        if "supplier_name" in c or "budget" in c:  # what the seller confirmed for saving (spec 6.36); split off before the playbook inputs are validated
+            save: dict[str, Any] = {}
+            if "supplier_name" in c:
+                quote: dict[str, Any] = {"supplier_name": c["supplier_name"], "unit_cost_paise": c["unit_cost"], "sku": c["sku"]}
+                if c.get("order_shipping") is not None:
+                    quote["shipping_paise"] = c["order_shipping"]
+                save["quote"] = quote
+            if "budget" in c:
+                save["budget_paise"] = c["budget"]
+            out["save"] = save
+        return out
     fee = c["fee"]
     return {
         "competitor_url_id": c["competitor"], "sku": c["sku"], "marketplace": fee["marketplace"], "category": fee["category"], "fee_type": fee["fee_type"], "basis": c["basis"],

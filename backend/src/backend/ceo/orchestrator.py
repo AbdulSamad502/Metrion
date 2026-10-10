@@ -43,7 +43,7 @@ from backend.ceo.runtime import CeoRuntime, EventLog, EventSink, StageClock, Tur
 from backend.ceo.turn_lock import investigation_turn_lock
 from backend.entitlement import meter_ceo_turn
 from backend.repositories import investigation_repo as repo
-from backend.services import ceo_briefs
+from backend.services import ceo_briefs, ceo_inputs
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +180,7 @@ def _with_request_key(done: Any, anchor: str) -> dict[str, Any]:
     out = dict(done.inputs)
     if done.playbook in input_session.CMO_SESSIONS:
         out["request_key"] = f"ceo-{anchor}"
-    if done.playbook == "pi.discover":
+    if done.playbook in ("pi.discover", "NEW_PRODUCT_DECISION"):
         out["ceo_ref"] = f"ceo-{anchor}"
     return out
 
@@ -474,10 +474,23 @@ def _run_admitted(
             resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct=dict(run_inputs))
             notes = list(resolved.echoes())
         else:
+            run_inputs = dict(run_inputs)
+            saved_notes: list[str] = []
+            save, ref = run_inputs.pop("save", None), str(run_inputs.pop("ceo_ref", ""))
+            if key == "NEW_PRODUCT_DECISION" and save:  # the seller confirmed these on the confirm card: saved as their own CFO inputs, then the engine runs (spec 6.36)
+                try:
+                    saved_notes = ceo_inputs.save_new_product_inputs(tenant, created_by=ctx.app_user_id, role=ctx.role, permissions=ctx.permissions, sku=str(run_inputs.get("sku")), save=save, ref=ref)
+                except ceo_inputs.CannotSave as exc:
+                    invalid_form, save = str(exc), None
+                except Exception:  # noqa: BLE001
+                    logger.exception("could not save new-product inputs")
+                    invalid_form, save = "I could not save those figures, so I did not run it", None
             try:
+                if invalid_form is not None:
+                    raise InvalidInputs([])
                 r = resolve_playbook_run(key, run_inputs, tenant_id=tenant, today=now.date(), max_candidate_prices=runtime.max_candidate_prices)
             except InvalidInputs as exc:
-                invalid_form = "; ".join(exc.problems)
+                invalid_form = invalid_form or "; ".join(exc.problems)
             else:
                 if isinstance(r, Clarification):
                     pending = clarification.pending_intent("PLAYBOOK", key, {}, {})
@@ -485,7 +498,7 @@ def _run_admitted(
                     route, key, clarify_slot, clarify_text = "CLARIFY", None, r.slot, r.question
                 else:
                     resolved = r
-                    notes = list(r.echoes())
+                    notes = [*saved_notes, *r.echoes()]
     elif route in ("ACTION", "PLAYBOOK"):
         r = resolve_slots(decision.slots, required, tenant_id=tenant, today=now.date(), resolves=resolves, refs=ui_refs)
         if isinstance(r, Clarification):

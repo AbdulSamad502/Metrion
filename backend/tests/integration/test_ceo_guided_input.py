@@ -11,6 +11,7 @@ import pytest
 
 from backend.ceo import orchestrator
 from backend.repositories import investigation_repo as repo
+from backend.services import cfo_actions
 from tests.integration.ceo_support import ctx_for
 from tests.integration.test_ceo_decision_playbooks import recording_registry, save_cogs
 from tests.integration.test_ceo_state_specialists import NOW, seed  # noqa: F401  (fixture + constant)
@@ -51,7 +52,7 @@ def test_a_chip_or_typed_chat_starts_a_conversation_about_inputs_not_a_form_and_
     assert set(labels[:2]) == {"Acme Copper", "Acme Steel"}  # real tracked competitors, never invented
     assert labels[-2:] == ["Other", "Cancel"] and sum(1 for o in res.choices["options"] if o["kind"] in ("RECOMMENDED", "ALTERNATIVE")) <= 3
     chip = orchestrator.run_turn(ctx, rt, start(ctx, rt), "New product", ui_action=UI("PLAYBOOK", "NEW_PRODUCT_DECISION"))
-    assert chip.status == "CLARIFIED" and chip.clarify_for == "sku" and chip.answer.startswith("(1 of 3)")
+    assert chip.status == "CLARIFIED" and chip.clarify_for == "sku" and chip.answer.startswith("(1 of 8)")
 
 
 def test_a_bad_answer_is_asked_again_with_the_reason_and_keeps_the_state(two_tenants, app_user, seed):  # noqa: F811
@@ -62,7 +63,7 @@ def test_a_bad_answer_is_asked_again_with_the_reason_and_keeps_the_state(two_ten
     inv = start(ctx, rt)
     orchestrator.run_turn(ctx, rt, inv, "New product", ui_action=UI("PLAYBOOK", "NEW_PRODUCT_DECISION"))
     r = orchestrator.run_turn(ctx, rt, inv, "SKU-1")  # a TYPED reply to the open question: it is the answer, no classifier
-    assert r.clarify_for == "quantity" and r.answer.startswith("(2 of 3)")
+    assert r.clarify_for == "quantity" and r.answer.startswith("(2 of 8)")
     bad = orchestrator.run_turn(ctx, rt, inv, "a lot")
     assert bad.clarify_for == "quantity" and "whole number above zero" in bad.answer
     assert bad.choices["pending"]["collected"] == {"sku": "SKU-1"}  # nothing was lost or guessed
@@ -140,6 +141,8 @@ def test_new_product_conversation_runs_with_the_collected_inputs(two_tenants, ap
     ctx = ctx_for(a, user_id=app_user)
     rt = rt_for(calls)
     inv = start(ctx, rt)
+    cfo_actions.enter_expense(a, target_type="SKU", target_ref="SKU-1", field="supplier.quote", value={"supplier_name": "S", "unit_cost_paise": 20000}, created_by=app_user)
+    cfo_actions.enter_expense(a, target_type="ACCOUNT", target_ref=str(a), field="batch.budget", value={"amount_paise": 5000000}, created_by=app_user)  # stored: not asked again (6.36)
     res = orchestrator.run_turn(ctx, rt, inv, "x", ui_action=UI("PLAYBOOK", "NEW_PRODUCT_DECISION"))
     res = say(ctx, rt, inv, "SKU-1")
     res = say(ctx, rt, inv, "200")
