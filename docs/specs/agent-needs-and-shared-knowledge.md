@@ -165,6 +165,16 @@ Rules: a failed or unavailable leg writes nothing; volume is bounded per tenant 
 
 Presenting an `AGENT_REPORTED` finding as verified is a defect. The label text is fixed: `SELLER_STATED` = "You said", `ENGINE_VERIFIED` = "Calculated by the engine", `AGENT_REPORTED` = "Reported by <agent>, not verified".
 
+### 6.6 S3 implementation notes (choices where the spec was silent or ambiguous)
+
+1. **Names.** Migration `20261010_0012`; repository `repositories/shared_finding_repo.py`; service `ceo/findings.py` (`record`, `correct`, `forget`, `list_visible`, `visible_agents`). The per-agent S4 adapters should therefore live beside it under a different name (not a `ceo/findings/` package, which would clash with the module). Routes are `GET /api/v1/ceo/findings` and `POST /api/v1/ceo/findings/{id}/forget` (not `.../shared-findings`). `POST .../correct` is **not** exposed in S3: a `SELLER_STATED` row must cite a `message`, and the panel has no message to cite until S6b decides how a correction is recorded (open question Q13). The service function `correct` exists and is tested.
+2. **Trust is derived, never passed.** `record` takes no trust label. Zero refs or any `ESTIMATE` ref gives `AGENT_REPORTED`; at least one ref, all `ENGINE_RESULT`, all resolving to a `metric_result` of the tenant now, gives `ENGINE_VERIFIED`; an `ENGINE_RESULT` that does not resolve is refused (not downgraded). The database trigger re-checks every `ENGINE_RESULT` ref whatever the trust.
+3. **Forget and correct rows copy the original's `agent_code`, `kind`, `dedupe_key` (and, for forget, `trust`, `source_ref`, `figure_refs`); forget sets `text` to `(forgotten)`.** The tombstone is the original row (never deleted, `supersedes_id IS NULL`) plus the unique index, and a trigger that also refuses a new ACTIVE root row whose `dedupe_key` has a FORGOTTEN row. `record` returns `None` for a repeated or forgotten source. A correction is attributed to agent `CEO`, kind `SELLER_NOTE`, so it is visible to any member with `agent.ceo`; it repeats none of the original agent's text.
+4. **Per-agent visibility (D6)** = the agent's status in `compute_capabilities` with every agent treated as attached: hidden when `NOT_PERMITTED` or `NOT_ENTITLED`, visible otherwise (a detached agent's history stays visible). Forget (and correct) of a finding from a hidden agent is a plain 404. Hidden counts are per agent with a fixed sentence.
+5. **Figures.** The list returns each ref as `{label, kind, id, resolvable}` and no value: rendering a value goes through the provenance gate in S5/S6, not the ledger. `resolvable` is re-checked at read time (ENGINE_RESULT against `metric_result`; `ESTIMATE` is reported resolvable as it was verified at write time).
+6. **Number words.** The writer rejects Unicode decimal digits (NFKC) and a short word list (not "one"). The database CHECK covers ASCII digits only.
+7. **Limits.** The list is bounded by a `limit` query (default 100, max 200); no new configuration was added. The per-agent daily cap (`CEO_FINDINGS_MAX_PER_AGENT_PER_DAY`) belongs to the S4 writers, not the ledger.
+
 ## 7. Part C: CEO business Q&A
 
 ### 7.1 Principle
@@ -294,6 +304,7 @@ The CEO answers a business question only by reading a fixed set of Business Stat
 | Q9 | Relay PI's stored feasibility as a labelled estimate inside `LANDED_COST_FOR_IDEA` and as a finding number (`estimate_ref`)? | Defer until PI exposes a read that returns the estimate with its `estimate_ref`; then add as a follow-up slice. |
 | Q10 | Does `cmo_generation` persist the generated text (needed for `BS_CMO_CONTENT_LATEST`)? | S5 verifies; if not, drop the entry (§6.13 rule 5) rather than adding a write. |
 | Q11 | Do CFO `leak_finding` and `metric_result` expose an `engine_result_ref` for the leak amount (so `LEAK_FOUND` can be `ENGINE_VERIFIED` with a number)? | S4 verifies; if not, record `LEAK_FOUND` as `AGENT_REPORTED` with no number. |
+| Q13 | How does the panel's **Correct** action obtain the `message` a `SELLER_STATED` row must cite (a new `investigation_message` row, or a relaxed source kind for panel corrections)? | Decide with S6b; S3 ships the service function only (6.6.1). |
 | Q12 | Should the seller be told when an agent records a new finding (like the memory acknowledgement), or only see it in the panel? | Panel only in V1 (findings are not seller statements; agent-memory §1 "nothing remembered silently" applies to seller facts); show an unread count on the panel. Owner may prefer an in-answer note. |
 
 ---
