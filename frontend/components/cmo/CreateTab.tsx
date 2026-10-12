@@ -78,7 +78,7 @@ function AttributeEditor() {
           </div>
         ))}
         {intake.attributes.length < 50 && (
-          <button type="button" className="mt-btn mt-btn-secondary mt-focus w-fit rounded-lg px-3 py-1.5 t-meta font-bold" onClick={() => setIntake({ attributes: [...intake.attributes, { name: "", value: "" }] })}>
+          <button type="button" className="mt-btn mt-btn-secondary mt-focus min-h-[36px] w-fit rounded-lg px-3 py-1.5 t-meta font-bold sm:min-h-0" onClick={() => setIntake({ attributes: [...intake.attributes, { name: "", value: "" }] })}>
             + Add an attribute
           </button>
         )}
@@ -130,7 +130,7 @@ function PhotoSection() {
     >
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Choose a photo" hint="JPEG, PNG or WebP. Location data and other hidden details are stripped before it is stored.">
-          {(id) => <input id={id} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => { setFile(e.target.files?.[0] ?? null); upload.reset(); analysis.reset(); }} className="t-body-sm" />}
+          {(id) => <input id={id} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => { setFile(e.target.files?.[0] ?? null); upload.reset(); analysis.reset(); }} className="t-body-sm min-h-6" />}
         </Field>
         <SubmitButton onClick={doUpload} busy={upload.busy} label="Upload photo" busyLabel="Uploading…" disabled={!file} />
         {upload.result && <SubmitButton onClick={doAnalyze} busy={analysis.busy} label={a ? "Analyse again" : "Read the photo"} busyLabel="Reading the photo…" primary={!a} />}

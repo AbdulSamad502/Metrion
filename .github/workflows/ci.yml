@@ -129,34 +129,8 @@ jobs:
           python -m alembic downgrade base
           python -m alembic upgrade head
 
-      - name: calc-engine — pytest (unit + integration)
-        working-directory: packages/calc-engine
-        run: python -m pytest tests/ -v
-
-      - name: data-foundation — pytest (unit + integration)
-        working-directory: packages/data-foundation
-        run: python -m pytest tests/ -v
-
-      - name: competitor-intelligence — pytest (unit + integration)
-        working-directory: packages/competitor-intelligence
-        run: python -m pytest tests/ -v
-
-      - name: cfo — pytest (unit + integration)
-        working-directory: packages/cfo
-        run: python -m pytest tests/ -v
-
-      - name: market-signals — pytest
-        working-directory: packages/market-signals
-        run: python -m pytest tests/ -v
-
-      - name: product-intelligence — pytest (unit + integration)
-        working-directory: packages/product-intelligence
-        run: python -m pytest tests/ -v
-
-      - name: slim-cmo — pytest (unit + integration)
-        working-directory: packages/slim-cmo
-        run: python -m pytest tests/ -v
-
+      # ORDER MATTERS. The cfo package's own tests import backend.* (25 files: backend.services.cfo_actions and friends) and some touch backend tables, so backend must be installed AND
+      # migrated before any package's pytest step. Previously these two steps came after the package tests and the cfo step could not even import `backend`.
       # backend depends on competitor-intelligence, cfo and product-intelligence at import time (api/v1/ci.py,
       # ceo_hub.py, agents/ceo_hub.py, and cfo's analogous routes/dispatch) but does not
       # declare either in pyproject.toml — see the comment there for why a relative `file:`
@@ -172,6 +146,37 @@ jobs:
           python -m alembic downgrade base
           python -m alembic upgrade head
 
+      - name: calc-engine — pytest (unit + integration)
+        working-directory: packages/calc-engine
+        run: python -m pytest tests/ -v
+
+      - name: data-foundation — pytest (unit + integration)
+        working-directory: packages/data-foundation
+        run: python -m pytest tests/ -v
+
+      - name: competitor-intelligence — pytest (unit + integration)
+        working-directory: packages/competitor-intelligence
+        run: python -m pytest tests/ -v
+
+      - name: cfo — pytest (unit + integration)
+        working-directory: packages/cfo
+        env:
+          # backend.config refuses a model endpoint nobody attested as operator-controlled; the cfo tests use fakes, but the check runs on import paths they exercise.
+          LLM_OPERATOR_CONTROLLED_HOSTS: localhost:11434
+        run: python -m pytest tests/ -v
+
+      - name: market-signals — pytest
+        working-directory: packages/market-signals
+        run: python -m pytest tests/ -v
+
+      - name: product-intelligence — pytest (unit + integration)
+        working-directory: packages/product-intelligence
+        run: python -m pytest tests/ -v
+
+      - name: slim-cmo — pytest (unit + integration)
+        working-directory: packages/slim-cmo
+        run: python -m pytest tests/ -v
+
       - name: backend — pytest (unit + integration)
         working-directory: backend
         env:
@@ -184,4 +189,38 @@ jobs:
           CLERK_WEBHOOK_SECRET: whsec_ci_placeholder
           CLERK_JWT_KEY: "-----BEGIN PUBLIC KEY-----\nCIPLACEHOLDER\n-----END PUBLIC KEY-----"
           FRONTEND_ORIGIN: http://localhost:3000
+          # CI's database is disposable, so the migration downgrade tests may run here (never against a dev database).
+          METRION_ALLOW_DOWNGRADE_TESTS: "1"
         run: python -m pytest tests/ -v
+
+  frontend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      # Placeholders only (no real Clerk project exists in CI): the build needs a syntactically valid publishable key, nothing calls Clerk.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuZXhhbXBsZS5jb20k
+      CLERK_SECRET_KEY: sk_test_ci_placeholder
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: frontend — install (lockfile, deterministic)
+        run: npm ci
+      - name: frontend — eslint
+        run: npx eslint
+      - name: frontend — typescript
+        run: npx tsc --noEmit
+      - name: frontend — tests
+        # --maxWorkers=2: a GitHub-hosted ubuntu-latest runner has 2 vCPUs for a PRIVATE repository and 4 for a public one. This repository's visibility is not known to the
+        # tooling, so the setting that is safe on both is used (it is slower, never flaky from over-subscription). Raise to 4 if the repository is public. Local runs use 4.
+        run: npx vitest run --maxWorkers=2
+      - name: frontend — production build
+        run: npm run build

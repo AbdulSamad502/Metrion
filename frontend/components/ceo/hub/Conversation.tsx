@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { DecisionCard } from "@/components/ceo/hub/DecisionCard";
 import { Welcome } from "@/components/ceo/hub/Welcome";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState, Spinner } from "@/components/ui/LoadingState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import type { AgentCode, CeoMessage, ClarificationCard, ClarificationReply, ExplicitPeriod, FindingRow, InvestigationDetail, NeedRow, TurnRow, UiAction } from "@/lib/ceo";
+import type { AgentCode, CeoMessage, ClarificationReply, ExplicitPeriod, FindingRow, InvestigationDetail, NeedRow, TurnRow, UiAction } from "@/lib/ceo";
 import { findingLink, investigationTitle, messageView, needStepView, needsByMessage, type HubState } from "@/lib/ceoModel";
 import type { TurnProgress } from "@/lib/useCeoHub";
 
@@ -30,7 +31,10 @@ export function Conversation({
   onReopen,
   onArchive,
   onRetry,
+  awaiting = false,
 }: {
+  /** the stored thread ends with a question that has no answer yet (page reopened mid-run, or the reply was lost) */
+  awaiting?: boolean;
   onOpenForm: (form: string) => void;
   state: HubState;
   detail: InvestigationDetail | null;
@@ -49,8 +53,8 @@ export function Conversation({
     return (
       <EmptyState
         icon="ceo"
-        title="Select or start an investigation"
-        description="Pick one on the left, or start a new one. The CEO answers from your saved results and the specialists you wire in, and says plainly what it could not check."
+        title="Select or start a conversation"
+        description="Open one from Conversations, or just type below to start a new one. The CEO answers from your saved results and the specialists you wire in, and says plainly what it could not check."
       />
     );
   }
@@ -63,13 +67,12 @@ export function Conversation({
   const turnById = new Map(detail.turns.map((t) => [t.id, t]));
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3" data-testid="conversation" data-state={state}>
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="mt-eyebrow">Conversation</h2>
-          <div className="mt-1 t-card-title font-semibold" style={{ color: "var(--text-1)" }}>
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3" data-testid="conversation" data-state={state}>
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
+          <h2 className="m-0 truncate t-card-title font-semibold" title={investigationTitle(inv)} style={{ color: "var(--text-1)" }}>
             {investigationTitle(inv)}
-          </div>
+          </h2>
         </div>
         <StatusControls status={inv.status} processing={state === "PROCESSING"} onResolve={onResolve} onReopen={onReopen} onArchive={onArchive} />
       </header>
@@ -102,6 +105,14 @@ export function Conversation({
 
 
       {state === "PROCESSING" && <Processing question={turn.question} arrived={turn.arrivedIds.length} stage={turn.stage} />}
+      {awaiting && state !== "PROCESSING" && !closed && (
+        <div role="status" aria-live="polite" data-testid="awaiting-answer" className="flex items-center gap-3 rounded-xl px-3.5 py-3 t-body-sm" style={{ border: "1px dashed var(--accent-border-default)", color: "var(--text-3)" }}>
+          <Spinner />
+          <span className="min-w-0 flex-1">
+            Your last question has no answer yet. It may still be running, and this page checks again every few seconds. It has not been reported as done. If it never arrives, send your next message: an interrupted request is settled and reported honestly.
+          </span>
+        </div>
+      )}
       {turn.error && state !== "PROCESSING" && <ErrorNotice message={turn.error} />}
 
     </div>
@@ -123,7 +134,7 @@ function Processing({ question, arrived, stage }: { question: string | null; arr
       <Spinner />
       <span className="min-w-0 flex-1">
         The CEO is working on {question ? <>&ldquo;{question}&rdquo;</> : "your question"}.{stage ? <span data-testid="stage"> {stage}</span> : null}{" "}
-        {arrived > 0 ? `${arrived} ${arrived === 1 ? "finding has" : "findings have"} arrived so far; see the panel on the right.` : "Findings appear on the right as each specialist finishes."}
+        {arrived > 0 ? `${arrived} ${arrived === 1 ? "finding has" : "findings have"} arrived so far; see the activity panel.` : "Findings appear in the activity panel as each specialist finishes."}
       </span>
     </div>
   );
@@ -151,23 +162,23 @@ function Thread({
   needs: NeedRow[];
 }) {
   const placed = needsByMessage(needs, messages);
-  const end = useRef<HTMLDivElement | null>(null);
+  const end = useRef<HTMLLIElement | null>(null);
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: "end" });
   }, [messages.length]);
   if (messages.length === 0) return <Welcome agents={agents} onAsk={onAsk} onAction={onSuggest} onOpenForm={onOpenForm} />;
   return (
-    <ol className="m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto p-0 pr-1" aria-label="Conversation" aria-live="polite">
+    <ol tabIndex={0} className="mt-focus m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto rounded-lg p-0 pr-1" aria-label="Conversation" aria-live="polite">
       {messages.map((m) => (
         <li key={m.id}>
           <Bubble message={m} turnById={turnById} />
           {m.role === "CEO" && m.kind === "ANSWER" && <ReportButtons links={reportLinks(findings, m.turn_id)} />}
           <NeedSteps needs={placed.byMessage.get(m.id) ?? []} />
-          {m.id === answerableCardId && m.choices && <DecisionCard messageId={m.id} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
+          {m.id === answerableCardId && m.choices && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
         </li>
       ))}
       {placed.unplaced.length > 0 && <li><NeedSteps needs={placed.unplaced} /></li>}
-      <div ref={end} />
+      <li ref={end} aria-hidden="true" className="h-0 overflow-hidden" />
     </ol>
   );
 }
@@ -207,13 +218,18 @@ function ReportButtons({ links }: { links: { href: string; label: string }[] }) 
   return (
     <div className="mt-1.5 flex flex-wrap gap-2" data-testid="report-buttons">
       {links.map((l) => (
-        <Link key={l.href} href={l.href} data-testid="report-button" className="mt-btn mt-focus inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 t-body-sm font-bold" style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}>
+        <Link key={l.href} href={l.href} data-testid="report-button" className="mt-btn mt-focus inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-3 py-1.5 t-body-sm font-bold sm:min-h-0" style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}>
           {l.label} &rarr;
         </Link>
       ))}
     </div>
   );
 }
+
+const timeOf = (iso: string): string => {
+  const d = new Date(iso);
+  return d.toString() === "Invalid Date" ? "" : d.toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+};
 
 function Bubble({ message, turnById }: { message: CeoMessage; turnById: Map<string, TurnRow> }) {
   const v = messageView(message, turnById);
@@ -229,20 +245,21 @@ function Bubble({ message, turnById }: { message: CeoMessage; turnById: Map<stri
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div
         data-testid={mine ? "message-user" : "message-ceo"}
-        className="max-w-[88%] rounded-2xl px-4 py-3"
+        className={`rounded-2xl px-4 py-3 ${mine ? "max-w-[min(85%,36rem)]" : "max-w-[min(96%,50rem)]"}`}
         style={{
-          background: mine ? "var(--fill-hover)" : "var(--bg-card)",
-          border: `1px solid ${v.tone === "clarify" ? "var(--warning-border)" : "var(--border-subtle)"}`,
+          background: mine ? "var(--accent-fill-subtle, rgba(62,207,116,0.10))" : "var(--bg-card)",
+          border: `1px solid ${v.tone === "clarify" ? "var(--warning-border)" : mine ? "var(--accent-border-default)" : "var(--border-subtle)"}`,
+          boxShadow: !mine && v.tone !== "clarify" ? "inset 2px 0 0 var(--accent-border-strong)" : undefined,
           opacity: message.pending ? 0.7 : 1,
         }}
       >
-        {v.badge && (
-          <div className="mb-1.5">
-            <StatusBadge tone={v.tone === "clarify" ? "warning" : "neutral"}>{v.badge}</StatusBadge>
-          </div>
-        )}
+        <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="t-meta font-bold" style={{ color: mine ? "var(--text-3)" : "var(--accent)" }}>{mine ? "You" : "CEO"}</span>
+          {v.badge && <StatusBadge tone={v.tone === "clarify" ? "warning" : "neutral"}>{v.badge}</StatusBadge>}
+          <time className="t-meta" dateTime={message.created_at} style={{ color: "var(--text-6)" }}>{message.pending ? "Sending…" : message.failed ? "Not sent" : timeOf(message.created_at)}</time>
+        </div>
         {/* the backend's gated text, shown verbatim: line breaks kept, nothing re-formatted or re-computed here */}
-        <div className="whitespace-pre-wrap t-body" style={{ color: "var(--text-2)" }}>
+        <div className="whitespace-pre-wrap break-words t-body" style={{ color: "var(--text-1)", lineHeight: 1.6 }}>
           {message.content}
         </div>
         {v.footnote && (
@@ -251,71 +268,6 @@ function Bubble({ message, turnById }: { message: CeoMessage; turnById: Map<stri
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-/** The backend's decision card (spec 6.32): real options built from the seller's own data, the recommended one first with the rule that recommends it, then
- * "Other". Choosing sends the option's key; the backend resumes the pending question with no model call and the same checks. Nothing is chosen for the seller. */
-function DecisionCard({ messageId, card, disabled, onAnswer, onOpenForm }: { messageId: string; card: ClarificationCard; disabled: boolean; onAnswer: (reply: ClarificationReply, text: string) => void; onOpenForm: (form: string) => void }) {
-  const [typing, setTyping] = useState(false);
-  const [other, setOther] = useState("");
-  const input = card.kind === "INPUT"; // a question the CEO is asking: the answer is typed in the chat bar (or chosen here)
-  const real = card.options.filter((o) => o.kind !== "OTHER" && o.kind !== "CANCEL");
-  const cancel = card.options.find((o) => o.kind === "CANCEL");
-  const hasOther = !input && card.options.some((o) => o.kind === "OTHER");
-  return (
-    <div role="group" aria-label="Choose one" data-testid="decision-card" className="mt-2 flex max-w-[88%] flex-col gap-2 rounded-2xl px-3.5 py-3" style={{ border: "1px solid var(--warning-border)", background: "var(--bg-card)" }}>
-      {real.map((o) => (
-        <button
-          key={o.key}
-          type="button"
-          disabled={disabled}
-          data-testid={`card-option-${o.key}`}
-          onClick={() => (o.form ? onOpenForm(o.form) : onAnswer({ id: messageId, option: o.key }, o.label))}
-          className="mt-btn mt-focus flex flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left"
-          style={{ border: `1px solid ${o.kind === "RECOMMENDED" ? "var(--accent-border-default)" : "var(--border-hover)"}`, color: "var(--text-2)", opacity: disabled ? 0.5 : 1 }}
-        >
-          <span className="flex items-center gap-2 t-body-sm font-semibold">
-            {o.label}
-            {o.kind === "RECOMMENDED" && <StatusBadge tone="accent">Recommended</StatusBadge>}
-          </span>
-          <span className="t-meta" style={{ color: "var(--text-5)" }}>{o.reason}</span>
-        </button>
-      ))}
-      {input && (
-        <div className="flex flex-wrap items-center justify-between gap-2 t-meta" style={{ color: "var(--text-5)" }}>
-          <span>{real.length > 0 ? "Choose one, or type your answer in the chat bar below." : "Type your answer in the chat bar below."}</span>
-          {cancel && (
-            <button type="button" disabled={disabled} data-testid="card-cancel" onClick={() => onAnswer({ id: messageId, option: cancel.key }, "Cancel")} className="mt-focus rounded-lg px-2 py-1 t-meta font-bold" style={{ color: "var(--text-4)", border: "1px solid var(--border-subtle)" }}>
-              Cancel
-            </button>
-          )}
-        </div>
-      )}
-      {hasOther && !typing && (
-        <button type="button" disabled={disabled} data-testid="card-option-other" onClick={() => setTyping(true)} className="mt-btn mt-focus self-start rounded-lg px-3 py-1.5 t-body-sm font-semibold" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)", opacity: disabled ? 0.5 : 1 }}>
-          Other…
-        </button>
-      )}
-      {hasOther && typing && (
-        <form
-          className="flex items-end gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const text = other.trim();
-            if (!text || disabled) return;
-            onAnswer({ id: messageId, option: null }, text);
-            setOther("");
-            setTyping(false);
-          }}
-        >
-          <input value={other} onChange={(e) => setOther(e.target.value)} maxLength={200} aria-label="Your own answer" className="mt-focus min-w-0 flex-1 rounded-lg bg-transparent px-2.5 py-1.5 t-body-sm" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-2)" }} />
-          <button type="submit" disabled={disabled || !other.trim()} className="mt-btn mt-focus rounded-lg px-3 py-1.5 t-body-sm font-bold" style={{ background: "var(--accent)", color: "var(--accent-on-fill)", opacity: disabled || !other.trim() ? 0.5 : 1 }}>
-            Send
-          </button>
-        </form>
-      )}
     </div>
   );
 }
@@ -329,16 +281,16 @@ function StatusControls({ status, processing, onResolve, onReopen, onArchive }: 
       <div className="flex items-center gap-2">
         {status === "ACTIVE" ? <StatusBadge tone="accent" dot>Active</StatusBadge> : <StatusBadge tone="info">Resolved</StatusBadge>}
         {status === "ACTIVE" && (
-          <button type="button" disabled={processing} onClick={() => setMode(mode === "resolve" ? "none" : "resolve")} className="mt-btn mt-focus rounded-lg px-2.5 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
+          <button type="button" disabled={processing} onClick={() => setMode(mode === "resolve" ? "none" : "resolve")} className="mt-btn mt-focus min-h-[36px] rounded-lg px-3 py-1 t-meta font-bold sm:min-h-0 sm:px-2.5" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
             Resolve
           </button>
         )}
         {status === "RESOLVED" && (
-          <button type="button" onClick={onReopen} className="mt-btn mt-focus rounded-lg px-2.5 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
+          <button type="button" onClick={onReopen} className="mt-btn mt-focus min-h-[36px] rounded-lg px-3 py-1 t-meta font-bold sm:min-h-0 sm:px-2.5" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
             Reopen
           </button>
         )}
-        <button type="button" disabled={processing} onClick={() => setMode(mode === "archive" ? "none" : "archive")} className="mt-btn mt-focus rounded-lg px-2.5 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
+        <button type="button" disabled={processing} onClick={() => setMode(mode === "archive" ? "none" : "archive")} className="mt-btn mt-focus min-h-[36px] rounded-lg px-3 py-1 t-meta font-bold sm:min-h-0 sm:px-2.5" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
           Archive
         </button>
       </div>

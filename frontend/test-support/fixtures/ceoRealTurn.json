@@ -1,0 +1,920 @@
+{
+ "detail": {
+  "agents": {
+   "CFO": true,
+   "CI": true,
+   "CMO": true,
+   "PI": true
+  },
+  "findings": [
+   {
+    "action_key": "cfo.financial_health",
+    "agent_run_id": "ddcc0b4b-4817-44ea-aa8b-598142f719cc",
+    "created_at": "2026-10-01T09:00:00.005000+00:00",
+    "figure_refs": [
+     {
+      "id": "8f4d2ae3-a674-49fc-b012-69c6bb33e5b5",
+      "kind": "ENGINE_RESULT"
+     },
+     {
+      "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+      "kind": "ENGINE_RESULT"
+     },
+     {
+      "id": "25139d22-4b74-4e1a-b9b5-da133c32dba9",
+      "kind": "ENGINE_RESULT"
+     }
+    ],
+    "gap_reason": null,
+    "id": "ea395033-e687-4442-90ea-26942ffe7543",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Overall health band",
+       "text": "WATCH"
+      },
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Contribution margin band",
+       "text": "GOOD"
+      },
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Fee ratio band",
+       "text": "WATCH"
+      },
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Return rate band",
+       "text": "GOOD"
+      }
+     ],
+     "figures": [
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Contribution margin (2026-09-01/2026-09-30)",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "8f4d2ae3-a674-49fc-b012-69c6bb33e5b5",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "12.5%"
+      },
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Fee ratio (2026-09-01/2026-09-30)",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "30%"
+      },
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Return rate (2026-09-01/2026-09-30)",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "25139d22-4b74-4e1a-b9b5-da133c32dba9",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "4%"
+      }
+     ],
+     "gaps": [],
+     "headline": "Contribution margin (2026-09-01/2026-09-30): 12.5%",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "CFO",
+    "status": "COMPLETE",
+    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+   },
+   {
+    "action_key": "cfo.anomaly_check",
+    "agent_run_id": "9dbd67e7-aa3c-417a-ad0e-d90343277362",
+    "created_at": "2026-10-01T09:00:00.006000+00:00",
+    "figure_refs": [],
+    "gap_reason": null,
+    "id": "e3e2af23-f89f-4cee-a1e5-8da9196912db",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [],
+     "figures": [],
+     "gaps": [
+      "The anomaly check (z score) is not configured yet.",
+      "The anomaly check (percentile threshold) is not configured yet.",
+      "The anomaly check (period over period delta) is not configured yet."
+     ],
+     "headline": "The anomaly check (z score) is not configured yet.",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "CFO",
+    "status": "COMPLETE",
+    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+   },
+   {
+    "action_key": "cfo.strategic_briefing",
+    "agent_run_id": "c17d2804-75b3-4fa3-9800-4009b9ca6719",
+    "created_at": "2026-10-01T09:00:00.007000+00:00",
+    "figure_refs": [
+     {
+      "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+      "kind": "ENGINE_RESULT"
+     }
+    ],
+    "gap_reason": null,
+    "id": "b32b42f0-8b4e-49f6-a467-2e684f3cf3af",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Briefing signal: fee ratio",
+       "text": "watch severity; suggested action type review fee mapping or negotiate"
+      }
+     ],
+     "figures": [
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Fee ratio (2026-09-01/2026-09-30)",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "30%"
+      }
+     ],
+     "gaps": [],
+     "headline": "Fee ratio (2026-09-01/2026-09-30): 30%",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "CFO",
+    "status": "COMPLETE",
+    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+   },
+   {
+    "action_key": "BS_LEAK_OPEN",
+    "agent_run_id": null,
+    "created_at": "2026-10-01T09:00:00.011000+00:00",
+    "figure_refs": [],
+    "gap_reason": "No leak findings are recorded \u2014 reconciliation may not have been run, so this is not a clean bill of health.",
+    "id": "99200e5f-689d-49f8-a460-fabbad996713",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [],
+     "figures": [],
+     "gaps": [
+      "No leak findings are recorded \u2014 reconciliation may not have been run, so this is not a clean bill of health."
+     ],
+     "headline": "No leak findings are recorded \u2014 reconciliation may not have been run, so this is not a clean bill of health.",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "BUSINESS_STATE",
+    "status": "UNAVAILABLE",
+    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+   },
+   {
+    "action_key": "BS_DATA_GAPS",
+    "agent_run_id": null,
+    "created_at": "2026-10-01T09:00:00.012000+00:00",
+    "figure_refs": [],
+    "gap_reason": null,
+    "id": "f9cdaac6-5b52-4989-8350-17dad681401a",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Data requests",
+       "text": "No inputs are currently being requested."
+      }
+     ],
+     "figures": [],
+     "gaps": [],
+     "headline": "Data requests: No inputs are currently being requested.",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "BUSINESS_STATE",
+    "status": "COMPLETE",
+    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+   },
+   {
+    "action_key": "BS_PNL_LATEST",
+    "agent_run_id": null,
+    "created_at": "2026-10-01T09:00:00.013000+00:00",
+    "figure_refs": [
+     {
+      "as_of": "2026-10-01T09:00:00+00:00",
+      "id": "b629b292-3789-4dd7-87a5-48af006e1885",
+      "kind": "ENGINE_RESULT"
+     },
+     {
+      "as_of": "2026-10-01T09:00:00+00:00",
+      "id": "f4898999-06ca-405d-8c15-31c610319489",
+      "kind": "ENGINE_RESULT"
+     },
+     {
+      "as_of": "2026-10-01T09:00:00+00:00",
+      "id": "4a6bf776-02a0-43f8-bc15-5c4d97be9b65",
+      "kind": "ENGINE_RESULT"
+     }
+    ],
+    "gap_reason": null,
+    "id": "e05ea5a7-2f04-4fc1-9866-262b9f5c49fa",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [],
+     "figures": [
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Net realized revenue",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "b629b292-3789-4dd7-87a5-48af006e1885",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "\u20b9482,150.00"
+      },
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Contribution profit",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "f4898999-06ca-405d-8c15-31c610319489",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "\u20b961,320.00"
+      },
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Marketplace fees",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "4a6bf776-02a0-43f8-bc15-5c4d97be9b65",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "\u20b971,044.00"
+      }
+     ],
+     "gaps": [],
+     "headline": "Net realized revenue: \u20b9482,150.00",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "BUSINESS_STATE",
+    "status": "COMPLETE",
+    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+   }
+  ],
+  "investigation": {
+   "created_at": "2026-10-01T09:00:00+00:00",
+   "created_by": "b971f37f-31ef-4e6c-84d4-154cf0e700c4",
+   "id": "223287c9-f793-4365-930e-0c3a4a722f52",
+   "last_message_at": "2026-10-01T09:00:00.014000+00:00",
+   "origin": "USER_CHAT",
+   "resolution_note": null,
+   "resolved_at": null,
+   "resolved_by": null,
+   "situation_id": null,
+   "status": "ACTIVE",
+   "summary": null,
+   "summary_covers_through": null,
+   "title": "Why profit?"
+  },
+  "messages": [
+   {
+    "agent_run_id": null,
+    "choices": null,
+    "content": "Why did my profit drop in September?",
+    "created_at": "2026-10-01T09:00:00.003000+00:00",
+    "created_by": "b971f37f-31ef-4e6c-84d4-154cf0e700c4",
+    "id": "b390d121-9049-4295-8025-ee127f693733",
+    "kind": "TEXT",
+    "role": "USER",
+    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+   },
+   {
+    "agent_run_id": "81041805-d388-4ba9-b557-18a09864de6d",
+    "choices": null,
+    "content": "Here is what we found. 12.5% 30% 4% \u20b9482,150.00 \u20b961,320.00 \u20b971,044.00 The anomaly check (z score) is not configured yet. The anomaly check (percentile threshold) is not configured yet. The anomaly check (period over period delta) is not configured yet. No leak findings are recorded \u2014 reconciliation may not have been run, so this is not a clean bill of health.\n\nFigures as of 2026-10-01.\n\nI read the period 'September' as 2026-09-01 to 2026-09-30.",
+    "created_at": "2026-10-01T09:00:00.014000+00:00",
+    "created_by": null,
+    "id": "8c9c2539-be15-43a7-915a-647776261d46",
+    "kind": "ANSWER",
+    "role": "CEO",
+    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+   }
+  ],
+  "turns": [
+   {
+    "agent_run_id": "81041805-d388-4ba9-b557-18a09864de6d",
+    "ceo_message_id": "8c9c2539-be15-43a7-915a-647776261d46",
+    "classifier_result": {
+     "clarifyFor": null,
+     "effectiveKey": "PROFIT_DIAGNOSIS",
+     "effectiveRoute": "PLAYBOOK",
+     "flags": [],
+     "key": "PROFIT_DIAGNOSIS",
+     "model": "scripted-classifier",
+     "needsAgent": null,
+     "parseOk": true,
+     "promptVersion": "ceo-classifier-3",
+     "rawKey": "PROFIT_DIAGNOSIS",
+     "rawRoute": "PLAYBOOK",
+     "route": "PLAYBOOK",
+     "slots": {
+      "period": "September"
+     }
+    },
+    "completed_at": "2026-10-01T09:00:00.017000+00:00",
+    "composition_mode": "LLM",
+    "created_at": "2026-10-01T09:00:00.004000+00:00",
+    "id": "fb5df38f-845d-43d6-bae8-64e9ba003cab",
+    "investigation_id": "223287c9-f793-4365-930e-0c3a4a722f52",
+    "outcome": null,
+    "route": "PLAYBOOK",
+    "route_key": "PROFIT_DIAGNOSIS",
+    "route_source": "CLASSIFIER",
+    "safety_result": {
+     "gate": "PASS",
+     "promptVersion": "ceo-composer-3"
+    },
+    "slots": {
+     "period": "September"
+    },
+    "stage_timings": {
+     "extras": {
+      "classificationModelMs": 0,
+      "classificationTtftMs": 0,
+      "synthesisModelMs": 0
+     },
+     "legs": [
+      {
+       "action": "cfo.financial_health",
+       "endMs": 375,
+       "startMs": 248,
+       "status": "COMPLETE"
+      },
+      {
+       "action": "cfo.anomaly_check",
+       "endMs": 368,
+       "startMs": 248,
+       "status": "COMPLETE"
+      },
+      {
+       "action": "cfo.strategic_briefing",
+       "endMs": 382,
+       "startMs": 249,
+       "status": "COMPLETE"
+      }
+     ],
+     "requestReceivedAt": "2026-10-11T17:43:07.498329+00:00",
+     "stages": {
+      "admission": {
+       "endMs": 22,
+       "startMs": 0
+      },
+      "capabilities": {
+       "endMs": 200,
+       "startMs": 31
+      },
+      "classification": {
+       "endMs": 214,
+       "startMs": 214
+      },
+      "context": {
+       "endMs": 210,
+       "startMs": 200
+      },
+      "dispatch": {
+       "endMs": 382,
+       "startMs": 247
+      },
+      "synthesis": {
+       "endMs": 404,
+       "startMs": 403
+      }
+     },
+     "totalMs": 435
+    },
+    "status": "DELIVERED",
+    "tenant_id": "023d3a28-2f74-4a1f-a078-d19ac29ca6ec",
+    "user_message_id": "b390d121-9049-4295-8025-ee127f693733"
+   }
+  ]
+ },
+ "turn": {
+  "answer": "Here is what we found. 12.5% 30% 4% \u20b9482,150.00 \u20b961,320.00 \u20b971,044.00 The anomaly check (z score) is not configured yet. The anomaly check (percentile threshold) is not configured yet. The anomaly check (period over period delta) is not configured yet. No leak findings are recorded \u2014 reconciliation may not have been run, so this is not a clean bill of health.\n\nFigures as of 2026-10-01.\n\nI read the period 'September' as 2026-09-01 to 2026-09-30.",
+  "choices": null,
+  "clarificationId": null,
+  "clarifyFor": null,
+  "compositionMode": "LLM",
+  "events": [
+   {
+    "atMs": 0,
+    "data": {},
+    "kind": "TURN_RECEIVED"
+   },
+   {
+    "atMs": 31,
+    "data": {},
+    "kind": "TURN_ADMITTED"
+   },
+   {
+    "atMs": 214,
+    "data": {
+     "route": "PLAYBOOK",
+     "routeKey": "PROFIT_DIAGNOSIS"
+    },
+    "kind": "CLASSIFIED"
+   },
+   {
+    "atMs": 222,
+    "data": {
+     "route": "PLAYBOOK",
+     "routeKey": "PROFIT_DIAGNOSIS"
+    },
+    "kind": "PLAN_VALIDATED"
+   },
+   {
+    "atMs": 248,
+    "data": {
+     "action": "cfo.financial_health"
+    },
+    "kind": "LEG_STARTED"
+   },
+   {
+    "atMs": 248,
+    "data": {
+     "action": "cfo.anomaly_check"
+    },
+    "kind": "LEG_STARTED"
+   },
+   {
+    "atMs": 249,
+    "data": {
+     "action": "cfo.strategic_briefing"
+    },
+    "kind": "LEG_STARTED"
+   },
+   {
+    "atMs": 344,
+    "data": {
+     "entry": "BS_LEAK_OPEN",
+     "status": "UNAVAILABLE"
+    },
+    "kind": "STATE_READ"
+   },
+   {
+    "atMs": 347,
+    "data": {
+     "entry": "BS_DATA_GAPS",
+     "status": "AVAILABLE"
+    },
+    "kind": "STATE_READ"
+   },
+   {
+    "atMs": 353,
+    "data": {
+     "entry": "BS_PNL_LATEST",
+     "status": "AVAILABLE"
+    },
+    "kind": "STATE_READ"
+   },
+   {
+    "atMs": 368,
+    "data": {
+     "action": "cfo.anomaly_check",
+     "agentRunId": "9dbd67e7-aa3c-417a-ad0e-d90343277362",
+     "figureRefs": 0,
+     "findingId": "e3e2af23-f89f-4cee-a1e5-8da9196912db",
+     "status": "COMPLETE"
+    },
+    "kind": "LEG_FINISHED"
+   },
+   {
+    "atMs": 375,
+    "data": {
+     "action": "cfo.financial_health",
+     "agentRunId": "ddcc0b4b-4817-44ea-aa8b-598142f719cc",
+     "figureRefs": 3,
+     "findingId": "ea395033-e687-4442-90ea-26942ffe7543",
+     "status": "COMPLETE"
+    },
+    "kind": "LEG_FINISHED"
+   },
+   {
+    "atMs": 382,
+    "data": {
+     "action": "cfo.strategic_briefing",
+     "agentRunId": "c17d2804-75b3-4fa3-9800-4009b9ca6719",
+     "figureRefs": 1,
+     "findingId": "b32b42f0-8b4e-49f6-a467-2e684f3cf3af",
+     "status": "COMPLETE"
+    },
+    "kind": "LEG_FINISHED"
+   },
+   {
+    "atMs": 403,
+    "data": {},
+    "kind": "SYNTHESIS_STARTED"
+   },
+   {
+    "atMs": 435,
+    "data": {
+     "mode": "LLM",
+     "status": "DELIVERED"
+    },
+    "kind": "ANSWER_READY"
+   }
+  ],
+  "findings": [
+   {
+    "action_key": "cfo.financial_health",
+    "agent_run_id": "ddcc0b4b-4817-44ea-aa8b-598142f719cc",
+    "created_at": "2026-10-01T09:00:00.005000+00:00",
+    "figure_refs": [
+     {
+      "id": "8f4d2ae3-a674-49fc-b012-69c6bb33e5b5",
+      "kind": "ENGINE_RESULT"
+     },
+     {
+      "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+      "kind": "ENGINE_RESULT"
+     },
+     {
+      "id": "25139d22-4b74-4e1a-b9b5-da133c32dba9",
+      "kind": "ENGINE_RESULT"
+     }
+    ],
+    "gap_reason": null,
+    "id": "ea395033-e687-4442-90ea-26942ffe7543",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Overall health band",
+       "text": "WATCH"
+      },
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Contribution margin band",
+       "text": "GOOD"
+      },
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Fee ratio band",
+       "text": "WATCH"
+      },
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Return rate band",
+       "text": "GOOD"
+      }
+     ],
+     "figures": [
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Contribution margin (2026-09-01/2026-09-30)",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "8f4d2ae3-a674-49fc-b012-69c6bb33e5b5",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "12.5%"
+      },
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Fee ratio (2026-09-01/2026-09-30)",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "30%"
+      },
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Return rate (2026-09-01/2026-09-30)",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "25139d22-4b74-4e1a-b9b5-da133c32dba9",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "4%"
+      }
+     ],
+     "gaps": [],
+     "headline": "Contribution margin (2026-09-01/2026-09-30): 12.5%",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "CFO",
+    "status": "COMPLETE"
+   },
+   {
+    "action_key": "cfo.anomaly_check",
+    "agent_run_id": "9dbd67e7-aa3c-417a-ad0e-d90343277362",
+    "created_at": "2026-10-01T09:00:00.006000+00:00",
+    "figure_refs": [],
+    "gap_reason": null,
+    "id": "e3e2af23-f89f-4cee-a1e5-8da9196912db",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [],
+     "figures": [],
+     "gaps": [
+      "The anomaly check (z score) is not configured yet.",
+      "The anomaly check (percentile threshold) is not configured yet.",
+      "The anomaly check (period over period delta) is not configured yet."
+     ],
+     "headline": "The anomaly check (z score) is not configured yet.",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "CFO",
+    "status": "COMPLETE"
+   },
+   {
+    "action_key": "cfo.strategic_briefing",
+    "agent_run_id": "c17d2804-75b3-4fa3-9800-4009b9ca6719",
+    "created_at": "2026-10-01T09:00:00.007000+00:00",
+    "figure_refs": [
+     {
+      "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+      "kind": "ENGINE_RESULT"
+     }
+    ],
+    "gap_reason": null,
+    "id": "b32b42f0-8b4e-49f6-a467-2e684f3cf3af",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Briefing signal: fee ratio",
+       "text": "watch severity; suggested action type review fee mapping or negotiate"
+      }
+     ],
+     "figures": [
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Fee ratio (2026-09-01/2026-09-30)",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "30%"
+      }
+     ],
+     "gaps": [],
+     "headline": "Fee ratio (2026-09-01/2026-09-30): 30%",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "CFO",
+    "status": "COMPLETE"
+   },
+   {
+    "action_key": "BS_LEAK_OPEN",
+    "agent_run_id": null,
+    "created_at": "2026-10-01T09:00:00.011000+00:00",
+    "figure_refs": [],
+    "gap_reason": "No leak findings are recorded \u2014 reconciliation may not have been run, so this is not a clean bill of health.",
+    "id": "99200e5f-689d-49f8-a460-fabbad996713",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [],
+     "figures": [],
+     "gaps": [
+      "No leak findings are recorded \u2014 reconciliation may not have been run, so this is not a clean bill of health."
+     ],
+     "headline": "No leak findings are recorded \u2014 reconciliation may not have been run, so this is not a clean bill of health.",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "BUSINESS_STATE",
+    "status": "UNAVAILABLE"
+   },
+   {
+    "action_key": "BS_DATA_GAPS",
+    "agent_run_id": null,
+    "created_at": "2026-10-01T09:00:00.012000+00:00",
+    "figure_refs": [],
+    "gap_reason": null,
+    "id": "f9cdaac6-5b52-4989-8350-17dad681401a",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [
+      {
+       "basis": "SOURCE_DERIVED",
+       "label": "Data requests",
+       "text": "No inputs are currently being requested."
+      }
+     ],
+     "figures": [],
+     "gaps": [],
+     "headline": "Data requests: No inputs are currently being requested.",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "BUSINESS_STATE",
+    "status": "COMPLETE"
+   },
+   {
+    "action_key": "BS_PNL_LATEST",
+    "agent_run_id": null,
+    "created_at": "2026-10-01T09:00:00.013000+00:00",
+    "figure_refs": [
+     {
+      "as_of": "2026-10-01T09:00:00+00:00",
+      "id": "b629b292-3789-4dd7-87a5-48af006e1885",
+      "kind": "ENGINE_RESULT"
+     },
+     {
+      "as_of": "2026-10-01T09:00:00+00:00",
+      "id": "f4898999-06ca-405d-8c15-31c610319489",
+      "kind": "ENGINE_RESULT"
+     },
+     {
+      "as_of": "2026-10-01T09:00:00+00:00",
+      "id": "4a6bf776-02a0-43f8-bc15-5c4d97be9b65",
+      "kind": "ENGINE_RESULT"
+     }
+    ],
+    "gap_reason": null,
+    "id": "e05ea5a7-2f04-4fc1-9866-262b9f5c49fa",
+    "presentation": {
+     "artefacts": [],
+     "conflicts": [],
+     "facts": [],
+     "figures": [
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Net realized revenue",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "b629b292-3789-4dd7-87a5-48af006e1885",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "\u20b9482,150.00"
+      },
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Contribution profit",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "f4898999-06ca-405d-8c15-31c610319489",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "\u20b961,320.00"
+      },
+      {
+       "as_of": "2026-10-01T09:00:00+00:00",
+       "label": "Marketplace fees",
+       "note": null,
+       "ref": {
+        "as_of": "2026-10-01T09:00:00+00:00",
+        "id": "4a6bf776-02a0-43f8-bc15-5c4d97be9b65",
+        "kind": "ENGINE_RESULT"
+       },
+       "register": "DERIVED",
+       "value": "\u20b971,044.00"
+      }
+     ],
+     "gaps": [],
+     "headline": "Net realized revenue: \u20b9482,150.00",
+     "offers": [],
+     "version": 1
+    },
+    "report_ref": null,
+    "source": "BUSINESS_STATE",
+    "status": "COMPLETE"
+   }
+  ],
+  "messageId": "8c9c2539-be15-43a7-915a-647776261d46",
+  "notes": [
+   "I read the period 'September' as 2026-09-01 to 2026-09-30."
+  ],
+  "outcome": null,
+  "replayed": false,
+  "route": "PLAYBOOK",
+  "routeKey": "PROFIT_DIAGNOSIS",
+  "routeSource": "CLASSIFIER",
+  "status": "DELIVERED",
+  "timings": {
+   "extras": {
+    "classificationModelMs": 0,
+    "classificationTtftMs": 0,
+    "synthesisModelMs": 0
+   },
+   "legs": [
+    {
+     "action": "cfo.financial_health",
+     "endMs": 375,
+     "startMs": 248,
+     "status": "COMPLETE"
+    },
+    {
+     "action": "cfo.anomaly_check",
+     "endMs": 368,
+     "startMs": 248,
+     "status": "COMPLETE"
+    },
+    {
+     "action": "cfo.strategic_briefing",
+     "endMs": 382,
+     "startMs": 249,
+     "status": "COMPLETE"
+    }
+   ],
+   "requestReceivedAt": "2026-10-11T17:43:07.498329+00:00",
+   "stages": {
+    "admission": {
+     "endMs": 22,
+     "startMs": 0
+    },
+    "capabilities": {
+     "endMs": 200,
+     "startMs": 31
+    },
+    "classification": {
+     "endMs": 214,
+     "startMs": 214
+    },
+    "context": {
+     "endMs": 210,
+     "startMs": 200
+    },
+    "dispatch": {
+     "endMs": 382,
+     "startMs": 247
+    },
+    "synthesis": {
+     "endMs": 404,
+     "startMs": 403
+    }
+   },
+   "totalMs": 435
+  },
+  "turnId": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+ }
+}

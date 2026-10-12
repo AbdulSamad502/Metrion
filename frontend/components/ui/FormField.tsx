@@ -26,10 +26,10 @@ export function FormField({
           type={isPassword && reveal ? "text" : inputProps.type}
           id={id}
           // Password managers need this to recognize the field; autoComplete is set per-field by callers.
-          className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors"
+          className="mt-focus w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors"
           style={{
             background: "var(--bg-input)",
-            border: `1px solid ${error ? "var(--negative)" : "var(--border-hover)"}`,
+            border: `1px solid ${error ? "var(--negative)" : "var(--field-edge, var(--border-hover))"}`,
             color: "var(--text-2)",
             paddingRight: isPassword ? "3.25rem" : undefined,
           }}
@@ -38,9 +38,9 @@ export function FormField({
           <button
             type="button"
             onClick={() => setReveal((r) => !r)}
-            tabIndex={-1}
             aria-label={reveal ? "Hide password" : "Show password"}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold"
+            aria-pressed={reveal}
+            className="mt-focus absolute right-2 top-1/2 inline-flex min-h-9 min-w-9 -translate-y-1/2 sm:min-h-6 sm:min-w-6 items-center justify-center rounded px-1.5 text-xs font-semibold"
             style={{ color: "var(--text-6)" }}
           >
             {reveal ? "Hide" : "Show"}

@@ -22,7 +22,7 @@ describe("agents on wires", () => {
       expect(within(canvas).getByTestId(`agent-node-${code}`)).toHaveAttribute("data-state", "ATTACHED");
       expect(within(canvas).getByTestId(`wire-${code}`)).toHaveAccessibleName(`Detach ${code === "CFO" ? "CFO" : code === "CI" ? "Competitor Intelligence" : code === "PI" ? "Product Intelligence" : "Slim CMO"} from this investigation`);
     }
-    expect(screen.getByTestId("connected-row")).toHaveTextContent("4/4 agents connected");
+    expect(screen.getByTestId("connected-row")).toHaveTextContent("4/4 connected");
   });
 
   it("Remove then Connect on the wire: removing starts a conversation if none is open, detaches for future work only, and Connect wires it back", async () => {
@@ -33,7 +33,7 @@ describe("agents on wires", () => {
     expect(fake.count("createInvestigation")).toBe(1);
     expect(fake.calls.find((c) => c.method === "setAgentAttached")?.args.slice(1)).toEqual(["CFO", false]);
     expect(screen.getByTestId("agent-node-CFO")).toHaveTextContent("Removed: not used for new work");
-    expect(screen.getByTestId("connected-row")).toHaveTextContent("3/4 agents connected");
+    expect(screen.getByTestId("connected-row")).toHaveTextContent("3/4 connected");
     await u.click(screen.getByTestId("wire-CFO"));
     await waitFor(() => expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "ATTACHED"));
   });

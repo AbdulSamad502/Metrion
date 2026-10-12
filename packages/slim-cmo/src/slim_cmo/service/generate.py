@@ -171,6 +171,21 @@ def _already_current(new: NewFact, stored: Sequence[FactInput]) -> bool:
 already_current = _already_current  # shared with the catalog service
 
 
+class _HookedProvider:
+    """Calls `service.before_model_call` (when set) just before each model call. The host uses it to record that a run has really started: until the first model call a
+    request can still be rejected and leaves nothing behind."""
+
+    def __init__(self, inner: LlmProvider, service: "GenerationService") -> None:
+        self._inner = inner
+        self._service = service
+
+    def complete(self, *, model: str, prompt: str) -> str:
+        hook = self._service.before_model_call
+        if hook is not None:
+            hook()
+        return self._inner.complete(model=model, prompt=prompt)
+
+
 class GenerationService:
     def __init__(
         self,
@@ -186,7 +201,8 @@ class GenerationService:
         if not model.strip():
             raise ValueError("model is required (supplied by the composition root)")
         self._store = store
-        self._provider = provider
+        self.before_model_call: Callable[[], None] | None = None
+        self._provider = _HookedProvider(provider, self)
         self._model = model
         self._clock = clock
         self._kinds = accepted_row_kinds

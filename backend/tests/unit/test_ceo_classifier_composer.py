@@ -139,7 +139,7 @@ def test_the_schema_closes_route_key_over_the_catalog():
 def test_the_classifier_sees_only_bounded_context_and_finding_labels():
     ctx = classifier.TurnContext(summary="s", recent=tuple(("USER", f"m{i}") for i in range(30)), findings=("cfo.financial_health COMPLETE as of 2026-10-01",))
     p = classifier.build_prompt(FULL, "go", ctx)
-    assert "m29" in p and "m5" not in p.split("Recent messages:")[1].split("Findings")[0]  # only the last few messages
+    assert "m29" in p and "m5" not in p.split("Recent messages (JSON list):")[1].split("Findings")[0]  # only the last few messages
     assert "₹" not in p
 
 

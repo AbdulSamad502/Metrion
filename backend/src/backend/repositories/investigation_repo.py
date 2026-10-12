@@ -380,6 +380,92 @@ def update_turn(
             raise InvestigationNotFound(f"turn {turn_id}")
 
 
+def finalise_turn(
+    tenant_id: UUID,
+    turn_id: UUID,
+    *,
+    status: str,
+    billing: Mapping[str, Any],
+    ceo_message_id: UUID | None = None,
+    composition_mode: str | None = None,
+    safety_result: Mapping[str, Any] | None = None,
+    stage_timings: Mapping[str, Any] | None = None,
+    completed_at: datetime | None = None,
+) -> bool:
+    """Ends a turn AND stores its billing decision, once. The UPDATE applies only to a turn that is not yet complete and has no stored decision, so
+    exactly one caller ever finalises a turn: it returns True for that caller and False for any other (a replay, a race, a recovery). Only the
+    caller that got True may write the usage event (approval prerequisite R2: the decision is stored once and usage is written once)."""
+    with tenant_scope(tenant_id) as conn:
+        result = conn.execute(
+            text(
+                "UPDATE investigation_turn SET status = :status, "
+                "ceo_message_id = COALESCE(:ceo_msg, ceo_message_id), "
+                "composition_mode = COALESCE(:mode, composition_mode), "
+                "safety_result = COALESCE(CAST(:safety AS jsonb), safety_result, CAST('{}' AS jsonb)) || jsonb_build_object('billing', CAST(:billing AS jsonb)), "
+                "stage_timings = COALESCE(CAST(:timings AS jsonb), stage_timings), "
+                "completed_at = COALESCE(:done, completed_at) "
+                "WHERE id = :id AND completed_at IS NULL AND NOT (COALESCE(safety_result, CAST('{}' AS jsonb)) ? 'billing')"
+            ),
+            {"id": str(turn_id), "status": status, "ceo_msg": str(ceo_message_id) if ceo_message_id else None,
+             "mode": composition_mode, "safety": _jsonb(safety_result), "timings": _jsonb(stage_timings),
+             "done": completed_at, "billing": _jsonb(billing)},
+        )
+        return result.rowcount == 1
+
+
+def list_open_ceo_runs(tenant_id: UUID, investigation_id: UUID) -> list[dict[str, Any]]:
+    """RUNNING conversational CEO runs of one investigation (the seller's turns; SYSTEM runs are not this recovery's business)."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text("SELECT id, investigation_id, started_at FROM agent_run WHERE investigation_id = :inv AND agent_id = 'CEO' AND trigger_type = 'CONVERSATIONAL' AND status = 'RUNNING' ORDER BY started_at"),
+            {"inv": str(investigation_id)},
+        )
+        return [dict(r._mapping) for r in rows]
+
+
+def investigations_with_open_ceo_runs(tenant_id: UUID) -> list[UUID]:
+    with tenant_scope(tenant_id) as conn:
+        return [r[0] for r in conn.execute(text("SELECT DISTINCT investigation_id FROM agent_run WHERE agent_id = 'CEO' AND trigger_type = 'CONVERSATIONAL' AND status = 'RUNNING' AND investigation_id IS NOT NULL"))]
+
+
+_LATE_LEGS_FROM = (
+    "FROM agent_run c JOIN agent_run p ON p.id = c.parent_run_id "
+    "WHERE p.agent_id = 'CEO' AND p.trigger_type = 'CONVERSATIONAL' AND p.status NOT IN ('QUEUED', 'RUNNING') AND c.status IN ('QUEUED', 'RUNNING')"
+)
+
+
+def list_late_legs(tenant_id: UUID, investigation_id: UUID) -> list[dict[str, Any]]:
+    """Legs still QUEUED/RUNNING although the CEO turn that started them has ended (the soft leg deadline passed and the turn answered without them)."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(f"SELECT c.id, c.agent_id, c.trigger_ref, c.started_at, c.parent_run_id {_LATE_LEGS_FROM} AND p.investigation_id = :inv ORDER BY c.started_at"),
+            {"inv": str(investigation_id)},
+        )
+        return [dict(r._mapping) for r in rows]
+
+
+def investigations_with_late_legs(tenant_id: UUID) -> list[UUID]:
+    with tenant_scope(tenant_id) as conn:
+        return [r[0] for r in conn.execute(text(f"SELECT DISTINCT p.investigation_id {_LATE_LEGS_FROM} AND p.investigation_id IS NOT NULL"))]
+
+
+def get_turn_for_run(tenant_id: UUID, run_id: UUID) -> dict[str, Any] | None:
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(text("SELECT * FROM investigation_turn WHERE agent_run_id = :r"), {"r": str(run_id)}).first()
+        return dict(row._mapping) if row is not None else None
+
+
+def find_turn_by_request_key(tenant_id: UUID, investigation_id: UUID, request_key: str) -> dict[str, Any] | None:
+    """The turn a submission key already produced in THIS investigation, if any (the key lives in the turn's `classifier_result`; no schema is involved).
+    The caller holds the investigation's turn lock, which is what makes check-then-act race-free."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text("SELECT * FROM investigation_turn WHERE investigation_id = :inv AND classifier_result->>'requestKey' = :k ORDER BY created_at LIMIT 1"),
+            {"inv": str(investigation_id), "k": request_key},
+        ).first()
+        return dict(row._mapping) if row is not None else None
+
+
 def get_turn(tenant_id: UUID, turn_id: UUID) -> dict[str, Any] | None:
     with tenant_scope(tenant_id) as conn:
         row = conn.execute(text("SELECT * FROM investigation_turn WHERE id = :id"), {"id": str(turn_id)}).first()
@@ -468,6 +554,30 @@ def insert_attachment(
              "st": extraction_status, "note": extraction_note, "txt": extracted_text, "by": str(created_by) if created_by else None, "at": _now(now)},
         )
     return new_id
+
+
+def get_attachment_contents(tenant_id: UUID, investigation_id: UUID, ids: Sequence[UUID]) -> list[dict[str, Any]]:
+    """The bytes of the named attachments of THIS investigation in THIS tenant (an id that is foreign, from another conversation or unknown is simply absent)."""
+    if not ids:
+        return []
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text("SELECT id, filename, detected_type, content FROM investigation_attachment WHERE investigation_id = :inv AND id = ANY(CAST(:ids AS uuid[])) ORDER BY created_at"),
+            {"inv": str(investigation_id), "ids": [str(i) for i in ids]},
+        )
+        return [{**dict(r._mapping), "content": bytes(r._mapping["content"])} for r in rows]
+
+
+def find_attachment_by_sha(tenant_id: UUID, investigation_id: UUID, sha256: str) -> dict[str, Any] | None:
+    """The attachment of THIS investigation (and tenant) with exactly this content, if one is already stored: attaching the same file twice (a double click, a retry after a
+    lost response) gives back the first one instead of storing the bytes again."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text("SELECT id, filename, detected_type, byte_size, extraction_status, extraction_note FROM investigation_attachment "
+                 "WHERE investigation_id = :inv AND sha256 = :sha ORDER BY created_at LIMIT 1"),
+            {"inv": str(investigation_id), "sha": sha256},
+        ).first()
+    return dict(row._mapping) if row else None
 
 
 def get_attachments(tenant_id: UUID, investigation_id: UUID, ids: Sequence[UUID]) -> list[dict[str, Any]]:

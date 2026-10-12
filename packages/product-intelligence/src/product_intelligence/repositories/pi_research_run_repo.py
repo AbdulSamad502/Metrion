@@ -38,9 +38,9 @@ def create_run(
             text(
                 """
                 INSERT INTO pi_research_run
-                    (tenant_id, niche_brief_id, depth, trigger, candidate_cap, status)
+                    (tenant_id, niche_brief_id, depth, trigger, candidate_cap, status, created_at)
                 VALUES
-                    (:tenant_id, :niche_brief_id, :depth, :trigger, :candidate_cap, :status)
+                    (:tenant_id, :niche_brief_id, :depth, :trigger, :candidate_cap, :status, now())
                 RETURNING id
                 """
             ),
@@ -147,6 +147,38 @@ def finish_run(tenant_id: UUID, run_id: UUID, *, status: str, finished_at: datet
         )
         if result.rowcount == 0:
             raise ValueError(f"pi_research_run {run_id} not found for tenant {tenant_id}")
+
+
+def record_outcome(tenant_id: UUID, run_id: UUID, *, outcome_code: str, usage_due: bool) -> bool:
+    """Stores the run's accounting decision ONCE (first writer wins). Returns True only for the call that stored it, so only that
+    caller may write usage events. Legacy rows (created_at IS NULL) are never given a decision (migration 20261011_0002)."""
+    with tenant_scope(tenant_id) as conn:
+        result = conn.execute(
+            text(
+                "UPDATE pi_research_run SET outcome_code = :outcome_code, usage_due = :usage_due "
+                "WHERE tenant_id = :tenant_id AND id = :id AND created_at IS NOT NULL AND usage_due IS NULL AND outcome_code IS NULL"
+            ),
+            {"tenant_id": str(tenant_id), "id": str(run_id), "outcome_code": outcome_code, "usage_due": usage_due},
+        )
+        return result.rowcount == 1
+
+
+def operational_counts(tenant_id: UUID) -> dict[str, int]:
+    """Operational counts of runs, kept SEPARATE from usage (Q-R3): `started` = every row ever inserted (what `count_runs_for_tenant`
+    has always returned), `failed` = status FAILED, `interrupted` = reconciled as interrupted/unknown-outcome, `successful` = runs whose stored
+    decision says they were billable. Legacy rows (no decision) are only ever counted as started/failed."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text(
+                "SELECT count(*) AS started, "
+                "count(*) FILTER (WHERE status = 'FAILED') AS failed, "
+                "count(*) FILTER (WHERE outcome_code IN ('INTERRUPTED', 'OUTCOME_UNKNOWN')) AS interrupted, "
+                "count(*) FILTER (WHERE usage_due IS TRUE) AS successful "
+                "FROM pi_research_run WHERE tenant_id = :tenant_id"
+            ),
+            {"tenant_id": str(tenant_id)},
+        ).one()
+    return {"started": int(row.started), "failed": int(row.failed), "interrupted": int(row.interrupted), "successful": int(row.successful)}
 
 
 def latest_run_for_tenant(tenant_id: UUID, *, finished_only: bool = False) -> dict[str, Any] | None:

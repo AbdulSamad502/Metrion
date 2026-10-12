@@ -8,6 +8,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { ApiError, apiFetch, type ImportComponent, type ImportDetail, type ImportRow } from "@/lib/api";
+import { friendlyApiError } from "@/lib/apiErrors";
 
 const PAGE_SIZE = 50;
 
@@ -127,7 +128,7 @@ function ImportViewerBody({ reportFileId, getToken }: { reportFileId: string; ge
         const token = await getToken();
         setDetail(await apiFetch<ImportDetail>(`/api/v1/cfo/imports/${reportFileId}?limit=${PAGE_SIZE}&offset=${at}`, token));
       } catch (e) {
-        setError(e instanceof ApiError ? (e.status === 404 ? "This import no longer exists." : e.message) : "Could not reach the backend");
+        setError(e instanceof ApiError && e.status === 404 ? "This import no longer exists." : friendlyApiError(e, "Could not reach the backend"));
       } finally {
         setLoading(false);
       }

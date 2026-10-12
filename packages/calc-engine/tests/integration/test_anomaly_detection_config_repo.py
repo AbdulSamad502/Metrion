@@ -15,6 +15,7 @@ from sqlalchemy import text
 
 from calc_engine.repositories.config_repo import resolve_anomaly_detection_config
 from calc_engine.repositories.tenant_context import tenant_scope
+from tests.integration.owner_db import owner_tenant_scope
 
 pytestmark = pytest.mark.usefixtures("_clean_engine_tables")
 
@@ -33,7 +34,7 @@ def _insert(
     effective_from="2026-01-01",
     version=1,
 ):
-    with tenant_scope(connect_as_tenant if connect_as_tenant is not None else tenant_id) as conn:
+    with owner_tenant_scope(connect_as_tenant if connect_as_tenant is not None else tenant_id) as conn:  # configuration is written by an operator (owner role)
         conn.execute(
             text(
                 """

@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { AuthCard } from "@/components/ui/AuthCard";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
-import { apiFetch, ApiError, type SessionResponse } from "@/lib/api";
+import { apiFetch, type SessionResponse } from "@/lib/api";
+import { friendlyApiError } from "@/lib/apiErrors";
 import { useSubmitGuard } from "@/lib/useSubmitGuard";
 
 /** The O1/O2 blocking business-name onboarding step — the one screen Clerk doesn't
@@ -50,7 +51,7 @@ export default function OnboardingPage() {
       setSession(s);
       return s;
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not reach the backend");
+      setError(friendlyApiError(e, "Could not reach the backend"));
       return null;
     }
   };
@@ -119,7 +120,7 @@ export default function OnboardingPage() {
 
         await loadSession();
       } catch (e) {
-        setError(e instanceof ApiError ? e.message : "Onboarding failed");
+        setError(friendlyApiError(e, "Onboarding failed"));
       } finally {
         setSubmitting(false);
       }

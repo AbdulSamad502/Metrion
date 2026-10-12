@@ -3,7 +3,8 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { apiFetch, ApiError, type SessionResponse } from "@/lib/api";
+import { apiFetch, type SessionResponse } from "@/lib/api";
+import { friendlyApiError } from "@/lib/apiErrors";
 
 /** Shared gate for every page in the signed-in app shell: redirects to /sign-in if
  * unauthenticated, to /onboarding if not yet ACTIVE, and otherwise resolves the session +
@@ -22,19 +23,24 @@ export function useAppSession() {
       router.replace("/sign-in");
       return;
     }
+    let alive = true; // a reply that arrives after the page is gone must not update it
     (async () => {
       try {
         const token = await getToken();
         const s = await apiFetch<SessionResponse>("/api/v1/session", token);
+        if (!alive) return;
         if (s.onboardingState !== "ACTIVE") {
           router.replace("/onboarding");
           return;
         }
         setSession(s);
       } catch (e) {
-        setError(e instanceof ApiError ? e.message : "Could not reach the backend");
+        if (alive) setError(friendlyApiError(e, "Could not reach the backend"));
       }
     })();
+    return () => {
+      alive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, isSignedIn]);
 

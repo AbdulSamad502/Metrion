@@ -92,6 +92,7 @@ def test_the_whole_price_impact_conversation_builds_the_same_inputs_as_the_form_
     res = say(ctx, rt, inv, "₹499")  # 6 current price
     res = say(ctx, rt, inv, "449, 479")  # 7 candidates
     assert res.clarify_for == "shipping" and [o["label"] for o in res.choices["options"][:2]] == ["None (0), I confirm", "Unknown"]
+    assert [o["label"] for o in res.choices["options"] if o.get("skip")] == ["Unknown"] and any(o["kind"] == "BACK" for o in res.choices["options"])  # only the deliberate "unknown" is skippable
     res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, "None (0), I confirm"))  # 8 shipping confirmed zero
     res = say(ctx, rt, inv, "5")  # 9 advertising typed amount
     res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, "Unknown"))  # 10 return/RTO unknown
@@ -150,3 +151,54 @@ def test_new_product_conversation_runs_with_the_collected_inputs(two_tenants, ap
     final = say(ctx, rt, inv, "", card=res.message_id, option=res.choices["options"][0]["key"])
     assert final.status == "DELIVERED" and set(calls) == {"cfo.landed_cost", "cfo.supplier_ranking", "cfo.batch_size"}
     assert calls["cfo.batch_size"][0].period_end.isoformat() == "2026-10-01"  # the chosen window ends on the test clock's day
+
+
+def test_back_re_asks_the_previous_question_without_a_model_call_and_the_seller_can_answer_it_differently(two_tenants, app_user):
+    a, _ = two_tenants
+    calls: dict = {}
+    ctx = ctx_for(a, user_id=app_user)
+    rt = rt_for(calls)
+    inv = start(ctx, rt)
+    first = orchestrator.run_turn(ctx, rt, inv, "New product", ui_action=UI("PLAYBOOK", "NEW_PRODUCT_DECISION"))
+    assert first.clarify_for == "sku" and all(o["kind"] != "BACK" for o in first.choices["options"])  # nothing to go back to on the first question
+    second = say(ctx, rt, inv, "SKU-1")
+    assert second.clarify_for == "quantity" and second.choices["pending"]["collected"] == {"sku": "SKU-1"}
+    assert [o["key"] for o in second.choices["options"]][-2:] == ["back", "cancel"]
+    again = say(ctx, rt, inv, "", card=second.message_id, option="back")
+    assert again.clarify_for == "sku" and again.answer.startswith("(1 of 8)") and again.choices["pending"]["collected"] == {}  # the answer is dropped from the session, not guessed
+    fixed = say(ctx, rt, inv, "SKU-2")
+    assert fixed.clarify_for == "quantity" and fixed.choices["pending"]["collected"] == {"sku": "SKU-2"}
+    assert calls == {}
+
+
+def test_back_removes_only_the_last_answer_by_field_order_not_by_stored_key_order(two_tenants, app_user):
+    a, _ = two_tenants
+    calls: dict = {}
+    ctx = ctx_for(a, user_id=app_user)
+    rt = rt_for(calls)
+    inv = start(ctx, rt)
+    orchestrator.run_turn(ctx, rt, inv, "New product", ui_action=UI("PLAYBOOK", "NEW_PRODUCT_DECISION"))
+    say(ctx, rt, inv, "SKU-1")
+    third = say(ctx, rt, inv, "200")
+    assert third.clarify_for == "window"
+    back = say(ctx, rt, inv, "", card=third.message_id, option="back")
+    assert back.clarify_for == "quantity" and back.choices["pending"]["collected"] == {"sku": "SKU-1"}
+
+
+def test_a_back_reply_on_the_first_question_is_refused_not_ignored(two_tenants, app_user):
+    a, _ = two_tenants
+    ctx = ctx_for(a, user_id=app_user)
+    rt = rt_for({})
+    inv = start(ctx, rt)
+    first = orchestrator.run_turn(ctx, rt, inv, "New product", ui_action=UI("PLAYBOOK", "NEW_PRODUCT_DECISION"))
+    with pytest.raises(orchestrator.InvalidClarification):
+        say(ctx, rt, inv, "", card=first.message_id, option="back")
+
+
+def test_only_options_that_record_unknown_on_purpose_are_flagged_skippable(two_tenants, app_user):
+    a, _ = two_tenants
+    comp_ctx = ctx_for(a, user_id=app_user)
+    rt = rt_for({})
+    inv = start(comp_ctx, rt)
+    res = orchestrator.run_turn(comp_ctx, rt, inv, "New product", ui_action=UI("PLAYBOOK", "NEW_PRODUCT_DECISION"))
+    assert not any(o.get("skip") for o in res.choices["options"])  # the SKU question has nothing that can be skipped

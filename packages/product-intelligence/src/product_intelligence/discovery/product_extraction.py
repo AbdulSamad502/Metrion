@@ -40,6 +40,7 @@ import json
 import re
 from dataclasses import dataclass
 from typing import Protocol
+from product_intelligence.ollama_errors import describe_ollama_error
 
 
 class ProductExtractionClient(Protocol):
@@ -138,7 +139,7 @@ class OllamaProductExtractionClient:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise ProductExtractionUnavailable(f"Ollama request failed: {exc}") from exc
+            raise ProductExtractionUnavailable(f"Ollama request failed: {describe_ollama_error(exc, self.model)}") from None
 
         body = response.json()
         raw_text = body.get("response")

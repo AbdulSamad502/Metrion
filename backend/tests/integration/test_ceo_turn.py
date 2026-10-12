@@ -55,7 +55,8 @@ class Scripted:
         def script(prompt: str, schema):
             self.calls += 1
             self.prompts.append(prompt)
-            msg = prompt.split('Seller message: """')[1].split('"""')[0]
+            line = next(l for l in prompt.split(STATIC_END, 1)[1].splitlines() if l.startswith("Seller message (JSON string): "))
+            msg = json.loads(line.split(": ", 1)[1])  # the seller's message is a JSON string in the prompt (hardening Fix 5)
             return self.table[msg]
 
         return ScriptedModel(script, name="scripted-classifier")

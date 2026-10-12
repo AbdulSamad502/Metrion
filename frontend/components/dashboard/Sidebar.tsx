@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { Icon } from "@/components/ui/Icon";
-import { FOOTER_NAV, NAV_GROUPS, isActive, type NavItem } from "@/lib/navigation";
+import { FOOTER_NAV, NAV_GROUPS, SYSTEM_GROUP_LABEL, isActive, type NavItem } from "@/lib/navigation";
 
 /** The persistent app navigation (docs/design/frontend-design). Active state comes from the
  * URL, not a prop, so it can never disagree with the page; a single indicator slides to the
@@ -32,6 +32,7 @@ export function Sidebar({
   const { signOut } = useClerk();
   const pathname = usePathname();
   const navRef = useRef<HTMLElement | null>(null);
+  const asideRef = useRef<HTMLElement | null>(null);
   const indicatorRef = useRef<HTMLDivElement | null>(null);
 
   const initials = userName
@@ -41,6 +42,34 @@ export function Sidebar({
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+  // The mobile drawer is a modal-style overlay below the desktop breakpoint. Escape closes it (kept current through a ref so the effect below does not re-run).
+  const closeRef = useRef(onCloseMobile);
+  useEffect(() => { closeRef.current = onCloseMobile; });
+
+  // Focus moves into the drawer when it opens, Tab stays inside while it is open, and focus returns to whatever opened it when it closes.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const aside = asideRef.current;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusables = () => Array.from(aside?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? []).filter((el) => { const cs = getComputedStyle(el); return cs.display !== "none" && cs.visibility !== "hidden"; });
+    focusables()[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { closeRef.current(); return; }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) return;
+      const first = list[0], last = list[list.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      else if (aside && !aside.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      opener?.focus();
+    };
+  }, [mobileOpen]);
 
   // Slide the indicator to the active row. Imperative on purpose: it is pure presentation, so no
   // state/re-render is needed, and it runs before paint so it never flashes in the wrong place.
@@ -97,9 +126,10 @@ export function Sidebar({
         aria-hidden
       />
       <aside
+        ref={asideRef}
         aria-label="Primary"
         className={`mt-sidebar fixed inset-y-0 left-0 z-[70] flex h-screen w-[264px] flex-shrink-0 flex-col transition-[transform,width] duration-200 lg:static lg:z-auto lg:translate-x-0 ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+          mobileOpen ? "translate-x-0" : "invisible -translate-x-full lg:visible" // off-screen and out of the tab order until opened
         } ${collapsed ? "lg:w-[76px]" : "lg:w-60"}`}
       >
         <div className={`flex items-center gap-2.5 px-5 pb-4 pt-5 ${collapsed ? "lg:justify-center lg:px-0" : ""}`}>
@@ -124,19 +154,31 @@ export function Sidebar({
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="mb-0.5">
               <div
-                className={`px-3 pb-1.5 pt-3 t-nano font-bold uppercase tracking-wider ${collapsed ? "lg:invisible lg:h-3 lg:p-0" : ""}`}
+                className={`px-3 pb-1.5 pt-3 [@media(max-height:800px)]:pt-1.5 t-nano font-bold uppercase tracking-wider ${collapsed ? "lg:invisible lg:h-3 lg:p-0" : ""}`}
                 style={{ color: "var(--text-6)" }}
               >
                 {group.label}
               </div>
               {group.items.map((item) => (
-                <NavRow key={item.id} item={item} active={isActive(item, pathname)} collapsed={collapsed} />
+                <NavRow
+                  key={item.id}
+                  item={item}
+                  active={isActive(item, pathname)}
+                  collapsed={collapsed}
+                  attention={item.id === "notifications" ? attentionCount : 0}
+                />
               ))}
             </div>
           ))}
 
           <div className="flex-1" />
-          <div className="my-2 h-px" style={{ background: "var(--border-subtle)" }} />
+          <div className="my-2 h-px [@media(max-height:800px)]:my-1" style={{ background: "var(--border-subtle)" }} />
+          <div
+            className={`px-3 pb-1.5 pt-1 t-nano font-bold uppercase tracking-wider ${collapsed ? "lg:invisible lg:h-0 lg:p-0" : ""}`}
+            style={{ color: "var(--text-6)" }}
+          >
+            {SYSTEM_GROUP_LABEL}
+          </div>
           {FOOTER_NAV.map((item) => (
             <NavRow
               key={item.id}
@@ -176,7 +218,7 @@ export function Sidebar({
             <div className="truncate t-body-sm font-semibold" style={{ color: "var(--text-2)" }}>
               {userName}
             </div>
-            <div className="truncate t-micro" style={{ color: "var(--text-7)" }}>
+            <div className="truncate t-micro" style={{ color: "var(--text-5)" }}>
               {roleLabel}
             </div>
           </div>
@@ -236,7 +278,7 @@ function NavRow({
       )}
     </>
   );
-  const className = `mt-nav-item mt-focus flex items-center gap-3 rounded-xl px-3 py-2 t-body ${collapsed ? "lg:justify-center lg:px-0" : ""}`;
+  const className = `mt-nav-item mt-focus flex min-h-[44px] items-center gap-3 rounded-xl px-3 py-2 lg:min-h-0 t-body ${collapsed ? "lg:justify-center lg:px-0" : ""}`;
   const style: React.CSSProperties = {
     color: active ? "var(--text-1)" : item.soon ? "var(--text-6)" : "var(--text-4)",
     fontWeight: active ? 600 : 500,

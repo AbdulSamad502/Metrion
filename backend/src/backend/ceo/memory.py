@@ -7,6 +7,7 @@ never evidence: it can pre-fill a question or let the CEO say "you told me", and
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ from typing import Any
 from uuid import UUID
 
 from backend.repositories import agent_memory_repo as repo
+
+logger = logging.getLogger(__name__)
 
 AGENTS = ("CEO", "CFO", "PI", "CMO", "CI")
 SHARED_KINDS = repo.SHARED_KINDS
@@ -67,13 +70,8 @@ def extract(text: str) -> list[Candidate]:
 
 # ------------------------------------------------------------------------------------------------ writes
 def _set(tenant: UUID, *, scope: str, agent: str, kind: str, key: str, value: str, basis: str, source_ref: Mapping[str, Any] | None, created_by: UUID | None) -> bool:
-    """Save a value unless it is already the active one; a different value supersedes the old one. Returns whether anything was written."""
-    current = repo.list_active(tenant, scope=scope, agent=agent, kind=kind, key=key, limit=1)
-    if current and current[0]["value"] == value:
-        return False
-    repo.insert(tenant, scope=scope, agent=agent, kind=kind, key=key, value=value, basis=basis, source_ref=source_ref, created_by=created_by,
-                supersedes_id=current[0]["id"] if current else None)
-    return True
+    """Save a value unless it is already the active one; a different value supersedes the old one. Returns whether anything was written. One transaction per key, serialized (see the repository)."""
+    return repo.set_active(tenant, scope=scope, agent=agent, kind=kind, key=key, value=value, basis=basis, source_ref=source_ref, created_by=created_by) is not None
 
 
 def promote(tenant: UUID, *, agent: str, kind: str, key: str, value: str, basis: str, source_ref: Mapping[str, Any], created_by: UUID | None) -> bool:
@@ -91,25 +89,33 @@ def note(tenant: UUID, *, agent: str, key: str, value: str, basis: str, source_r
 
 
 def remember_from_message(tenant: UUID, user_id: UUID | None, message_id: UUID, text: str) -> list[str]:
-    """Capture what the seller just stated; returns the acknowledgement lines to append to the answer (written by code, quoting the seller's own words)."""
+    """Capture what the seller just stated; returns the acknowledgement lines to append to the answer (written by code, quoting the seller's own words).
+
+    Each statement is saved on its own. If one cannot be saved, the ones that were saved are still acknowledged (nothing is remembered silently) and the failed one is not
+    claimed; the failure is raised only when NOTHING could be saved, so the caller logs it and the seller is not told something false."""
     acks: list[str] = []
+    failure: Exception | None = None
     for c in extract(text):
         label = {"business_name": "your business name", "niche": "your niche", "marketplaces": "where you sell"}[c.key]
-        if promote(tenant, agent="CEO", kind=c.kind, key=c.key, value=c.value, basis="SELLER_STATED", source_ref={"message_id": str(message_id)}, created_by=user_id):
+        try:
+            saved = promote(tenant, agent="CEO", kind=c.kind, key=c.key, value=c.value, basis="SELLER_STATED", source_ref={"message_id": str(message_id)}, created_by=user_id)
+        except Exception as exc:  # noqa: BLE001 - recorded below; the other statements in the same message still get their chance
+            logger.exception("could not remember %s from message %s", c.key, message_id)
+            failure = failure or exc
+            continue
+        if saved:
             acks.append(f"I'll remember {label}: {c.value}. You can change or remove it under “What I remember”.")
         else:
             acks.append(f"I already have {label}: {c.value}.")  # the same fact again: acknowledged, nothing new saved
+    if failure is not None and not acks:
+        raise failure
     return acks
 
 
 def forget(tenant: UUID, memory_id: UUID, user_id: UUID | None) -> bool:
-    """Forget one active item: a FORGOTTEN row supersedes it. A foreign, unknown or already-superseded id is simply not found."""
-    row = repo.get(tenant, memory_id)
-    if row is None or row["status"] != "ACTIVE" or not any(str(r["id"]) == str(memory_id) for r in repo.list_active(tenant, kind=row["kind"], key=row["key"], scope=row["scope"], agent=row["agent_code"])):
-        return False
-    repo.insert(tenant, scope=row["scope"], agent=row["agent_code"], kind=row["kind"], key=row["key"], value="(forgotten)", basis=row["basis"],
-                source_ref={"forgot": str(memory_id)} if row["basis"] != "AGENT_NOTE" else None, created_by=user_id, supersedes_id=memory_id, status="FORGOTTEN")
-    return True
+    """Forget one active item: a FORGOTTEN row supersedes it. A foreign, unknown, stale or already-forgotten id is simply not found. Atomic per key: of several simultaneous
+    forgets of one item exactly one succeeds."""
+    return repo.forget_head(tenant, memory_id, user_id)
 
 
 # ------------------------------------------------------------------------------------------------ reads

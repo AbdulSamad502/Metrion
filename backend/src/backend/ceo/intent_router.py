@@ -23,7 +23,7 @@ _WRITE = r"(?:write|give|generate|create|make|suggest|need|want|get|draft|find|s
 
 
 # A general "how should I think about..." question has no data in it: it is answered as general guidance (ADVISORY), never turned into a request for a marketplace or period.
-_GENERAL_ASK = re.compile(r"^\W*(?:how (?:should|do|can|would|could) (?:i|we)\b|what(?:'s| is) the best way to\b|any tips\b|tips (?:for|on)\b|explain\b|why is it important\b|what should i (?:think|know) about\b)", re.IGNORECASE)
+_GENERAL_ASK = re.compile(r"^\W*(?:tell me about\b|what makes (?:a|an|the) (?:good|great|best|effective)\b|how (?:should|do|can|would|could) (?:i|we)\b|what(?:'s| is) the best way to\b|any tips\b|tips (?:for|on)\b|explain\b|why is it important\b|what should i (?:think|know) about\b)", re.IGNORECASE)
 _DATA_WORDS = re.compile(r"\b(?:my|our|mine)\b.*\b(?:profit|margin|sales?|revenue|orders?|returns?|data|reports?|stock|inventory|costs?|competitors?|settlements?|gst|skus?)\b|\b(?:september|october|august|july|june|last month|this month|last week|today|yesterday)\b", re.IGNORECASE)
 
 
@@ -53,9 +53,9 @@ STATE_RULES: tuple[Rule, ...] = (
     Rule("QT_DATA_GAPS", "CFO", _rx(
         r"\bwhat (?:data|inputs?|information|reports?|details?) (?:are you|is|do you) (?:still )?(?:missing|need|needed|required)\b|\bwhat (?:are you|do you) (?:still )?(?:missing|need)\b|\bwhat(?:'s| is) missing\b|\bdata gaps?\b"), "BUSINESS_STATE"),
     Rule("QT_COMPETITORS_PRICES", "CI", _rx(
-        r"^(?!.*\bmargin\b).*(?:\bwhat(?:'s| is| are)? (?:my |our |the )?competitors?\b.*\b(?:charg\w*|pric\w*|sell\w* (?:at|for))\b|\bcompetitors?'? prices?\b|\bhow much (?:are|is|do) (?:my |our |the )?competitors?\b.*\b(?:charg\w*|sell\w*)\b)"), "BUSINESS_STATE"),
+        r"^(?!.*\b(?:margin|scenarios?)\b).*(?:\bwhat(?:'s| is| are)? (?:my |our |the )?competitors?\b.*\b(?:charg\w*|pric\w*|sell\w* (?:at|for))\b|\bcompetitors?'? prices?\b|\bhow much (?:are|is|do) (?:my |our |the )?competitors?\b.*\b(?:charg\w*|sell\w*)\b)"), "BUSINESS_STATE"),
     Rule("QT_PRODUCT_IDEAS", "PI", _rx(
-        r"\bwhat (?:product )?(?:ideas?|products?)\b.*\b(?:did you|have you|you) (?:find|found|list|listed|come up with)\b|\bproduct ideas? (?:you|we) (?:found|listed|have)\b|\bwhat did (?:you|the research|product intelligence) (?:find|found)\b"), "BUSINESS_STATE"),
+        r"\bwhat (?:product )?(?:ideas?|products?)\b.*\b(?:did you|have you|you) (?:find|found|list|listed|come up with)\b|\bproduct ideas? (?:you|we) (?:found|listed|have)\b|\bwhat did (?:you|the (?:product )?research|product intelligence) (?:find|found)\b"), "BUSINESS_STATE"),
     Rule("QT_LISTING_CONTENT", "CMO", _rx(
         r"\bwhat (?:titles?|descriptions?|hashtags?|keywords?|listing (?:content|copy)|content)\b.*\b(?:did|have) (?:we|you|i)\b.*\b(?:write|wrote|written|generat\w+|made|create\w*)\b|\b(?:titles?|descriptions?|hashtags?) (?:we|you) (?:wrote|made|generated|created)\b"), "BUSINESS_STATE"),
     Rule("QT_GOALS", "CFO", _rx(r"\bwhat(?:'s| is| are) (?:my|our) (?:goals?|targets?|target margin)\b|\bwhat (?:goal|target) (?:did i|have i|did we) (?:set|give|gave)\b"), "BUSINESS_STATE"),
@@ -74,7 +74,16 @@ RULES: tuple[Rule, ...] = STATE_RULES + (
     Rule("gst_lookup", "CFO", _rx(r"\bgst\b.*\b(?:rate|percent|percentage|%|slab|apply|applies|applicable|charge)\b|\b(?:rate|percent|percentage|slab)\b.*\bgst\b|\bgst (?:on|for|of)\b")),
     Rule("NEW_PRODUCT_DECISION", "CFO", _rx(r"\bworth (?:stocking|buying|importing|selling)\b|\bshould i (?:stock|buy|import|order)\b"), "PLAYBOOK"),
     Rule("COMPETITOR_PRICE_IMPACT", "CI", _rx(r"(?=.*\bmargin\b)(?:.*\b(?:at|match|matched|matching|beat|undercut)\b.*\bprice\b|.*\b(?:is|are|dropped|cut|lowered)\b.*\b(?:at|to)\s*(?:₹|rs\.?)?\s*\d)"), "PLAYBOOK"),
-    Rule("cmo.generate_hashtags", "CMO", _rx(r"\bhash\s?tags?\b")),
+    # A price scenario for ONE competitor (the saved list of competitor prices is a state read, matched earlier and excluded when the word "scenario" is used).
+    Rule("ci.request_price_scenario", "CI", _rx(r"\bprice scenarios?\b|\bscenarios?\b.*\bprices?\b|\bprices?\b.*\bscenarios?\b|\bprice positioning\b")),
+    # B. hashtags: only an explicit request to GENERATE them. A question ABOUT hashtags (tell me about, what makes, how do, why, were those any good...) is not one.
+    Rule(
+        "cmo.generate_hashtags", "CMO",
+        _rx(
+            r"^(?!\s*(?:tell me about|explain|what (?:is|are|makes?)|what's|how (?:do|does|should|many|to|can)|why|were|are|is|do|does|did)\b)"
+            r"(?:.*\b(?:write|give|generate|create|make|suggest|draft|need|want|get)\b.*\bhash\s?tags?\b|.*\bhash\s?tags?\s+(?:for|ideas?)\b)"
+        ),
+    ),
     Rule("cmo.generate_title_sets", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing |product |amazon |flipkart |meesho )?titles?\b|\btitles? (?:options?|ideas?|for)\b")),
     Rule("cmo.generate_description", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:product |listing )?descriptions?\b")),
     Rule("cmo.generate_keywords", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:search |seo )?keywords?\b|\bkeywords? (?:for|ideas?)\b")),
@@ -84,7 +93,10 @@ RULES: tuple[Rule, ...] = STATE_RULES + (
         "pi.discover", "PI",
         _rx(
             # asking to SEE an earlier run (report, status, latest, saved...) is not a request to start a new one
-            r"^(?!.*\b(?:report|status|latest|last|previous|saved|earlier)\b).*(?:"
+            r"^(?!.*\b(?:report|status|latest|last|previous|saved|earlier)\b)"
+            # not for competitors (Competitor Intelligence), the seller's OWN sales, or a question about a result that is already saved
+            r"(?!.*\bcompetitors?\b)(?!.*\b(?:my|our)\b[^?.]*\b(?:top|best)[- ]?sell\w*)(?!.*\b(?!(?:amazon|flipkart|meesho|india|the market)\b)\w+['\u2019]s\s+(?:top|best)[- ]?sell)"  # "Acme's top sellers": a named party, not the market
+            r"(?!.*\bwhat did\b.*\b(?:research|find|found)\b).*(?:"
             r"\b(?:trending|top[- ]selling|best[- ]selling|best ?sellers?|winning|hot|top)\b.*\bproducts?\b"
             r"|\bproducts? (?:to|i can|i should) sell\b|\bwhat (?:should|can|do) i sell\b|\bproduct (?:ideas?|research|discovery)\b"
             r"|\b(?:find|discover|suggest|research|recommend)\b.*\b(?:products?|niche)\b|\bniche research\b)"
@@ -93,7 +105,8 @@ RULES: tuple[Rule, ...] = STATE_RULES + (
 )
 
 _PRODUCT_AFTER_FOR = re.compile(r"\bfor (?:my|the|a|an|our)?\s*([\w][\w \-']{1,80}?)(?=\s+(?:on|in|at)\s+(?:amazon|flipkart|meesho)\b|[.,?!]|$)", re.IGNORECASE)
-_NICHE = re.compile(r"\b(?:niche|nich|category|segment)\s*(?:is|:|=|-)?\s*([\w][\w \-']{1,60}?)(?=[.,?!]|\s+(?:on|in|with|under|budget)\b|$)", re.IGNORECASE)
+_NICHE = re.compile(r"\b(?:niche|nich|category|segment)\s*(?:is|:|=|-)?\s*(?!(?:under|below|within|upto|up to|budget|on|in|with|for)\b)([\w][\w \-']{1,60}?)(?=[.,?!]|\s+(?:on|in|with|under|budget)\b|$)", re.IGNORECASE)
+_NICHE_BEFORE = re.compile(r"\b(?:in|for|of|within)\s+(?:the |a |an |my )?([\w][\w \-']{1,60}?)\s+(?:niche|category|segment)\b", re.IGNORECASE)
 _BUDGET = re.compile(r"(?:under|below|within|upto|up to|budget(?: of| is)?|max(?:imum)?)\s*((?:₹|rs\.?|inr)?\s*[\d,]+(?:\.\d+)?)", re.IGNORECASE)
 
 
@@ -112,6 +125,8 @@ def _product_text(raw: str | None) -> str | None:
     return v
 
 
+_SCENARIO_AMOUNT = re.compile(r"\b(?:at|to|@)\s*((?:(?i:₹|rs\.?|inr))?\s*\d[\d,]*(?:\.\d+)?)")
+_SCENARIO_COMPETITOR = re.compile(r"\b(?:against|versus|vs\.?|for|with|from)\s+([A-Z][\w\-']*(?:\s+[A-Z][\w\-']*)*)")  # a named competitor only; never guessed
 _RIVAL_PRICE_OF = re.compile(r"\b(?:at|if i match(?:ed)?|matching|match|beat|undercut)\s+(?:the\s+)?(?P<c>[\w][\w \-']{1,40}?)(?:'s|\u2019s|s')\s+(?:new\s+|current\s+)?price", re.IGNORECASE)
 _RIVAL_AT_PRICE = re.compile(r"^\W*(?:so\s+|ok\s+)?(?P<c>[\w][\w \-']{1,40}?)\s+(?:is|are|dropped|cut|lowered)\b.*?\b(?:at|to)\s*(?P<p>(?:₹|rs\.?)?\s*\d+(?:,\d+)*(?:\.\d+)?)", re.IGNORECASE)
 _STOCK_BEFORE = re.compile(r"^\W*(?:is|are)\s+(?:the\s+|my\s+|a\s+)?(?P<p>[\w][\w \-']{1,60}?)\s+worth\s+(?:stocking|buying|importing|selling)", re.IGNORECASE)
@@ -130,6 +145,9 @@ def _slots(rule: Rule, text: str) -> dict[str, str]:
         m = _RIVAL_AT_PRICE.search(text)
         c = _product_text(m.group("c")) if m else None
         return {"competitor": c, "amount": m.group("p").strip()} if m and c else {}
+    if rule.key == "ci.request_price_scenario":  # only what the seller said: no competitor and no price is ever assumed (the plan asks for what is missing)
+        amount, rival = _SCENARIO_AMOUNT.search(text), _SCENARIO_COMPETITOR.search(text)
+        return {**({"competitor": rival.group(1).strip()} if rival else {}), **({"amount": amount.group(1).strip()} if amount else {})}
     if rule.key == "NEW_PRODUCT_DECISION":
         m = _STOCK_BEFORE.search(text) or _STOCK_AFTER.search(text)
         product = _product_text(m.group("p") if m else None)
@@ -142,7 +160,7 @@ def _slots(rule: Rule, text: str) -> dict[str, str]:
     if m:
         out["marketplace"] = m.group(1)
     if rule.agent == "PI":
-        niche = _NICHE.search(text)
+        niche = _NICHE_BEFORE.search(text) or _NICHE.search(text)
         if niche:
             out["product"] = niche.group(1).strip()
         budget = _BUDGET.search(text)

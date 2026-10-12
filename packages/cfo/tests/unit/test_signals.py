@@ -136,3 +136,35 @@ def test_ranking_is_deterministic_and_repeatable():
     first = compose_strategic_signals(**kwargs)
     second = compose_strategic_signals(**kwargs)
     assert [s.headline for s in first] == [s.headline for s in second]
+
+
+# --- Issue 20 (Metrion_24_Fixes): the same missing input listed twice ----------------------------------------------------------------------------------------------
+
+
+def test_identical_open_data_requests_give_one_signal_each_distinct_one_is_kept():
+    same = lambda: DataRequestInput(requested_field="supplier.quote", reason="No active quote exists for SKU-1.", blocking_metric="LANDED_COST")  # noqa: E731
+    signals = compose_strategic_signals(
+        data_requests=[
+            same(),
+            same(),  # a second failed run raised the same request again
+            DataRequestInput(requested_field="supplier.quote", reason="No active quote exists for SKU-2.", blocking_metric="LANDED_COST"),  # another SKU: kept
+            DataRequestInput(requested_field="supplier.quote", reason="No active quote exists for SKU-1.", blocking_metric="BATCH_SIZE"),  # another metric: kept
+            DataRequestInput(requested_field="supplier.quote", reason="No active quote exists for SKU-1.", blocking_metric=None),  # none vs a metric: kept
+        ]
+    )
+    headlines = sorted(s.headline for s in signals)
+    assert headlines == [
+        "Missing: supplier.quote",
+        "Missing: supplier.quote (blocks BATCH_SIZE)",
+        "Missing: supplier.quote (blocks LANDED_COST)",
+        "Missing: supplier.quote (blocks LANDED_COST)",
+    ]
+    assert sorted(s.evidence[0].text_value for s in signals if s.headline.endswith("(blocks LANDED_COST)")) == [
+        "No active quote exists for SKU-1.",
+        "No active quote exists for SKU-2.",
+    ]
+
+
+def test_deduplication_keeps_the_first_occurrences_order_so_the_result_is_deterministic():
+    reqs = [DataRequestInput(requested_field=f"f{i % 3}", reason="r", blocking_metric="M") for i in range(9)]
+    assert [s.headline for s in compose_strategic_signals(data_requests=reqs)] == [f"Missing: f{i} (blocks M)" for i in range(3)]

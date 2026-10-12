@@ -1,9 +1,12 @@
 "use client";
 
+import { PAGE_COPY } from "@/lib/navigation";
 import { useAuth } from "@clerk/nextjs";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import type { IconName } from "@/components/ui/Icon";
-import { ApiError, apiFetch, type AgentStatus } from "@/lib/api";
+import { friendlyApiError } from "@/lib/apiErrors";
+import { apiFetch, type AgentStatus } from "@/lib/api";
+import type { AgentAvailability } from "@/lib/ceo";
 
 /** Presentation metadata for the agents the backend roster can return. The roster itself
  * (`GET /api/v1/ceo-hub/agents`) only carries id / name / CONNECTED|NOT_CONNECTED — what each
@@ -25,35 +28,53 @@ const AGENT_META: Record<string, AgentMeta> = {
     description: "Tracks competitor prices and availability from evidence you provide, and flags what changed.",
     icon: "competitors",
     href: "/dashboard/competitors",
-    workspaceLabel: "Open Competitors",
+    workspaceLabel: `Open ${PAGE_COPY.competitors.title}`,
   },
   PI: {
     role: "Product Intelligence",
     description: "Finds niches and candidate products, checks feasibility against your costs, shortlists suppliers.",
     icon: "products",
     href: "/dashboard/pi",
-    workspaceLabel: "Open Products",
+    workspaceLabel: `Open ${PAGE_COPY.products.title}`,
   },
   CFO: {
     role: "Finance",
     description: "Reconciles settlements, computes true contribution profit, GST and leaks from your uploaded reports.",
     icon: "finance",
     href: "/dashboard/cfo",
-    workspaceLabel: "Open CFO",
+    workspaceLabel: `Open ${PAGE_COPY.cfo.title}`,
   },
   CMO: {
     role: "Marketing",
     description: "Writes marketplace titles and listing copy, answers catalog questions and researches your niche — as text for you to copy; it never publishes anything.",
     icon: "marketing",
     href: "/dashboard/cmo",
-    workspaceLabel: "Open Marketing",
+    workspaceLabel: `Open ${PAGE_COPY.cmo.title}`,
   },
 };
 
 const FALLBACK: AgentMeta = { role: "Agent", description: "No description available.", icon: "agents" };
 
+/** How a specialist's availability is worded everywhere (Overview, Agents, the diagram), so one state never has three names. */
+export const TIER_LABEL: Record<AgentTier, string> = {
+  connected: "Works with Ask Metrion",
+  available: "Own page only",
+  unavailable: "Not built yet",
+};
+
 export function agentMeta(id: string): AgentMeta {
   return AGENT_META[id] ?? FALLBACK;
+}
+
+/** The backend's roster (`GET /ceo-hub/agents`) is a fixed list that still marks Product Intelligence and the CFO as not connected, although the CEO registry has
+ * wired actions for both. What the CEO can really run for this member is `GET /ceo/agents/availability` (permission, plan and wired chat actions), so an agent that
+ * answers PRESENT with at least one chat action is shown as connected. An agent the member may not use, or one the plan excludes, is left as the roster says. */
+export function withChatAvailability(roster: AgentStatus[], availability: Partial<AgentAvailability> | null | undefined): AgentStatus[] {
+  if (!availability) return roster;
+  return roster.map((a) => {
+    const live = (availability as Record<string, { status?: string; chatActions?: number } | undefined>)[a.id];
+    return live && live.status === "PRESENT" && typeof live.chatActions === "number" && live.chatActions > 0 ? { ...a, status: "CONNECTED" as const } : a;
+  });
 }
 
 /** Loads the real agent roster. `status` is what the backend reports about CEO routing
@@ -64,13 +85,24 @@ export function useAgentRoster() {
   const [agents, setAgents] = useState<AgentStatus[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const alive = useRef(true); // a reply that arrives after the page is gone must not update it
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
   const load = useCallback(async () => {
     try {
       const token = await getToken();
-      setAgents(await apiFetch<AgentStatus[]>("/api/v1/ceo-hub/agents", token));
+      const [list, live] = await Promise.all([
+        apiFetch<AgentStatus[]>("/api/v1/ceo-hub/agents", token),
+        // best effort: a member without the CEO key, or a failed read, simply keeps the roster's own statuses
+        apiFetch<AgentAvailability>("/api/v1/ceo/agents/availability", token).catch(() => null),
+      ]);
+      if (!alive.current) return;
+      setAgents(withChatAvailability(list, live));
       setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not reach the backend");
+      if (alive.current) setError(friendlyApiError(e, "Could not reach the backend"));
     }
   }, [getToken]);
 

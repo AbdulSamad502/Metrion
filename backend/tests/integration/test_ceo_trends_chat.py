@@ -17,6 +17,7 @@ from tests.integration.test_ceo_turn import Grounded, Scripted, runtime, start
 
 pytestmark = [pytest.mark.usefixtures("two_tenants"), pytest.mark.skipif(not os.environ.get("DATABASE_URL_APP") or not os.environ.get("DATABASE_URL"), reason="needs a live Postgres")]
 
+
 DIGEST = "a" * 64
 ASK = "what are the market trends in my niche on Amazon?"
 
@@ -56,6 +57,7 @@ def say(ctx, rt, inv, text, *, prev=None, option=None):
     return orchestrator.run_turn(ctx, rt, inv, text or "(chose an option)", clarification=clar)
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_the_exact_searches_are_shown_first_and_nothing_runs_until_the_seller_confirms(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}
@@ -74,6 +76,7 @@ def test_the_exact_searches_are_shown_first_and_nothing_runs_until_the_seller_co
     assert "What the CMO makes of it" in done.answer and "Your niche: no confirmed niche terms" in done.answer  # a section that could not be built is a named gap
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_cancel_runs_nothing(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}
@@ -85,6 +88,7 @@ def test_cancel_runs_nothing(two_tenants, app_user):
     assert "Nothing was run" in stopped.answer and "cmo.market_trends" not in calls
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_the_marketplace_is_asked_when_not_given_and_nothing_to_search_is_said_plainly(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}

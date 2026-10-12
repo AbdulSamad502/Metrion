@@ -42,6 +42,7 @@ from backend.auth.permissions import (
 )
 from backend.entitlement import cfo_entitlement_check_value, resolve_cfo_entitlement, resolve_gst_lookup_entitlement
 from backend.repositories import agent_run_repo
+from backend.repositories.agent_run_repo import settles_open_runs
 from backend.services import cmo_actions
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,7 @@ def _missing(role: str, permissions: Mapping[str, object], keys: tuple[str, ...]
     return tuple(k for k in keys if not has_permission(role=role, permissions=dict(permissions), key=k))
 
 
+@settles_open_runs
 def dispatch_cmo(
     tenant_id: UUID,
     *,
@@ -146,6 +148,7 @@ def dispatch_cmo(
     return CeoHubCmoResult(run, payload)
 
 
+@settles_open_runs
 def dispatch_cmo_market_trends_preview(
     tenant_id: UUID, *, requested_by: UUID, role: str, permissions: Mapping[str, object], body: Any, now: datetime | None = None
 ) -> CeoHubCmoResult:
@@ -224,6 +227,7 @@ def select_gst_route(role: str, permissions: Mapping[str, object]) -> GstRoute |
     return GstRoute.A_CFO if has_permission(role=role, permissions=dict(permissions), key=AGENT_CFO) else GstRoute.B_SHARED
 
 
+@settles_open_runs
 def dispatch_gst_lookup(
     tenant_id: UUID,
     *,

@@ -272,6 +272,7 @@ _SUPPLIER_RANKING_CONFIG_VERSION = "CFO_SUPPLIER_RANKING.v1"
 _FUNDING_READINESS_CONFIG_VERSION = "CFO_FUNDING_READINESS.v1"
 _BATCH_SIZE_CONFIG_VERSION = "CFO_BATCH_SIZE.v1"
 _LEAK_SHIELD_CONFIG_VERSION = "CFO_LEAK_SHIELD.v1"
+_CASH_RECONCILIATION_CONFIG_VERSION = "CFO_CASH_RECONCILIATION.v1"
 
 # engine §7.2.1 — the authoritative manual_adjustment field registry. CFO never invents a
 # field name (cfo-agent.md line 73); `enter_expense` is restricted to exactly this set.
@@ -4140,7 +4141,12 @@ class CashReconciliationOutcome:
 def assemble_cash_reconciliation(tenant_id: UUID, request: CashReconciliationRequest) -> CashReconciliationOutcome:
     """cfo-agent.md §6.10 — real HTTP wiring for `deterministic-engine.md` §5.13.3's
     `cash_reconciliation`. No new arithmetic: every figure comes straight from the engine call
-    below."""
+    below.
+
+    Persists the five returned `MetricResult`s (available or not) via `metric_result_repo.save_many`,
+    like every other CFO composition: each figure the route returns cites an `engineResultRef`, and a
+    reference to a row that was never stored cannot be resolved by the screen, by the CEO's provenance
+    gate or by an audit. One transaction; the engine call itself is unchanged."""
     result = compute_cash_reconciliation(
         tenant_id,
         marketplace=request.marketplace,
@@ -4148,6 +4154,22 @@ def assemble_cash_reconciliation(tenant_id: UUID, request: CashReconciliationReq
         period_end=request.period_end,
         as_of_date=request.as_of_date,
         computed_at=datetime.now(timezone.utc),
+    )
+    period_label = f"{request.period_start.isoformat()}/{request.period_end.isoformat()}"
+    metric_result_repo.save_many(
+        tenant_id,
+        [
+            (
+                metric,
+                {
+                    "grain": "TENANT_PERIOD",
+                    "target_ref": f"MARKETPLACE:{request.marketplace}",
+                    "period": period_label,
+                    "config_version": _CASH_RECONCILIATION_CONFIG_VERSION,
+                },
+            )
+            for metric in (result.cash_received, result.cash_expected, result.cash_variance, result.tcs_collected, result.tds_deducted)
+        ],
     )
     return CashReconciliationOutcome(
         cash_received=result.cash_received,

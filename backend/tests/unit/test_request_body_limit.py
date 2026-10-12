@@ -171,3 +171,130 @@ def test_malformed_multipart_within_the_limit_is_a_client_error_never_a_500(clie
 def test_routes_not_in_the_limit_table_are_unaffected(client) -> None:
     r = client.post("/api/v1/cfo/pricing-curve", content=b"x" * 300_000)
     assert r.status_code != 413
+
+
+# ---- a limit for a route with an id in its path (the CEO attachment upload) ----------------------
+
+
+def _templated(inner, limit=100):
+    return RequestBodyLimitMiddleware(inner, limits={"/inv/{investigation_id}/attachments": limit}, overhead_bytes=0)
+
+
+async def test_a_templated_path_limit_applies_to_any_id() -> None:
+    inner = _Recorder()
+    status, _, pulled = await _call(_templated(inner), chunks=[b"x" * 101], content_length=101, path="/inv/6f1c1a52-0d2f-4a9e-8d57-2f1c9c1b7a10/attachments")
+    assert status == 413 and not inner.called and pulled == 0
+
+
+async def test_a_templated_path_limit_lets_an_at_limit_body_through() -> None:
+    inner = _Recorder()
+    status, _, _ = await _call(_templated(inner), chunks=[b"x" * 100], content_length=100, path="/inv/abc/attachments")
+    assert status == 200 and inner.body_bytes == 100
+
+
+@pytest.mark.parametrize("path", ["/inv/a/b/attachments", "/inv//attachments", "/inv/abc/attachments/extra", "/other/abc/attachments"])
+async def test_a_templated_limit_does_not_leak_onto_other_paths(path: str) -> None:
+    inner = _Recorder()
+    status, _, _ = await _call(_templated(inner), chunks=[b"x" * 5000], content_length=5000, path=path)
+    assert status == 200 and inner.called  # not this route's limit: handled (or refused) by the route itself
+
+
+def test_the_real_app_cuts_off_an_oversized_ceo_attachment_before_authentication(monkeypatch) -> None:
+    monkeypatch.setenv("CEO_ATTACHMENT_MAX_BYTES", "1000")
+    client = TestClient(main_module.create_app(), raise_server_exceptions=False)
+    big = {"file": ("big.pdf", b"%PDF-" + b"x" * (200 * 1024), "application/pdf")}  # far over limit + envelope overhead
+    resp = client.post("/api/v1/ceo/investigations/6f1c1a52-0d2f-4a9e-8d57-2f1c9c1b7a10/attachments", files=big)  # no credentials at all
+    assert resp.status_code == 413  # refused before auth and before the multipart parser spooled it
+
+
+def test_the_ceo_attachment_cap_is_not_invented_when_unset(monkeypatch) -> None:
+    monkeypatch.delenv("CEO_ATTACHMENT_MAX_BYTES", raising=False)
+    client = TestClient(main_module.create_app(), raise_server_exceptions=False)
+    big = {"file": ("big.pdf", b"%PDF-" + b"x" * (200 * 1024), "application/pdf")}
+    resp = client.post("/api/v1/ceo/investigations/6f1c1a52-0d2f-4a9e-8d57-2f1c9c1b7a10/attachments", files=big)
+    assert resp.status_code == 401  # no cap configured -> no middleware entry; the normal auth answer, nothing made up
+
+
+# ---- the default limit for every other (JSON) route ----------------------------------------------------------------
+
+
+def _with_default(inner, default=100, upload=1000):
+    return RequestBodyLimitMiddleware(inner, limits={"/upload": upload}, overhead_bytes=0, default_limit=default)
+
+
+async def test_a_json_body_exactly_at_the_default_limit_is_passed_through() -> None:
+    inner = _Recorder()
+    status, _, _ = await _call(_with_default(inner), chunks=[b"x" * 100], content_length=100, path="/api/v1/anything")
+    assert status == 200 and inner.body_bytes == 100
+
+
+async def test_one_byte_over_the_default_limit_is_413_before_the_app_runs() -> None:
+    inner = _Recorder()
+    status, body, pulled = await _call(_with_default(inner), chunks=[b"x" * 101], content_length=101, path="/api/v1/anything")
+    assert status == 413 and not inner.called and pulled == 0
+    assert "limit" in json.loads(body)["detail"]
+
+
+async def test_a_chunked_json_body_without_content_length_is_cut_off() -> None:
+    inner = _Recorder()
+    status, _, pulled = await _call(_with_default(inner), chunks=[b"x" * 40 for _ in range(50)], path="/api/v1/anything")
+    assert status == 413 and pulled < 50
+
+
+async def test_an_upload_route_keeps_its_own_larger_limit_under_a_small_default() -> None:
+    inner = _Recorder()
+    status, _, _ = await _call(_with_default(inner), chunks=[b"x" * 900], content_length=900, path="/upload")
+    assert status == 200 and inner.body_bytes == 900
+
+
+async def test_a_malformed_content_length_is_400_and_a_get_is_never_limited() -> None:
+    inner = _Recorder()
+    status, _, _ = await _call(_with_default(inner), chunks=[b""], content_length="abc", path="/api/v1/anything")  # type: ignore[arg-type]
+    assert status == 400 and not inner.called
+    status, _, _ = await _call(_with_default(_Recorder()), chunks=[b"x" * 5000], content_length=5000, method="GET", path="/api/v1/anything")
+    assert status == 200
+
+
+async def test_no_default_limit_means_no_limit_on_other_routes() -> None:
+    inner = _Recorder()
+    status, _, _ = await _call(RequestBodyLimitMiddleware(inner, limits={}, overhead_bytes=0), chunks=[b"x" * 5000], content_length=5000, path="/api/v1/anything")
+    assert status == 200
+
+
+def test_the_default_limit_configuration(monkeypatch) -> None:
+    from backend import config
+
+    monkeypatch.delenv("API_MAX_BODY_BYTES", raising=False)
+    assert config.api_max_body_bytes() == 1024 * 1024
+    monkeypatch.setenv("API_MAX_BODY_BYTES", "2048")
+    assert config.api_max_body_bytes() == 2048
+    monkeypatch.setenv("API_MAX_BODY_BYTES", "0")
+    assert config.api_max_body_bytes() is None
+    for bad in ("-1", "abc", "1.5"):
+        monkeypatch.setenv("API_MAX_BODY_BYTES", bad)
+        with pytest.raises(ValueError):
+            config.api_max_body_bytes()
+
+
+def test_the_real_app_refuses_an_oversized_json_body_before_authentication(monkeypatch) -> None:
+    monkeypatch.setenv("API_MAX_BODY_BYTES", "2000")
+    client = TestClient(main_module.create_app(), raise_server_exceptions=False)
+    url = "/api/v1/ceo/investigations/6f1c1a52-0d2f-4a9e-8d57-2f1c9c1b7a10/turns"
+    assert client.post(url, content=b'{"message": "' + b"x" * 5000 + b'"}', headers={"content-type": "application/json"}).status_code == 413
+    assert client.post(url, json={"message": "hi"}).status_code == 401  # a normal body reaches the normal answer
+    assert client.post(url, content=b'{"message": ' + b"x" * 1000, headers={"content-type": "application/json"}).status_code == 422  # malformed but under the limit: FastAPI's own answer, as before
+
+
+def test_the_real_app_with_the_limit_off_does_not_cap(monkeypatch) -> None:
+    monkeypatch.setenv("API_MAX_BODY_BYTES", "0")
+    client = TestClient(main_module.create_app(), raise_server_exceptions=False)
+    url = "/api/v1/ceo/investigations/6f1c1a52-0d2f-4a9e-8d57-2f1c9c1b7a10/turns"
+    assert client.post(url, content=b"x" * 3_000_000, headers={"content-type": "application/json"}).status_code == 422  # not 413: nothing caps it
+
+
+def test_the_default_applies_to_the_real_app_when_nothing_is_configured(monkeypatch) -> None:
+    monkeypatch.delenv("API_MAX_BODY_BYTES", raising=False)
+    client = TestClient(main_module.create_app(), raise_server_exceptions=False)
+    url = "/api/v1/ceo/investigations/6f1c1a52-0d2f-4a9e-8d57-2f1c9c1b7a10/turns"
+    assert client.post(url, content=b"x" * (1024 * 1024 + 1), headers={"content-type": "application/json"}).status_code == 413
+    assert client.post(url, content=b"x" * 1024 * 1024, headers={"content-type": "application/json"}).status_code == 422  # exactly at the limit: passed on (then rejected as malformed)

@@ -1,13 +1,7 @@
 import { Card, CardCta } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
-import { agentMeta, agentTier, type AgentTier } from "@/lib/agents";
+import { agentMeta, agentTier, TIER_LABEL } from "@/lib/agents";
 import type { AgentStatus } from "@/lib/api";
-
-const TIER_LABEL: Record<AgentTier, string> = {
-  connected: "Wired to CEO",
-  available: "Workspace available",
-  unavailable: "Not built yet",
-};
 
 /** One agent, answering five questions in reading order: who is it, what does it do, is it
  * available, what did it last do, and where do I go next. Presence follows the tier — a wired
@@ -45,7 +39,7 @@ export function AgentCard({ agent, lastActivity }: { agent: AgentStatus; lastAct
             <Icon name={meta.icon} size={19} />
           </span>
           <div className="min-w-0">
-            <div className="t-card-title truncate" style={{ color: dead ? "var(--text-5)" : "var(--text-1)" }}>
+            <div className="t-card-title break-words" style={{ color: dead ? "var(--text-5)" : "var(--text-1)" }}>
               {agent.name}
             </div>
             <div className="t-meta mt-1 flex items-center gap-1.5" style={{ color: live ? "var(--accent)" : "var(--text-5)" }}>

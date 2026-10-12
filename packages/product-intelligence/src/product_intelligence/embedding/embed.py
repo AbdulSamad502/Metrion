@@ -18,6 +18,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from product_intelligence.repositories import product_embedding_repo
+from product_intelligence.ollama_errors import describe_ollama_error
 
 MODEL_NAME = "nomic-embed-text"
 MODEL_DIM = 768
@@ -50,7 +51,7 @@ class OllamaEmbeddingClient:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise EmbeddingUnavailable(f"Ollama embeddings request failed: {exc}") from exc
+            raise EmbeddingUnavailable(f"Ollama embeddings request failed: {describe_ollama_error(exc, self._model)}") from None
 
         try:
             body = response.json()
@@ -89,7 +90,7 @@ class OllamaEmbeddingClient:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise EmbeddingUnavailable(f"Ollama batch embeddings request failed: {exc}") from exc
+            raise EmbeddingUnavailable(f"Ollama batch embeddings request failed: {describe_ollama_error(exc, self._model)}") from None
         try:
             body = response.json()
         except ValueError as exc:

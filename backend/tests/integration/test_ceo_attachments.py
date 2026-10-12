@@ -131,6 +131,120 @@ def test_an_attachment_of_another_tenant_or_another_conversation_is_refused_and_
 def test_more_files_than_the_configured_count_is_refused(api, env):
     client, ha, *_ = api
     inv = start(client, ha)
-    ids = [upload(client, ha, inv, f"{i}.csv", b"a,b\n1,2\n").json()["id"] for i in range(3)]
+    ids = [upload(client, ha, inv, f"{i}.csv", f"a,b\n1,{i}\n".encode()).json()["id"] for i in range(3)]  # different content: identical bytes are one attachment
     r = client.post(f"/api/v1/ceo/investigations/{inv}/turns", json={"message": ASK, "attachment_ids": ids}, headers=ha)
     assert r.status_code == 422 and r.json()["detail"]["code"] == "TOO_MANY_ATTACHMENTS"
+
+
+def test_an_unauthenticated_upload_is_refused(api, env):
+    client, ha, *_ = api
+    inv = start(client, ha)
+    r = client.post(f"/api/v1/ceo/investigations/{inv}/attachments", files={"file": ("a.csv", b"a,b\n1,2\n", "text/csv")})
+    assert r.status_code == 401
+
+
+def test_attaching_the_same_file_twice_stores_it_once(api, env):
+    client, ha, *_ = api
+    inv = start(client, ha)
+    first = upload(client, ha, inv, "orders.csv", b"a,b\n1,2\n")
+    second = upload(client, ha, inv, "renamed.csv", b"a,b\n1,2\n")  # the same bytes under another name: a retry or a double click
+    assert first.status_code == 201 and second.status_code == 201
+    assert second.json()["id"] == first.json()["id"] and second.json().get("duplicate") is True and "duplicate" not in first.json()
+    other = start(client, ha)
+    third = upload(client, ha, other, "orders.csv", b"a,b\n1,2\n")  # another conversation is its own scope
+    assert third.json()["id"] != first.json()["id"]
+
+
+def test_a_storage_failure_is_an_error_not_a_success_and_leaks_nothing(api, env, monkeypatch):
+    client, ha, *_ = api
+    inv = start(client, ha)
+
+    def broken(*_a, **_k):
+        raise RuntimeError("disk full: TOPSECRET-CONTENT")
+
+    monkeypatch.setattr(ceo_api.repo, "insert_attachment", broken)
+    from backend.main import app
+
+    quiet = TestClient(app, raise_server_exceptions=False)  # the crash is answered as a 500 body; do not re-raise it into the test
+    r = quiet.post(f"/api/v1/ceo/investigations/{inv}/attachments", files={"file": ("a.csv", b"a,b\n1,2\n", "text/csv")}, headers=ha)
+    assert r.status_code >= 500 and "TOPSECRET" not in r.text and "id" not in (r.json() if r.headers.get("content-type", "").startswith("application/json") else {})
+
+
+# ------------------------------------------------------------------------------------------------ spreadsheet analysis (spec 6.34 addendum)
+SETTLEMENT = (
+    "Order ID,Settlement Date,Item Price,Commission,Shipping Fee,Status\n"
+    "S1,2026-09-01,1000.00,100.00,40.00,Delivered\n"
+    "S2,2026-09-02,500.50,50.05,40.00,Returned\n"
+    "S3,2026-09-03,300.00,30.00,,Delivered\n"
+).encode()
+
+
+def _ledger_counts(tenant_id):
+    from sqlalchemy import text
+
+    from backend.tenant_context import tenant_scope
+
+    tables = ("metric_result", "sales_line", "settlement_line", "report_file", "ingestion_run", "leak_finding", "validation_finding")
+    with tenant_scope(tenant_id) as conn:
+        return {t: conn.execute(text(f"SELECT count(*) FROM {t}")).scalar() for t in tables}
+
+
+def _turn(client, headers, inv, message, ids):
+    return client.post(f"/api/v1/ceo/investigations/{inv}/turns", json={"message": message, "attachment_ids": ids}, headers=headers)
+
+
+def test_the_ceo_answers_from_an_attached_csv_with_no_model_and_creates_no_financial_records(api, env):
+    client, ha, _, a, composer = api
+    inv = start(client, ha)
+    up = upload(client, ha, inv, "settlement.csv", SETTLEMENT, "text/csv")
+    assert up.status_code == 201 and up.json()["table"] == {"status": "READ", "sheets": [{"name": "(CSV)", "rows": 3, "columns": 6, "headerRow": 1, "truncated": False}], "sheetsTruncated": False}
+    before = _ledger_counts(a)
+    r = _turn(client, ha, inv, "What are the largest fees in this settlement report, and how many were returned?", [up.json()["id"]])
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "DELIVERED" and composer.calls == 0  # the classifier was never scripted for this message, the composer was never called
+    answer = body["answer"]
+    # independent hand calculation: Commission 100+50.05+30 = 180.05 ; Shipping Fee 40+40 = 80.00 (one blank, not zero) ; Item Price 1,800.50
+    assert "'Commission': 180.05" in answer and "'Shipping Fee': 80.00" in answer and "'Shipping Fee': 80.00 (" in answer
+    assert "'Returned' on 1 of 3 filled rows (33.3%)" in answer
+    assert "nothing was imported, saved or changed" in answer and "settlement.csv" in answer and "rows 2-4" in answer
+    assert [f for fnd in body["findings"] for f in ((fnd.get("presentation") or {}).get("figures") or [])] == []  # a file's figure is never an engine figure
+    assert _ledger_counts(a) == before  # conversational analysis wrote no ledger, report, finding or ingestion row
+
+
+def test_an_unreadable_workbook_is_named_not_analysed_and_a_retry_with_a_good_file_works(api, env):
+    import io
+    import zipfile
+
+    client, ha, _, a, composer = api
+    inv = start(client, ha)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:  # looks like a workbook (content types plus an xl/ part) but is not one
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("xl/workbook.xml", "garbage")
+    bad = upload(client, ha, inv, "broken.xlsx", buf.getvalue())
+    assert bad.status_code == 201 and bad.json()["table"]["status"] == "UNREADABLE"
+    r = _turn(client, ha, inv, "Summarise this report", [bad.json()["id"]])
+    assert r.status_code == 200 and "I could not read 'broken.xlsx' as a table" in r.json()["answer"] and "Nothing was imported or changed" in r.json()["answer"]
+    good = upload(client, ha, inv, "settlement.csv", SETTLEMENT, "text/csv").json()["id"]
+    r2 = _turn(client, ha, inv, "Summarise this report", [good])
+    assert "'Item Price': 1,800.50" in r2.json()["answer"] and composer.calls == 0
+
+
+def test_a_question_that_is_not_about_the_file_still_takes_the_normal_route(api, env):
+    client, ha, _, a, composer = api
+    inv = start(client, ha)
+    up = upload(client, ha, inv, "settlement.csv", SETTLEMENT, "text/csv").json()["id"]
+    r = _turn(client, ha, inv, ASK, [up])  # "What does this PDF say?" is scripted as ADVISORY: no analysis, and no claim that the sheet was analysed
+    assert r.status_code == 200 and "Here is what I can establish from the file" not in r.json()["answer"]
+    assert composer.calls == 1
+
+
+def test_two_attached_files_are_compared_only_when_their_periods_allow_it(api, env):
+    client, ha, *_ = api
+    inv = start(client, ha)
+    a = upload(client, ha, inv, "orders.csv", b"Order ID,Order Date,Amount\nO1,2026-09-01,100\nO2,2026-09-30,200\n").json()["id"]
+    b = upload(client, ha, inv, "october.csv", b"Order ID,Settlement Date,Amount\nO1,2026-10-01,90\n").json()["id"]
+    answer = _turn(client, ha, inv, "Compare these two reports", [a, b]).json()["answer"]
+    assert "non-overlapping" in answer and "do not compute a difference" in answer
+    assert "1 appear in both files, 1 only in the first, 0 only in the second" in answer  # exact identifier counts are still real

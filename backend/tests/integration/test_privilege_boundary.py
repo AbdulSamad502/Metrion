@@ -32,19 +32,18 @@ APPEND_ONLY = ("investigation_finding",)  # evidence: no UPDATE either
 KNOWN_APP_DELETABLE = frozenset({
     "agent_data_request", "alembic_version", "alembic_version_backend", "alembic_version_cfo",
     "alembic_version_competitor_intelligence", "alembic_version_data_foundation", "alembic_version_product_intelligence",
-    "alembic_version_slim_cmo", "anomaly_detection_config", "app_user", "auth_audit", "capability_entitlement_rule",
+    "alembic_version_slim_cmo", "app_user",
     "ci_candidate", "ci_candidate_relevance", "ci_capture_run", "ci_digest_subscription", "ci_discovery_run",
-    "ci_search_query", "ci_search_result", "ci_tenant_config", "competitor_evidence", "competitor_listing_insight",
+    "ci_search_query", "ci_search_result", "competitor_evidence", "competitor_listing_insight",
     "competitor_price_event", "competitor_review_insight", "competitor_snapshot", "competitor_snapshot_field",
-    "competitor_url", "discount_bearer_config", "entitlement_cap_config", "fee_reference", "financial_health_config",
-    "formula_definition", "gst_lookup_result", "gst_slab_reference", "hsn_gst_reference", "ingestion_run", "leak_finding",
-    "line_component", "member_entitlement_allocation", "membership", "metered_event", "metered_event_meter_map",
-    "metric_result", "niche_brief", "pi_research_run", "pi_tenant_config", "plan", "product_candidate", "product_embedding",
+    "competitor_url",
+    "gst_lookup_result", "ingestion_run", "leak_finding",
+    "line_component", "membership",
+    "metric_result", "niche_brief", "pi_research_run", "pi_tenant_config", "product_candidate", "product_embedding",
     "product_feasibility_estimate", "product_review_insight", "reconciliation_exception", "reconciliation_match",
-    "reconciliation_run", "reconciliation_tolerance_config", "report_file", "report_period", "sales_line",
-    "seller_product_profile", "settlement_line", "severity_config", "supplier_lead", "tenant", "tenant_cart_item",
-    "tenant_plan", "validation_finding", "whatsapp_alert_subscription", "whatsapp_binding", "whatsapp_message",
-    "whatsapp_pending_action", "whatsapp_template",
+    "reconciliation_run", "report_file", "report_period", "sales_line",
+    "seller_product_profile", "settlement_line", "supplier_lead", "tenant",
+    "validation_finding",
 })
 
 

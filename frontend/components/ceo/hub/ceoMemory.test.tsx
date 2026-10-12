@@ -16,7 +16,8 @@ const mount = () => render(<CeoHubWorkspace client={fake.client()} feedFactory={
 describe("what I remember", () => {
   it("says plainly when nothing is remembered yet", async () => {
     mount();
-    expect(await screen.findByTestId("memory-empty")).toHaveTextContent("Nothing yet");
+    await screen.findByTestId("agent-canvas");
+    expect(screen.queryByTestId("memory-panel")).not.toBeInTheDocument(); // nothing remembered: no empty panel
   });
 
   it("shows each remembered item verbatim with whether it is shared, and forgets the one the seller removes", async () => {

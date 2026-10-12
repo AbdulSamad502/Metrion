@@ -79,6 +79,7 @@ def test_the_general_advice_line_is_written_by_code_after_the_answer(two_tenants
     assert "{{" not in res.answer and not any("GENERAL_GUIDANCE" in p for p in comp.prompts)  # the model was never asked to place it
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_pi_results_show_names_and_plain_limits_only(two_tenants, app_user):
     from tests.integration.test_ceo_pi_chat import ASK, registry as pi_registry, run_through
 
@@ -101,6 +102,7 @@ def test_pi_results_show_names_and_plain_limits_only(two_tenants, app_user):
     assert "not been checked against live marketplace listings" in res.answer and "Real sales and demand numbers are not available" in res.answer
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_the_seller_can_follow_up_on_a_numbered_idea_and_the_next_agent_works_on_it(two_tenants, app_user):
     """The agents are connected through the conversation: PI lists ideas, then "write titles for #2" sends THAT idea to CMO (and "GST rate for #1" would send it to the
     lookup). The substitution is told to the seller and only happens when the list exists and the number is in range."""
@@ -136,3 +138,4 @@ def test_the_same_fact_again_is_acknowledged_not_sent_to_the_model(two_tenants, 
     again = orchestrator.run_turn(ctx, rt, inv, "my business name is Zyquora")
     assert "I'll remember your business name: Zyquora" in first.answer
     assert again.status == "DELIVERED" and "I already have your business name: Zyquora" in again.answer
+

@@ -672,3 +672,52 @@ def test_there_is_no_marketplace_publish_or_update_route_at_runtime(env):
         for method in ("post", "put"):
             assert getattr(c, method)(f"/api/v1/cmo/{path}", json={}, headers=env.headers).status_code in (404, 405)
     assert env.provider.calls == 0
+
+
+# ---- R5: a CMO run is discoverable from its first model call on ------------------------------------------------------
+
+
+def _running_cmo_runs(env):
+    return [r[0] for r in env.q("SELECT status FROM agent_run WHERE agent_id = 'CMO'")]
+
+
+def test_a_cmo_run_row_exists_and_is_running_during_the_model_call_then_completes(env):
+    seen: list[list[str]] = []
+    original = env.provider.complete
+
+    def spy(*, model: str, prompt: str) -> str:
+        seen.append(_running_cmo_runs(env))
+        return original(model=model, prompt=prompt)
+
+    env.provider.complete = spy  # type: ignore[method-assign]
+    assert env.post("title-sets", title_body("r5-inflight")).status_code == 200
+    assert seen and all(s == ["RUNNING"] for s in seen)  # mid-flight: exactly one row, RUNNING
+    assert _running_cmo_runs(env) == ["COMPLETE"]  # and one terminal row afterwards (same count as before this change)
+
+
+def test_a_request_rejected_before_any_model_call_leaves_no_run_row(env):
+    r = env.post("listing-copy", {"request_key": "r5-rejected", "sku": "S", "brand": "B", "marketplace": AMAZON})
+    assert r.status_code == 422 and env.provider.calls == 0
+    assert _running_cmo_runs(env) == []  # rejected requests still persist nothing
+
+
+def test_a_hard_killed_cmo_request_leaves_a_run_that_recovery_settles(env):
+    import subprocess
+    import sys
+
+    from backend.ceo import recovery
+    from backend.repositories import run_liveness
+
+    child = os.path.join(os.path.dirname(__file__), "cmo_kill_child.py")
+    proc = subprocess.run([sys.executable, child, str(env.tenant), str(env.user_id)], capture_output=True, text=True, env=os.environ.copy(), timeout=120)
+    assert "IN_FLIGHT" in proc.stdout and proc.returncode == 137, (proc.stdout, proc.stderr[-400:])
+    assert _running_cmo_runs(env) == ["RUNNING"]  # the stuck-RUNNING state: no terminal write, no cleanup
+    run_id = env.q("SELECT id FROM agent_run WHERE agent_id = 'CMO'")[0][0]
+    for _ in range(200):
+        if not run_liveness.is_owned_elsewhere(run_id):
+            break
+        time.sleep(0.1)
+    assert recovery.sweep_orphan_runs(tenants=[env.tenant]).orphans_settled == 1
+    assert env.q("SELECT status, error_reason FROM agent_run WHERE agent_id = 'CMO'")[0][0] == "FAILED"
+    assert recovery.sweep_orphan_runs(tenants=[env.tenant]).orphans_settled == 0
+    assert env.n("cmo_generation") == 0 and env.events() == []  # nothing was delivered or billed

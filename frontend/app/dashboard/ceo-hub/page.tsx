@@ -1,13 +1,17 @@
 "use client";
 
+import { Suspense } from "react";
+import { PAGE_COPY } from "@/lib/navigation";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { CeoHub } from "@/components/ceo/hub/CeoHubWorkspace";
 
 export default function CeoHubPage() {
   return (
-    <DashboardShell title="CEO Hub" subtitle="Ask anything. The CEO answers, or hands it to the right agent.">
+    <DashboardShell {...PAGE_COPY["ceo-hub"]}>
       <div className="mt-content">
-        <CeoHub />
+        <Suspense fallback={null}>
+          <CeoHub />
+        </Suspense>
       </div>
     </DashboardShell>
   );

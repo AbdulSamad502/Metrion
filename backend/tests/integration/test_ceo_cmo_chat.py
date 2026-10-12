@@ -21,6 +21,7 @@ from tests.integration.test_ceo_turn import Grounded, Scripted, decision, runtim
 
 pytestmark = [pytest.mark.usefixtures("two_tenants"), pytest.mark.skipif(not os.environ.get("DATABASE_URL_APP") or not os.environ.get("DATABASE_URL"), reason="needs a live Postgres")]
 
+
 KEYS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords")
 
 
@@ -47,6 +48,7 @@ ASK_ALL = "write hashtags for my steel water bottle on Amazon"
 HASHTAGS = lambda **slots: decision(route="ACTION", route_key="cmo.generate_hashtags", slots=slots)  # noqa: E731
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_the_ceo_asks_only_for_what_is_missing_then_runs_cmo_and_shows_what_was_written(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}
@@ -66,6 +68,7 @@ def test_the_ceo_asks_only_for_what_is_missing_then_runs_cmo_and_shows_what_was_
     assert finding["presentation"]["figures"] == []  # written content is never a figure
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_everything_in_the_first_message_runs_with_no_questions(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}
@@ -75,6 +78,7 @@ def test_everything_in_the_first_message_runs_with_no_questions(two_tenants, app
     assert res.status == "DELIVERED" and len(calls["cmo.generate_hashtags"]) == 1
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_a_bad_answer_is_asked_again_and_nothing_runs(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}
@@ -87,6 +91,7 @@ def test_a_bad_answer_is_asked_again_and_nothing_runs(two_tenants, app_user):
     assert bad.choices["pending"]["collected"] == {"product_name": "steel water bottle"}
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_title_sets_take_several_marketplaces_and_an_optional_category(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}
@@ -120,6 +125,7 @@ def test_a_detached_cmo_cannot_be_run_and_nothing_is_asked(two_tenants, app_user
     assert calls == {} and res.choices is None  # not asked anything: it cannot run, so collecting inputs for it would be a lie
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_the_same_answer_to_the_same_card_sends_the_same_idempotency_key(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}

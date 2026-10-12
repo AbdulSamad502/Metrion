@@ -24,7 +24,7 @@ SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "cfo"
 # (relative path, line number) -> reason it is not money-adjacent. Adding an entry here must
 # be accompanied by a one-line justification; this is not a general escape hatch.
 _ALLOWED_NON_MONEY_FLOATS: dict[tuple[str, int], str] = {
-    ("reasoning/ollama_provider.py", 37): "OllamaLlmProvider.timeout_seconds — an HTTP client timeout, never a money value",
+    ("reasoning/ollama_provider.py", 39): "OllamaLlmProvider.timeout_seconds — an HTTP client timeout, never a money value",
 }
 
 

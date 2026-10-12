@@ -13,6 +13,8 @@ dependencies = [
     "svix>=1.45",
     "httpx>=0.27",
     "python-multipart>=0.0.12",
+    "PyPDF2>=3.0",  # services/ceo_attachments.py reads uploaded PDFs (spec Q35)
+    "openpyxl>=3.1",  # services/ceo_attachments.py reads uploaded .xlsx files
     # NOTE: `competitor-intelligence` (packages/competitor-intelligence), `cfo`
     # (packages/cfo) and `product-intelligence` (packages/product-intelligence) are all real
     # runtime dependencies — backend/api/v1/ci.py, cfo.py, pi.py, agents/ceo_hub.py, and

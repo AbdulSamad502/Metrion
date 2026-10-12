@@ -69,7 +69,7 @@ export function Tabs({
 export function TabPanel({ id, active, idPrefix = "tab", children }: { id: string; active: string; idPrefix?: string; children: ReactNode }) {
   if (id !== active) return null;
   return (
-    <div role="tabpanel" id={`${idPrefix}-panel-${id}`} aria-labelledby={`${idPrefix}-${id}`} tabIndex={0} className="mt-fade-up outline-none">
+    <div role="tabpanel" id={`${idPrefix}-panel-${id}`} aria-labelledby={`${idPrefix}-${id}`} tabIndex={0} className="mt-fade-up mt-focus rounded-lg outline-none">
       {children}
     </div>
   );

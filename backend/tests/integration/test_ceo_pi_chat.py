@@ -24,6 +24,7 @@ from tests.integration.test_ceo_turn import Grounded, Scripted, decision, runtim
 
 pytestmark = [pytest.mark.usefixtures("two_tenants"), pytest.mark.skipif(not os.environ.get("DATABASE_URL_APP") or not os.environ.get("DATABASE_URL"), reason="needs a live Postgres")]
 
+
 RUN_ID = str(uuid4())
 ASK = "ok now i want the top trending products to sell my nich is mens shoes"
 
@@ -52,6 +53,7 @@ def run_through(ctx, rt, inv, answers):
     return res
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_the_niche_is_taken_from_the_message_and_only_the_rest_is_asked(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}
@@ -62,6 +64,7 @@ def test_the_niche_is_taken_from_the_message_and_only_the_rest_is_asked(two_tena
     assert q.choices["pending"]["collected"] == {"category": "mens shoes"} and q.choices["pending"]["key"] == "pi.discover"
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_after_the_seller_confirms_the_brief_is_saved_pi_runs_and_the_ideas_are_shown_as_unverified(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}
@@ -84,6 +87,7 @@ def test_after_the_seller_confirms_the_brief_is_saved_pi_runs_and_the_ideas_are_
     assert pi_finding["presentation"]["figures"] == [] and pi_finding["presentation"]["artefacts"][0]["items"][0].startswith("Men's Running Shoes")
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_cancelling_at_the_summary_saves_and_runs_nothing(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}
@@ -95,6 +99,7 @@ def test_cancelling_at_the_summary_saves_and_runs_nothing(two_tenants, app_user)
     assert "stopped" in res.answer and calls == {} and pi_actions.list_niche_briefs(a) == []
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_answering_the_same_confirmation_twice_reuses_the_brief(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}

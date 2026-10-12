@@ -1,0 +1,3983 @@
+{
+ "routes": {
+  "GET /api/v1/ceo-hub/agents": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo-hub/runs/{ceo_agent_run_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/agents/availability": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/findings": {
+   "query": [
+    "limit"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/forms/new-product": {
+   "query": [
+    "sku"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/forms/price-impact": {
+   "query": [
+    "sku"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/investigations": {
+   "query": [
+    "status"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/investigations/{investigation_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/investigations/{investigation_id}/events": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/investigations/{investigation_id}/findings": {
+   "query": [
+    "turn_id"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/investigations/{investigation_id}/needs": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/investigations/{investigation_id}/turns/{turn_id}/flow": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/memory": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/state/health": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/data-requests": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/expenses": {
+   "query": [
+    "category",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/expenses/budget-status": {
+   "query": [
+    "category",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
+    "category",
+    "period_end",
+    "period_start"
+   ]
+  },
+  "GET /api/v1/cfo/imports": {
+   "query": [
+    "limit"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/imports/{report_file_id}": {
+   "query": [
+    "limit",
+    "offset"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/line-status-override": {
+   "query": [
+    "sales_line_id"
+   ],
+   "requiredQuery": [
+    "sales_line_id"
+   ]
+  },
+  "GET /api/v1/cfo/seller-goal": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/alerts": {
+   "query": [
+    "days"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/competitor-urls": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/competitor-urls/{url_id}/comparison": {
+   "query": [
+    "product_id"
+   ],
+   "requiredQuery": [
+    "product_id"
+   ]
+  },
+  "GET /api/v1/ci/competitor-urls/{url_id}/handoff": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/competitor-urls/{url_id}/listing-diff": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/competitor-urls/{url_id}/price-events": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/competitor-urls/{url_id}/snapshots": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/digest/preview": {
+   "query": [
+    "days"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/digest/subscription": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/discovery-runs/{discovery_run_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/market-overview/{product_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/seller-products/{product_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/summary": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/market-trends": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/market-trends/{generation_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/niche-terms": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ops/live": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ops/ready": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ops/runs": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/pi/niche-briefs": {
+   "query": [
+    "status"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/pi/niche-briefs/{brief_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/pi/report/{run_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ping": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/session": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "PATCH /api/v1/ci/competitor-urls/{url_id}": {
+   "body": {
+    "$ref": "#/components/schemas/UpdateCompetitorUrlRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo-hub/discover-competitors": {
+   "body": {
+    "$ref": "#/components/schemas/DiscoverCompetitorsRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo-hub/request-price-scenario": {
+   "body": {
+    "$ref": "#/components/schemas/RequestPriceScenarioRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo-hub/research-now": {
+   "body": {
+    "$ref": "#/components/schemas/ResearchNowRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/findings/{finding_id}/forget": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/investigations": {
+   "body": {
+    "$ref": "#/components/schemas/StartInvestigationBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/investigations/{investigation_id}/archive": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/investigations/{investigation_id}/attachments": {
+   "multipart": true,
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/investigations/{investigation_id}/reopen": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/investigations/{investigation_id}/resolve": {
+   "body": {
+    "$ref": "#/components/schemas/ResolveBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/investigations/{investigation_id}/turns": {
+   "body": {
+    "$ref": "#/components/schemas/TurnBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/memory/{memory_id}/forget": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/anomaly-check": {
+   "body": {
+    "$ref": "#/components/schemas/AnomalyCheckHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/batch-size": {
+   "body": {
+    "$ref": "#/components/schemas/BatchSizeHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/cash-reconciliation": {
+   "body": {
+    "$ref": "#/components/schemas/CashReconciliationHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/financial-health": {
+   "body": {
+    "$ref": "#/components/schemas/FinancialHealthHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/funding-readiness": {
+   "body": {
+    "$ref": "#/components/schemas/FundingReadinessHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/gst-lookup": {
+   "body": {
+    "$ref": "#/components/schemas/GstLookupHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/gst-lookup/accept": {
+   "body": {
+    "$ref": "#/components/schemas/AcceptGstLookupHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/gst/analyze-lines": {
+   "body": {
+    "$ref": "#/components/schemas/AnalyzeGstLinesRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/gst/period-summary": {
+   "body": {
+    "$ref": "#/components/schemas/GstPeriodSummaryHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/ingest": {
+   "multipart": true,
+   "query": [
+    "adapter_id",
+    "marketplace"
+   ],
+   "requiredQuery": [
+    "adapter_id",
+    "marketplace"
+   ]
+  },
+  "POST /api/v1/cfo/landed-cost": {
+   "body": {
+    "$ref": "#/components/schemas/LandedCostHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/period-comparison": {
+   "body": {
+    "$ref": "#/components/schemas/PeriodComparisonHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/pnl": {
+   "body": {
+    "$ref": "#/components/schemas/PeriodPnlHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/pnl-for-tenant": {
+   "body": {
+    "$ref": "#/components/schemas/PeriodPnlForTenantHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/preview": {
+   "body": {
+    "$ref": "#/components/schemas/PreviewHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/pricing": {
+   "body": {
+    "$ref": "#/components/schemas/PricingCurveHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/reconcile": {
+   "body": {
+    "$ref": "#/components/schemas/ReconcileHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/strategic-briefing": {
+   "body": {
+    "$ref": "#/components/schemas/StrategicBriefingHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/suppliers/rank": {
+   "body": {
+    "$ref": "#/components/schemas/SupplierRankingHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ci/competitor-urls": {
+   "body": {
+    "$ref": "#/components/schemas/CreateCompetitorUrlRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ci/competitor-urls/{url_id}/price-scenario": {
+   "body": {
+    "$ref": "#/components/schemas/PriceScenarioRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ci/discovery-runs": {
+   "body": {
+    "$ref": "#/components/schemas/StartDiscoveryRunRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ci/discovery-runs/{discovery_run_id}/candidates/{candidate_id}/decision": {
+   "body": {
+    "$ref": "#/components/schemas/CandidateDecisionRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ci/discovery-runs/{discovery_run_id}/candidates/{candidate_id}/promote": {
+   "body": {
+    "$ref": "#/components/schemas/StartDiscoveryRunRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ci/evidence": {
+   "multipart": true,
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ci/review-research": {
+   "body": {
+    "$ref": "#/components/schemas/ReviewResearchRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/backend-terms": {
+   "body": {
+    "$ref": "#/components/schemas/GroundedBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/bullets": {
+   "body": {
+    "$ref": "#/components/schemas/GroundedBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/catalog-answers": {
+   "body": {
+    "$ref": "#/components/schemas/CatalogBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/description": {
+   "body": {
+    "$ref": "#/components/schemas/GroundedBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/hashtags": {
+   "body": {
+    "$ref": "#/components/schemas/HashtagsBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/image-analyses": {
+   "body": {
+    "$ref": "#/components/schemas/AnalyzeBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/image-hints/confirm": {
+   "body": {
+    "$ref": "#/components/schemas/ConfirmHintBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/images": {
+   "multipart": true,
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/keywords": {
+   "body": {
+    "$ref": "#/components/schemas/GroundedBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/listing-copy": {
+   "body": {
+    "$ref": "#/components/schemas/GroundedBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/market-trends": {
+   "body": {
+    "$ref": "#/components/schemas/TrendRunBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/market-trends/preview": {
+   "body": {
+    "$ref": "#/components/schemas/TrendPreviewBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/niche-terms/confirm": {
+   "body": {
+    "$ref": "#/components/schemas/NicheConfirmBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/niche-terms/suggest": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/title-approvals": {
+   "body": {
+    "$ref": "#/components/schemas/ApprovalBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/title-sets": {
+   "body": {
+    "$ref": "#/components/schemas/TitleSetsBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/onboarding/business": {
+   "body": {
+    "$ref": "#/components/schemas/BusinessOnboardingRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/pi/discover": {
+   "body": {
+    "$ref": "#/components/schemas/DiscoverRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/pi/niche-briefs": {
+   "body": {
+    "$ref": "#/components/schemas/CreateNicheBriefRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/pi/niche-briefs/{brief_id}/archive": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/pi/niche-briefs/{brief_id}/mark-draft": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/pi/niche-briefs/{brief_id}/mark-ready": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/pi/supplier-lookup": {
+   "body": {
+    "$ref": "#/components/schemas/SupplierLookupRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "PUT /api/v1/ceo/investigations/{investigation_id}/agents/{agent_code}": {
+   "body": {
+    "$ref": "#/components/schemas/AttachBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "PUT /api/v1/cfo/expenses": {
+   "body": {
+    "$ref": "#/components/schemas/EnterExpenseRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "PUT /api/v1/cfo/expenses/budget": {
+   "body": {
+    "$ref": "#/components/schemas/EnterExpenseBudgetHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "PUT /api/v1/cfo/line-count-override": {
+   "body": {
+    "$ref": "#/components/schemas/DeclareLineCountOverrideHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "PUT /api/v1/cfo/line-status-override": {
+   "body": {
+    "$ref": "#/components/schemas/DeclareLineStatusOverrideHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "PUT /api/v1/cfo/seller-goal": {
+   "body": {
+    "$ref": "#/components/schemas/SellerGoalHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "PUT /api/v1/ci/digest/subscription": {
+   "body": {
+    "$ref": "#/components/schemas/DigestSubscriptionRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "PUT /api/v1/ci/seller-products/{product_id}": {
+   "body": {
+    "$ref": "#/components/schemas/UpdateSellerProductRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "PUT /api/v1/pi/niche-briefs/{brief_id}": {
+   "body": {
+    "$ref": "#/components/schemas/UpdateNicheBriefRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  }
+ },
+ "schemas": {
+  "AcceptGstLookupHttpRequest": {
+   "description": "Accepting a specific `gst_lookup_result` for a SKU (deterministic-engine.md \u00a77.2.1\n`gst_rate_override` / \u00a78.4's updated L2 rule). Deliberately carries no `rate_pct`/`hsn`/\n`category` fields at all \u2014 `accept_gst_lookup_result` reads those from the real stored\n`gst_lookup_result` row, never from this request body (see that function's own docstring\non why `AcceptGstLookupRequest` even has those fields internally but never reads them).",
+   "properties": {
+    "effective_from": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Effective From"
+    },
+    "gst_lookup_result_id": {
+     "format": "uuid",
+     "title": "Gst Lookup Result Id",
+     "type": "string"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Reason"
+    },
+    "sku": {
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    }
+   },
+   "required": [
+    "gst_lookup_result_id",
+    "sku"
+   ],
+   "title": "AcceptGstLookupHttpRequest",
+   "type": "object"
+  },
+  "AnalyzeBody": {
+   "additionalProperties": false,
+   "properties": {
+    "asset_id": {
+     "format": "uuid",
+     "title": "Asset Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "asset_id"
+   ],
+   "title": "AnalyzeBody",
+   "type": "object"
+  },
+  "AnalyzeGstLinesRequest": {
+   "properties": {
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "lines": {
+     "items": {
+      "$ref": "#/components/schemas/GstLineRequest"
+     },
+     "minItems": 1,
+     "title": "Lines",
+     "type": "array"
+    }
+   },
+   "required": [
+    "lines",
+    "as_of_date"
+   ],
+   "title": "AnalyzeGstLinesRequest",
+   "type": "object"
+  },
+  "AnomalyCheckHttpRequest": {
+   "description": "One `target_ref` (SKU/ACCOUNT/MARKETPLACE grain, matching `MetricResult.target_ref`) and\na lookback window (cfo-agent.md \u00a76.1 rule 4/\u00a76.5/\u00a77, anomaly-detection.md). `MARGIN_PCT` is\nthe only series this checkpoint has a real, spec-grounded composition for \u2014 this route does\nnot accept a `metric` field because there is only one real choice today (\u00a710 P1/P2 name\n`FEE_RATIO_PCT`/`SETTLEMENT_LAG_DAYS`/`RETURN_RATE_PCT` as genuinely out of scope).\n\n`include_narration` (default `False`, opt-in \u2014 see `post_anomaly_check`'s own docstring for\nwhy this is opt-in rather than always-on) additionally calls `narrate_anomaly_check` and\nreturns its prose under `narration`. `model` is only meaningful when `include_narration` is\n`True`; it is ignored otherwise, mirroring `PeriodComparisonHttpRequest.model`'s own\noptional-override shape.",
+   "properties": {
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "include_narration": {
+     "default": false,
+     "title": "Include Narration",
+     "type": "boolean"
+    },
+    "model": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Model"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    },
+    "target_ref": {
+     "minLength": 1,
+     "title": "Target Ref",
+     "type": "string"
+    }
+   },
+   "required": [
+    "target_ref",
+    "period_start",
+    "period_end",
+    "as_of_date"
+   ],
+   "title": "AnomalyCheckHttpRequest",
+   "type": "object"
+  },
+  "ApprovalBody": {
+   "additionalProperties": false,
+   "properties": {
+    "edited_text": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Edited Text"
+    },
+    "generation_id": {
+     "format": "uuid",
+     "title": "Generation Id",
+     "type": "string"
+    },
+    "option_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Option Id"
+    }
+   },
+   "required": [
+    "generation_id"
+   ],
+   "title": "ApprovalBody",
+   "type": "object"
+  },
+  "AttachBody": {
+   "properties": {
+    "attached": {
+     "title": "Attached",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "attached"
+   ],
+   "title": "AttachBody",
+   "type": "object"
+  },
+  "AttributePair": {
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "maxLength": 100,
+     "minLength": 1,
+     "title": "Name",
+     "type": "string"
+    },
+    "value": {
+     "maxLength": 500,
+     "minLength": 1,
+     "title": "Value",
+     "type": "string"
+    }
+   },
+   "required": [
+    "name",
+    "value"
+   ],
+   "title": "AttributePair",
+   "type": "object"
+  },
+  "BatchSizeHttpRequest": {
+   "description": "One SKU, one chosen `supplier.quote`, one `batch.budget` target, plus already-assembled\nsales history (cfo-agent.md \u00a76.12, `twinkly-mapping-canyon.md` CP B3b). `lines` reuses\n`GstPeriodSummaryLineRequest`'s shape (the same already-assembled-`CanonicalLine` request\nfield convention `POST /cfo/gst/period-summary` already established) \u2014 an empty `lines`\nlist is this route's own way of expressing \"no sales history for this SKU\", exactly \u00a76.12's\nown \"never sold\" case, never a request-validation error.",
+   "properties": {
+    "active_adjustment_ids": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Active Adjustment Ids",
+     "type": "array"
+    },
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "budget_target_ref": {
+     "minLength": 1,
+     "title": "Budget Target Ref",
+     "type": "string"
+    },
+    "budget_target_type": {
+     "pattern": "^(SKU|ACCOUNT)$",
+     "title": "Budget Target Type",
+     "type": "string"
+    },
+    "canonical_lines": {
+     "items": {
+      "$ref": "#/components/schemas/PeriodPnlLineRequest"
+     },
+     "title": "Canonical Lines",
+     "type": "array"
+    },
+    "lines": {
+     "items": {
+      "$ref": "#/components/schemas/GstPeriodSummaryLineRequest"
+     },
+     "title": "Lines",
+     "type": "array"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    },
+    "sku": {
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    },
+    "supplier_quote_target_ref": {
+     "minLength": 1,
+     "title": "Supplier Quote Target Ref",
+     "type": "string"
+    },
+    "supplier_quote_target_type": {
+     "pattern": "^(SKU|ACCOUNT|PERIOD)$",
+     "title": "Supplier Quote Target Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sku",
+    "supplier_quote_target_type",
+    "supplier_quote_target_ref",
+    "budget_target_type",
+    "budget_target_ref",
+    "period_start",
+    "period_end",
+    "as_of_date"
+   ],
+   "title": "BatchSizeHttpRequest",
+   "type": "object"
+  },
+  "BusinessOnboardingRequest": {
+   "properties": {
+    "business_name": {
+     "maxLength": 200,
+     "minLength": 1,
+     "title": "Business Name",
+     "type": "string"
+    }
+   },
+   "required": [
+    "business_name"
+   ],
+   "title": "BusinessOnboardingRequest",
+   "type": "object"
+  },
+  "CandidateDecisionRequest": {
+   "properties": {
+    "decision": {
+     "pattern": "^(ACCEPT|REJECT)$",
+     "title": "Decision",
+     "type": "string"
+    }
+   },
+   "required": [
+    "decision"
+   ],
+   "title": "CandidateDecisionRequest",
+   "type": "object"
+  },
+  "CashReconciliationHttpRequest": {
+   "properties": {
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "marketplace": {
+     "title": "Marketplace",
+     "type": "string"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    }
+   },
+   "required": [
+    "marketplace",
+    "period_start",
+    "period_end",
+    "as_of_date"
+   ],
+   "title": "CashReconciliationHttpRequest",
+   "type": "object"
+  },
+  "CatalogAttribute": {
+   "enum": [
+    "CATEGORY",
+    "VERTICAL",
+    "COLOR",
+    "MATERIAL",
+    "SIZE",
+    "WEIGHT",
+    "DIMENSIONS",
+    "BRAND"
+   ],
+   "title": "CatalogAttribute",
+   "type": "string"
+  },
+  "CatalogBody": {
+   "additionalProperties": false,
+   "properties": {
+    "attributes": {
+     "items": {
+      "$ref": "#/components/schemas/AttributePair"
+     },
+     "maxItems": 50,
+     "title": "Attributes",
+     "type": "array"
+    },
+    "brand": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Brand"
+    },
+    "category_hint": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Category Hint"
+    },
+    "image_analysis_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Image Analysis Id"
+    },
+    "marketplaces": {
+     "items": {
+      "$ref": "#/components/schemas/Marketplace"
+     },
+     "maxItems": 3,
+     "title": "Marketplaces",
+     "type": "array"
+    },
+    "notes": {
+     "items": {
+      "maxLength": 1000,
+      "type": "string"
+     },
+     "maxItems": 20,
+     "title": "Notes",
+     "type": "array"
+    },
+    "product_name": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Product Name"
+    },
+    "questions": {
+     "items": {
+      "$ref": "#/components/schemas/CatalogAttribute"
+     },
+     "maxItems": 8,
+     "minItems": 1,
+     "title": "Questions",
+     "type": "array"
+    },
+    "request_key": {
+     "maxLength": 128,
+     "minLength": 1,
+     "title": "Request Key",
+     "type": "string"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 128,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "target_price_paise": {
+     "anyOf": [
+      {
+       "maximum": 9.223372036854776e+18,
+       "minimum": 0.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Target Price Paise"
+    },
+    "text_only_confirmed": {
+     "default": false,
+     "title": "Text Only Confirmed",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "request_key",
+    "questions"
+   ],
+   "title": "CatalogBody",
+   "type": "object"
+  },
+  "ClarificationReplyBody": {
+   "description": "The seller answering a decision card: the card's message id and the chosen option key (null = the free-text \"Other\", which is the message text).",
+   "properties": {
+    "id": {
+     "format": "uuid",
+     "title": "Id",
+     "type": "string"
+    },
+    "option": {
+     "anyOf": [
+      {
+       "maxLength": 96,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Option"
+    }
+   },
+   "required": [
+    "id"
+   ],
+   "title": "ClarificationReplyBody",
+   "type": "object"
+  },
+  "ConfirmHintBody": {
+   "additionalProperties": false,
+   "properties": {
+    "analysis_id": {
+     "format": "uuid",
+     "title": "Analysis Id",
+     "type": "string"
+    },
+    "attribute_name": {
+     "maxLength": 100,
+     "minLength": 1,
+     "title": "Attribute Name",
+     "type": "string"
+    },
+    "confirmed_value": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Confirmed Value"
+    },
+    "sku": {
+     "maxLength": 128,
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    }
+   },
+   "required": [
+    "analysis_id",
+    "attribute_name",
+    "sku"
+   ],
+   "title": "ConfirmHintBody",
+   "type": "object"
+  },
+  "CostEntryHttpRequest": {
+   "description": "One `cogs_per_unit` weighted-average-cost data point (\u00a77.2.1) \u2014 `CostEntry`'s own shape.",
+   "properties": {
+    "amount_paise": {
+     "title": "Amount Paise",
+     "type": "integer"
+    },
+    "effective_from": {
+     "format": "date",
+     "title": "Effective From",
+     "type": "string"
+    }
+   },
+   "required": [
+    "amount_paise",
+    "effective_from"
+   ],
+   "title": "CostEntryHttpRequest",
+   "type": "object"
+  },
+  "CreateCompetitorUrlRequest": {
+   "properties": {
+    "label": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Label"
+    },
+    "linked_sku": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Linked Sku"
+    },
+    "url": {
+     "minLength": 1,
+     "title": "Url",
+     "type": "string"
+    }
+   },
+   "required": [
+    "url"
+   ],
+   "title": "CreateCompetitorUrlRequest",
+   "type": "object"
+  },
+  "CreateNicheBriefRequest": {
+   "properties": {
+    "budget_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Budget Paise"
+    },
+    "category_text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Category Text"
+    },
+    "constraints": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Constraints"
+    },
+    "marketplaces": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Marketplaces"
+    },
+    "target_price_max_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Target Price Max Paise"
+    },
+    "target_price_min_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Target Price Min Paise"
+    }
+   },
+   "title": "CreateNicheBriefRequest",
+   "type": "object"
+  },
+  "DecisionKind": {
+   "enum": [
+    "CONFIRM",
+    "REJECT",
+    "EDIT"
+   ],
+   "title": "DecisionKind",
+   "type": "string"
+  },
+  "DeclareLineCountOverrideHttpRequest": {
+   "description": "Mirrors `DeclareLineStatusOverrideHttpRequest`'s shape, `value` typed `int` instead of\n`str` \u2014 the two count-shaped fields (`returned_qty_override`/`rto_qty_override`) validated\nby `declare_line_count_override` itself, not by this model.",
+   "properties": {
+    "field": {
+     "minLength": 1,
+     "title": "Field",
+     "type": "string"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Reason"
+    },
+    "sales_line_id": {
+     "format": "uuid",
+     "title": "Sales Line Id",
+     "type": "string"
+    },
+    "supersedes_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Supersedes Id"
+    },
+    "value": {
+     "title": "Value",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "sales_line_id",
+    "field",
+    "value"
+   ],
+   "title": "DeclareLineCountOverrideHttpRequest",
+   "type": "object"
+  },
+  "DeclareLineStatusOverrideHttpRequest": {
+   "description": "One seller declaration of a real order-line outcome (deterministic-engine.md \u00a77.2.1's\n`cancellation_state_override`/`return_status_override`/`rto_status_override`) \u2014 mirrors\n`EnterExpenseRequest`'s own shape, restricted to this trio's real enumerated values by\n`declare_line_status_override` itself, not by this model (the same division of validation\nresponsibility `EnterExpenseRequest`/`enter_expense` already use).",
+   "properties": {
+    "field": {
+     "minLength": 1,
+     "title": "Field",
+     "type": "string"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Reason"
+    },
+    "sales_line_id": {
+     "format": "uuid",
+     "title": "Sales Line Id",
+     "type": "string"
+    },
+    "supersedes_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Supersedes Id"
+    },
+    "value": {
+     "minLength": 1,
+     "title": "Value",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sales_line_id",
+    "field",
+    "value"
+   ],
+   "title": "DeclareLineStatusOverrideHttpRequest",
+   "type": "object"
+  },
+  "DigestSubscriptionRequest": {
+   "properties": {
+    "channel": {
+     "default": "IN_APP",
+     "title": "Channel",
+     "type": "string"
+    },
+    "enabled": {
+     "default": true,
+     "title": "Enabled",
+     "type": "boolean"
+    },
+    "frequency": {
+     "pattern": "^(NONE|DAILY|WEEKLY)$",
+     "title": "Frequency",
+     "type": "string"
+    }
+   },
+   "required": [
+    "frequency"
+   ],
+   "title": "DigestSubscriptionRequest",
+   "type": "object"
+  },
+  "DiscoverCompetitorsRequest": {
+   "properties": {
+    "product_id": {
+     "title": "Product Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "product_id"
+   ],
+   "title": "DiscoverCompetitorsRequest",
+   "type": "object"
+  },
+  "DiscoverRequest": {
+   "properties": {
+    "candidate_cap": {
+     "anyOf": [
+      {
+       "maximum": 100.0,
+       "minimum": 1.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Candidate Cap"
+    },
+    "depth": {
+     "pattern": "^(SHALLOW|COMPLETE)$",
+     "title": "Depth",
+     "type": "string"
+    },
+    "niche_brief_id": {
+     "format": "uuid",
+     "title": "Niche Brief Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "niche_brief_id",
+    "depth"
+   ],
+   "title": "DiscoverRequest",
+   "type": "object"
+  },
+  "EnterExpenseBudgetHttpRequest": {
+   "description": "Mirrors `EnterExpenseRequest`'s own shape (deterministic-engine.md \u00a77.2.1's\n`expense.budget` row) \u2014 one category ceiling for one period. No `target_type`/`target_ref`\nfields: `set_expense_budget` fixes both (`ACCOUNT`, `str(tenant_id)`) itself, see that\nfunction's own grain-decision docstring.",
+   "properties": {
+    "amount_paise": {
+     "title": "Amount Paise",
+     "type": "integer"
+    },
+    "category": {
+     "minLength": 1,
+     "title": "Category",
+     "type": "string"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Reason"
+    },
+    "supersedes_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Supersedes Id"
+    }
+   },
+   "required": [
+    "category",
+    "amount_paise",
+    "period_start",
+    "period_end"
+   ],
+   "title": "EnterExpenseBudgetHttpRequest",
+   "type": "object"
+  },
+  "EnterExpenseRequest": {
+   "description": "The manual expense-entry form \u2014 one engine \u00a77.2.1 field at a time (`enter_expense`\nrejects any field outside that registry). `value` is passed through unchanged; its shape\nis whatever \u00a77.2.1 defines for the given `field` (e.g. `{amount_paise, gst_amount_paise?,\nmarketplace?}` for an `expense.*` pool).",
+   "properties": {
+    "field": {
+     "minLength": 1,
+     "title": "Field",
+     "type": "string"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Reason"
+    },
+    "supersedes_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Supersedes Id"
+    },
+    "target_ref": {
+     "minLength": 1,
+     "title": "Target Ref",
+     "type": "string"
+    },
+    "target_type": {
+     "pattern": "^(SKU|ACCOUNT|PERIOD)$",
+     "title": "Target Type",
+     "type": "string"
+    },
+    "value": {
+     "title": "Value"
+    }
+   },
+   "required": [
+    "target_type",
+    "target_ref",
+    "field",
+    "value"
+   ],
+   "title": "EnterExpenseRequest",
+   "type": "object"
+  },
+  "FinancialHealthHttpRequest": {
+   "properties": {
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    }
+   },
+   "required": [
+    "period_start",
+    "period_end",
+    "as_of_date"
+   ],
+   "title": "FinancialHealthHttpRequest",
+   "type": "object"
+  },
+  "FundingReadinessHttpRequest": {
+   "description": "A period range plus the caller's own explicit statement of which period labels it\nexpected a `CONTRIBUTION_PROFIT` result for (cfo-agent.md \u00a76.13, `twinkly-mapping-canyon.md`\nCP B2). `expected_periods` entries must be in the same `\"{start}/{end}\"` ISO-date-range\nshape `compute_period_pnl` already persists to `metric_result.period` \u2014 CFO has no\nperiodicity assumption of its own (see `FundingReadinessRequest`'s own docstring); an empty\nlist means \"no missing-period check requested\", not \"no periods were expected\".",
+   "properties": {
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "expected_periods": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Expected Periods",
+     "type": "array"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    }
+   },
+   "required": [
+    "period_start",
+    "period_end",
+    "as_of_date"
+   ],
+   "title": "FundingReadinessHttpRequest",
+   "type": "object"
+  },
+  "GroundedBody": {
+   "additionalProperties": false,
+   "properties": {
+    "approval_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Approval Id"
+    },
+    "attributes": {
+     "items": {
+      "$ref": "#/components/schemas/AttributePair"
+     },
+     "maxItems": 50,
+     "title": "Attributes",
+     "type": "array"
+    },
+    "brand": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Brand"
+    },
+    "category_hint": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Category Hint"
+    },
+    "image_analysis_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Image Analysis Id"
+    },
+    "marketplace": {
+     "$ref": "#/components/schemas/Marketplace"
+    },
+    "notes": {
+     "items": {
+      "maxLength": 1000,
+      "type": "string"
+     },
+     "maxItems": 20,
+     "title": "Notes",
+     "type": "array"
+    },
+    "product_name": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Product Name"
+    },
+    "request_key": {
+     "maxLength": 128,
+     "minLength": 1,
+     "title": "Request Key",
+     "type": "string"
+    },
+    "seller_title": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Seller Title"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 128,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "target_price_paise": {
+     "anyOf": [
+      {
+       "maximum": 9.223372036854776e+18,
+       "minimum": 0.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Target Price Paise"
+    },
+    "text_only_confirmed": {
+     "default": false,
+     "title": "Text Only Confirmed",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "request_key",
+    "marketplace"
+   ],
+   "title": "GroundedBody",
+   "type": "object"
+  },
+  "GstLineRequest": {
+   "description": "One line for `analyze_gst_lines` \u2014 never accepts a period range; this endpoint has no\nconcept of a period total (cfo-agent.md \u00a76.6, `gst/summary.py` stays a stub).",
+   "properties": {
+    "basis": {
+     "pattern": "^(INCLUSIVE|EXCLUSIVE)$",
+     "title": "Basis",
+     "type": "string"
+    },
+    "line_ref": {
+     "minLength": 1,
+     "title": "Line Ref",
+     "type": "string"
+    },
+    "listed_paise": {
+     "title": "Listed Paise",
+     "type": "integer"
+    },
+    "rate_pct": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Rate Pct"
+    }
+   },
+   "required": [
+    "line_ref",
+    "listed_paise",
+    "basis"
+   ],
+   "title": "GstLineRequest",
+   "type": "object"
+  },
+  "GstLookupHttpRequest": {
+   "description": "One product to research \u2014 `sku`/`hsn`/`category` optional, exactly `calc_engine.\ngst_lookup.types.GstLookupQuery`'s own shape (`GstLookupRequest` mirrors it verbatim).",
+   "properties": {
+    "category": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Category"
+    },
+    "hsn": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Hsn"
+    },
+    "product_title": {
+     "minLength": 1,
+     "title": "Product Title",
+     "type": "string"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    }
+   },
+   "required": [
+    "product_title"
+   ],
+   "title": "GstLookupHttpRequest",
+   "type": "object"
+  },
+  "GstPeriodSummaryHttpRequest": {
+   "description": "A period range, never a single line \u2014 the inverse of `AnalyzeGstLinesRequest`. This is\n`cfo.gst_summary` (\u00a76.6/\u00a76.8), genuinely distinct from `/gst/analyze-lines`; the two routes\nare never interchangeable and never share a request/response model.",
+   "properties": {
+    "active_adjustment_ids": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Active Adjustment Ids",
+     "type": "array"
+    },
+    "adapter_versions": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Adapter Versions",
+     "type": "array"
+    },
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "ingestion_run_ids": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Ingestion Run Ids",
+     "type": "array"
+    },
+    "lines": {
+     "items": {
+      "$ref": "#/components/schemas/GstPeriodSummaryLineRequest"
+     },
+     "title": "Lines",
+     "type": "array"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    },
+    "tax_heads": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Tax Heads"
+    }
+   },
+   "required": [
+    "lines",
+    "period_start",
+    "period_end",
+    "as_of_date"
+   ],
+   "title": "GstPeriodSummaryHttpRequest",
+   "type": "object"
+  },
+  "GstPeriodSummaryLineRequest": {
+   "description": "One canonical line's tax-relevant fields for the PERIOD summary. Deliberately a\ndifferent shape from `GstLineRequest` (which drives the LINE-level `/gst/analyze-lines`\nroute) \u2014 this route has no concept of a single line's own rate/plausibility, only the tax\ncomponents that feed the period total.",
+   "properties": {
+    "components": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "title": "Components",
+     "type": "array"
+    },
+    "confidence": {
+     "default": "CONFIRMED",
+     "title": "Confidence",
+     "type": "string"
+    },
+    "document_type": {
+     "title": "Document Type",
+     "type": "string"
+    },
+    "gross_item_amount_paise": {
+     "title": "Gross Item Amount Paise",
+     "type": "integer"
+    },
+    "marketplace": {
+     "title": "Marketplace",
+     "type": "string"
+    },
+    "quantity": {
+     "title": "Quantity",
+     "type": "integer"
+    },
+    "sales_line_id": {
+     "format": "uuid",
+     "title": "Sales Line Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sales_line_id",
+    "marketplace",
+    "document_type",
+    "quantity",
+    "gross_item_amount_paise",
+    "components"
+   ],
+   "title": "GstPeriodSummaryLineRequest",
+   "type": "object"
+  },
+  "HashtagsBody": {
+   "additionalProperties": false,
+   "properties": {
+    "attributes": {
+     "items": {
+      "$ref": "#/components/schemas/AttributePair"
+     },
+     "maxItems": 50,
+     "title": "Attributes",
+     "type": "array"
+    },
+    "brand": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Brand"
+    },
+    "category_hint": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Category Hint"
+    },
+    "image_analysis_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Image Analysis Id"
+    },
+    "marketplace": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/Marketplace"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "notes": {
+     "items": {
+      "maxLength": 1000,
+      "type": "string"
+     },
+     "maxItems": 20,
+     "title": "Notes",
+     "type": "array"
+    },
+    "product_name": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Product Name"
+    },
+    "request_key": {
+     "maxLength": 128,
+     "minLength": 1,
+     "title": "Request Key",
+     "type": "string"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 128,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "target_price_paise": {
+     "anyOf": [
+      {
+       "maximum": 9.223372036854776e+18,
+       "minimum": 0.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Target Price Paise"
+    },
+    "text_only_confirmed": {
+     "default": false,
+     "title": "Text Only Confirmed",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "request_key"
+   ],
+   "title": "HashtagsBody",
+   "type": "object"
+  },
+  "LandedCostHttpRequest": {
+   "description": "One SKU, one `supplier.quote` target \u2014 never a set of quotes to compare (that is\nsupplier ranking, Phase B1, not this primitive). `supplier_quote_target_type`/\n`supplier_quote_target_ref` identify exactly the `(target_type, target_ref)` a seller used\nwhen recording the quote via `PUT /cfo/expenses` (`EnterExpenseRequest`'s own\n`target_type`/`target_ref` fields) \u2014 this route reads back what that write path wrote.",
+   "properties": {
+    "active_adjustment_ids": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Active Adjustment Ids",
+     "type": "array"
+    },
+    "as_of_date": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "As Of Date"
+    },
+    "quantity": {
+     "exclusiveMinimum": 0.0,
+     "title": "Quantity",
+     "type": "integer"
+    },
+    "sku": {
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    },
+    "supplier_quote_target_ref": {
+     "minLength": 1,
+     "title": "Supplier Quote Target Ref",
+     "type": "string"
+    },
+    "supplier_quote_target_type": {
+     "pattern": "^(SKU|ACCOUNT|PERIOD)$",
+     "title": "Supplier Quote Target Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sku",
+    "supplier_quote_target_type",
+    "supplier_quote_target_ref",
+    "quantity"
+   ],
+   "title": "LandedCostHttpRequest",
+   "type": "object"
+  },
+  "Marketplace": {
+   "enum": [
+    "AMAZON",
+    "FLIPKART",
+    "MEESHO"
+   ],
+   "title": "Marketplace",
+   "type": "string"
+  },
+  "NicheConfirmBody": {
+   "additionalProperties": false,
+   "properties": {
+    "decisions": {
+     "items": {
+      "$ref": "#/components/schemas/NicheDecisionBody"
+     },
+     "maxItems": 100,
+     "title": "Decisions",
+     "type": "array"
+    },
+    "new_terms": {
+     "items": {
+      "maxLength": 200,
+      "type": "string"
+     },
+     "maxItems": 50,
+     "title": "New Terms",
+     "type": "array"
+    }
+   },
+   "title": "NicheConfirmBody",
+   "type": "object"
+  },
+  "NicheDecisionBody": {
+   "additionalProperties": false,
+   "properties": {
+    "decision": {
+     "$ref": "#/components/schemas/DecisionKind"
+    },
+    "new_text": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "New Text"
+    },
+    "term_id": {
+     "format": "uuid",
+     "title": "Term Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "term_id",
+    "decision"
+   ],
+   "title": "NicheDecisionBody",
+   "type": "object"
+  },
+  "PeriodComparisonHttpRequest": {
+   "description": "Two already-persisted `metric_result` ids for the SAME `metric_code` \u2014 e.g. this\nperiod's `CONTRIBUTION_PROFIT` vs. last period's. Never accepts raw figures; the whole\npoint of this route (cfo-agent.md \u00a77.4.4's \"once built\" rule, twinkly-mapping-canyon.md\nCP A3) is to compare two figures the engine has ALREADY computed and persisted.",
+   "properties": {
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "model": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Model"
+    },
+    "result_a_id": {
+     "format": "uuid",
+     "title": "Result A Id",
+     "type": "string"
+    },
+    "result_b_id": {
+     "format": "uuid",
+     "title": "Result B Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "result_a_id",
+    "result_b_id",
+    "as_of_date"
+   ],
+   "title": "PeriodComparisonHttpRequest",
+   "type": "object"
+  },
+  "PeriodPnlForTenantHttpRequest": {
+   "description": "The real, DB-driven counterpart to `PeriodPnlHttpRequest` \u2014 no `lines`/`sku_by_line`/\n`cost_history_by_sku`/`ingestion_run_ids`/`active_adjustment_ids` fields at all, since\n`compute_period_pnl_for_tenant` auto-derives every one of them from the real database\n(cfo-agent.md \u00a76.16). The four component-code classification sets remain caller-supplied \u2014\ngenuine tenant/business classifications this composition does not guess.",
+   "properties": {
+    "advertising_adjustment_values": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "title": "Advertising Adjustment Values",
+     "type": "array"
+    },
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "duplicate_fee_candidate_codes": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Duplicate Fee Candidate Codes",
+     "type": "array"
+    },
+    "fee_component_codes": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Fee Component Codes",
+     "type": "array"
+    },
+    "forward_logistics_codes": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Forward Logistics Codes",
+     "type": "array"
+    },
+    "non_refunded_fee_codes": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Non Refunded Fee Codes",
+     "type": "array"
+    },
+    "other_adjustment_values": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "title": "Other Adjustment Values",
+     "type": "array"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    },
+    "recognition_state": {
+     "pattern": "^(RECOGNISED|REALIZED|UNAVAILABLE)$",
+     "title": "Recognition State",
+     "type": "string"
+    },
+    "reverse_logistics_codes": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Reverse Logistics Codes",
+     "type": "array"
+    }
+   },
+   "required": [
+    "period_start",
+    "period_end",
+    "as_of_date",
+    "recognition_state"
+   ],
+   "title": "PeriodPnlForTenantHttpRequest",
+   "type": "object"
+  },
+  "PeriodPnlHttpRequest": {
+   "description": "Everything `PeriodPnlRequest` needs (cfo-agent.md \u00a76.8 `cfo.pnl`) \u2014 caller-assembled,\nsame convention `/gst/period-summary` and `/batch-size` already established for\nalready-resolved `CanonicalLine`/cost-history/component-code inputs over HTTP.\n`compute_period_pnl` is a composition over already-assembled canonical data, not a raw\ningestion endpoint (`PeriodPnlRequest`'s own docstring, judgment call 4): a client posts the\nlines it has already fetched from its own store, exactly as every other multi-line CFO\nroute in this file does \u2014 this is not a novel shape for this file, just the first time it\nis paired with `cfo.pnl` specifically.",
+   "properties": {
+    "active_adjustment_ids": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Active Adjustment Ids",
+     "type": "array"
+    },
+    "adapter_versions": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Adapter Versions",
+     "type": "array"
+    },
+    "advertising_adjustment_values": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "title": "Advertising Adjustment Values",
+     "type": "array"
+    },
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "cost_history_by_sku": {
+     "additionalProperties": {
+      "items": {
+       "$ref": "#/components/schemas/CostEntryHttpRequest"
+      },
+      "type": "array"
+     },
+     "title": "Cost History By Sku",
+     "type": "object"
+    },
+    "duplicate_fee_candidate_codes": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Duplicate Fee Candidate Codes",
+     "type": "array"
+    },
+    "fee_component_codes": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Fee Component Codes",
+     "type": "array"
+    },
+    "forward_logistics_codes": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Forward Logistics Codes",
+     "type": "array"
+    },
+    "ingestion_run_ids": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Ingestion Run Ids",
+     "type": "array"
+    },
+    "lines": {
+     "items": {
+      "$ref": "#/components/schemas/PeriodPnlLineRequest"
+     },
+     "minItems": 1,
+     "title": "Lines",
+     "type": "array"
+    },
+    "non_refunded_fee_codes": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Non Refunded Fee Codes",
+     "type": "array"
+    },
+    "other_adjustment_values": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "title": "Other Adjustment Values",
+     "type": "array"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    },
+    "recognition_state": {
+     "pattern": "^(RECOGNISED|REALIZED|UNAVAILABLE)$",
+     "title": "Recognition State",
+     "type": "string"
+    },
+    "reverse_logistics_codes": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Reverse Logistics Codes",
+     "type": "array"
+    },
+    "sku_by_line": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "title": "Sku By Line",
+     "type": "object"
+    }
+   },
+   "required": [
+    "lines",
+    "period_start",
+    "period_end",
+    "as_of_date",
+    "recognition_state"
+   ],
+   "title": "PeriodPnlHttpRequest",
+   "type": "object"
+  },
+  "PeriodPnlLineRequest": {
+   "description": "One full `CanonicalLine` for `cfo.pnl` (cfo-agent.md \u00a76.8 `cfo.pnl`) \u2014 deliberately NOT\n`GstPeriodSummaryLineRequest` (the shape `/gst/period-summary` and `/batch-size` already\naccept over HTTP). That shape is a documented reduction: its own docstring states it never\ncarries a line's cancellation/return/RTO status because the GST period summary has no use\nfor them. `compute_period_pnl` genuinely needs those fields \u2014 `NetRealizedRevenue` consumes\n`cancellation_state`/`return_status`/`refunded_amount` (\u00a75.4/\u00a75.7) and `ReturnRTOLosses`\nconsumes `rto_status`/`rto_outcome` (\u00a75.6/\u00a75.7) \u2014 reusing the reduced shape here would\nsilently null every line's status and misreport a resolvable marketplace (e.g. Meesho) as\nUNAVAILABLE (E9-style), exactly the silent-wrong-default this codebase's hard rule forbids.\nThis model is therefore the fuller `CanonicalLine` shape `compute_period_pnl`'s own test\nfixtures (`packages/cfo/tests/unit/test_cfo_actions_pnl.py::_line`) construct \u2014 still\ncaller-assembled (`PeriodPnlRequest`'s own docstring, judgment call 4: this composition\ndoes not derive a `CanonicalLine` from raw `sales_line`/`line_component` rows itself), just\nnot truncated to the GST-only subset.",
+   "properties": {
+    "cancellation_state": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Cancellation State"
+    },
+    "components": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "title": "Components",
+     "type": "array"
+    },
+    "confidence": {
+     "default": "VERIFIED",
+     "title": "Confidence",
+     "type": "string"
+    },
+    "dispatch_date": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Dispatch Date"
+    },
+    "document_type": {
+     "title": "Document Type",
+     "type": "string"
+    },
+    "gross_item_amount_paise": {
+     "title": "Gross Item Amount Paise",
+     "type": "integer"
+    },
+    "invoice_date": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Invoice Date"
+    },
+    "marketplace": {
+     "title": "Marketplace",
+     "type": "string"
+    },
+    "order_date": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Order Date"
+    },
+    "quantity": {
+     "title": "Quantity",
+     "type": "integer"
+    },
+    "quarantine_rule_ids": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Quarantine Rule Ids",
+     "type": "array"
+    },
+    "refunded_amount_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Refunded Amount Paise"
+    },
+    "return_status": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Return Status"
+    },
+    "returned_qty": {
+     "default": 0,
+     "title": "Returned Qty",
+     "type": "integer"
+    },
+    "rto_outcome": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Rto Outcome"
+    },
+    "rto_qty": {
+     "default": 0,
+     "title": "Rto Qty",
+     "type": "integer"
+    },
+    "rto_status": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Rto Status"
+    },
+    "sales_line_id": {
+     "format": "uuid",
+     "title": "Sales Line Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sales_line_id",
+    "marketplace",
+    "document_type",
+    "quantity",
+    "gross_item_amount_paise",
+    "components"
+   ],
+   "title": "PeriodPnlLineRequest",
+   "type": "object"
+  },
+  "PreviewHttpRequest": {
+   "description": "A marketplace and period range for the free-tier gated preview (D7, cfo-agent.md\n\u00a76.9/\u00a76.8 `cfo.preview`) \u2014 mirrors `ReconcileHttpRequest` exactly, since this route calls\nthe same real reconciliation `POST /cfo/reconcile` does; the preview differs only in what\nit reveals, never in what it computes.",
+   "properties": {
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "marketplace": {
+     "minLength": 1,
+     "title": "Marketplace",
+     "type": "string"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    }
+   },
+   "required": [
+    "marketplace",
+    "period_start",
+    "period_end",
+    "as_of_date"
+   ],
+   "title": "PreviewHttpRequest",
+   "type": "object"
+  },
+  "PriceScenarioRequest": {
+   "description": "Handoff.py's own docstring names this exact caller as the missing piece: \"a caller\nwith a seller price should call calc_engine.api.compute_metric.compute_price_positioning\nitself.\" `seller_price_paise` is the caller-supplied fact \u00a75.15 requires \u2014 there is no\nlive \"current listed price\" lookup anywhere in this engine or this codebase (verified by\ngrep), so it must come from the request body, never be inferred.",
+   "properties": {
+    "seller_price_paise": {
+     "exclusiveMinimum": 0.0,
+     "title": "Seller Price Paise",
+     "type": "integer"
+    },
+    "stance": {
+     "anyOf": [
+      {
+       "pattern": "^(MATCH_LOWEST|BEAT_LOWEST_BY_PCT|BEAT_LOWEST_BY_PAISE|MATCH_AVERAGE|MATCH_HIGHEST)$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Stance"
+    },
+    "stance_param_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Stance Param Paise"
+    },
+    "stance_param_pct": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Stance Param Pct"
+    }
+   },
+   "required": [
+    "seller_price_paise"
+   ],
+   "title": "PriceScenarioRequest",
+   "type": "object"
+  },
+  "PricingCandidateHttpInput": {
+   "properties": {
+    "engine_result_ref": {
+     "format": "uuid",
+     "title": "Engine Result Ref",
+     "type": "string"
+    },
+    "margin_pct": {
+     "title": "Margin Pct",
+     "type": "string"
+    },
+    "price_paise": {
+     "title": "Price Paise",
+     "type": "integer"
+    },
+    "sku": {
+     "title": "Sku",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sku",
+    "price_paise",
+    "margin_pct",
+    "engine_result_ref"
+   ],
+   "title": "PricingCandidateHttpInput",
+   "type": "object"
+  },
+  "PricingCurveHttpRequest": {
+   "description": "One SKU, a set of candidate prices \u2014 never a single \"optimal price\" request (D4/AC12).\n`cogs_paise`/`return_rto_losses_paise` are `None` when that input is genuinely\nUNAVAILABLE to the caller (E14: refused with a data request, never an assumed cost), not\na way to spell zero.",
+   "properties": {
+    "active_adjustment_ids": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Active Adjustment Ids",
+     "type": "array"
+    },
+    "adapter_versions": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Adapter Versions",
+     "type": "array"
+    },
+    "advertising_costs_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Advertising Costs Paise"
+    },
+    "advertising_costs_unavailable_reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Advertising Costs Unavailable Reason"
+    },
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "basis": {
+     "pattern": "^(INCLUSIVE|EXCLUSIVE)$",
+     "title": "Basis",
+     "type": "string"
+    },
+    "candidate_prices_paise": {
+     "items": {
+      "type": "integer"
+     },
+     "minItems": 1,
+     "title": "Candidate Prices Paise",
+     "type": "array"
+    },
+    "category": {
+     "minLength": 1,
+     "title": "Category",
+     "type": "string"
+    },
+    "cogs_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Cogs Paise"
+    },
+    "cogs_unavailable_reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Cogs Unavailable Reason"
+    },
+    "fee_type": {
+     "minLength": 1,
+     "title": "Fee Type",
+     "type": "string"
+    },
+    "gst_rate_pct": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Gst Rate Pct"
+    },
+    "ingestion_run_ids": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Ingestion Run Ids",
+     "type": "array"
+    },
+    "marketplace": {
+     "minLength": 1,
+     "title": "Marketplace",
+     "type": "string"
+    },
+    "other_allocated_costs_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Other Allocated Costs Paise"
+    },
+    "other_allocated_costs_unavailable_reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Other Allocated Costs Unavailable Reason"
+    },
+    "return_rto_losses_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Return Rto Losses Paise"
+    },
+    "return_rto_losses_unavailable_reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Return Rto Losses Unavailable Reason"
+    },
+    "shipping_logistics_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Shipping Logistics Paise"
+    },
+    "shipping_logistics_unavailable_reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Shipping Logistics Unavailable Reason"
+    },
+    "sku": {
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sku",
+    "candidate_prices_paise",
+    "basis",
+    "marketplace",
+    "category",
+    "fee_type",
+    "as_of_date",
+    "shipping_logistics_paise",
+    "advertising_costs_paise",
+    "other_allocated_costs_paise"
+   ],
+   "title": "PricingCurveHttpRequest",
+   "type": "object"
+  },
+  "ReconcileHttpRequest": {
+   "description": "A marketplace and period range for Leak Shield's real reconciliation (D5, cfo-agent.md\n\u00a76.2/\u00a76.8 `cfo.reconcile`). Never accepts raw sales/settlement figures \u2014 this route always\nreads the tenant's already-ingested `sales_line`/`settlement_line` rows for the given\nperiod, exactly as `reconcile()` itself does.",
+   "properties": {
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "marketplace": {
+     "minLength": 1,
+     "title": "Marketplace",
+     "type": "string"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    }
+   },
+   "required": [
+    "marketplace",
+    "period_start",
+    "period_end",
+    "as_of_date"
+   ],
+   "title": "ReconcileHttpRequest",
+   "type": "object"
+  },
+  "RequestPriceScenarioRequest": {
+   "properties": {
+    "competitor_url_id": {
+     "format": "uuid",
+     "title": "Competitor Url Id",
+     "type": "string"
+    },
+    "seller_price_paise": {
+     "exclusiveMinimum": 0.0,
+     "title": "Seller Price Paise",
+     "type": "integer"
+    },
+    "stance": {
+     "anyOf": [
+      {
+       "pattern": "^(MATCH_LOWEST|BEAT_LOWEST_BY_PCT|BEAT_LOWEST_BY_PAISE|MATCH_AVERAGE|MATCH_HIGHEST)$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Stance"
+    },
+    "stance_param_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Stance Param Paise"
+    },
+    "stance_param_pct": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Stance Param Pct"
+    }
+   },
+   "required": [
+    "competitor_url_id",
+    "seller_price_paise"
+   ],
+   "title": "RequestPriceScenarioRequest",
+   "type": "object"
+  },
+  "ResearchNowRequest": {
+   "properties": {
+    "competitor_url_id": {
+     "format": "uuid",
+     "title": "Competitor Url Id",
+     "type": "string"
+    },
+    "image_refs": {
+     "default": [],
+     "items": {
+      "type": "string"
+     },
+     "title": "Image Refs",
+     "type": "array"
+    },
+    "manual_fields": {
+     "additionalProperties": true,
+     "default": {},
+     "title": "Manual Fields",
+     "type": "object"
+    }
+   },
+   "required": [
+    "competitor_url_id"
+   ],
+   "title": "ResearchNowRequest",
+   "type": "object"
+  },
+  "ResolveBody": {
+   "properties": {
+    "resolution_note": {
+     "maxLength": 2000,
+     "minLength": 1,
+     "title": "Resolution Note",
+     "type": "string"
+    }
+   },
+   "required": [
+    "resolution_note"
+   ],
+   "title": "ResolveBody",
+   "type": "object"
+  },
+  "ReviewResearchRequest": {
+   "properties": {
+    "competitor_url_id": {
+     "format": "uuid",
+     "title": "Competitor Url Id",
+     "type": "string"
+    },
+    "image_refs": {
+     "items": {
+      "type": "string"
+     },
+     "minItems": 1,
+     "title": "Image Refs",
+     "type": "array"
+    },
+    "snapshot_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Snapshot Id"
+    }
+   },
+   "required": [
+    "competitor_url_id",
+    "image_refs"
+   ],
+   "title": "ReviewResearchRequest",
+   "type": "object"
+  },
+  "SellerGoalHttpRequest": {
+   "properties": {
+    "note": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Note"
+    },
+    "priority_category": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Priority Category"
+    },
+    "target_margin_pct": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Target Margin Pct"
+    }
+   },
+   "title": "SellerGoalHttpRequest",
+   "type": "object"
+  },
+  "SellerProductAttribute": {
+   "properties": {
+    "key": {
+     "title": "Key",
+     "type": "string"
+    },
+    "value": {
+     "title": "Value",
+     "type": "string"
+    }
+   },
+   "required": [
+    "key",
+    "value"
+   ],
+   "title": "SellerProductAttribute",
+   "type": "object"
+  },
+  "StartDiscoveryRunRequest": {
+   "properties": {
+    "product_id": {
+     "title": "Product Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "product_id"
+   ],
+   "title": "StartDiscoveryRunRequest",
+   "type": "object"
+  },
+  "StartInvestigationBody": {
+   "properties": {
+    "title": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Title"
+    }
+   },
+   "title": "StartInvestigationBody",
+   "type": "object"
+  },
+  "StrategicBriefingHttpRequest": {
+   "description": "Every opt-in field defaults to \"don't run this check\" \u2014 mirrors `FinancialHealthHttpRequest`'s\nminimal shape, extended only with the opt-in signal sources `assemble_strategic_briefing`\nitself documents as opt-in (see that function's own docstring). `pricing_candidates`/\n`supplier_ranking` are the caller's own already-computed `compute_pricing_curve`/\n`rank_suppliers` output, copied through unchanged (never recomputed here) \u2014 same opt-in,\npass-through contract as `anomaly_target_ref`/`expense_budget_categories`.",
+   "properties": {
+    "anomaly_target_ref": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Anomaly Target Ref"
+    },
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "expense_budget_categories": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Expense Budget Categories",
+     "type": "array"
+    },
+    "include_narration": {
+     "default": true,
+     "title": "Include Narration",
+     "type": "boolean"
+    },
+    "model": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Model"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    },
+    "pricing_candidates": {
+     "items": {
+      "$ref": "#/components/schemas/PricingCandidateHttpInput"
+     },
+     "title": "Pricing Candidates",
+     "type": "array"
+    },
+    "supplier_ranking": {
+     "items": {
+      "$ref": "#/components/schemas/SupplierRankHttpInput"
+     },
+     "title": "Supplier Ranking",
+     "type": "array"
+    }
+   },
+   "required": [
+    "period_start",
+    "period_end",
+    "as_of_date"
+   ],
+   "title": "StrategicBriefingHttpRequest",
+   "type": "object"
+  },
+  "SupplierLookupRequest": {
+   "properties": {
+    "candidate_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "minItems": 1,
+     "title": "Candidate Ids",
+     "type": "array"
+    },
+    "run_id": {
+     "format": "uuid",
+     "title": "Run Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "run_id",
+    "candidate_ids"
+   ],
+   "title": "SupplierLookupRequest",
+   "type": "object"
+  },
+  "SupplierRankHttpInput": {
+   "properties": {
+    "engine_result_ref": {
+     "format": "uuid",
+     "title": "Engine Result Ref",
+     "type": "string"
+    },
+    "landed_cost_paise": {
+     "title": "Landed Cost Paise",
+     "type": "integer"
+    },
+    "sku": {
+     "title": "Sku",
+     "type": "string"
+    },
+    "supplier_name": {
+     "title": "Supplier Name",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sku",
+    "supplier_name",
+    "landed_cost_paise",
+    "engine_result_ref"
+   ],
+   "title": "SupplierRankHttpInput",
+   "type": "object"
+  },
+  "SupplierRankingHttpRequest": {
+   "description": "One SKU \u2014 ranks every ACTIVE `supplier.quote` row for it by landed cost (cfo-agent.md\n\u00a76.11, `twinkly-mapping-canyon.md` Phase B1). No `target_type`/`target_ref` fields here\n(unlike `LandedCostHttpRequest`): `rank_suppliers` fixes `target_type=\"SKU\"` internally,\nper CP A4's own established convention that multiple suppliers quoting the same SKU land\nas multiple ACTIVE rows under one `(target_type=\"SKU\", target_ref=sku)` pair \u2014 `sku` alone\nis the lookup key.",
+   "properties": {
+    "active_adjustment_ids": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Active Adjustment Ids",
+     "type": "array"
+    },
+    "as_of_date": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "As Of Date"
+    },
+    "quantity": {
+     "exclusiveMinimum": 0.0,
+     "title": "Quantity",
+     "type": "integer"
+    },
+    "sku": {
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sku",
+    "quantity"
+   ],
+   "title": "SupplierRankingHttpRequest",
+   "type": "object"
+  },
+  "TitleSetsBody": {
+   "additionalProperties": false,
+   "properties": {
+    "attributes": {
+     "items": {
+      "$ref": "#/components/schemas/AttributePair"
+     },
+     "maxItems": 50,
+     "title": "Attributes",
+     "type": "array"
+    },
+    "brand": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Brand"
+    },
+    "category_hint": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Category Hint"
+    },
+    "image_analysis_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Image Analysis Id"
+    },
+    "marketplaces": {
+     "items": {
+      "$ref": "#/components/schemas/Marketplace"
+     },
+     "maxItems": 3,
+     "minItems": 1,
+     "title": "Marketplaces",
+     "type": "array"
+    },
+    "notes": {
+     "items": {
+      "maxLength": 1000,
+      "type": "string"
+     },
+     "maxItems": 20,
+     "title": "Notes",
+     "type": "array"
+    },
+    "product_name": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Product Name"
+    },
+    "request_key": {
+     "maxLength": 128,
+     "minLength": 1,
+     "title": "Request Key",
+     "type": "string"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 128,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "target_price_paise": {
+     "anyOf": [
+      {
+       "maximum": 9.223372036854776e+18,
+       "minimum": 0.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Target Price Paise"
+    },
+    "text_only_confirmed": {
+     "default": false,
+     "title": "Text Only Confirmed",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "request_key",
+    "marketplaces"
+   ],
+   "title": "TitleSetsBody",
+   "type": "object"
+  },
+  "TrendPreviewBody": {
+   "additionalProperties": false,
+   "properties": {
+    "marketplaces": {
+     "items": {
+      "$ref": "#/components/schemas/Marketplace"
+     },
+     "maxItems": 3,
+     "title": "Marketplaces",
+     "type": "array"
+    },
+    "sections": {
+     "items": {
+      "$ref": "#/components/schemas/TrendSection"
+     },
+     "maxItems": 5,
+     "title": "Sections",
+     "type": "array"
+    }
+   },
+   "title": "TrendPreviewBody",
+   "type": "object"
+  },
+  "TrendRunBody": {
+   "additionalProperties": false,
+   "properties": {
+    "marketplaces": {
+     "items": {
+      "$ref": "#/components/schemas/Marketplace"
+     },
+     "maxItems": 3,
+     "title": "Marketplaces",
+     "type": "array"
+    },
+    "plan_digest": {
+     "pattern": "^[0-9a-f]{64}$",
+     "title": "Plan Digest",
+     "type": "string"
+    },
+    "request_key": {
+     "maxLength": 128,
+     "minLength": 1,
+     "title": "Request Key",
+     "type": "string"
+    },
+    "sections": {
+     "items": {
+      "$ref": "#/components/schemas/TrendSection"
+     },
+     "maxItems": 5,
+     "title": "Sections",
+     "type": "array"
+    }
+   },
+   "required": [
+    "request_key",
+    "plan_digest"
+   ],
+   "title": "TrendRunBody",
+   "type": "object"
+  },
+  "TrendSection": {
+   "description": "The five *researched* sections of a trend report (\u00a76.8.2). Sections 6\n(interpretation) and 7 (evidence) are derived, not researched, and are stored in their\nown columns.",
+   "enum": [
+    "NICHE",
+    "MARKET_NEWS",
+    "REPORTED_TACTICS",
+    "NEW_PRODUCTS_BUZZ",
+    "ADJACENT"
+   ],
+   "title": "TrendSection",
+   "type": "string"
+  },
+  "TurnBody": {
+   "properties": {
+    "action": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/UiActionBody"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "attachment_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 20,
+     "title": "Attachment Ids",
+     "type": "array"
+    },
+    "clarification": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ClarificationReplyBody"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "clientRequestId": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Clientrequestid"
+    },
+    "message": {
+     "maxLength": 4000,
+     "minLength": 1,
+     "title": "Message",
+     "type": "string"
+    },
+    "period_end": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Period End"
+    },
+    "period_start": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Period Start"
+    }
+   },
+   "required": [
+    "message"
+   ],
+   "title": "TurnBody",
+   "type": "object"
+  },
+  "UiActionBody": {
+   "description": "A quick action chosen with a deterministic UI control. `kind` is one of the executing routes; `key` is a catalog key (BUSINESS_STATE / ACTION /\nPLAYBOOK) and absent for SYNTHESIZE; `slots` may only use the declared slot vocabulary, as short text the backend then resolves deterministically.\nWhether the member may actually run it is decided server-side, per leg, exactly as for a classified message.",
+   "properties": {
+    "inputs": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Inputs"
+    },
+    "key": {
+     "anyOf": [
+      {
+       "maxLength": 64,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Key"
+    },
+    "kind": {
+     "enum": [
+      "BUSINESS_STATE",
+      "ACTION",
+      "PLAYBOOK",
+      "SYNTHESIZE"
+     ],
+     "title": "Kind",
+     "type": "string"
+    },
+    "refs": {
+     "additionalProperties": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "title": "Refs",
+     "type": "object"
+    },
+    "slots": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "title": "Slots",
+     "type": "object"
+    }
+   },
+   "required": [
+    "kind"
+   ],
+   "title": "UiActionBody",
+   "type": "object"
+  },
+  "UpdateCompetitorUrlRequest": {
+   "properties": {
+    "alert_on_availability_change_override": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Alert On Availability Change Override"
+    },
+    "archive": {
+     "default": false,
+     "title": "Archive",
+     "type": "boolean"
+    },
+    "price_threshold_pct_override": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Price Threshold Pct Override"
+    },
+    "tags": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Tags"
+    }
+   },
+   "title": "UpdateCompetitorUrlRequest",
+   "type": "object"
+  },
+  "UpdateNicheBriefRequest": {
+   "properties": {
+    "budget_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Budget Paise"
+    },
+    "category_text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Category Text"
+    },
+    "constraints": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Constraints"
+    },
+    "marketplaces": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Marketplaces"
+    },
+    "target_price_max_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Target Price Max Paise"
+    },
+    "target_price_min_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Target Price Min Paise"
+    }
+   },
+   "title": "UpdateNicheBriefRequest",
+   "type": "object"
+  },
+  "UpdateSellerProductRequest": {
+   "description": "The seller-product-profile manual form (\u00a75.5.1 Source 2, C31) \u2014 exactly the five\nfields locked by C31, no more. `rating`/`review_count` are deliberately absent: they are\nout of the form's scope by decision and always stay `UNKNOWN` (\u00a75.5.2). Every field is\noptional and full-replace on submit (`seller_product_profile_repo.upsert_profile`) \u2014 a\nfield omitted (or sent as `null`) is stored as `NULL`, i.e. `UNKNOWN`, never a default.",
+   "properties": {
+    "attributes": {
+     "anyOf": [
+      {
+       "items": {
+        "$ref": "#/components/schemas/SellerProductAttribute"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Attributes"
+    },
+    "category": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Category"
+    },
+    "fulfillment_type": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Fulfillment Type"
+    },
+    "keywords": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Keywords"
+    },
+    "price_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Price Paise"
+    }
+   },
+   "title": "UpdateSellerProductRequest",
+   "type": "object"
+  }
+ }
+}

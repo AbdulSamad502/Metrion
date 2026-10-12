@@ -1,5 +1,6 @@
 "use client";
 
+import { PAGE_COPY } from "@/lib/navigation";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { AgentCard } from "@/components/ceo/AgentCard";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
@@ -11,7 +12,7 @@ import { useCiSummary } from "@/lib/useCiSummary";
 
 export default function AgentsPage() {
   return (
-    <DashboardShell title="Agents" subtitle="The agents Metrion runs for your workspace">
+    <DashboardShell {...PAGE_COPY["agents"]}>
       <Agents />
     </DashboardShell>
   );

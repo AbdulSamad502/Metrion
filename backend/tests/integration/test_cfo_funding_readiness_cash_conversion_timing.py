@@ -127,7 +127,7 @@ def _insert_settlement_line(tenant_id: uuid.UUID, *, ingestion_run_id: uuid.UUID
 
 
 def _insert_tolerance(tenant_id: uuid.UUID) -> None:
-    from calc_engine.repositories.tenant_context import tenant_scope as engine_tenant_scope
+    from tests.integration.owner_db import owner_tenant_scope as engine_tenant_scope  # configuration is written by an operator (owner role), not the app role
 
     with engine_tenant_scope(tenant_id) as conn:
         conn.execute(

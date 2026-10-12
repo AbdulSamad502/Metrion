@@ -17,8 +17,9 @@ const QUESTION = {
   version: 1, kind: "INPUT", slot: "shipping",
   options: [
     { key: "opt-0", label: "None (0), I confirm", kind: "RECOMMENDED" as const, reason: "You are sure it is zero" },
-    { key: "opt-1", label: "Unknown", kind: "ALTERNATIVE" as const, reason: "Margins that depend on it will show as unavailable" },
+    { key: "opt-1", label: "Unknown", kind: "ALTERNATIVE" as const, reason: "Margins that depend on it will show as unavailable", skip: true },
     { key: "other", label: "Other", kind: "OTHER" as const, reason: "Type your answer in the chat bar" },
+    { key: "back", label: "Back", kind: "BACK" as const, reason: "Change my previous answer" },
     { key: "cancel", label: "Cancel", kind: "CANCEL" as const, reason: "Stop asking; nothing will run" },
   ],
 };
@@ -39,21 +40,46 @@ describe("input questions", () => {
   it("shows the options, tells the seller to type in the chat bar, and has no inline text box (the chat bar is the answer box)", async () => {
     await open();
     expect(screen.getByTestId("card-option-opt-0")).toHaveTextContent("None (0), I confirm");
-    expect(screen.getByTestId("card-option-opt-1")).toHaveTextContent("Unknown");
+    expect(screen.getByTestId("card-skip")).toHaveTextContent("Skip · Unknown"); // the backend's own "unknown" option, offered as Skip and described honestly
+    expect(screen.getByTestId("card-back")).toBeInTheDocument();
+    expect(screen.getByTestId("card-progress")).toHaveTextContent("Question 8 of 11");
     expect(screen.getByText(/type your answer in the chat bar/i)).toBeInTheDocument();
     expect(screen.queryByTestId("card-option-other")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Ask the CEO")).toBeEnabled();
     expect(screen.getByTestId("ceo-status")).toHaveTextContent("Needs your input");
   });
 
-  it("choosing an option answers that question", async () => {
+  it("choosing an option stages it; Continue answers that question", async () => {
     await open();
-    await user().click(screen.getByTestId("card-option-opt-1"));
+    const u = user();
+    const before = fake.calls.filter((c) => c.method === "postTurn").length;
+    await u.click(screen.getByTestId("card-option-opt-0"));
+    expect(fake.calls.filter((c) => c.method === "postTurn")).toHaveLength(before);
+    await u.click(screen.getByTestId("card-continue"));
+    await screen.findByTestId("processing");
+    const args = fake.calls.filter((c) => c.method === "postTurn").at(-1)!.args as unknown[];
+    expect(args[1]).toBe("None (0), I confirm");
+    expect(args[4]).toMatchObject({ option: "opt-0" });
+    fake.completeTurn({ answer: "ok" });
+  });
+
+  it("Skip sends the backend's unknown option, so the thread says Unknown rather than hiding what was recorded", async () => {
+    await open();
+    await user().click(screen.getByTestId("card-skip"));
     await screen.findByTestId("processing");
     const args = fake.calls.filter((c) => c.method === "postTurn").at(-1)!.args as unknown[];
     expect(args[1]).toBe("Unknown");
     expect(args[4]).toMatchObject({ option: "opt-1" });
     fake.completeTurn({ answer: "ok" });
+  });
+
+  it("Back asks the backend to step back one question; the client keeps no answers of its own", async () => {
+    await open();
+    await user().click(screen.getByTestId("card-back"));
+    await screen.findByTestId("processing");
+    const args = fake.calls.filter((c) => c.method === "postTurn").at(-1)!.args as unknown[];
+    expect(args[4]).toMatchObject({ option: "back" });
+    fake.completeTurn({ answer: "(7 of 11) What is the current price?" });
   });
 
   it("a typed answer goes through the same chat bar as every message, with no special client logic", async () => {

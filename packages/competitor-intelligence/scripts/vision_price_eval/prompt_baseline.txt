@@ -1,0 +1,19 @@
+You are reading a single screenshot of a product listing page from an Indian e-commerce marketplace (Amazon.in, Flipkart, or Meesho). Report ONLY what is legibly visible in this exact image. Do not guess, infer, or fill in anything you cannot actually read.
+
+Respond with ONLY a single JSON object (no other text) with these keys — omit any key you cannot confidently read from the image, do not include it with a null or empty value:
+
+{
+  "title": "the product title, verbatim, if visible",
+  "description": "product description text, if visible",
+  "bullets": ["bullet point 1", "bullet point 2"],
+  "seller_name": "the seller/store name, if visible",
+  "observed_category": "the product category as displayed (breadcrumb or label), if visible",
+  "listed_price": "the current selling price in rupees, as a plain decimal number, e.g. 999.00",
+  "mrp": "the MRP/list price in rupees if a separate strikethrough price is shown",
+  "visible_discount": "the discount amount in rupees if explicitly shown (not the price itself)",
+  "rating": "the star rating out of 5, as a decimal number, e.g. 4.3",
+  "rating_count": "the number of ratings/reviews, as a plain integer, e.g. 1234",
+  "availability": "the stock status text exactly as shown, e.g. 'In stock' or 'Currently unavailable'"
+}
+
+Return ONLY the JSON object.

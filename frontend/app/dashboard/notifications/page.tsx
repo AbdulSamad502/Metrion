@@ -1,5 +1,6 @@
 "use client";
 
+import { PAGE_COPY } from "@/lib/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
@@ -26,7 +27,7 @@ type Selected = { kind: "alert"; alert: Layer1Alert } | { kind: "request"; reque
 
 export default function NotificationsPage() {
   return (
-    <DashboardShell title="Notifications" subtitle="Competitor alerts and inputs the CFO is waiting on">
+    <DashboardShell {...PAGE_COPY["notifications"]}>
       <Notifications />
     </DashboardShell>
   );

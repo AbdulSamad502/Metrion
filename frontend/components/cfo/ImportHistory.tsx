@@ -8,7 +8,8 @@ import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Section } from "@/components/ui/Section";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ApiError, apiFetch, type ImportSummary, type UploadOutcome } from "@/lib/api";
+import { apiFetch, type ImportSummary, type UploadOutcome } from "@/lib/api";
+import { friendlyApiError } from "@/lib/apiErrors";
 
 function statusBadge(s: ImportSummary) {
   if (s.status === "VALIDATED") return <StatusBadge tone="accent" dot>Ingested</StatusBadge>;
@@ -40,7 +41,7 @@ export function ImportHistory({
     try {
       setImports(await apiFetch<ImportSummary[]>("/api/v1/cfo/imports", await getToken()));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not reach the backend");
+      setError(friendlyApiError(e, "Could not reach the backend"));
     }
   }, [getToken]);
 

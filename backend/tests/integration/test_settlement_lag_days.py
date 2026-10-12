@@ -202,7 +202,7 @@ def _insert_tolerance(
     settlement_lag_days: int = 90,
     grace_period_days: int = 30,
 ) -> None:
-    from calc_engine.repositories.tenant_context import tenant_scope as engine_tenant_scope
+    from tests.integration.owner_db import owner_tenant_scope as engine_tenant_scope  # configuration is written by an operator (owner role), not the app role
 
     with engine_tenant_scope(tenant_id) as conn:
         conn.execute(

@@ -71,6 +71,11 @@ def runlog(monkeypatch: pytest.MonkeyPatch) -> RunLog:
     def finish_run(tenant_id, run_id, **kw):  # type: ignore[no-untyped-def]
         log.finished.append({"id": run_id, "tenant_id": tenant_id, **kw})
 
+    def finish_run_if_unfinished(tenant_id, run_id, **kw):  # type: ignore[no-untyped-def]
+        # the choke point's leg write is guarded (R5 Stage A); the fake records it exactly like an unguarded finish and always wins the race
+        log.finished.append({"id": run_id, "tenant_id": tenant_id, **kw})
+        return True
+
     def insert_finding(tenant_id, investigation_id, **kw):  # type: ignore[no-untyped-def]
         finding_id = uuid.uuid4()
         log.findings.append({"id": finding_id, "tenant_id": tenant_id, "investigation_id": investigation_id, **kw})
@@ -78,6 +83,7 @@ def runlog(monkeypatch: pytest.MonkeyPatch) -> RunLog:
 
     monkeypatch.setattr(agent_run_repo, "insert_run", insert_run)
     monkeypatch.setattr(agent_run_repo, "finish_run", finish_run)
+    monkeypatch.setattr(agent_run_repo, "finish_run_if_unfinished", finish_run_if_unfinished)
     monkeypatch.setattr(investigation_repo, "insert_finding", insert_finding)
     monkeypatch.setattr(investigation_repo, "attached_agents", lambda tenant_id, investigation_id: log.attached)
     monkeypatch.setattr(dispatch_module, "resolve_ceo_entitlement", lambda tenant_id, occurred_at=None: _Pass())

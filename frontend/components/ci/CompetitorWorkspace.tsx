@@ -29,6 +29,7 @@ import {
   type SellerProduct,
   type SnapshotHistoryItem,
 } from "@/lib/api";
+import { friendlyApiError } from "@/lib/apiErrors";
 
 const CI_TABS = [
   { id: "competitors", label: "Tracked competitors" },
@@ -52,7 +53,7 @@ export function CompetitorWorkspace() {
       setUrls(await apiFetch<CompetitorUrl[]>("/api/v1/ci/competitor-urls", token));
       setLoadError(null);
     } catch (e) {
-      setLoadError(e instanceof ApiError ? e.message : "Could not reach the backend");
+      setLoadError(friendlyApiError(e, "Could not reach the backend"));
     }
   };
 
@@ -122,8 +123,15 @@ function CompetitorResearchSection({
     onChanged();
   };
 
+  const [adding, setAdding] = useState(false);
   const addUrl = async () => {
+    if (adding) return;
     setAddError(null);
+    if (!newUrl.trim()) {
+      setAddError("Enter the competitor's product URL first.");
+      return;
+    }
+    setAdding(true);
     try {
       const token = await getToken();
       await apiFetch("/api/v1/ci/competitor-urls", token, {
@@ -134,7 +142,9 @@ function CompetitorResearchSection({
       setNewLinkedSku("");
       onChanged();
     } catch (e) {
-      setAddError(e instanceof ApiError ? e.message : "Could not add competitor URL");
+      setAddError(friendlyApiError(e, "Could not add competitor URL"));
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -200,12 +210,14 @@ function CompetitorResearchSection({
           )}
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <input
+              aria-label="Competitor product URL"
               value={newUrl}
               onChange={(e) => setNewUrl(e.target.value)}
               placeholder="https://amazon.in/dp/... (reference only — never fetched)"
               className="mt-input flex-1 rounded-lg px-3 py-2 t-body"
             />
             <input
+              aria-label="Link to SKU (optional)"
               value={newLinkedSku}
               onChange={(e) => setNewLinkedSku(e.target.value)}
               placeholder="Link to SKU (optional — needed for Market Overview)"
@@ -214,9 +226,10 @@ function CompetitorResearchSection({
             <button
               type="button"
               onClick={addUrl}
-              className="mt-btn mt-focus rounded-lg px-4 py-2 t-body font-bold mt-btn-secondary"
+              disabled={adding}
+              className="mt-btn mt-focus rounded-lg px-4 py-2 t-body font-bold mt-btn-secondary disabled:opacity-60"
             >
-              Add
+              {adding ? "Adding…" : "Add"}
             </button>
           </div>
           <div className="t-meta" style={{ color: "var(--text-6)" }}>
@@ -224,7 +237,7 @@ function CompetitorResearchSection({
             product SKU — either through Discover Competitors (automatic) or the &quot;Link to
             SKU&quot; box above (manual).
           </div>
-          {addError && <div className="t-body-sm" style={{ color: "var(--negative)" }}>{addError}</div>}
+          {addError && <div role="alert" className="t-body-sm" style={{ color: "var(--negative)" }}>{addError}</div>}
         </div>
       </Section>
 
@@ -264,6 +277,18 @@ function CompetitorResearchSection({
   );
 }
 
+/** The stored availability change as the seller reads it. An unknown value is shown as it is, never guessed. */
+function availabilityTransition(change: string | null): string {
+  if (change === "IN_TO_OUT") return "IN STOCK → OUT OF STOCK";
+  if (change === "OUT_TO_IN") return "OUT OF STOCK → IN STOCK";
+  return change ?? "";
+}
+
+/** An event whose only change is availability: no price moved, so it must not be presented as a price decrease of zero. */
+function isAvailabilityOnly(ev: PriceEventItem): boolean {
+  return ev.availabilityChange !== null && ev.deltaPaise === 0;
+}
+
 function CompetitorDetailSection({
   url,
   getToken,
@@ -286,8 +311,11 @@ function CompetitorDetailSection({
   const [tagsSaved, setTagsSaved] = useState(false);
 
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const loadDetail = async (urlId: string) => {
+    setRefreshing(true);
     try {
       const token = await getToken();
       const [h, e, d] = await Promise.all([
@@ -299,9 +327,12 @@ function CompetitorDetailSection({
       setEvents(e);
       setListingDiff(d);
       setDetailError(null);
+      setUpdatedAt(new Date());
     } catch (err) {
       // Previously an unhandled rejection that left the panel on "Loading…" forever.
-      setDetailError(err instanceof ApiError ? err.message : "Could not load this competitor's history");
+      setDetailError(friendlyApiError(err, "Could not load this competitor's history"));
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -334,7 +365,7 @@ function CompetitorDetailSection({
     } catch (e) {
       // Previously swallowed silently — a failed save looked identical to a successful
       // one, since nothing rendered either way. Now surfaced directly.
-      setTagsError(e instanceof ApiError ? e.message : "Could not save tags");
+      setTagsError(friendlyApiError(e, "Could not save tags"));
     } finally {
       setTagsSaving(false);
     }
@@ -346,14 +377,23 @@ function CompetitorDetailSection({
     <Section title={`Competitor Detail — ${url.label ?? url.url}`}>
       <div className="flex flex-col gap-5">
         {detailError && <ErrorNotice message={detailError} onRetry={() => void loadDetail(url.id)} />}
-        <button
-          type="button"
-          onClick={() => loadDetail(url.id)}
-          className="w-fit t-meta font-semibold"
-          style={{ color: "var(--accent)" }}
-        >
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => loadDetail(url.id)}
+            disabled={refreshing}
+            aria-busy={refreshing}
+            className="mt-btn mt-btn-secondary mt-focus w-fit rounded-lg px-3 py-1.5 t-body-sm font-semibold disabled:cursor-not-allowed"
+            style={{ opacity: refreshing ? 0.6 : 1 }}
+          >
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+          {updatedAt && !detailError && (
+            <span role="status" className="t-meta" style={{ color: "var(--text-5)" }}>
+              Updated {updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} · {history?.length ?? 0} snapshot(s), {events?.length ?? 0} price event(s)
+            </span>
+          )}
+        </div>
         <div>
           <div className="mb-1 t-body-sm font-semibold" style={{ color: "var(--text-6)" }}>
             Tags
@@ -380,7 +420,7 @@ function CompetitorDetailSection({
               Save tags
             </button>
           </div>
-          {tagsError && <div className="mt-1 t-meta" style={{ color: "var(--negative)" }}>{tagsError}</div>}
+          {tagsError && <div role="alert" className="mt-1 t-meta" style={{ color: "var(--negative)" }}>{tagsError}</div>}
           {tagsSaved && !tagsError && (
             <div className="mt-1 t-meta" style={{ color: "var(--accent)" }}>Saved.</div>
           )}
@@ -450,10 +490,16 @@ function CompetitorDetailSection({
                   className="rounded-lg px-3 py-2 t-body-sm"
                   style={{ borderBottom: "1px solid var(--border-subtle)" }}
                 >
-                  <span style={{ color: "var(--text-2)" }}>
-                    {ev.direction} {ev.deltaPct}% (₹{(Math.abs(ev.deltaPaise) / 100).toFixed(2)})
-                  </span>
-                  {ev.availabilityChange && <span style={{ color: "var(--text-5)" }}> · {ev.availabilityChange}</span>}
+                  {isAvailabilityOnly(ev) ? (
+                    <span style={{ color: "var(--text-2)" }}>Availability: {availabilityTransition(ev.availabilityChange)} (price unchanged)</span>
+                  ) : (
+                    <>
+                      <span style={{ color: "var(--text-2)" }}>
+                        {ev.direction} {ev.deltaPct}% (₹{(Math.abs(ev.deltaPaise) / 100).toFixed(2)})
+                      </span>
+                      {ev.availabilityChange && <span style={{ color: "var(--text-5)" }}> · {availabilityTransition(ev.availabilityChange)}</span>}
+                    </>
+                  )}
                   {ev.thresholdBreached && <span style={{ color: "var(--negative)" }}> · alert-worthy</span>}
                   <span style={{ color: "var(--text-6)" }}> · {new Date(ev.createdAt).toLocaleString()}</span>
                 </div>
@@ -515,7 +561,12 @@ function ComparisonView({ competitorUrlId, getToken }: { competitorUrlId: string
       );
       setResult(data);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not load the comparison");
+      // A 404 naming the product means the product itself is unknown to Metrion: it is in no uploaded sales report and no saved profile yet.
+      setError(
+        e instanceof ApiError && e.status === 404 && typeof e.detail === "string" && e.detail.startsWith("No SellerProduct")
+          ? `Metrion has no product "${productId}" yet: it is not in an uploaded sales report and has no saved profile. Save it in the Seller Product form above, or use a SKU from an uploaded report, then compare again.`
+          : friendlyApiError(e, "Could not load the comparison"),
+      );
       setResult(null);
     } finally {
       setLoading(false);
@@ -559,7 +610,7 @@ function ComparisonView({ competitorUrlId, getToken }: { competitorUrlId: string
           {loading ? "Loading…" : "Compare"}
         </button>
       </div>
-      {error && <div className="mb-2 text-sm" style={{ color: "var(--negative)" }}>{error}</div>}
+      {error && <div role="alert" className="mb-2 text-sm" style={{ color: "var(--negative)" }}>{error}</div>}
       {result && !result.available && (
         <div className="text-sm" style={{ color: "var(--text-5)" }}>Not available yet — {result.reason}</div>
       )}
@@ -664,7 +715,7 @@ function PricePositioningForm({
       );
       setResult(res);
     } catch (e) {
-      setFormError(e instanceof ApiError ? e.message : "Could not check price position");
+      setFormError(friendlyApiError(e, "Could not check price position"));
     } finally {
       setBusy(false);
     }
@@ -735,7 +786,7 @@ function PricePositioningForm({
         >
           {busy ? "Checking…" : "Check price position"}
         </button>
-        {formError && <div className="t-body-sm" style={{ color: "var(--negative)" }}>{formError}</div>}
+        {formError && <div role="alert" className="t-body-sm" style={{ color: "var(--negative)" }}>{formError}</div>}
 
         {result && (
           <div className="flex flex-col gap-1.5">
@@ -823,7 +874,7 @@ function ResearchForm({
       setAvailability("");
       onChanged();
     } catch (e) {
-      setFormError(e instanceof ApiError ? e.message : "Research run failed");
+      setFormError(friendlyApiError(e, "Research run failed"));
     } finally {
       setBusy(false);
     }
@@ -878,7 +929,7 @@ function ResearchForm({
       >
         {busy ? "Running…" : "Research Now"}
       </button>
-      {formError && <div className="t-body-sm" style={{ color: "var(--negative)" }}>{formError}</div>}
+      {formError && <div role="alert" className="t-body-sm" style={{ color: "var(--negative)" }}>{formError}</div>}
 
       {result && (
         <div className="mt-2 rounded-lg p-3 t-body-sm" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
@@ -984,7 +1035,7 @@ function SellerProductSection({ getToken }: { getToken: () => Promise<string | n
         setNotFound(true);
         populateFormFrom(null);
       } else {
-        setLoadError(e instanceof ApiError ? e.message : "Could not load the seller-product profile");
+        setLoadError(friendlyApiError(e, "Could not load the seller-product profile"));
         setProduct(null);
         setLoadedProductId(null);
       }
@@ -1030,7 +1081,7 @@ function SellerProductSection({ getToken }: { getToken: () => Promise<string | n
       setSaved(true);
     } catch (e) {
       // Show the real outcome either way — no silent success and no silent failure.
-      setSaveError(e instanceof ApiError ? e.message : "Could not save the seller-product profile");
+      setSaveError(friendlyApiError(e, "Could not save the seller-product profile"));
     } finally {
       setSaving(false);
     }
@@ -1066,7 +1117,7 @@ function SellerProductSection({ getToken }: { getToken: () => Promise<string | n
               {loading ? "Loading…" : "Load"}
             </button>
           </div>
-          {loadError && <div className="mt-1 t-body-sm" style={{ color: "var(--negative)" }}>{loadError}</div>}
+          {loadError && <div role="alert" className="mt-1 t-body-sm" style={{ color: "var(--negative)" }}>{loadError}</div>}
         </div>
 
         {loadedProductId && (
@@ -1188,7 +1239,7 @@ function SellerProductSection({ getToken }: { getToken: () => Promise<string | n
               >
                 {saving ? "Saving…" : "Save profile"}
               </button>
-              {saveError && <div className="mt-1 t-body-sm" style={{ color: "var(--negative)" }}>{saveError}</div>}
+              {saveError && <div role="alert" className="mt-1 t-body-sm" style={{ color: "var(--negative)" }}>{saveError}</div>}
               {saved && !saveError && (
                 <div className="mt-1 t-body-sm" style={{ color: "var(--accent)" }}>Saved.</div>
               )}
@@ -1224,7 +1275,7 @@ function DiscoverySection({ getToken, onAccepted }: { getToken: () => Promise<st
       const detail = await apiFetch<DiscoveryRunDetail>(`/api/v1/ci/discovery-runs/${runId}`, token);
       setRun(detail);
     } catch (e) {
-      setDecisionError(e instanceof ApiError ? e.message : "Could not refresh the discovery run");
+      setDecisionError(friendlyApiError(e, "Could not refresh the discovery run"));
     } finally {
       setRefreshing(false);
     }
@@ -1248,7 +1299,7 @@ function DiscoverySection({ getToken, onAccepted }: { getToken: () => Promise<st
       setLastProductId(productId);
       await refreshRun(started.discoveryRunId);
     } catch (e) {
-      setStartError(e instanceof ApiError ? e.message : "Could not start discovery");
+      setStartError(friendlyApiError(e, "Could not start discovery"));
       setRun(null);
     } finally {
       setStarting(false);
@@ -1268,7 +1319,7 @@ function DiscoverySection({ getToken, onAccepted }: { getToken: () => Promise<st
       await refreshRun(run.discoveryRunId);
       if (decision === "ACCEPT") onAccepted();
     } catch (e) {
-      setDecisionError(e instanceof ApiError ? e.message : `Could not ${decision.toLowerCase()} this candidate`);
+      setDecisionError(friendlyApiError(e, `Could not ${decision.toLowerCase()} this candidate`));
     } finally {
       setBusyCandidateId(null);
     }
@@ -1286,7 +1337,7 @@ function DiscoverySection({ getToken, onAccepted }: { getToken: () => Promise<st
       });
       await refreshRun(run.discoveryRunId);
     } catch (e) {
-      setDecisionError(e instanceof ApiError ? e.message : "Could not promote this candidate to analysis");
+      setDecisionError(friendlyApiError(e, "Could not promote this candidate to analysis"));
     } finally {
       setBusyCandidateId(null);
     }
@@ -1390,8 +1441,8 @@ function DiscoverySection({ getToken, onAccepted }: { getToken: () => Promise<st
           </button>
         )}
       </div>
-      {startError && <div className="mb-3 text-sm" style={{ color: "var(--negative)" }}>{startError}</div>}
-      {decisionError && <div className="mb-3 text-sm" style={{ color: "var(--negative)" }}>{decisionError}</div>}
+      {startError && <div role="alert" className="mb-3 text-sm" style={{ color: "var(--negative)" }}>{startError}</div>}
+      {decisionError && <div role="alert" className="mb-3 text-sm" style={{ color: "var(--negative)" }}>{decisionError}</div>}
 
       {run && (
         <div>
@@ -1458,7 +1509,7 @@ function MarketOverviewSection({ getToken }: { getToken: () => Promise<string | 
       const data = await apiFetch<MarketOverview>(`/api/v1/ci/market-overview/${encodeURIComponent(productId)}`, token);
       setOverview(data);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not load the market overview");
+      setError(friendlyApiError(e, "Could not load the market overview"));
       setOverview(null);
     } finally {
       setLoading(false);
@@ -1496,7 +1547,7 @@ function MarketOverviewSection({ getToken }: { getToken: () => Promise<string | 
           {loading ? "Loading…" : "Load market overview"}
         </button>
       </div>
-      {error && <div className="mb-3 text-sm" style={{ color: "var(--negative)" }}>{error}</div>}
+      {error && <div role="alert" className="mb-3 text-sm" style={{ color: "var(--negative)" }}>{error}</div>}
       {overview && (
         <div>
           <div className="mb-2 text-xs" style={{ color: "var(--text-4)" }}>

@@ -120,7 +120,7 @@ function Block({ title, text }: { title: string; text: string }) {
         <div className="t-body-sm font-bold" style={{ color: "var(--text-3)" }}>{title}</div>
         <CopyButton text={text} />
       </div>
-      <p className="whitespace-pre-wrap rounded-xl px-3 py-2.5 t-body" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>{text}</p>
+      <p className="whitespace-pre-wrap break-words rounded-xl px-3 py-2.5 t-body" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>{text}</p>
     </div>
   );
 }

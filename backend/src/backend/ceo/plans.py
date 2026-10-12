@@ -195,6 +195,11 @@ def _direct(s: ResolvedSlots) -> dict[str, object]:
     return dict(s.direct)
 
 
+def _preview_defaults(s: ResolvedSlots) -> dict[str, object]:
+    # The zero-cost trend preview takes the route's own defaults when nothing was collected: a catalog-offered action must never fail building its slots.
+    return dict(s.direct or {})
+
+
 def _pi_report(s: ResolvedSlots) -> dict[str, object]:
     assert s.pi_run_id is not None
     return {"run_id": str(s.pi_run_id)}
@@ -252,7 +257,7 @@ ACTIONS: Mapping[str, ActionPlan] = {
         ActionPlan("cmo.generate_description", "Write a product description for a marketplace from the seller's own title (CMO). The CEO asks for the details", (), _direct, session=True),
         ActionPlan("cmo.generate_keywords", "Suggest search keywords for a product on a marketplace from the seller's own title (CMO). The CEO asks for the details", (), _direct, session=True),
         ActionPlan("cmo.market_trends", "Research current market trends for the seller's niche (marketplace news, tactics sellers report, new product buzz) from public web search (CMO). The CEO first shows the exact searches and asks the seller to confirm", (), _direct, session=True),
-        ActionPlan("cmo.market_trends_preview", "Preview the exact web searches a market-trends run would send; nothing is sent and nothing is used up", (), _direct),
+        ActionPlan("cmo.market_trends_preview", "Preview the exact web searches a market-trends run would send; nothing is sent and nothing is used up", (), _preview_defaults),
         ActionPlan("cfo.cash_reconciliation", "Cash reconciliation: is the marketplace paying what it owes, for a marketplace and period", ("marketplace", "period"), _period_marketplace),
     )
 }

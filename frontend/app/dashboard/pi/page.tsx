@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { PAGE_COPY } from "@/lib/navigation";
 import { useAuth } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { useEffect, useState, createContext, useContext, useId } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Icon } from "@/components/ui/Icon";
 import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
@@ -19,6 +21,8 @@ import {
   type PiRunResult,
   type PiSupplierLookupResponse,
 } from "@/lib/api";
+import { friendlyApiError } from "@/lib/apiErrors";
+import { rupeesToPaise } from "@/lib/costInput";
 
 /** PI test harness — a real, functional, deliberately undecorated dashboard for clicking
  * through PI's direct-execution routes (`backend/src/backend/api/v1/pi.py`) against the
@@ -28,9 +32,8 @@ import {
  * only). No mock data anywhere — every section calls a real backend route and renders
  * exactly what comes back, including genuine UNAVAILABLE/error/empty states.
  *
- * No CEO/CFO agent wiring exists yet (see the PI build plan's Phase 2 scope boundary) —
- * the "final recommendation" section below is therefore an honest, clearly-labeled
- * "not yet available" placeholder, never a faked or partial version of the real thing. */
+ * This page does not produce a recommendation: the "final recommendation" section says so and links to the new-product decision in Ask Metrion, which checks a
+ * product against the seller's own saved costs. Nothing here is a faked or partial version of that. */
 const PI_TABS = [
   { id: "discover", label: "Niche & discovery" },
   { id: "shortlist", label: "Shortlist & suppliers" },
@@ -39,7 +42,7 @@ const PI_TABS = [
 
 export default function PiPage() {
   return (
-    <DashboardShell title="Products" subtitle="Find niches and candidates, check feasibility, shortlist suppliers">
+    <DashboardShell {...PAGE_COPY["products"]}>
       <PiWorkspace />
     </DashboardShell>
   );
@@ -69,7 +72,7 @@ function PiWorkspace() {
       const res = await apiFetch<PiReport>(`/api/v1/pi/report/${id}`, await getToken());
       setReport(res);
     } catch (e) {
-      setReportError(e instanceof ApiError ? e.message : "Could not load the PI report");
+      setReportError(friendlyApiError(e, "Could not load the PI report"));
     } finally {
       setReportBusy(false);
     }
@@ -122,13 +125,17 @@ function PiWorkspace() {
 
 // --- Shared primitives (same inline CSS-variable convention ceo-hub/cfo pages use) ----
 
+const FieldIdContext = createContext<string | undefined>(undefined);
+
+/** The label is tied to its control (clicking it focuses the control, and assistive technology reads it as the control's name). */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const id = useId();
   return (
     <div>
-      <label className="mb-1 block t-body-sm" style={{ color: "var(--text-6)" }}>
+      <label htmlFor={id} className="mb-1 block t-body-sm" style={{ color: "var(--text-6)" }}>
         {label}
       </label>
-      {children}
+      <FieldIdContext.Provider value={id}>{children}</FieldIdContext.Provider>
     </div>
   );
 }
@@ -138,14 +145,19 @@ function TextInput({
   onChange,
   placeholder,
   type = "text",
+  ariaLabel,
 }: {
+  ariaLabel?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   type?: string;
 }) {
+  const fieldId = useContext(FieldIdContext);
   return (
     <input
+      id={ariaLabel ? undefined : fieldId}
+      aria-label={ariaLabel}
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -166,6 +178,7 @@ function SelectInput({
 }) {
   return (
     <select
+      id={useContext(FieldIdContext)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="mt-input w-full rounded-lg px-3 py-2 t-body"
@@ -209,7 +222,7 @@ function SubmitButton({
 function ErrorText({ children }: { children: React.ReactNode }) {
   if (!children) return null;
   return (
-    <div className="t-body-sm" style={{ color: "var(--negative)" }}>
+    <div role="alert" className="t-body-sm" style={{ color: "var(--negative)" }}>
       {children}
     </div>
   );
@@ -219,8 +232,19 @@ function rupees(paise: number | null): string {
   return paise === null ? "—" : `₹${(paise / 100).toFixed(2)}`;
 }
 
-function toPaise(rupeesStr: string): number {
-  return Math.round(parseFloat(rupeesStr) * 100);
+/** Rupees typed by the seller -> integer paise (the shared exact parser; "₹50,000" is fine). An unreadable amount is `null`, never NaN, which JSON would turn into a
+ * silent `null` and drop the figure from the brief. */
+function toPaise(rupeesStr: string): number | null {
+  return rupeesToPaise(rupeesStr.replace(/₹/g, ""));
+}
+
+/** The §6.1 rule-2 fields a DRAFT still lacks before it can be marked READY (same rule the backend enforces). */
+function missingForReady(b: PiNicheBrief): string[] {
+  const out: string[] = [];
+  if (!b.category_text) out.push("a category");
+  if (b.budget_paise === null || b.budget_paise === undefined) out.push("a budget");
+  if (!b.marketplaces || b.marketplaces.length === 0) out.push("at least one marketplace");
+  return out;
 }
 
 function imageDomain(sourceUrl: string | null): string {
@@ -251,9 +275,15 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
     setMarketplaces((ms) => (ms.includes(m) ? ms.filter((x) => x !== m) : [...ms, m]));
 
   const createDraft = async () => {
-    setCreateBusy(true);
     setCreateError(null);
     setCreatedBriefId(null);
+    const money = { budget, "target minimum": targetMin, "target maximum": targetMax };
+    const bad = Object.entries(money).find(([, v]) => v.trim() && toPaise(v) === null);
+    if (bad) {
+      setCreateError(`The ${bad[0]} must be an amount in rupees, like 50000 or 499.50. Nothing was saved.`);
+      return;
+    }
+    setCreateBusy(true);
     try {
       const res = await apiFetch<{ nicheBriefId: string }>("/api/v1/pi/niche-briefs", await getToken(), {
         method: "POST",
@@ -270,7 +300,7 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
       });
       setCreatedBriefId(res.nicheBriefId);
     } catch (e) {
-      setCreateError(e instanceof ApiError ? e.message : "Could not create the niche brief draft");
+      setCreateError(friendlyApiError(e, "Could not create the niche brief draft"));
     } finally {
       setCreateBusy(false);
     }
@@ -298,7 +328,7 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
       if (e instanceof ApiError && e.status === 404) {
         setLookupNotFound(true);
       } else {
-        setLookupError(e instanceof ApiError ? e.message : "Could not load the niche brief");
+        setLookupError(friendlyApiError(e, "Could not load the niche brief"));
       }
     } finally {
       setLookupBusy(false);
@@ -307,16 +337,53 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
 
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusDone, setStatusDone] = useState<string | null>(null);
 
   const transition = async (action: "mark-ready" | "mark-draft" | "archive") => {
     if (!lookupBrief) return;
     setStatusBusy(true);
     setStatusError(null);
+    setStatusDone(null);
     try {
-      await apiFetch(`/api/v1/pi/niche-briefs/${lookupBrief.id}/${action}`, await getToken(), { method: "POST" });
+      const res = await apiFetch<{ status: string }>(`/api/v1/pi/niche-briefs/${lookupBrief.id}/${action}`, await getToken(), { method: "POST" });
       await loadBrief();
+      setStatusDone(`Status is now ${res.status}.`);
     } catch (e) {
-      setStatusError(e instanceof ApiError ? e.message : `Could not ${action.replace("-", " ")} this brief`);
+      setStatusError(friendlyApiError(e, `Could not ${action.replace("-", " ")} this brief`));
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+
+  // Completing a DRAFT that lacks a field the READY rule needs: the existing PUT keeps every field that is not sent.
+  const [fixCategory, setFixCategory] = useState("");
+  const [fixBudget, setFixBudget] = useState("");
+  const [fixMarketplaces, setFixMarketplaces] = useState<string[]>([]);
+  const completeDraft = async () => {
+    if (!lookupBrief) return;
+    setStatusError(null);
+    setStatusDone(null);
+    if (fixBudget.trim() && toPaise(fixBudget) === null) {
+      setStatusError("The budget must be an amount in rupees, like 50000 or 499.50. Nothing was saved.");
+      return;
+    }
+    setStatusBusy(true);
+    try {
+      await apiFetch(`/api/v1/pi/niche-briefs/${lookupBrief.id}`, await getToken(), {
+        method: "PUT",
+        body: JSON.stringify({
+          category_text: fixCategory.trim() || null,
+          budget_paise: fixBudget.trim() ? toPaise(fixBudget) : null,
+          marketplaces: fixMarketplaces.length > 0 ? fixMarketplaces : null,
+        }),
+      });
+      await loadBrief();
+      setFixCategory("");
+      setFixBudget("");
+      setFixMarketplaces([]);
+      setStatusDone("Saved. Check what is still needed below, then mark it READY.");
+    } catch (e) {
+      setStatusError(friendlyApiError(e, "Could not save this brief"));
     } finally {
       setStatusBusy(false);
     }
@@ -338,8 +405,8 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
             </Field>
             <Field label="Target price range (₹)">
               <div className="flex gap-2">
-                <TextInput value={targetMin} onChange={setTargetMin} placeholder="min" />
-                <TextInput value={targetMax} onChange={setTargetMax} placeholder="max" />
+                <TextInput value={targetMin} onChange={setTargetMin} placeholder="min" ariaLabel="Target minimum" />
+                <TextInput value={targetMax} onChange={setTargetMax} placeholder="max" ariaLabel="Target maximum" />
               </div>
             </Field>
           </div>
@@ -349,7 +416,7 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
             </div>
             <div className="flex gap-3">
               {MARKETPLACE_OPTIONS.map((m) => (
-                <label key={m} className="flex items-center gap-1.5 t-body" style={{ color: "var(--text-3)" }}>
+                <label key={m} className="flex min-h-6 items-center gap-1.5 t-body" style={{ color: "var(--text-3)" }}>
                   <input type="checkbox" checked={marketplaces.includes(m)} onChange={() => toggleMarketplace(m)} />
                   {m}
                 </label>
@@ -386,7 +453,7 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
             Look up a niche brief
           </div>
           <div className="flex gap-2">
-            <TextInput value={lookupBriefId} onChange={setLookupBriefId} placeholder="niche brief id (UUID)" />
+            <TextInput value={lookupBriefId} onChange={setLookupBriefId} placeholder="niche brief id (UUID)" ariaLabel="Niche brief id to look up" />
             <SubmitButton onClick={loadBrief} busy={lookupBusy} label="Load" busyLabel="Loading…" />
           </div>
           <ErrorText>{lookupError}</ErrorText>
@@ -406,12 +473,49 @@ function NicheBriefSection({ getToken }: { getToken: () => Promise<string | null
                   Excluding brands: {(lookupBrief.constraints!.exclude_brands as string[]).join(", ")}
                 </div>
               )}
+              {lookupBrief.status === "DRAFT" && missingForReady(lookupBrief).length > 0 && (
+                <div className="mt-2 flex flex-col gap-2" data-testid="brief-needs">
+                  <div style={{ color: "var(--text-3)" }}>
+                    Before this can be marked READY it needs {missingForReady(lookupBrief).join(", ")}.
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {!lookupBrief.category_text && (
+                      <Field label="Category / product idea">
+                        <TextInput value={fixCategory} onChange={setFixCategory} placeholder="e.g. kitchen storage jars" />
+                      </Field>
+                    )}
+                    {lookupBrief.budget_paise === null && (
+                      <Field label="Budget (₹)">
+                        <TextInput value={fixBudget} onChange={setFixBudget} placeholder="e.g. 50000" />
+                      </Field>
+                    )}
+                  </div>
+                  {(!lookupBrief.marketplaces || lookupBrief.marketplaces.length === 0) && (
+                    <div className="flex gap-3">
+                      {MARKETPLACE_OPTIONS.map((m) => (
+                        <label key={m} className="flex min-h-6 items-center gap-1.5 t-body" style={{ color: "var(--text-3)" }}>
+                          <input
+                            type="checkbox"
+                            checked={fixMarketplaces.includes(m)}
+                            onChange={() => setFixMarketplaces((ms) => (ms.includes(m) ? ms.filter((x) => x !== m) : [...ms, m]))}
+                          />
+                          {m}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <SubmitButton onClick={completeDraft} busy={statusBusy} label="Save missing details" busyLabel="Saving…" />
+                </div>
+              )}
               <div className="mt-2 flex gap-2">
                 <SubmitButton onClick={() => transition("mark-ready")} busy={statusBusy} label="Mark READY" busyLabel="…" />
                 <SubmitButton onClick={() => transition("mark-draft")} busy={statusBusy} label="Mark DRAFT" busyLabel="…" />
                 <SubmitButton onClick={() => transition("archive")} busy={statusBusy} label="Archive" busyLabel="…" />
               </div>
               <ErrorText>{statusError}</ErrorText>
+              {statusDone && !statusError && (
+                <div role="status" className="t-body-sm" style={{ color: "var(--accent)" }}>{statusDone}</div>
+              )}
             </div>
           )}
         </div>
@@ -461,7 +565,7 @@ function DiscoverSection({
       setResult(res);
       onRunStarted(res.runId);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not run discovery — check the brief is READY and try again");
+      setError(friendlyApiError(e, "Could not run discovery — check the brief is READY and try again"));
     } finally {
       setBusy(false);
     }
@@ -743,7 +847,7 @@ function ShortlistSupplierSection({
       setResult(res);
       onReload();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not run supplier lookup");
+      setError(friendlyApiError(e, "Could not run supplier lookup"));
     } finally {
       setBusy(false);
     }
@@ -769,7 +873,7 @@ function ShortlistSupplierSection({
         <div className="flex flex-col gap-2">
           {report.candidates.map((entry) => (
             <div key={entry.candidate.id} className="rounded-lg p-3" style={{ border: "1px solid var(--border-subtle)" }}>
-              <label className="flex items-center gap-2 t-body" style={{ color: "var(--text-3)" }}>
+              <label className="flex min-h-6 items-center gap-2 t-body" style={{ color: "var(--text-3)" }}>
                 <input
                   type="checkbox"
                   checked={selected.includes(entry.candidate.id)}
@@ -882,9 +986,14 @@ function FinalRecommendationSection() {
     <Section title="Final Recommendation">
       <ConfidenceBadge
         status="unavailable"
-        label="Not yet available — requires CFO batch-size integration (Phase 2 agent wiring, not yet done)"
-        reason="PI's Phase 2 currently exposes only plain HTTP routes (discover, supplier lookup, report). The CEO→CFO batch-size handoff that assembles a final per-candidate recommendation (target price margin, recommended quantity, consider-addressing list) has not been wired yet — this section will render real data once that agent wiring is separately approved and built, never a faked or partial version in the meantime."
+        label="Not produced on this page"
+        reason="This page shows candidates, evidence and supplier leads; it does not recommend what to buy. To check a product against your own costs and budget, run the new-product decision in Ask Metrion. It uses your saved figures and says what is missing."
       />
+      <div className="mt-3">
+        <Link href="/dashboard/ceo-hub?form=new-product" className="mt-btn mt-btn-secondary mt-focus inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 t-body font-semibold">
+          Check a product in Ask Metrion <Icon name="arrow" size={13} strokeWidth={1.9} />
+        </Link>
+      </div>
     </Section>
   );
 }

@@ -82,16 +82,35 @@ class TurnContext:
     findings: tuple[str, ...] = ()  # ids/labels only — never values (§6.3 rule 5)
 
 
+# Unicode line separators and bidirectional controls are escaped too: some tokenizers and splitters treat them as line breaks, and they can reorder how text reads.
+_ESCAPE_SEPARATORS = re.compile("[\u0085\u2028\u2029\u202a-\u202e\u2066-\u2069]")
+
+
+def _clean(value: str) -> str:
+    """A forged end-of-instructions marker is neutralised so the prompt can never be split a second time."""
+    return value.replace("=== END OF STATIC INSTRUCTIONS ===", "[marker removed]")
+
+
+def _dump(obj: object) -> str:
+    """Untrusted text travels as JSON: a quote, newline or backslash inside a string is escaped, so it cannot close its slot or start a new line of the prompt (triple quotes
+    alone cannot isolate it)."""
+    return _ESCAPE_SEPARATORS.sub(lambda m: "\\u%04x" % ord(m.group()), json.dumps(obj, ensure_ascii=False))
+
+
+def _data(value: str) -> str:
+    return _dump(_clean(value))
+
+
 def build_prompt(cat: Catalog, message: str, ctx: TurnContext | None = None) -> str:
     ctx = ctx or TurnContext()
     dynamic: list[str] = []
     if ctx.summary:
-        dynamic.append(f"Conversation summary: {ctx.summary}")
+        dynamic.append(f"Conversation summary (JSON string): {_data(ctx.summary)}")
     if ctx.recent:
-        dynamic.append("Recent messages:\n" + "\n".join(f"{role}: {text}" for role, text in ctx.recent))
+        dynamic.append("Recent messages (JSON list): " + _dump([{"role": role, "text": _clean(text)} for role, text in ctx.recent]))
     if ctx.findings:
         dynamic.append("Findings already in this investigation: " + "; ".join(ctx.findings))
-    dynamic.append(f'Seller message: """{message}"""')
+    dynamic.append(f"Seller message (JSON string): {_data(message)}")
     dynamic.append("JSON:")
     return static_prefix(cat) + "\n".join(dynamic)
 

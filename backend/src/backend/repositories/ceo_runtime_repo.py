@@ -32,6 +32,12 @@ def data_fingerprint(tenant_id: UUID, tables: Sequence[str]) -> str:
     return "|".join(parts)
 
 
+def list_tenant_ids() -> list[UUID]:
+    """Every tenant id (the `tenant` table itself carries no RLS). Used only to enumerate where recovery must look; each tenant's rows are then read through its own scope."""
+    with get_engine().connect() as conn:
+        return [r[0] for r in conn.execute(text("SELECT id FROM tenant"))]
+
+
 class AdvisoryLock:
     """A Postgres session-level advisory lock on a dedicated autocommit connection. Closing the connection (also on process death) releases it."""
 

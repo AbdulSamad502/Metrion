@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/ui/Icon";
-import { agentMeta, agentTier } from "@/lib/agents";
+import { agentMeta, agentTier, TIER_LABEL } from "@/lib/agents";
 import type { AgentStatus } from "@/lib/api";
 
 export type StageState = "live" | "idle" | "unavailable";
@@ -110,7 +110,7 @@ export function AgentGraph({ agents }: { agents: AgentStatus[] }) {
                 </span>
               </span>
               <span className="t-meta" style={{ color: live ? "var(--accent)" : "var(--text-5)" }}>
-                {live ? "Wired to CEO" : tier === "available" ? "Workspace only — not routed by CEO" : "Not built yet"}
+                {TIER_LABEL[tier]}
               </span>
             </span>
           );

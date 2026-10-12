@@ -24,6 +24,8 @@ from typing import Any, Protocol
 
 import httpx
 
+from market_signals.errors import describe
+
 _BASE_URL = "https://www.googleapis.com/youtube/v3"
 
 
@@ -83,7 +85,7 @@ class HttpYoutubeClient:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise YoutubeUnavailable(f"YouTube Data API request failed: {exc}") from exc
+            raise YoutubeUnavailable(f"YouTube Data API request failed: {describe(exc)}") from None  # never chain: the original carries the key-bearing URL
         try:
             parsed = response.json()
         except ValueError as exc:

@@ -1,0 +1,308 @@
+"use client";
+
+import { useState } from "react";
+import { Section } from "@/components/ui/Section";
+import { apiFetch, type BudgetStatus, type ExpenseListResponse, type ManualAdjustmentIdResponse } from "@/lib/api";
+import { friendlyApiError } from "@/lib/apiErrors";
+import { ErrorText, Field, SelectInput, SubmitButton, TextInput, rupees, toPaise } from "@/components/cfo/primitives";
+
+// --- 1. Expense tracker (PUT/GET /cfo/expenses, PUT /cfo/expenses/budget, GET /cfo/expenses/budget-status) --
+
+// The only five real §7.2.1 expense-pool categories the backend's `_EXPENSE_CATEGORIES`
+// registry accepts (backend/src/backend/services/cfo_actions.py) — a free-text category
+// here would 400/500 on every submit, since `enter_expense`/`set_expense_budget`/
+// `check_expense_budget` all reject anything outside this exact, lowercase set.
+const EXPENSE_CATEGORIES = ["advertising", "packaging", "storage", "logistics", "other"] as const;
+
+export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | null> }) {
+  const [addCategory, setAddCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
+  const [addAmount, setAddAmount] = useState("");
+  const [addMarketplace, setAddMarketplace] = useState("");
+  // Free-text description (e.g. "petrol for delivery run", "travel to supplier meeting") —
+  // stored as manual_adjustment.reason, the field enter_expense already accepted but this form
+  // never collected, leaving "other" entries with no way to say what they actually were.
+  const [addDescription, setAddDescription] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addResult, setAddResult] = useState<ManualAdjustmentIdResponse | null>(null);
+
+  const addExpense = async () => {
+    if (!addCategory.trim() || !addAmount.trim()) {
+      setAddError("Enter a category and amount first.");
+      return;
+    }
+    setAddBusy(true);
+    setAddError(null);
+    setAddResult(null);
+    try {
+      const value: Record<string, unknown> = { amount_paise: toPaise(addAmount) };
+      if (addMarketplace.trim()) value.marketplace = addMarketplace.trim();
+      const res = await apiFetch<ManualAdjustmentIdResponse>("/api/v1/cfo/expenses", await getToken(), {
+        method: "PUT",
+        body: JSON.stringify({
+          target_type: "ACCOUNT",
+          target_ref: "default",
+          field: `expense.${addCategory.trim()}`,
+          value,
+          reason: addDescription.trim() || null,
+        }),
+      });
+      setAddResult(res);
+      setAddCategory("");
+      setAddAmount("");
+      setAddMarketplace("");
+      setAddDescription("");
+    } catch (e) {
+      setAddError(friendlyApiError(e, "Could not add expense"));
+    } finally {
+      setAddBusy(false);
+    }
+  };
+
+  const [listPeriodStart, setListPeriodStart] = useState("");
+  const [listPeriodEnd, setListPeriodEnd] = useState("");
+  const [listCategory, setListCategory] = useState("");
+  // "" means "no category filter" for List/Budget/Status below — GET /cfo/expenses only
+  // rejects a category when one is actually supplied, so an empty filter must stay empty,
+  // never default to a real category value.
+  const [listBusy, setListBusy] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [listResult, setListResult] = useState<ExpenseListResponse | null>(null);
+
+  const loadExpenses = async () => {
+    setListBusy(true);
+    setListError(null);
+    try {
+      const params = new URLSearchParams();
+      if (listPeriodStart) params.set("period_start", listPeriodStart);
+      if (listPeriodEnd) params.set("period_end", listPeriodEnd);
+      if (listCategory.trim()) params.set("category", listCategory.trim());
+      const qs = params.toString();
+      const res = await apiFetch<ExpenseListResponse>(`/api/v1/cfo/expenses${qs ? `?${qs}` : ""}`, await getToken());
+      setListResult(res);
+    } catch (e) {
+      setListError(friendlyApiError(e, "Could not load expenses"));
+      setListResult(null);
+    } finally {
+      setListBusy(false);
+    }
+  };
+
+  const [budgetCategory, setBudgetCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
+  const [budgetAmount, setBudgetAmount] = useState("");
+  const [budgetPeriodStart, setBudgetPeriodStart] = useState("");
+  const [budgetPeriodEnd, setBudgetPeriodEnd] = useState("");
+  const [budgetBusy, setBudgetBusy] = useState(false);
+  const [budgetError, setBudgetError] = useState<string | null>(null);
+  const [budgetResult, setBudgetResult] = useState<ManualAdjustmentIdResponse | null>(null);
+
+  const setBudget = async () => {
+    if (!budgetCategory.trim() || !budgetAmount.trim() || !budgetPeriodStart || !budgetPeriodEnd) {
+      setBudgetError("Fill in category, amount and both period dates first.");
+      return;
+    }
+    setBudgetBusy(true);
+    setBudgetError(null);
+    setBudgetResult(null);
+    try {
+      const res = await apiFetch<ManualAdjustmentIdResponse>("/api/v1/cfo/expenses/budget", await getToken(), {
+        method: "PUT",
+        body: JSON.stringify({
+          category: budgetCategory.trim(),
+          amount_paise: toPaise(budgetAmount),
+          period_start: budgetPeriodStart,
+          period_end: budgetPeriodEnd,
+        }),
+      });
+      setBudgetResult(res);
+    } catch (e) {
+      setBudgetError(friendlyApiError(e, "Could not set budget"));
+    } finally {
+      setBudgetBusy(false);
+    }
+  };
+
+  const [statusCategory, setStatusCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
+  const [statusPeriodStart, setStatusPeriodStart] = useState("");
+  const [statusPeriodEnd, setStatusPeriodEnd] = useState("");
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusResult, setStatusResult] = useState<BudgetStatus | null>(null);
+
+  const checkStatus = async () => {
+    if (!statusCategory.trim() || !statusPeriodStart || !statusPeriodEnd) {
+      setStatusError("Fill in category and both period dates first.");
+      return;
+    }
+    setStatusBusy(true);
+    setStatusError(null);
+    try {
+      const params = new URLSearchParams({
+        category: statusCategory.trim(),
+        period_start: statusPeriodStart,
+        period_end: statusPeriodEnd,
+      });
+      const res = await apiFetch<BudgetStatus>(`/api/v1/cfo/expenses/budget-status?${params.toString()}`, await getToken());
+      setStatusResult(res);
+    } catch (e) {
+      setStatusError(friendlyApiError(e, "Could not check budget status"));
+      setStatusResult(null);
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+
+  return (
+    <Section title="Expense Tracker">
+      <div className="flex flex-col gap-6">
+        <div>
+          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Add expense</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Category">
+              <SelectInput
+                value={addCategory}
+                onChange={setAddCategory}
+                options={EXPENSE_CATEGORIES.map((c) => ({ value: c, label: c }))}
+              />
+            </Field>
+            <Field label="Amount (₹)">
+              <TextInput value={addAmount} onChange={setAddAmount} placeholder="e.g. 499" />
+            </Field>
+            <Field label="Marketplace (optional)">
+              <TextInput value={addMarketplace} onChange={setAddMarketplace} placeholder="AMAZON" />
+            </Field>
+          </div>
+          <div className="mt-3">
+            <Field label="Description (optional) — e.g. travel, petrol, courier">
+              <TextInput value={addDescription} onChange={setAddDescription} placeholder="What was this expense for?" />
+            </Field>
+          </div>
+          <div className="mt-3">
+            <SubmitButton onClick={addExpense} busy={addBusy} label="Add expense" busyLabel="Adding…" />
+          </div>
+          <ErrorText>{addError}</ErrorText>
+          {addResult && (
+            <div className="mt-1 t-body-sm" style={{ color: "var(--accent)" }}>
+              Added — manual adjustment <code>{addResult.manualAdjustmentId.slice(0, 8)}</code>
+            </div>
+          )}
+        </div>
+
+        <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
+          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>List expenses</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Period start (optional)">
+              <TextInput type="date" value={listPeriodStart} onChange={setListPeriodStart} />
+            </Field>
+            <Field label="Period end (optional)">
+              <TextInput type="date" value={listPeriodEnd} onChange={setListPeriodEnd} />
+            </Field>
+            <Field label="Category (optional)">
+              <SelectInput
+                value={listCategory}
+                onChange={setListCategory}
+                options={[{ value: "", label: "— All categories —" }, ...EXPENSE_CATEGORIES.map((c) => ({ value: c, label: c }))]}
+              />
+            </Field>
+          </div>
+          <div className="mt-3">
+            <SubmitButton onClick={loadExpenses} busy={listBusy} label="List expenses" busyLabel="Loading…" />
+          </div>
+          <ErrorText>{listError}</ErrorText>
+          {listResult && (
+            <div className="mt-3">
+              {listResult.entries.length === 0 ? (
+                <div style={{ color: "var(--text-6)" }}>No expenses recorded yet for this filter.</div>
+              ) : (
+                <div className="mt-table-wrap"><table className="mt-table">
+                  <thead>
+                    <tr style={{ color: "var(--text-6)" }}>
+                      <th className="pb-2 font-semibold">Category</th>
+                      <th className="pb-2 font-semibold">Description</th>
+                      <th className="pb-2 font-semibold">Amount</th>
+                      <th className="pb-2 font-semibold">Target</th>
+                      <th className="pb-2 font-semibold">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {listResult.entries.map((e) => (
+                      <tr key={e.manualAdjustmentId} style={{ borderTop: "1px solid var(--border-subtle)" }}>
+                        <td className="py-2" style={{ color: "var(--text-3)" }}>{e.category}</td>
+                        <td className="py-2" style={{ color: "var(--text-5)" }}>{e.reason ?? "—"}</td>
+                        <td className="py-2" style={{ color: "var(--text-3)" }}>{rupees(e.amountPaise)}</td>
+                        <td className="py-2" style={{ color: "var(--text-5)" }}>{e.targetType}/{e.targetRef}</td>
+                        <td className="py-2" style={{ color: "var(--text-5)" }}>{new Date(e.createdAt).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table></div>
+              )}
+              <div className="mt-2 t-body" style={{ color: "var(--text-2)" }}>Total: {rupees(listResult.totalPaise)}</div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
+          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Set category budget</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Field label="Category">
+              <SelectInput
+                value={budgetCategory}
+                onChange={setBudgetCategory}
+                options={EXPENSE_CATEGORIES.map((c) => ({ value: c, label: c }))}
+              />
+            </Field>
+            <Field label="Budget ceiling (₹)"><TextInput value={budgetAmount} onChange={setBudgetAmount} placeholder="e.g. 20000" /></Field>
+            <Field label="Period start"><TextInput type="date" value={budgetPeriodStart} onChange={setBudgetPeriodStart} /></Field>
+            <Field label="Period end"><TextInput type="date" value={budgetPeriodEnd} onChange={setBudgetPeriodEnd} /></Field>
+          </div>
+          <div className="mt-3">
+            <SubmitButton onClick={setBudget} busy={budgetBusy} label="Set budget" busyLabel="Saving…" />
+          </div>
+          <ErrorText>{budgetError}</ErrorText>
+          {budgetResult && (
+            <div className="mt-1 t-body-sm" style={{ color: "var(--accent)" }}>
+              Saved — manual adjustment <code>{budgetResult.manualAdjustmentId.slice(0, 8)}</code>
+            </div>
+          )}
+        </div>
+
+        <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
+          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Check budget status</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Field label="Category">
+              <SelectInput
+                value={statusCategory}
+                onChange={setStatusCategory}
+                options={EXPENSE_CATEGORIES.map((c) => ({ value: c, label: c }))}
+              />
+            </Field>
+            <Field label="Period start"><TextInput type="date" value={statusPeriodStart} onChange={setStatusPeriodStart} /></Field>
+            <Field label="Period end"><TextInput type="date" value={statusPeriodEnd} onChange={setStatusPeriodEnd} /></Field>
+          </div>
+          <div className="mt-3">
+            <SubmitButton onClick={checkStatus} busy={statusBusy} label="Check status" busyLabel="Checking…" />
+          </div>
+          <ErrorText>{statusError}</ErrorText>
+          {statusResult && (
+            <div className="mt-2 t-body" style={{ color: "var(--text-2)" }}>
+              {statusResult.noBudgetSet ? (
+                <div style={{ color: "var(--text-6)" }}>No budget set for this category/period.</div>
+              ) : (
+                <>
+                  <div>
+                    Spent: {rupees(statusResult.spentPaise)} · Budget: {rupees(statusResult.budgetPaise)} · Remaining:{" "}
+                    {rupees(statusResult.remainingPaise)}
+                  </div>
+                  <div style={{ color: statusResult.exceeded ? "var(--negative)" : "var(--accent)" }}>
+                    {statusResult.exceeded ? "Budget exceeded" : "Within budget"}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </Section>
+  );
+}

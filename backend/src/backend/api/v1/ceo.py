@@ -38,6 +38,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CEO, AGENT_CFO, AGENT_CI, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
+from backend.ceo.approval_gate import plan_required
 from backend.ceo import business_state, findings as ceo_findings, memory as agent_memory, orchestrator, summary
 from backend.ceo.capabilities import NOT_ENTITLED, compute_capabilities
 from backend.ceo.contract import AgentCode
@@ -53,7 +54,7 @@ from backend.ceo.runtime import CeoRuntime
 from backend import config
 from backend.config import MissingConfig
 from backend.repositories import agent_run_repo, investigation_repo as repo
-from backend.services import ceo_attachments, ceo_reads, ceo_runtime
+from backend.services import ceo_attachment_analysis, ceo_attachments, ceo_reads, ceo_runtime
 
 router = APIRouter(prefix="/api/v1/ceo")
 
@@ -127,6 +128,9 @@ class TurnBody(BaseModel):
     # neither chooses nor withholds it, and the same deterministic resolver validates it (a future or inverted range is a 422).
     period_start: date | None = None
     period_end: date | None = None
+    # Optional idempotency identifier: ONE logical submission = one UUID, reused by a retry of the same submission and fresh for a new one (even with identical text). It is scoped to
+    # this investigation inside the tenant, never trusted as an identity, and absent = the documented no-key behaviour (a resend is a new turn).
+    client_request_id: UUID | None = Field(default=None, alias="clientRequestId")
 
 
 class AttachBody(BaseModel):
@@ -201,7 +205,8 @@ def get_investigation(investigation_id: UUID, ctx: AuthContext = require_auth(pe
     tenant = _tenant(ctx)
     return _jd({
         "investigation": inv, "agents": repo.agent_states(tenant, investigation_id), "messages": repo.list_messages(tenant, investigation_id),
-        "turns": repo.list_turns(tenant, investigation_id), "findings": repo.list_findings(tenant, investigation_id),
+        "turns": [{**t, "outcome": ((t.get("safety_result") or {}).get("billing") or {}).get("outcome")} for t in repo.list_turns(tenant, investigation_id)],
+        "findings": repo.list_findings(tenant, investigation_id),
     })
 
 
@@ -250,8 +255,12 @@ def post_turn(
         if body.attachment_ids and (max_files is None or len(body.attachment_ids) > max_files):
             raise HTTPException(status_code=422, detail={"code": "TOO_MANY_ATTACHMENTS", "max": max_files})
         bus = event_bus.get_bus()
-        result = orchestrator.run_turn(ctx, runtime, investigation_id, body.message, period=explicit, ui_action=ui, clarification=reply, attachment_ids=tuple(body.attachment_ids), sink=bus.sink_for(_tenant(ctx), investigation_id))
-        bus.done(_tenant(ctx), investigation_id, status=result.status)  # only a turn that actually ran ends a stream: a refused (409) one must not end another's
+        result = orchestrator.run_turn(
+            ctx, runtime, investigation_id, body.message, period=explicit, ui_action=ui, clarification=reply, attachment_ids=tuple(body.attachment_ids),
+            sink=bus.sink_for(_tenant(ctx), investigation_id), request_key=str(body.client_request_id) if body.client_request_id is not None else None,
+        )
+        if not result.replayed:
+            bus.done(_tenant(ctx), investigation_id, status=result.status)  # only a turn that actually ran ends a stream: a refused (409) or replayed one must not end another's
     except repo.InvestigationNotFound:
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"}) from None
     except orchestrator.InvestigationNotActive as exc:
@@ -264,16 +273,18 @@ def post_turn(
         raise HTTPException(status_code=422, detail={"code": "INVALID_ATTACHMENTS"}) from None
     except playbook_inputs.InvalidInputs as exc:
         raise HTTPException(status_code=422, detail={"code": "INVALID_INPUTS", "problems": exc.problems}) from None
-    except ValueError:
+    except orchestrator.InvalidMessage:
         raise HTTPException(status_code=422, detail={"code": "INVALID_MESSAGE"}) from None
-    if result.turn_id is not None and result.status != "DENIED":  # spec D2: due-ness is checked after the answer is sent, so the seller never waits for it
+    except orchestrator.IdempotencyConflict:
+        raise HTTPException(status_code=409, detail={"code": "CLIENT_REQUEST_ID_REUSED"}) from None
+    if result.turn_id is not None and result.status != "DENIED" and not result.replayed:  # spec D2: due-ness is checked after the answer is sent, so the seller never waits for it
         background.add_task(summary.regenerate_if_due_locked, _tenant(ctx), investigation_id, runtime)
     return _jd({
         "turnId": result.turn_id, "status": result.status, "route": result.route, "routeKey": result.route_key,
         "routeSource": "UI_ACTION" if (body.action is not None or body.clarification is not None) else "CLASSIFIER", "answer": result.answer,
         "choices": result.choices, "clarificationId": str(result.message_id) if result.choices and result.message_id else None,
         "messageId": result.message_id, "compositionMode": result.composition_mode, "clarifyFor": result.clarify_for, "notes": result.notes,
-        "findings": result.findings, "timings": result.timings,
+        "findings": result.findings, "timings": result.timings, "outcome": result.outcome, "replayed": result.replayed,
         "events": [{"kind": e.kind, "atMs": e.at_ms, "data": e.data} for e in result.events],
     })
 
@@ -295,15 +306,24 @@ async def upload_attachment(investigation_id: UUID, file: UploadFile, ctx: AuthC
         if str(exc) == "too large":
             raise HTTPException(status_code=413, detail={"code": "ATTACHMENT_TOO_LARGE", "maxBytes": max_bytes}) from None
         raise HTTPException(status_code=415, detail={"code": "ATTACHMENT_TYPE_NOT_SUPPORTED", "problem": str(exc)}) from None
+    digest = hashlib.sha256(data).hexdigest()
+    try:
+        existing = repo.find_attachment_by_sha(_tenant(ctx), investigation_id, digest)
+    except repo.InvestigationNotFound:
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"}) from None
+    if existing is not None:  # the same bytes already attached to this conversation: nothing is stored or read a second time
+        return {"id": str(existing["id"]), "filename": existing["filename"], "type": existing["detected_type"], "byteSize": existing["byte_size"],
+                "status": existing["extraction_status"], "note": existing["extraction_note"], "duplicate": True}
     ex = ceo_attachments.extract(data, kind, max_pages=max_pages)
     try:
         new_id = repo.insert_attachment(
             _tenant(ctx), investigation_id, filename=(file.filename or "file").replace("\\", "/").split("/")[-1], detected_type=kind, content=data,
-            sha256=hashlib.sha256(data).hexdigest(), extraction_status=ex.status, extraction_note=ex.note, extracted_text=ex.text, created_by=ctx.app_user_id,
+            sha256=digest, extraction_status=ex.status, extraction_note=ex.note, extracted_text=ex.text, created_by=ctx.app_user_id,
         )
     except repo.InvestigationNotFound:
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"}) from None
-    return {"id": str(new_id), "filename": file.filename, "type": kind, "byteSize": len(data), "status": ex.status, "note": ex.note}
+    return {"id": str(new_id), "filename": file.filename, "type": kind, "byteSize": len(data), "status": ex.status, "note": ex.note,
+            "table": ceo_attachment_analysis.upload_summary(data, kind, file.filename or "file")}
 
 
 @router.post("/investigations/{investigation_id}/resolve")
@@ -413,7 +433,7 @@ def _form_support_gate(ctx: AuthContext) -> None:
 
 
 @router.get("/forms/price-impact")
-def form_price_impact(sku: str | None = Query(default=None, max_length=120), runtime: CeoRuntime = Depends(get_runtime), ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+def form_price_impact(sku: str | None = Query(default=None, max_length=120), ctx: AuthContext = require_auth(permission=AGENT_CEO), runtime: CeoRuntime = Depends(get_runtime)) -> dict[str, Any]:
     """What the price-impact run-form needs to offer REAL choices and to show the seller the stored value it will use: tracked competitors, the (marketplace,
     category, fee type) combinations that have a fee reference, the saved cost per unit for the SKU with its effective date, and the configured price bound.
     Reads only; nothing is computed or defaulted."""
@@ -448,7 +468,7 @@ def forget_memory(memory_id: UUID, ctx: AuthContext = require_auth(permission=AG
 
 
 @router.get("/findings")
-def get_findings(limit: int = Query(default=100, ge=1, le=200), runtime: CeoRuntime = Depends(get_runtime), ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+def get_findings(limit: int = Query(default=100, ge=1, le=200), ctx: AuthContext = require_auth(permission=AGENT_CEO), runtime: CeoRuntime = Depends(get_runtime)) -> dict[str, Any]:
     """What the agents have reported (spec agent-needs-and-shared-knowledge.md 6.3): active shared findings with their trust label, limited to the agents this member could
     use directly (permission and entitlement, D6); the rest are only counted. Tenant from the session only."""
     visible = ceo_findings.visible_agents(ctx, runtime.registry, now=runtime.clock())
@@ -456,7 +476,7 @@ def get_findings(limit: int = Query(default=100, ge=1, le=200), runtime: CeoRunt
 
 
 @router.post("/findings/{finding_id}/forget")
-def forget_finding(finding_id: UUID, runtime: CeoRuntime = Depends(get_runtime), ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> dict[str, Any]:
+def forget_finding(finding_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CEO), runtime: CeoRuntime = Depends(get_runtime)) -> dict[str, Any]:
     """Forget one finding; its source is not recorded again. A foreign, unknown, already-forgotten or hidden-agent id is a plain not-found."""
     visible = ceo_findings.visible_agents(ctx, runtime.registry, now=runtime.clock())
     if not ceo_findings.forget(_tenant(ctx), finding_id, visible_agents=visible, created_by=ctx.app_user_id):
@@ -511,13 +531,13 @@ def get_turn_flow(investigation_id: UUID, turn_id: UUID, ctx: AuthContext = requ
 @router.get("/agents/availability")
 def agent_availability(ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW), runtime: CeoRuntime = Depends(get_runtime)) -> dict[str, Any]:
     """What this member can use right now, independent of any investigation: `status` is PRESENT, NOT_PERMITTED or NOT_ENTITLED (the
-    UI shows the last two as locked, never as attached); `chatActions` is how many of the agent's actions the CEO can run from chat today."""
+    UI shows the last two as locked, never as attached); `chatActions` is how many of the agent's actions the CEO can run from chat today: an approval-required action (decision D-8) is refused from chat until a stored approval plan exists, so it is NOT counted."""
     _also(ctx, AGENT_CEO)
     caps = compute_capabilities(ctx, runtime.registry, frozenset(a.value for a in AgentCode), now=runtime.clock())
     reg = get_registry()
     # The GST lookup is one action to the model; it is counted under the agent of its first route (CFO's Route A). Route B (no agent) stays available to a
     # member without CFO, but it is not an action of any specialist.
-    chat_actions = {a.value: sum(1 for k in ACTIONS if reg.get(VIRTUAL_ROUTES.get(k, (k,))[0]).agent is a) for a in AgentCode}
+    chat_actions = {a.value: sum(1 for k in ACTIONS if not plan_required([k]) and reg.get(VIRTUAL_ROUTES.get(k, (k,))[0]).agent is a) for a in AgentCode}
     return {code: {"status": status, "chatActions": chat_actions.get(code, 0)} for code, status in caps.agent_status.items()}
 
 

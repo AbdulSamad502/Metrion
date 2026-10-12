@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import contextvars
 import dataclasses
+import hashlib
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -30,10 +31,12 @@ from uuid import UUID
 from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
-from backend.ceo import business_state, classifier, clarification, data_requests, findings, input_session, intent_router, memory, needs, references
+from backend.ceo.approval_gate import evaluate_playbook, plan_required
+from backend.ceo import business_state, classifier, clarification, compound, deadlines, recovery, data_requests, findings, input_session, intent_router, memory, needs, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
+from backend.ceo.billing import UnitDecision, unit_decision
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
-from backend.ceo.contract import AgentCode, BusinessStateEntry, Denial, LegResult, LegStatus, TurnDenied
+from backend.ceo.contract import TERMINAL_TURN_STATUSES, AgentCode, BusinessStateEntry, Denial, LegResult, LegStatus, TurnDenied
 from backend.ceo.dispatch import CeoTurn, dispatch, open_turn
 from backend.ceo.evidence import EvidenceCollector, finding_status_for_entry
 from backend.ceo.presentation import present_entry, present_leg, safe
@@ -42,13 +45,15 @@ from backend.ceo.playbook_inputs import InvalidInputs
 from backend.ceo.runtime import CeoRuntime, EventLog, EventSink, StageClock, TurnEvent
 from backend.ceo.turn_lock import investigation_turn_lock
 from backend.entitlement import meter_ceo_turn
+from backend.repositories import accounting_cutover_repo
 from backend.repositories import investigation_repo as repo
 from backend.repositories import ceo_need_repo
-from backend.services import ceo_briefs, ceo_inputs
+from backend.services import ceo_attachment_analysis, ceo_briefs, ceo_inputs
 
 logger = logging.getLogger(__name__)
 
 _ACKS: contextvars.ContextVar[list[str]] = contextvars.ContextVar("ceo_memory_acks", default=[])
+_SUBMISSION: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar("ceo_submission", default=None)  # this turn's submission key + text hash, written onto its turn row
 MAX_MESSAGE_CHARS = 4000  # a request-size bound, not a business threshold
 GENERAL_GUIDANCE_TEXT = "This is general advice, not derived from your data."
 
@@ -98,6 +103,14 @@ UI_ACTION_UNAVAILABLE_TEXT = (
 )
 
 
+class InvalidMessage(ValueError):
+    """The seller's message is empty or too long. The only ValueError the API may answer as the seller's mistake: any other ValueError is a fault of ours."""
+
+
+class IdempotencyConflict(Exception):
+    """The submission key was already used for a DIFFERENT message in this investigation: never replayed, never run."""
+
+
 class InvestigationNotActive(Exception):
     def __init__(self, status: str) -> None:
         super().__init__(status)
@@ -119,6 +132,8 @@ class TurnResult:
     clarify_for: str | None = None
     notes: list[str] = field(default_factory=list)  # period/marketplace interpretations echoed back to the seller (AC17)
     choices: dict[str, Any] | None = None  # the decision card of a clarification (spec 6.32); the card's id is `message_id`
+    outcome: str | None = None  # SUCCEEDED | PARTIAL | FAILED | PENDING_INPUT | DECLINED (CEO_UNIT_RULE_2 turns only; None for legacy turns)
+    replayed: bool = False  # True when this is the STORED outcome of an earlier submission with the same key: nothing was written and nothing ran
 
 
 # ------------------------------------------------------------------------------------------------ investigations
@@ -139,7 +154,7 @@ def start_investigation(ctx: AuthContext, runtime: CeoRuntime, *, title: str | N
 # ------------------------------------------------------------------------------------------------ fixed texts (no model)
 _QUESTIONS = {
     "WHICH_AGENT": "Which area should I look at: your profit and payments, your competitors, product research, or your listings?",
-    "UNCLEAR_REQUEST": "I'm not sure what you'd like me to do. You can ask about your profit, leaks, payments or the health of your business.",
+    "UNCLEAR_REQUEST": "I'm not sure what you'd like me to do. You can ask about your profit, leaks and payments, your competitors, product ideas, or listing and marketing content: for example 'Why did my profit drop?' or 'Write a description for my product'.",
     "sku": "Which product (SKU) do you mean?", "product": "Which product do you mean?", "quantity": "How many units?", "amount": "What amount?",
     "competitor": "Which competitor do you mean?", "niche": "Which niche do you mean?", "option": "Which option do you mean?",
     "compare_period": "Which period should I compare it with?",
@@ -157,6 +172,11 @@ DENIED_TEXT = {
     Denial.PERMISSION: "You do not have access to the CEO for this investigation.",
     Denial.ENTITLEMENT: "Your CEO conversation allowance for this period has been used. It resets with your plan period.",
 }
+APPROVAL_UNAVAILABLE_TEXT = (
+    "That would use up part of your plan or send what you typed to an outside service, so it has to be approved first, as an exact plan, before it runs. "
+    "That approval step is not available yet, so I have not asked you anything, run anything, sent anything or used anything up. "
+    "For now you can run it from that agent's own page."
+)
 FAILED_TEXT = "Something went wrong on our side and nothing was changed. Please try again."
 CONFIG_TEXT = "The CEO's investigation limits have not been configured by the operator yet, so this investigation cannot run."
 FORM_TEXT = "This one needs exact prices and costs, which are entered in a form rather than typed into chat. Open the form below and I will run it on what you enter."
@@ -195,6 +215,25 @@ def _clarification_text(slot: str) -> str:
 
 
 # ------------------------------------------------------------------------------------------------ context
+def _decision_needs_approval(d: classifier.Decision) -> bool:
+    """The same approval check the turn applies to its own decision (D-8), offered to the compound-request analysis so each requirement is judged exactly as it would be alone."""
+    if d.route == "ACTION" and d.key is not None and d.key in ACTIONS:
+        return plan_required([d.key])
+    if d.route == "PLAYBOOK" and d.key is not None and d.key in PLAYBOOKS:
+        return evaluate_playbook(PLAYBOOKS[d.key]).plan_required
+    return False
+
+
+def _recalled(tenant: UUID) -> str | None:
+    """What the seller told us, as one quoted line, or None. Memory is context, never a requirement: if it cannot be read the turn goes on without it (and says nothing it
+    does not know), rather than failing the seller's question."""
+    try:
+        return memory.context_line(tenant)
+    except Exception:  # noqa: BLE001
+        logger.exception("could not read memory for the turn context")
+        return None
+
+
 def _turn_context(tenant: UUID, inv: dict[str, Any], current_msg: UUID) -> tuple[classifier.TurnContext, str | None]:
     msgs = [m for m in repo.list_messages(tenant, inv["id"], after_message_id=inv.get("summary_covers_through")) if m["id"] != current_msg]
     recent = tuple((str(m["role"]), str(m["content"])[:400]) for m in msgs[-classifier.MAX_RECENT_MESSAGES:] if m["kind"] != "SYSTEM_NOTE")
@@ -205,7 +244,7 @@ def _turn_context(tenant: UUID, inv: dict[str, Any], current_msg: UUID) -> tuple
     summary = inv.get("summary")
     ideas = references.latest_ideas(repo.list_findings(tenant, inv["id"]))  # what the seller was shown earlier ("the list above"), quoted as data so the CEO does not forget it
     ideas_line = ("Product ideas shown earlier in this conversation (from public web sources, not verified): " + "; ".join(f"#{n} {name}" for n, name in enumerate(ideas[:10], start=1))) if ideas else None
-    composer_ctx = " | ".join(x for x in (summary, memory.context_line(tenant), ideas_line, ("Earlier the seller asked: " + "; ".join(earlier_questions)) if earlier_questions else None) if x) or None
+    composer_ctx = " | ".join(x for x in (summary, _recalled(tenant), ideas_line, ("Earlier the seller asked: " + "; ".join(earlier_questions)) if earlier_questions else None) if x) or None
     return classifier.TurnContext(summary, recent, findings), composer_ctx
 
 
@@ -213,6 +252,7 @@ def _turn_context(tenant: UUID, inv: dict[str, Any], current_msg: UUID) -> tuple
 def run_turn(
     ctx: AuthContext, runtime: CeoRuntime, investigation_id: UUID, message: str, *, sink: EventSink | None = None,
     period: tuple[date, date] | None = None, ui_action: UiAction | None = None, clarification: ClarificationReply | None = None, attachment_ids: Sequence[UUID] = (),
+    request_key: str | None = None,
 ) -> TurnResult:
     """One turn, serialized per investigation (spec E24): a second turn waits for the running one (bounded by `CEO_TURN_LOCK_WAIT_SECONDS`)
     or is refused with `TurnInProgress`. Everything below, including any summary regeneration, runs under that lock."""
@@ -220,12 +260,13 @@ def run_turn(
     if repo.get_investigation(ctx.tenant_id, investigation_id) is None:  # RLS: another tenant's id is a plain not-found, and takes no lock
         raise repo.InvestigationNotFound(str(investigation_id))
     with investigation_turn_lock(investigation_id, config.ceo_turn_lock_wait_seconds()):
-        return _run_turn_locked(ctx, runtime, investigation_id, message, sink=sink, period=period, ui_action=ui_action, clarification=clarification, attachment_ids=attachment_ids)
+        return _run_turn_locked(ctx, runtime, investigation_id, message, sink=sink, period=period, ui_action=ui_action, clarification=clarification, attachment_ids=attachment_ids, request_key=request_key)
 
 
 def _run_turn_locked(
     ctx: AuthContext, runtime: CeoRuntime, investigation_id: UUID, message: str, *, sink: EventSink | None = None,
     period: tuple[date, date] | None = None, ui_action: UiAction | None = None, clarification: ClarificationReply | None = None, attachment_ids: Sequence[UUID] = (),
+    request_key: str | None = None,
 ) -> TurnResult:
     """`period` is an explicit (start, end) the seller chose with the date-range control. When given it is the period for this turn: it
     is passed to the classifier as a preset slot (the model neither chooses nor withholds it) and resolved by the same deterministic code."""
@@ -233,12 +274,24 @@ def _run_turn_locked(
     tenant = ctx.tenant_id
     text = message.strip()
     if not text or len(text) > MAX_MESSAGE_CHARS:
-        raise ValueError("message must be 1-%d characters" % MAX_MESSAGE_CHARS)
+        raise InvalidMessage("message must be 1-%d characters" % MAX_MESSAGE_CHARS)
     inv = repo.get_investigation(tenant, investigation_id)  # RLS: another tenant's id is indistinguishable from a missing one
     if inv is None:
         raise repo.InvestigationNotFound(str(investigation_id))
     if inv["status"] != "ACTIVE":
         raise InvestigationNotActive(str(inv["status"]))
+    try:  # holding this investigation's turn lock proves no live turn owns an earlier RUNNING run of it: an abandoned one is settled before this turn starts
+        recovery.settle_abandoned_locked(tenant, investigation_id, now=runtime.clock())
+        deadlines.settle_overdue_legs_locked(tenant, investigation_id, now=runtime.clock(), registry=runtime.registry)  # no-op unless CEO_LEG_ABANDON_SECONDS is set
+    except Exception:  # noqa: BLE001 — recovery never stands between the seller and a new turn
+        logger.exception("could not settle an abandoned turn (tenant=%s investigation=%s)", tenant, investigation_id)
+    _SUBMISSION.set(None)
+    if request_key is not None:  # one logical submission = one turn: a retry gets the stored outcome and nothing is written or run (hardening Fix 3)
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        replay = _replay(tenant, investigation_id, request_key, digest)
+        if replay is not None:
+            return replay
+        _SUBMISSION.set({"requestKey": request_key, "requestTextSha": digest})
     attachments = repo.get_attachments(tenant, investigation_id, list(dict.fromkeys(attachment_ids)))
     if len(attachments) != len(set(attachment_ids)):  # a foreign, unknown or other-conversation id: refused before anything is written
         raise InvalidAttachments("unknown attachment")
@@ -310,18 +363,49 @@ def _run_turn_locked(
     except Exception:  # noqa: BLE001 — R12: nothing internal reaches the seller; the server log has it
         logger.exception("CEO turn failed (tenant=%s investigation=%s)", tenant, investigation_id)
         log.emit("TURN_FAILED")
-        result = _finish(ctx, runtime, turn, clock, log, status="FAILED", route=result.route, route_key=None, answer=FAILED_TEXT, kind="ANSWER", composition=None,
-                         anchor_status="FAILED", error_reason="turn failed")
+        try:
+            result = _finish(ctx, runtime, turn, clock, log, status="FAILED", route=result.route, route_key=None, answer=FAILED_TEXT, kind="ANSWER", composition=None,
+                             anchor_status="FAILED", error_reason="turn failed")
+        except Exception:
+            # Even the failure answer could not be saved: the turn's own run must still be settled (never left RUNNING), and the caller gets the failure, not a success.
+            logger.exception("could not record the failed turn (tenant=%s investigation=%s)", tenant, investigation_id)
+            try:
+                turn.close(status="FAILED", error_reason="turn failed", now=runtime.clock())
+            except Exception:  # noqa: BLE001
+                logger.exception("could not settle the turn's run")
+            raise
     result.timings = clock.to_json()
     result.events = list(log.events)
     if result.turn_id is not None:
         try:
-            repo.update_turn(tenant, result.turn_id, status=result.status if result.status in ("DELIVERED", "CLARIFIED", "DENIED", "FAILED") else "FAILED",
+            repo.update_turn(tenant, result.turn_id, status=result.status if result.status in TERMINAL_TURN_STATUSES else "FAILED",
                              stage_timings=result.timings, completed_at=runtime.clock())
             result.findings = [_public_finding(f) for f in repo.list_findings(tenant, investigation_id, turn_id=result.turn_id)]
         except Exception:  # noqa: BLE001
             logger.exception("could not finalise turn timings")
     return result
+
+
+def _replay(tenant: UUID, investigation_id: UUID, request_key: str, digest: str) -> TurnResult | None:
+    prior = repo.find_turn_by_request_key(tenant, investigation_id, request_key)
+    if prior is None:
+        return None
+    if (prior.get("classifier_result") or {}).get("requestTextSha") != digest:
+        raise IdempotencyConflict(request_key)
+    msg = repo.get_message(tenant, investigation_id, prior["ceo_message_id"]) if prior.get("ceo_message_id") else None
+    status = str(prior["status"]) if prior["status"] in TERMINAL_TURN_STATUSES else "FAILED"
+    billing = (prior.get("safety_result") or {}).get("billing") or {}
+    return TurnResult(
+        status, str(prior["route"]), str(msg["content"]) if msg else FAILED_TEXT, turn_id=prior["id"], route_key=prior.get("route_key"), message_id=msg["id"] if msg else None,
+        composition_mode=prior.get("composition_mode"), findings=[_public_finding(f) for f in repo.list_findings(tenant, investigation_id, turn_id=prior["id"])],
+        choices=msg.get("choices") if msg else None, outcome=billing.get("outcome"), replayed=True,
+    )
+
+
+def _create_turn(tenant: UUID, inv_id: UUID, *, classifier_result: Mapping[str, Any] | None = None, **kw: Any) -> UUID:
+    """`repo.create_turn` plus this submission's key (when the caller sent one), so a retry can find the turn it already produced."""
+    submission = _SUBMISSION.get()
+    return repo.create_turn(tenant, inv_id, classifier_result={**(classifier_result or {}), **(submission or {})} if (classifier_result or submission) else None, **kw)
 
 
 def _public_finding(f: dict[str, Any]) -> dict[str, Any]:
@@ -331,7 +415,7 @@ def _public_finding(f: dict[str, Any]) -> dict[str, Any]:
 def _finish(
     ctx: AuthContext, runtime: CeoRuntime, turn: CeoTurn, clock: StageClock, log: EventLog, *, status: str, route: str, route_key: str | None, answer: str,
     kind: str, composition: Composition | None, anchor_status: str, error_reason: str | None = None, clarify_for: str | None = None,
-    classifier_flags: Sequence[str] = (), notes: Sequence[str] = (), choices: Mapping[str, Any] | None = None,
+    classifier_flags: Sequence[str] = (), notes: Sequence[str] = (), choices: Mapping[str, Any] | None = None, billing: UnitDecision | None = None,
 ) -> TurnResult:
     assert ctx.tenant_id is not None
     tenant = ctx.tenant_id
@@ -345,17 +429,35 @@ def _finish(
     safety = dict(composition.safety) if composition else {}
     if classifier_flags:
         safety["classifierFlags"] = sorted(classifier_flags)
+    decision: UnitDecision | None = None
+    charge = status == "DELIVERED"  # LEGACY rule (turns before the CEO_UNIT_RULE_2 cut-over): every delivered turn is one unit
     if turn.turn_id is not None:
-        repo.update_turn(
-            tenant, turn.turn_id, status=status, ceo_message_id=msg, composition_mode=composition.mode if composition else None,
-            safety_result=safety or None, stage_timings=clock.to_json(), completed_at=runtime.clock(),
-        )
+        if _unit_rule_2_applies(tenant, turn.turn_id):
+            # Approval prerequisite R2: decide ONCE, store the decision with the turn, and let only the finalising call write the usage event.
+            decision = billing or unit_decision(status=status, route=route)
+            finalised = repo.finalise_turn(
+                tenant, turn.turn_id, status=status, billing=decision.to_json(), ceo_message_id=msg, composition_mode=composition.mode if composition else None,
+                safety_result=safety or None, stage_timings=clock.to_json(), completed_at=runtime.clock(),
+            )
+            charge = finalised and decision.due
+        else:
+            repo.update_turn(
+                tenant, turn.turn_id, status=status, ceo_message_id=msg, composition_mode=composition.mode if composition else None,
+                safety_result=safety or None, stage_timings=clock.to_json(), completed_at=runtime.clock(),
+            )
     turn.close(status=anchor_status, error_reason=error_reason, now=runtime.clock())
-    if status == "DELIVERED" and turn.turn_id is not None:
+    if charge and turn.turn_id is not None:
         meter_ceo_turn(tenant, member_id=ctx.app_user_id, turn_id=turn.turn_id, agent_run_id=turn.anchor_run_id)  # best-effort (D4)
     log.emit("ANSWER_READY", status=status, mode=composition.mode if composition else None)
     return TurnResult(status, route, answer, turn_id=turn.turn_id, route_key=route_key, message_id=msg, composition_mode=composition.mode if composition else None,
-                      clarify_for=clarify_for, notes=list(notes), choices=dict(choices) if choices else None)
+                      clarify_for=clarify_for, notes=list(notes), choices=dict(choices) if choices else None, outcome=decision.outcome if decision else None)
+
+
+def _unit_rule_2_applies(tenant: UUID, turn_id: UUID) -> bool:
+    """True only when the CEO_UNIT_RULE_2 cut-over exists on this database AND this turn was created at/after it. Every other turn is LEGACY: it keeps the
+    old behaviour (a delivered turn is one unit, nothing stored) and is never re-evaluated, repaired or refunded."""
+    row = repo.get_turn(tenant, turn_id)
+    return bool(row) and accounting_cutover_repo.is_post_cutover(accounting_cutover_repo.CEO_UNIT_RULE_2, row["created_at"])
 
 
 def _run_admitted(
@@ -399,6 +501,10 @@ def _run_admitted(
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, direct, now)
         if _ACKS.get() and not text.rstrip().endswith("?") and intent_router.route(text, cat) is None:  # only a statement about their business: acknowledged, nothing to answer
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, "Noted.", now)
+    if ui_action is None and attachments and ceo_attachment_analysis.spreadsheets(attachments) and ceo_attachment_analysis.is_analysis_request(text):
+        # A question about an attached spreadsheet is answered from its own cells by code (no model, no ledger, nothing imported); a question about anything else goes on as before.
+        reply = ceo_attachment_analysis.answer(tenant, inv_id, attachments, text)
+        return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, reply, now, marker={"attachmentAnalysis": True, "attachments": [str(a["id"]) for a in attachments]})
     ref_notes: list[str] = []
     routed_text = text  # what the router and classifier see: earlier results referred to by position ("#3") are replaced by their names (spec 6.35)
     if ui_action is None:
@@ -407,6 +513,16 @@ def _run_admitted(
             _ACKS.set([*_ACKS.get(), *ref_notes])
         except Exception:  # noqa: BLE001
             logger.exception("reference expansion failed")
+    compound_plan: compound.CompoundPlan | None = None
+    if ui_action is None:  # one route per turn: when the message holds several requirements, one is handled and the rest are named, never dropped (hardening Fix 1)
+        try:
+            compound_plan = compound.analyse(routed_text, cat, needs_approval=_decision_needs_approval)
+        except Exception:  # noqa: BLE001
+            logger.exception("compound-request analysis failed")
+        if compound_plan is not None:
+            if compound_plan.chosen_text is not None:
+                routed_text = compound_plan.chosen_text
+            _ACKS.set([*_ACKS.get(), *compound_plan.lines])
     preset: dict[str, str] = {}
     if period is not None:
         preset["period"] = f"{period[0].isoformat()} to {period[1].isoformat()}"
@@ -458,6 +574,16 @@ def _run_admitted(
                     ui_refs[name] = UUID(str(raw_id))
                 except ValueError:
                     pass  # a malformed reference is simply absent: the slot is then asked for, never guessed
+    # Decision D-8 (spec C1/C3): an approval-required action is never run, and not even started, from chat until a stored approval plan exists. Checked on the
+    # decision itself, so every way of arriving here (typed text, rules, a chip, a resumed input session's final answer) is stopped BEFORE any question is asked,
+    # any brief or memory is saved, or any preview is built. A confirmation card or a completed input session is an in-conversation answer, not approval.
+    approval_blocked: str | None = None
+    if route == "ACTION" and key is not None and key in ACTIONS and plan_required([key]):
+        approval_blocked = key
+    elif route == "PLAYBOOK" and key is not None and key in PLAYBOOKS and evaluate_playbook(PLAYBOOKS[key]).plan_required:
+        approval_blocked = key
+    if approval_blocked is not None:
+        route, key, clarify_slot = "ADVISORY", None, None
     if route == "ACTION" and key is not None and key in ACTIONS:
         required, resolves = ACTIONS[key].required_slots, ACTIONS[key].resolves
     elif route == "PLAYBOOK" and key is not None and key in PLAYBOOKS:
@@ -559,12 +685,14 @@ def _run_admitted(
         pending = clarification.pending_intent(decision.raw_route, decision.raw_key, decision.slots, {k: str(v) for k, v in ui_refs.items()})
     if attachments and route == "CLARIFY" and pending is None and clarify_slot in (None, "UNCLEAR_REQUEST"):
         route, clarify_slot, clarify_text = "ADVISORY", None, None  # the seller showed a file and asked about it: the CEO answers qualitatively from what it read
-    turn.turn_id = repo.create_turn(
+    turn.turn_id = _create_turn(
         tenant, inv_id, user_message_id=user_msg, agent_run_id=turn.anchor_run_id, route=route, route_key=key, slots=dict(decision.slots),
         route_source="UI_ACTION" if ui_action is not None else "CLASSIFIER",
         classifier_result={**decision.to_json(), "effectiveRoute": route, "effectiveKey": key, "model": classifier_model, **(reply_meta or {}),
                            **({"inputs": resolved.run.inputs.model_dump(mode="json")} if resolved is not None and resolved.run is not None else {}),
                            **({"attachments": [str(a["id"]) for a in attachments]} if attachments else {}),
+                           **({"approvalRequiredFor": approval_blocked} if approval_blocked else {}),
+                           **({"compound": compound_plan.to_json()} if compound_plan is not None else {}),
                            # what a plain question is waiting for, so the seller's short answer resumes THIS task instead of starting a new one (spec 6.35)
                            **({"pending": pending, "pendingSlot": clarify_slot} if route == "CLARIFY" and pending is not None and clarify_slot in SLOT_VOCAB else {})},
         status="PLAN_VALIDATED", now=now,
@@ -572,6 +700,9 @@ def _run_admitted(
     log.emit("PLAN_VALIDATED", route=route, routeKey=key)
     flags = tuple(decision.flags)
 
+    if approval_blocked is not None:  # D-8: nothing was asked, saved, composed, dispatched, metered or sent
+        return _finish(ctx, runtime, turn, clock, log, status="DENIED", route="ADVISORY", route_key=None, answer=APPROVAL_UNAVAILABLE_TEXT, kind="ANSWER", composition=None,
+                       anchor_status="DENIED", error_reason="approval required", classifier_flags=flags)
     if "GST_UNAVAILABLE" in flags:  # a GST question this member cannot have looked up: the wall stands, and it is never answered from general knowledge (spec C11, G1)
         return _finish(ctx, runtime, turn, clock, log, status="DENIED", route="ADVISORY", route_key=None, answer=GST_WALL_TEXT, kind="ANSWER", composition=None,
                        anchor_status="DENIED", error_reason="no GST route available", classifier_flags=flags)
@@ -599,6 +730,8 @@ def _run_admitted(
     attach: list[str] = []
     template_only_answer = False
     refused_required = False
+    planned_leg_keys: list[str] = []
+    planned_required_keys: set[str] = set()
     heading: str | None = None
 
     if route == "BUSINESS_STATE":
@@ -643,6 +776,7 @@ def _run_admitted(
         if runtime.max_legs is not None and len(leg_keys) > runtime.max_legs:
             return _finish(ctx, runtime, turn, clock, log, status="FAILED", route=route, route_key=key, answer=CONFIG_TEXT, kind="ANSWER", composition=None,
                            anchor_status="FAILED", error_reason="CONFIG_MISSING: max legs", classifier_flags=flags)
+        planned_leg_keys, planned_required_keys = list(leg_keys), set(required_keys)
         legs, entries, refused_required = _execute(ctx, runtime, turn, resolved, leg_keys, required_keys, reads, attached, now, clock, log)
         need_gaps: list[str] = []
         if addons and route == "ACTION" and not refused_required:  # spec agent-needs 5: the CEO fetches what the request also asked for from the agent that provides it
@@ -707,7 +841,8 @@ def _run_admitted(
         return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route=route, route_key=key, answer=answer + "\n\n" + follow_up.text, kind="CLARIFICATION", composition=comp,
                        anchor_status=turn.derive_status(), clarify_for=follow_up.card["slot"], classifier_flags=flags, notes=notes, choices=follow_up.card)
     return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route=route, route_key=key, answer=answer, kind="ANSWER", composition=comp,
-                   anchor_status=turn.derive_status(), classifier_flags=flags, notes=notes)
+                   anchor_status=turn.derive_status(), classifier_flags=flags, notes=notes,
+                   billing=unit_decision(status="DELIVERED", route=route, planned_leg_keys=planned_leg_keys, required_keys=planned_required_keys, legs=turn.legs))
 
 
 # ------------------------------------------------------------------------------------------------ pieces
@@ -923,13 +1058,14 @@ def _attachment_notes(attachments: Sequence[Mapping[str, Any]]) -> list[str]:
 
 def _answer_direct(
     ctx: AuthContext, runtime: CeoRuntime, inv_id: UUID, user_msg: UUID, turn: CeoTurn, clock: StageClock, log: EventLog, text: str, now: datetime,
+    marker: Mapping[str, Any] | None = None,
 ) -> TurnResult:
     """An answer written by code from memory: no classifier, no composer, nothing run."""
     tenant = ctx.tenant_id
     assert tenant is not None
-    turn.turn_id = repo.create_turn(
+    turn.turn_id = _create_turn(
         tenant, inv_id, user_message_id=user_msg, agent_run_id=turn.anchor_run_id, route="ADVISORY", route_key=None, slots={}, route_source="CLASSIFIER",
-        classifier_result={"directMemoryAnswer": True, "model": "rules"}, status="PLAN_VALIDATED", now=now,
+        classifier_result={**(marker or {"directMemoryAnswer": True}), "model": "rules"}, status="PLAN_VALIDATED", now=now,
     )
     log.emit("PLAN_VALIDATED", route="ADVISORY", routeKey=None)
     return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route="ADVISORY", route_key=None, answer=text, kind="ANSWER", composition=None, anchor_status="COMPLETE")
@@ -941,7 +1077,7 @@ def _answer_input(
     """The CEO's reply to one answer of a guided input: the next question (or the same one again, with why), or the end. Nothing is run and no model is called."""
     tenant = ctx.tenant_id
     assert tenant is not None
-    turn.turn_id = repo.create_turn(
+    turn.turn_id = _create_turn(
         tenant, inv_id, user_message_id=user_msg, agent_run_id=turn.anchor_run_id, route="CLARIFY", route_key=None, slots={}, route_source="UI_ACTION",
         classifier_result={"inputSession": True, **(reply_meta or {})}, status="PLAN_VALIDATED", now=now,
     )
@@ -984,14 +1120,7 @@ def _execute(
         tasks: list[tuple[str, str, Callable[[], Any]]] = [("leg", k, lambda k=k: _run_leg(turn, runtime, resolved, k, attached, clock, log)) for k in admitted]  # type: ignore[misc]
         tasks += [("read", e, lambda e=e: _read_state(ctx, turn, e, attached, runtime, log)) for e in reads]  # type: ignore[misc]
         results: list[Any] = []
-        if len(tasks) == 1:
-            kind, name, fn = tasks[0]
-            try:
-                results = [fn()]
-            except Exception:  # noqa: BLE001
-                logger.exception("CEO %s %s raised", kind, name)
-                results = [LegResult(name, LegStatus.FAILED, reason="the action failed") if kind == "leg" else None]
-        elif tasks:
+        if tasks:
             pool = ThreadPoolExecutor(max_workers=len(tasks), thread_name_prefix="ceo-leg")
             futures = [pool.submit(contextvars.copy_context().run, fn) for _, _, fn in tasks]  # copy: each thread inherits the parent-run scope
             done, _not_done = wait(futures, timeout=runtime.leg_timeout_seconds)

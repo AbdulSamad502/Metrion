@@ -21,6 +21,7 @@ Design constraints this module exists to honour:
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -28,6 +29,8 @@ from decimal import Decimal, InvalidOperation
 from competitor_intelligence.evidence.extraction import ExtractedField, ExtractionFailed, ExtractionResult
 from competitor_intelligence.evidence.image_store import ImageNotFound, ImageStore
 from competitor_intelligence.evidence.ollama_client import OllamaClient, OllamaUnavailable
+
+logger = logging.getLogger(__name__)
 
 # Exactly the columns `competitor_snapshot` (§5) can store from a listing screenshot —
 # `variant_key` is deliberately excluded: its derivation is an open production-validation
@@ -65,43 +68,68 @@ Return ONLY the JSON object."""
 
 
 def _extract_json_object(text: str) -> dict[str, object] | None:
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
+    """The first complete JSON object in the model's reply. Small vision models often wrap the object in a markdown fence or add a sentence before or after it (sometimes
+    containing braces of its own), so this scans for a balanced object rather than assuming the reply starts and ends with one."""
+    decoder = json.JSONDecoder()
+    index = text.find("{")
+    while index != -1:
+        try:
+            parsed, _ = decoder.raw_decode(text, index)
+        except json.JSONDecodeError:
+            index = text.find("{", index + 1)
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+        index = text.find("{", index + 1)
+    return None
+
+
+_NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+_CURRENCY_NOISE = re.compile(r"(?i)(?:₹|\brs\.?|\binr\b|\bmrp\b|m\.r\.p\.?|/-)")
+
+
+def _single_number(value: object) -> Decimal | None:
+    """The one number in a model-reported value ("₹1,299.00", "Rs. 999", "999/-", 4.3), or None. A value with two different numbers ("₹999 ₹1,499") is ambiguous and is
+    not guessed at; text with no number, bare NaN/Infinity and booleans are absent, never zero."""
+    if value is None or isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return None  # a list or an object is not a number: str() of {"a": 1} would otherwise read as 1
+    text = _CURRENCY_NOISE.sub(" ", str(value))
+    found = {m.replace(",", "") for m in _NUMBER.findall(text)}
+    if len(found) != 1:
         return None
     try:
-        parsed = json.loads(match.group(0))
-    except json.JSONDecodeError:
+        number = Decimal(next(iter(found)))
+    except InvalidOperation:
         return None
-    return parsed if isinstance(parsed, dict) else None
+    return number if number.is_finite() else None
 
 
 def _parse_rupees_to_paise(value: object) -> int | None:
-    if value is None:
-        return None
-    try:
-        rupees = Decimal(str(value).replace(",", "").replace("₹", "").strip())
-    except (InvalidOperation, ValueError):
-        return None
-    if not rupees.is_finite():
-        # "NaN"/"Infinity" parse as valid Decimals (and `json.loads` accepts bare NaN/Infinity),
-        # but `int()` on them raises — an unreadable price is absent, never a crash or a zero.
-        return None
-    return int((rupees * 100).to_integral_value())
+    rupees = _single_number(value)
+    return int((rupees * 100).to_integral_value()) if rupees is not None else None
 
 
 def _parse_rating(value: object) -> str | None:
-    try:
-        rating = Decimal(str(value).strip())
-    except (InvalidOperation, ValueError):
-        return None
-    if not rating.is_finite() or rating < 0 or rating > 5:  # NaN < 0 raises InvalidOperation
+    text = str(value).strip() if value is not None else ""
+    text = re.sub(r"(?i)\s*(?:out of|/)\s*5(?:\.0+)?\b.*$|\s*stars?\b.*$", "", text)  # "4.3 out of 5", "4.3/5", "4.3 stars" -> "4.3"
+    rating = _single_number(text)
+    if rating is None or rating < 0 or rating > 5:
         return None
     return str(rating)
 
 
 def _parse_rating_count(value: object) -> int | None:
-    digits = re.sub(r"[^\d]", "", str(value)) if value is not None else ""
-    return int(digits) if digits else None
+    """A whole number of ratings ("1,234", "1234 ratings"). A abbreviated count ("1.2K", "3L") cannot be turned into an exact count, so it is absent rather than
+    approximated, and so is anything holding two different numbers."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, float):
+        return int(value) if value.is_integer() and value >= 0 else None
+    text = str(value).strip()
+    if re.search(r"\d\s*[kKlLmM]\b|\d\.\d", text):
+        return None
+    number = _single_number(text)
+    return int(number) if number is not None and number >= 0 and number == number.to_integral_value() else None
 
 
 def _normalize_availability(value: object) -> str | None:
@@ -117,7 +145,7 @@ def _normalize_availability(value: object) -> str | None:
     return "UNKNOWN"
 
 
-def _fields_from_model_json(parsed: dict[str, object]) -> tuple[ExtractedField, ...]:
+def _fields_from_model_json(parsed: dict[str, object], *, validate: bool = True) -> tuple[ExtractedField, ...]:
     fields: list[ExtractedField] = []
 
     for name in _STRING_FIELDS:
@@ -137,18 +165,70 @@ def _fields_from_model_json(parsed: dict[str, object]) -> tuple[ExtractedField, 
             fields.append(ExtractedField(field_name, paise))
 
     rating = _parse_rating(parsed.get("rating"))
-    if rating is not None:
+    if rating is not None and Decimal(rating) != 0:  # a printed rating of 0 stars does not exist: the model writes 0 for "not shown" (measured), so it is absent, never stored as a value
         fields.append(ExtractedField("rating", rating))
 
     rating_count = _parse_rating_count(parsed.get("rating_count"))
-    if rating_count is not None:
+    if rating_count:  # 0 is the same placeholder; "no ratings yet" is simply no rating_count
         fields.append(ExtractedField("rating_count", rating_count))
 
     availability = _normalize_availability(parsed.get("availability"))
     if availability is not None:
         fields.append(ExtractedField("availability", availability))
 
-    return tuple(fields)
+    return _drop_unsupported(tuple(fields), parsed)[0] if validate else tuple(fields)
+
+
+# A third rule, cross-checking price and MRP against a printed "NN% off", was MEASURED and removed: on real llava replies it discarded as many correct values as wrong ones (4 correct, 11 wrong
+# on the candidate-prompt replies) and left the share of reported prices that were right unchanged, because the MRP it leans on is itself mostly misread. A check that removes
+# right and wrong values alike only hides errors. (scripts/vision_price_eval, docs/evaluation/ci-vision-eval-2026-10-11.md)
+# "price_gt_mrp" (the selling price cannot exceed the list price: drop both) is IMPLEMENTED but NOT ADOPTED. Re-audited against the labelled replies it never fired (0 of the 3 baseline and 0 of
+# the 20 candidate replies that reported both fields), so it has no measured benefit; and its failure mode is the one that retired the percent rule: when it does fire, the MRP is the field the
+# model misreads most (18 of 32 on the candidate prompt), so it would discard a correct price along with a wrong MRP. Enable it per call (`rules=`) only after labelled data shows a benefit.
+OPTIONAL_RULES: frozenset[str] = frozenset({"price_gt_mrp"})
+ALL_RULES: frozenset[str] = frozenset({"discount"})
+
+
+def _drop_unsupported(
+    fields: tuple[ExtractedField, ...], parsed: dict[str, object], rules: frozenset[str] = ALL_RULES
+) -> tuple[tuple[ExtractedField, ...], tuple[str, ...]]:
+    """Deterministic consistency checks between values that must agree if they were really read. A value the screenshot cannot support is OMITTED (it then degrades toward
+    PENDING_MANUAL_ENTRY like an illegible screenshot), never kept as a plausible-looking number. Nothing is repaired or guessed: when two reads disagree and it cannot be
+    told which is wrong, both are dropped."""
+    by_name = {f.field_name: f.value for f in fields}
+    drop: set[str] = set()
+    price, mrp, discount = by_name.get("listed_price_paise"), by_name.get("mrp_paise"), by_name.get("visible_discount_paise")
+    if "discount" in rules and discount is not None and (discount <= 0 or (price is not None and discount >= price)):
+        drop.add("visible_discount_paise")  # a saving of nothing, or of at least the whole price, is not a reading
+    if "price_gt_mrp" in rules and price is not None and mrp is not None and price > mrp:
+        drop.update(("listed_price_paise", "mrp_paise"))  # the selling price cannot exceed the list price: one of them is misread and which one is unknown
+    return tuple(f for f in fields if f.field_name not in drop), tuple(sorted(drop))
+
+
+@dataclass(frozen=True, slots=True)
+class ReplyAnalysis:
+    """What one model reply supports, and what validation REFUSED to keep. `suppressed` names every field the consistency checks removed, so a dropped value is never invisible:
+    the extractor logs it against the screenshot, and the evaluation reports whether each suppressed value was right or wrong."""
+
+    fields: tuple[ExtractedField, ...]
+    suppressed: tuple[str, ...]
+    unvalidated: tuple[ExtractedField, ...]  # the same reply parsed WITHOUT the consistency checks (for measurement only; never stored)
+
+
+def analyse_reply(reply: str) -> ReplyAnalysis | None:
+    """None when the reply holds no parseable JSON object. The single entry point the extractor and the evaluation scripts share, so what is measured is what runs."""
+    parsed = _extract_json_object(reply)
+    if parsed is None:
+        return None
+    unvalidated = _fields_from_model_json(parsed, validate=False)
+    kept, dropped = _drop_unsupported(unvalidated, parsed)
+    return ReplyAnalysis(kept, dropped, unvalidated)
+
+
+def fields_from_reply(reply: str) -> tuple[ExtractedField, ...] | None:
+    """The fields one model reply supports, or None when it holds no parseable object or no supported field (an extraction failure)."""
+    analysis = analyse_reply(reply)
+    return (analysis.fields or None) if analysis is not None else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,22 +241,29 @@ class OllamaVisionExtractor:
     ollama: OllamaClient
     model: str
 
+    @staticmethod
+    def _failed(image_ref: str, reason: str) -> ExtractionFailed:
+        # The snapshot only records that extraction failed (EXTRACTED / EXTRACTION_FAILED); without this line a model timeout, an unreachable model server, a reply that
+        # was not JSON and an illegible screenshot are indistinguishable once the capture shows PENDING_MANUAL_ENTRY.
+        logger.warning("CI vision extraction failed for %s: %s", image_ref, reason)
+        return ExtractionFailed(reason=reason)
+
     def extract(self, image_ref: str) -> ExtractionResult | ExtractionFailed:
         try:
             image_bytes = self.image_store.read(image_ref)
         except ImageNotFound as exc:
-            return ExtractionFailed(reason=str(exc))
+            return self._failed(image_ref, str(exc))
 
         try:
             raw = self.ollama.generate(model=self.model, prompt=_PROMPT, image_bytes=image_bytes)
         except OllamaUnavailable as exc:
-            return ExtractionFailed(reason=str(exc))
+            return self._failed(image_ref, str(exc))
 
-        parsed = _extract_json_object(raw)
-        if parsed is None:
-            return ExtractionFailed(reason="model response did not contain a parseable JSON object")
-
-        fields = _fields_from_model_json(parsed)
-        if not fields:
-            return ExtractionFailed(reason="model reported no legible fields in this screenshot")
-        return ExtractionResult(fields=fields)
+        analysis = analyse_reply(raw)
+        if analysis is None:
+            return self._failed(image_ref, "model response did not contain a parseable JSON object")
+        if analysis.suppressed:  # visible, never silent: a value the checks refused to keep is recorded against this screenshot
+            logger.warning("CI vision extraction for %s: kept no value for %s (the reads were inconsistent or a placeholder)", image_ref, ", ".join(analysis.suppressed))
+        if not analysis.fields:
+            return self._failed(image_ref, "model reported no legible fields in this screenshot")
+        return ExtractionResult(fields=analysis.fields)

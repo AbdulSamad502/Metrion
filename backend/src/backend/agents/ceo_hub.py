@@ -37,6 +37,7 @@ from backend.entitlement import (
     resolve_ci_entitlement,
 )
 from backend.repositories import agent_run_repo
+from backend.repositories.agent_run_repo import settles_open_runs
 from backend.services.cfo_actions import (
     AnomalyCheckOutcome,
     AnomalyCheckRequest,
@@ -126,6 +127,7 @@ class CeoHubResult:
     ci_result: ResearchSessionResult
 
 
+@settles_open_runs
 def dispatch_ci_research_now(
     tenant_id: UUID,
     *,
@@ -192,6 +194,7 @@ class CeoHubDiscoveryResult:
     outcome: DiscoveryRunOutcome
 
 
+@settles_open_runs
 def dispatch_ci_discover_competitors(
     tenant_id: UUID,
     *,
@@ -243,6 +246,7 @@ class CeoHubPriceScenarioResult:
     outcome: PriceScenarioOutcome | None
 
 
+@settles_open_runs
 def dispatch_ci_request_price_scenario(
     tenant_id: UUID,
     *,
@@ -307,6 +311,7 @@ class CeoHubCfoPnlResult:
     outcome: PeriodPnlOutcome
 
 
+@settles_open_runs
 def dispatch_cfo_pnl(
     tenant_id: UUID,
     *,
@@ -377,6 +382,7 @@ class CeoHubCfoEnterExpenseResult:
     manual_adjustment_id: UUID
 
 
+@settles_open_runs
 def dispatch_cfo_enter_expense(
     tenant_id: UUID,
     *,
@@ -461,6 +467,7 @@ class CeoHubCfoGstLinesResult:
     results: list[GstLineResult]
 
 
+@settles_open_runs
 def dispatch_cfo_analyze_gst_lines(
     tenant_id: UUID,
     *,
@@ -524,6 +531,7 @@ class CeoHubCfoPricingResult:
     outcome: PricingCurveOutcome
 
 
+@settles_open_runs
 def dispatch_cfo_pricing(
     tenant_id: UUID,
     *,
@@ -596,6 +604,7 @@ class CeoHubCfoGstSummaryResult:
     outcome: GstPeriodSummaryOutcome
 
 
+@settles_open_runs
 def dispatch_cfo_gst_summary(
     tenant_id: UUID,
     *,
@@ -666,6 +675,7 @@ class CeoHubCfoPeriodComparisonResult:
     outcome: PeriodComparisonOutcome
 
 
+@settles_open_runs
 def dispatch_cfo_period_comparison(
     tenant_id: UUID,
     *,
@@ -745,6 +755,7 @@ class CeoHubCfoLandedCostResult:
     outcome: LandedCostOutcome
 
 
+@settles_open_runs
 def dispatch_cfo_landed_cost(
     tenant_id: UUID,
     *,
@@ -821,6 +832,7 @@ class CeoHubCfoSupplierRankingResult:
     outcome: SupplierRankingOutcome
 
 
+@settles_open_runs
 def dispatch_cfo_supplier_ranking(
     tenant_id: UUID,
     *,
@@ -897,6 +909,7 @@ class CeoHubCfoFundingReadinessResult:
     outcome: FundingReadinessOutcome
 
 
+@settles_open_runs
 def dispatch_cfo_funding_readiness(
     tenant_id: UUID,
     *,
@@ -976,6 +989,7 @@ class CeoHubCfoBatchSizeResult:
     outcome: BatchSizeOutcome
 
 
+@settles_open_runs
 def dispatch_cfo_batch_size(
     tenant_id: UUID,
     *,
@@ -1053,6 +1067,7 @@ class CeoHubCfoReconcileResult:
     outcome: LeakShieldOutcome
 
 
+@settles_open_runs
 def dispatch_cfo_reconcile(
     tenant_id: UUID,
     *,
@@ -1142,6 +1157,7 @@ class CeoHubCfoAnomalyCheckResult:
     outcome: AnomalyCheckOutcome
 
 
+@settles_open_runs
 def dispatch_cfo_anomaly_check(
     tenant_id: UUID,
     *,

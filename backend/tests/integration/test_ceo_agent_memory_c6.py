@@ -43,6 +43,7 @@ def offered_labels(card):
 
 
 # ------------------------------------------------------------------------------------------------ CMO
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_cmo_remembers_the_confirmed_marketplace_and_offers_it_first_without_filling_it(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}
@@ -88,6 +89,7 @@ def test_cmo_hashtags_and_grounded_offer_a_remembered_single_marketplace(two_ten
         assert len(offered_labels(s.card)) <= input_session.MAX_OPTIONS
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_skipping_the_optional_marketplace_remembers_nothing(two_tenants, app_user):
     a, _ = two_tenants
     calls: dict = {}
@@ -220,3 +222,4 @@ def test_a_bad_or_unknown_remembered_value_is_not_offered(two_tenants, app_user,
     p = input_session.start("COMPETITOR_PRICE_IMPACT", ictx(a), {})
     assert p.card["slot"] == "competitor" and [o["label"] for o in p.card["options"] if o["kind"] != "OTHER" and o["kind"] != "CANCEL"] == ["Acme Steel"]
     assert all(o["reason"] != LAST for o in p.card["options"])  # untracked label: not offered
+

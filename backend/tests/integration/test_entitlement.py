@@ -13,6 +13,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 from sqlalchemy import text
+from tests.integration.owner_db import owner_tenant_scope
 
 from backend.entitlement import resolve_cfo_entitlement
 from backend.repositories import entitlement_repo
@@ -177,7 +178,7 @@ def test_active_cart_item_returns_none_when_no_row_exists(two_tenants):
 
 def test_active_cart_item_returns_the_active_row(two_tenants):
     tenant_a, _ = two_tenants
-    with tenant_scope(tenant_a) as conn:
+    with owner_tenant_scope(tenant_a) as conn:  # cart items are written by an operator, not by the application role
         conn.execute(
             text(
                 """
@@ -237,7 +238,7 @@ def test_rls_isolation_on_metered_event(two_tenants):
 def test_rls_isolation_on_tenant_cart_item(two_tenants):
     tenant_a, tenant_b = two_tenants
     for tid in (tenant_a, tenant_b):
-        with tenant_scope(tid) as conn:
+        with owner_tenant_scope(tid) as conn:
             conn.execute(
                 text(
                     """

@@ -356,6 +356,19 @@ export type AnalyzeGstLinesResponse = { lines: GstLineResult[] };
  * separate alias only so call sites reading this file can see which routes share it. */
 export type PricingMetricResult = MetricResult;
 
+/** `POST /cfo/cash-reconciliation` (`post_cash_reconciliation`): cash really received from settlement rows; expected cash, variance and TDS are
+ * not available from any adapter today and come back with `isAvailable: false` and a reason. */
+export type CashReconciliationResponse = {
+  cashReceived: PricingMetricResult;
+  cashExpected: PricingMetricResult;
+  cashVariance: PricingMetricResult;
+  tcsCollected: PricingMetricResult;
+  tdsDeducted: PricingMetricResult;
+  settledWithinLagCount: number;
+  unsettledBeyondLagCount: number;
+  datesMissingCount: number;
+};
+
 /** `POST /cfo/pnl` — every one of the six is this shape, `_period_pnl_metric_result_to_dict`
  * (`MetricResult` + `valueFraction`, populated INSTEAD OF `valuePaise` for percentage
  * metrics like `CONTRIBUTION_MARGIN_PCT`, never alongside it). */

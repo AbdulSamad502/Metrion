@@ -31,6 +31,7 @@ for why it deliberately does NOT re-run the entitlement caps `post_gst_lookup` e
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import date, datetime, timezone
 from fractions import Fraction
 from pathlib import Path
@@ -39,7 +40,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from data_foundation.adapters.registry import ADAPTER_REGISTRY
 from data_foundation.ingestion.file_reader import read_csv_file
@@ -120,7 +121,7 @@ from backend.services.cfo_actions import (
     set_expense_budget,
     set_seller_goal,
 )
-from cfo.reasoning.ollama_provider import OllamaLlmProvider
+from cfo.reasoning.ollama_provider import OllamaLlmProvider, OllamaUnavailable
 from cfo.reasoning.signals import PricingCandidateInput, SupplierRankInput
 from cfo.repositories.agent_data_request_repo import list_for_tenant
 
@@ -134,10 +135,25 @@ CFO_INGEST = "cfo.ingest"
 CFO_SELLER_GOAL = "cfo.seller_goal"
 
 
+_MARGIN_PCT = re.compile(r"^(?:100(?:\.0{1,2})?|[0-9]{1,2}(?:\.[0-9]{1,2})?)$")  # the same grammar the Seller Goal form enforces, ASCII digits only: "15", "15.5", "15.00", 0 to 100
+
+
 class SellerGoalHttpRequest(BaseModel):
     target_margin_pct: str | None = None
     priority_category: str | None = None
     note: str | None = None
+
+    @field_validator("target_margin_pct")
+    @classmethod
+    def _margin_is_a_percentage(cls, v: str | None) -> str | None:
+        """Spec 7.2.1 calls this a Decimal-string. It is also quoted into the strategic-briefing narration prompt, so free text must never be stored in it (found in practical
+        acceptance: the API stored "abc" while only the form refused it). Blank means "not set", never a value."""
+        if v is None or not v.strip():
+            return None
+        v = v.strip()
+        if not _MARGIN_PCT.fullmatch(v):
+            raise ValueError("target_margin_pct must be a percentage between 0 and 100 written as a decimal string, like 15 or 15.50")
+        return v
 
 
 @router.put("/seller-goal")
@@ -639,6 +655,9 @@ def put_line_count_override(
     return {"manualAdjustmentId": str(manual_adjustment_id)}
 
 
+_DECIMAL_STRING = re.compile(r"\d{1,3}(?:\.\d{1,4})?")
+
+
 class GstLineRequest(BaseModel):
     """One line for `analyze_gst_lines` — never accepts a period range; this endpoint has no
     concept of a period total (cfo-agent.md §6.6, `gst/summary.py` stays a stub)."""
@@ -663,12 +682,19 @@ def post_analyze_gst_lines(
     summary; returns no total.**"""
     assert ctx.tenant_id is not None
     _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_ANALYZE_GST_LINES)
+    for index, line in enumerate(body.lines):
+        if line.rate_pct is not None and not _DECIMAL_STRING.fullmatch(line.rate_pct.strip()):
+            # Same shape as a request-validation error, so the page names the field instead of showing a server failure.
+            raise HTTPException(
+                status_code=422,
+                detail=[{"loc": ["body", "lines", index, "rate_pct"], "msg": "Must be a plain decimal such as 18 or 18.5 (no % sign)", "type": "value_error"}],
+            )
     parsed_lines = [
         GstLineInput(
             line_ref=line.line_ref,
             listed_paise=line.listed_paise,
             basis=line.basis,  # type: ignore[arg-type]
-            rate_pct=Fraction(line.rate_pct) if line.rate_pct is not None else None,
+            rate_pct=Fraction(line.rate_pct.strip()) if line.rate_pct is not None else None,
         )
         for line in body.lines
     ]
@@ -2015,7 +2041,15 @@ def post_gst_lookup(
         category=body.category,
         requested_by=ctx.app_user_id,
     )
-    outcome = run_gst_applicability_lookup(ctx.tenant_id, request)
+    try:
+        outcome = run_gst_applicability_lookup(ctx.tenant_id, request)
+    except OllamaUnavailable:
+        # The lookup reads each tax page with the language model. When the model server is down, not set up, or too slow, that is a dependency failure of ours, not a
+        # server bug and not a result: say so in a sentence the page can show, and write nothing.
+        raise HTTPException(
+            status_code=503,
+            detail="The model that reads GST pages could not be reached, so nothing was looked up. Try again shortly.",
+        ) from None
 
     return {
         "result": _gst_lookup_result_to_dict(outcome.result) if outcome.result is not None else None,

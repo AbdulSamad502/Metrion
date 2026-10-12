@@ -141,11 +141,11 @@ def forget(tenant: UUID, finding_id: UUID, *, visible_agents: Iterable[str], cre
     old = _active_target(tenant, finding_id, visible_agents)
     if old is None:
         return False
-    repo.insert(
+    done = repo.insert(
         tenant, agent=old["agent_code"], kind=old["kind"], subject=old["subject"], body="(forgotten)", trust=old["trust"], source_ref=old["source_ref"], figure_refs=old["figure_refs"],
         dedupe_key=old["dedupe_key"], created_by=created_by, supersedes_id=finding_id, status="FORGOTTEN",
     )
-    return True
+    return done is not None  # False when a simultaneous correction or forget got there first: the finding was not forgotten by this call
 
 
 # ------------------------------------------------------------------------------------------------ reads

@@ -15,14 +15,17 @@ with its counts filled in — never re-inserted, never deleted).
 
 from __future__ import annotations
 
+import contextvars
+import functools
 import json
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
+from calc_engine import ownership
 from calc_engine.repositories.tenant_context import tenant_scope
 
 _INSERT_RUN_SQL = text(
@@ -45,9 +48,14 @@ _MARK_RUN_FINISHED_SQL = text(
     UPDATE reconciliation_run
     SET status = :status, finished_at = :finished_at, settlement_line_count = :settlement_line_count,
         sales_line_count = :sales_line_count, match_count = :match_count, exception_count = :exception_count
-    WHERE id = :id
+    WHERE id = :id AND status = 'RUNNING'
     """
 )
+
+# A run that recovery already settled (its owner was gone) keeps that outcome: a late finisher cannot overwrite it.
+_SETTLE_FAILED_SQL = text("UPDATE reconciliation_run SET status = 'FAILED', finished_at = :finished_at WHERE id = :id AND status = 'RUNNING'")
+
+_OPENED: contextvars.ContextVar[list[tuple[UUID, UUID]] | None] = contextvars.ContextVar("reconciliation_runs_opened", default=None)
 
 _INSERT_MATCH_SQL = text(
     """
@@ -93,6 +101,23 @@ def insert_reconciliation_run(
     exception_count: int | None = None,
 ) -> UUID:
     new_id = uuid4()
+    owned = status == "RUNNING"
+    if owned:
+        ownership.claim(new_id)  # BEFORE the row exists: a visible RUNNING row always had a live owner
+    try:
+        _insert_run(tenant_id, new_id, marketplace, period_start, period_end, as_of_date, tolerance_config_version, formula_version, status,
+                    join_key_validated, started_at, finished_at, settlement_line_count, sales_line_count, match_count, exception_count)
+    except BaseException:
+        if owned:
+            ownership.release(new_id)
+        raise
+    if owned and (opened := _OPENED.get()) is not None:
+        opened.append((tenant_id, new_id))
+    return new_id
+
+
+def _insert_run(tenant_id, new_id, marketplace, period_start, period_end, as_of_date, tolerance_config_version, formula_version, status,  # noqa: ANN001
+                join_key_validated, started_at, finished_at, settlement_line_count, sales_line_count, match_count, exception_count) -> None:
     with tenant_scope(tenant_id) as conn:
         conn.execute(
             _INSERT_RUN_SQL,
@@ -115,7 +140,6 @@ def insert_reconciliation_run(
                 "finished_at": finished_at,
             },
         )
-    return new_id
 
 
 def mark_reconciliation_run_finished(
@@ -145,6 +169,37 @@ def mark_reconciliation_run_finished(
                 "exception_count": exception_count,
             },
         )
+    ownership.release(run_id)  # after the terminal write, never before
+
+
+def settle_failed(tenant_id: UUID, run_id: UUID, *, finished_at: datetime | None = None) -> bool:
+    """Marks a still-RUNNING run FAILED (guarded: exactly one finisher wins). True when this call wrote it."""
+    with tenant_scope(tenant_id) as conn:
+        done = bool(conn.execute(_SETTLE_FAILED_SQL, {"id": str(run_id), "finished_at": finished_at or datetime.now(timezone.utc)}).rowcount)
+    ownership.release(run_id)
+    return done
+
+
+def settles_open_runs(fn):  # noqa: ANN001, ANN201 — a decorator over one differently typed callable
+    """If the wrapped call raises, every `reconciliation_run` it left RUNNING is marked FAILED (the process is alive, so nothing else would ever settle it)."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        opened: list[tuple[UUID, UUID]] = []
+        token = _OPENED.set(opened)
+        try:
+            return fn(*args, **kwargs)
+        except BaseException:
+            for tenant_id, run_id in opened:
+                try:
+                    settle_failed(tenant_id, run_id)
+                except Exception:  # noqa: BLE001 — the original exception is the one that must surface
+                    pass
+            raise
+        finally:
+            _OPENED.reset(token)
+
+    return wrapper
 
 
 def _match_params(

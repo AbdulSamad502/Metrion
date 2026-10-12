@@ -59,18 +59,48 @@ def class1_cases():
     return out
 
 
+# D-8: an IN-catalog action that needs approval is refused (an explicit DENIED explanation, nothing asked or run) instead of being turned into a clarification question.
+# Spelled out here on purpose (not computed from the gate) so a change to the approval-required set is a reviewed edit.
+APPROVAL_REQUIRED_CHAT_ACTIONS = frozenset({"pi.discover", "cmo.market_trends", "cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords"})
+
+
+def _class1_violations(ctx, rt, tenant, cases, first_index=0):
+    """A case violates the invariant when ANYTHING executed (a leg row or a finding), or when the outcome is not the expected non-executing one: a CLARIFY for everything
+    outside the closed catalog or not runnable, and the D-8 refusal (ADVISORY, DENIED, the fixed approval explanation) for an in-catalog approval-required action."""
+    failures = []
+    for i, (r, k, s) in enumerate(cases, start=first_index):
+        inv, res = _run(ctx, rt, f"c1-{i}")
+        blocked = r == "ACTION" and k in APPROVAL_REQUIRED_CHAT_ACTIONS
+        wrong = (res.route != "ADVISORY" or res.status != "DENIED" or res.answer != orchestrator.APPROVAL_UNAVAILABLE_TEXT) if blocked else res.route != "CLARIFY"
+        if _children(tenant, res) or repo.list_findings(tenant, inv) or wrong:
+            failures.append((r, k, s, res.route, res.status))
+    return failures
+
+
 def test_class1_a_hostile_classifier_can_execute_nothing_outside_the_closed_catalog(two_tenants, app_user, health_config):  # noqa: F811
     a, _ = two_tenants
     cases = class1_cases()
     table = {f"c1-{i}": decision(route=r, route_key=k or None, slots=s) for i, (r, k, s) in enumerate(cases)}
     rt = runtime(Scripted(table), Grounded())
     ctx = ctx_for(a, user_id=app_user)
-    failures = []
-    for i, (r, k, s) in enumerate(cases):
-        inv, res = _run(ctx, rt, f"c1-{i}")
-        if _children(a, res) or repo.list_findings(a, inv) or res.route != "CLARIFY":
-            failures.append((r, k, s, res.route, res.status))
+    failures = _class1_violations(ctx, rt, a, cases)
     assert len(cases) >= FLOOR
+    assert failures == [], failures[:5]
+
+
+def test_class1_the_approval_required_cases_alone_execute_nothing_and_are_refused_not_asked(two_tenants, app_user, health_config):  # noqa: F811
+    """The slice of the class-1 cases that name an approval-required action, run on their own (20 turns instead of 700): nothing executes, nothing is asked, and
+    the seller gets the fixed refusal. The full 700-case test above remains the authority."""
+    a, _ = two_tenants
+    all_cases = class1_cases()
+    picked = [(i, c) for i, c in enumerate(all_cases) if c[0] == "ACTION" and c[1] in APPROVAL_REQUIRED_CHAT_ACTIONS]
+    assert len(picked) == 20  # pi.discover and cmo.generate_title_sets x 10 slot sets
+    table = {f"c1-{i}": decision(route=r, route_key=k or None, slots=s) for i, (r, k, s) in picked}
+    rt = runtime(Scripted(table), Grounded())
+    ctx = ctx_for(a, user_id=app_user)
+    failures = []
+    for i, c in picked:
+        failures += _class1_violations(ctx, rt, a, [c], first_index=i)
     assert failures == [], failures[:5]
 
 

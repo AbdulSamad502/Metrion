@@ -514,17 +514,35 @@ class NicheRunEntitlementResult:
 
     passed: bool
     reason: str | None
-    niche_run_count: int
+    niche_run_count: int  # UNCHANGED MEANING: every run ever STARTED (rows), kept for its existing consumers. It is NOT usage and NOT used for enforcement.
+    # Q-R3 / R3: usage and enforcement count SUCCESSFUL runs only (recorded `research.niche_run` events); operational counts are kept separately.
+    niche_runs_successful: int = 0  # all-time runs whose stored decision says they were billable
+    usage_count: int = 0  # recorded research.niche_run events in the current period (what a cap is compared against)
+    cap_value: int | None = None
+    meter_code: str = "research.niche_run"
+    period_key: str = ""
+    evaluation_basis: str = "NO_CAP_CONFIGURED"
+
+
+NICHE_RUN_AGENT_CODE = "SHARED"
+NICHE_RUN_EVENT_KIND = "research.niche_run"
 
 
 def resolve_niche_run_entitlement(tenant_id: UUID) -> NicheRunEntitlementResult:
-    """Always passes today — see module docstring for why `research.niche_run`'s shared-service
-    cap has no real numeric limit to enforce yet. `niche_run_count` is real, live-queried usage
-    (`product_intelligence.repositories.pi_research_run_repo.count_runs_for_tenant`)."""
+    """The shared `research.niche_run` meter, resolved through the same real F2 mechanism as `research.market_trends` (agent `SHARED`), so a cap can
+    be seeded without a code change. With no cap row (today) it passes, stated honestly as `NO_CAP_CONFIGURED`. **Only SUCCESSFUL runs count toward usage**
+    (events written by `services/pi_usage`); the started/failed/interrupted operational counts are separate and never feed enforcement.
+    A cap must not be seeded before PI's quota reservation (R6) is proven: until then it is not safely enforceable (see `services/pi_usage`)."""
     from product_intelligence.repositories import pi_research_run_repo
 
-    count = pi_research_run_repo.count_runs_for_tenant(tenant_id)
-    return NicheRunEntitlementResult(passed=True, reason=None, niche_run_count=count)
+    base = resolve_cfo_entitlement(tenant_id, direct_action_code=NICHE_RUN_EVENT_KIND, agent_code=NICHE_RUN_AGENT_CODE)
+    counts = pi_research_run_repo.operational_counts(tenant_id)
+    return NicheRunEntitlementResult(
+        passed=base.passed, reason=base.reason, niche_run_count=counts["started"], niche_runs_successful=counts["successful"],
+        usage_count=entitlement_repo.usage_count_for_period(tenant_id, agent_code=NICHE_RUN_AGENT_CODE, meter_code=base.meter_code, period_key=base.period_key),
+        cap_value=base.cap_value, meter_code=base.meter_code, period_key=base.period_key,
+        evaluation_basis=base.evaluation_basis,
+    )
 
 
 def niche_run_entitlement_check_value(result: NicheRunEntitlementResult) -> str:

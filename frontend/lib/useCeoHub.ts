@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import type {
-  AgentAvailability, AgentCode, CeoClient, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationSummary, MemoryItem, NeedRow, TurnEvent, TurnFlow, TurnResponse,
+  AgentAvailability, AgentCode, CeoClient, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationSummary, MemoryItem, SharedFindingsList, NeedRow, TurnEvent, TurnFlow, TurnResponse,
   UiAction,
 } from "@/lib/ceo";
-import { describeError, hubStateOf, mergeFindings, stageLabel, withPendingMessage, type HubState } from "@/lib/ceoModel";
+import { RECEIVED_BUT_NO_REPLY, describeError, hubStateOf, isAwaitingAnswer, markPendingFailed, mergeFindings, newSubmissionId, serverAlreadyHasSubmission, stageLabel, submissionFingerprint, withPendingMessage, type HubState } from "@/lib/ceoModel";
 import { POLL_INTERVAL_MS, startPollingFeed, type FeedFactory } from "@/lib/ceoPolling";
 
 export type AsyncStatus = "idle" | "loading" | "ready" | "error";
@@ -29,6 +29,30 @@ export type FlowState = { status: "loading" | "ready" | "error"; data: TurnFlow 
 
 const IDLE_TURN: TurnProgress = { phase: "idle", question: null, arrivedIds: [], error: null, last: null, stage: null, working: [] };
 
+const OPEN_KEY = "metrion.ceoHub.openInvestigation";
+/** The open conversation is remembered for this browser tab only, so a refresh does not drop the seller's place. Storage can be unavailable
+ * (private window, blocked site data): every access is guarded and the Hub works exactly as before without it. */
+const rememberOpen = (id: string | null): void => {
+  try {
+    if (id) sessionStorage.setItem(OPEN_KEY, id);
+    else sessionStorage.removeItem(OPEN_KEY);
+  } catch {
+    /* no storage: nothing is remembered */
+  }
+};
+const rememberedOpen = (): string | null => {
+  try {
+    return sessionStorage.getItem(OPEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+/** How often an unanswered question is re-read (the thread only; no findings, no money). */
+const AWAIT_POLL_MS = 3000;
+/** Another turn of this conversation is still running: the new message was REFUSED (nothing stored), which is not a failure of the running task. */
+const isTurnBusy = (e: unknown): boolean => e instanceof ApiError && e.status === 409 && (e.detail as { code?: string } | null)?.code === "TURN_IN_PROGRESS";
+
 const failure = (e: unknown): string => (e instanceof ApiError ? describeError(e.status, e.detail) : describeError(null, null));
 
 /** All CEO Hub state and actions. The backend decides everything (classification, execution, synthesis, safety); this hook only
@@ -50,9 +74,14 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
   const [health, setHealth] = useState<HealthState>({ status: "loading", entries: [] });
   const [flows, setFlows] = useState<Record<string, FlowState>>({});
   const [memory, setMemory] = useState<MemoryItem[]>([]);
+  const [shared, setShared] = useState<{ status: "loading" | "ready" | "error"; data: SharedFindingsList | null }>({ status: "loading", data: null });
   const [needs, setNeeds] = useState<NeedRow[]>([]);
   const selectedRef = useRef<string | null>(null);
   const findingsRef = useRef<FindingRow[]>([]);
+  const sendingRef = useRef(false);
+  const unansweredRef = useRef<{ fingerprint: string; id: string } | null>(null); // the last send that got no answer: sending it again unchanged is a RETRY and keeps its id
+  const detailRef = useRef(detail);
+  detailRef.current = detail;
   useEffect(() => {
     findingsRef.current = detail.data?.findings ?? [];
   }, [detail.data]);
@@ -88,10 +117,12 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
           setDetail({ status: "ready", data, error: null });
           void loadNeeds(id);
         }
+        return data;
       } catch (e) {
-        if (selectedRef.current !== id) return;
+        if (selectedRef.current !== id) return null;
         if (e instanceof ApiError && e.status === 404) setDetail({ status: "notfound", data: null, error: null });
         else setDetail((d) => ({ status: "error", data: quiet ? d.data : null, error: failure(e) }));
+        return null;
       }
     },
     [client, loadNeeds],
@@ -100,6 +131,7 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
   const select = useCallback(
     (id: string | null) => {
       selectedRef.current = id;
+      rememberOpen(id);
       setSelectedId(id);
       setTurn(IDLE_TURN);
       setNotice(null);
@@ -111,6 +143,18 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
     [loadDetail],
   );
 
+  // Once the list has loaded, reopen the conversation that was open before a refresh, but only if it is still in the seller's list and
+  // nothing else was opened or created in the meantime. A remembered id that is no longer listed is forgotten.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || list.status !== "ready") return;
+    restoredRef.current = true;
+    const remembered = rememberedOpen();
+    if (!remembered || selectedRef.current !== null) return;
+    if (list.items.some((i) => i.id === remembered)) select(remembered);
+    else rememberOpen(null);
+  }, [list.status, list.items, select]);
+
   const refreshMemory = useCallback(async () => {
     try {
       setMemory((await client.getMemory()).items);
@@ -118,6 +162,27 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
       /* memory is a convenience panel: if it cannot load, the Hub works without it */
     }
   }, [client]);
+
+  /** What the agents have reported (a separate, trust-labelled tier from "What I remember"). A failed read keeps what was already shown and says so. */
+  const refreshShared = useCallback(async () => {
+    try {
+      setShared({ status: "ready", data: await client.getSharedFindings() });
+    } catch {
+      setShared((s) => ({ status: "error", data: s.data }));
+    }
+  }, [client]);
+
+  const forgetShared = useCallback(
+    async (id: string) => {
+      try {
+        await client.forgetSharedFinding(id);
+      } catch {
+        /* already gone or not allowed: the refresh below shows the truth */
+      }
+      await refreshShared();
+    },
+    [client, refreshShared],
+  );
 
   const forgetMemory = useCallback(
     async (id: string) => {
@@ -144,8 +209,9 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
     void refreshList();
     void refreshHealth();
     void refreshMemory();
+    void refreshShared();
     client.getAvailability().then(setAvailability, () => setAvailability(null));
-  }, [client, refreshList, refreshHealth, refreshMemory]);
+  }, [client, refreshList, refreshHealth, refreshMemory, refreshShared]);
 
   /** "Show flow": read the audit rows for one turn, once, on demand. */
   const loadFlow = useCallback(
@@ -184,6 +250,12 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
       if (!id) return;
       const text = message.trim();
       if (!text) return;
+      if (sendingRef.current) return; // one submission in flight at a time from this screen (the server refuses an overlapping turn too: 409)
+      sendingRef.current = true;
+      const fingerprint = submissionFingerprint(id, text, period, action, clarification, attachmentIds);
+      const clientRequestId = unansweredRef.current?.fingerprint === fingerprint ? unansweredRef.current.id : newSubmissionId();
+      unansweredRef.current = { fingerprint, id: clientRequestId };
+      const userBefore = (detailRef.current.data?.messages ?? []).filter((m) => m.role === "USER" && !m.pending && !m.failed).length;
       setNotice(null);
       setTurn({ phase: "processing", question: text, arrivedIds: [], error: null, last: null, stage: null, working: [] });
       setDetail((d) => (d.data ? { ...d, data: { ...d.data, messages: withPendingMessage(d.data.messages, text, new Date().toISOString()) } } : d));
@@ -221,22 +293,28 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
       let error: string | null = null;
       let last: TurnResponse | null = null;
       try {
-        last = await client.postTurn(id, text, period, action, clarification, attachmentIds);
+        last = await client.postTurn(id, text, period, action, clarification, attachmentIds, clientRequestId);
+        unansweredRef.current = null; // answered: the next send, even with identical text, is a new submission
       } catch (e) {
-        error = failure(e);
+        if (isTurnBusy(e)) setNotice(failure(e)); // told once as a notice; the running task keeps its own status
+        else error = failure(e);
       } finally {
         feed.stop();
         events.abort();
+        sendingRef.current = false;
       }
       if (selectedRef.current === id) {
-        await loadDetail(id, true); // the authoritative thread: the server's copy replaces the pending message
+        if (error) setDetail((d) => (d.data ? { ...d, data: { ...d.data, messages: markPendingFailed(d.data.messages) } } : d)); // if the refresh below also fails, the question reads as not sent
+        const fresh = await loadDetail(id, true); // the authoritative thread: the server's copy replaces the pending message
+        if (error && fresh && serverAlreadyHasSubmission(fresh.messages, text, userBefore)) error = RECEIVED_BUT_NO_REPLY; // a lost reply, not a lost question: do not invite a resend
         setTurn((t) => ({ phase: "idle", question: null, arrivedIds: t.arrivedIds, error, last, stage: null, working: [] }));
       }
       void refreshList();
       void refreshHealth(); // a turn can read or trigger saved results; the strip is a cheap persisted read
       void refreshMemory(); // a turn can remember something the seller stated
+      void refreshShared(); // and a specialist that finished can have reported something
     },
-    [client, feedFactory, pollMs, loadDetail, refreshList, refreshHealth, refreshMemory],
+    [client, feedFactory, pollMs, loadDetail, refreshList, refreshHealth, refreshMemory, refreshShared],
   );
 
   const setAttached = useCallback(
@@ -293,10 +371,19 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
     }
   }, [client, loadDetail, refreshList]);
 
+  // A question the server stored but has not answered (refresh mid-run, lost reply): shown as still being answered and re-read until the answer arrives. The composer stays
+  // usable on purpose: a send is how an abandoned turn gets settled and reported, and the server refuses it with a plain notice while a live turn still owns the conversation.
+  const awaitingAnswer = turn.phase === "idle" && detail.status === "ready" && isAwaitingAnswer(detail.data?.messages, detail.data?.investigation.status);
+  useEffect(() => {
+    if (!awaitingAnswer || !selectedId) return;
+    const timer = setInterval(() => void loadDetail(selectedId, true), AWAIT_POLL_MS);
+    return () => clearInterval(timer);
+  }, [awaitingAnswer, selectedId, loadDetail]);
+
   const state: HubState = hubStateOf({ selectedId, status: detail.status, detail: detail.data, processing: turn.phase === "processing" });
 
   return {
-    state, list, availability, health, memory, needs, forgetMemory, flows, loadFlow, refreshHealth, selectedId, detail, turn, showArchived, setShowArchived, busyAgent, notice, dismissNotice: () => setNotice(null),
+    awaitingAnswer, state, list, availability, health, memory, needs, forgetMemory, shared, forgetShared, refreshShared, flows, loadFlow, refreshHealth, selectedId, detail, turn, showArchived, setShowArchived, busyAgent, notice, dismissNotice: () => setNotice(null),
     refreshList, select, create, sendTurn, setAttached, resolve, reopen, archive, retryDetail: () => selectedRef.current && loadDetail(selectedRef.current, false),
   };
 }

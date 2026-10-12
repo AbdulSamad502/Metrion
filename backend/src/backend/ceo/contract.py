@@ -21,6 +21,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from backend.auth.permissions import AGENT_CFO, AGENT_CI, AGENT_CMO, AGENT_PI
+from backend.ceo.effects import ActionEffects
 
 
 class AgentCode(str, Enum):
@@ -31,6 +32,13 @@ class AgentCode(str, Enum):
     PI = "PI"
     CMO = "CMO"
 
+
+# Turn statuses (`investigation_turn_status_check`). The in-flight statuses are written while a turn runs; the
+# terminal ones end it. `PLANNED` is vocabulary only until the approval workflow exists: nothing produces it yet.
+# `tests/integration/test_ceo_turn_status_vocabulary.py` fails if these constants and the DB constraint drift apart.
+IN_FLIGHT_TURN_STATUSES: tuple[str, ...] = ("RECEIVED", "CAP_CHECKED", "CLASSIFIED", "PLAN_VALIDATED", "DISPATCHED", "GATHERED", "COMPOSED")
+TERMINAL_TURN_STATUSES: tuple[str, ...] = ("DELIVERED", "CLARIFIED", "DENIED", "FAILED", "PLANNED")
+TURN_STATUSES: tuple[str, ...] = (*IN_FLIGHT_TURN_STATUSES, *TERMINAL_TURN_STATUSES)
 
 AGENT_PERMISSION_KEY: Mapping[AgentCode, str] = {
     AgentCode.CFO: AGENT_CFO,
@@ -80,6 +88,7 @@ class Denial(str, Enum):
     ENTITLEMENT = "ENTITLEMENT"
     NOT_ATTACHED = "NOT_ATTACHED"
     NOT_WIRED = "NOT_WIRED"
+    APPROVAL_REQUIRED = "APPROVAL_REQUIRED"  # approval-required action with no stored approval plan (the workflow does not exist yet): never run
 
 
 class EntryStatus(str, Enum):
@@ -214,6 +223,7 @@ class ActionSpec:
     extract_refs: Callable[[Mapping[str, Any]], list[Ref]] | None = None  # None => provenance.default_extract_refs
     denial_surface: bool = False  # cfo.preview: the entitlement-denial surface (spec C17)
     not_wired_reason: str | None = None
+    effects: ActionEffects | None = None  # what the action really does outside computation (ceo/effects.py); attached to EVERY action of the default registry
 
     @property
     def wired(self) -> bool:

@@ -25,6 +25,7 @@ from functools import lru_cache
 from typing import Any
 from uuid import UUID
 
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from backend.auth.context import AuthContext
@@ -191,9 +192,14 @@ def _pi_entitlement(code: str, *, also_niche_run: bool) -> EntitlementPreflight:
 def _gst_invoke(slots: Any, ctx: AuthContext, leg: LegContext) -> Mapping[str, Any]:
     from backend.api.v1 import cfo as cfo_api
 
-    return gst_lookup.invoke(
-        slots, ctx, leg, result_to_dict=cfo_api._gst_lookup_result_to_dict, no_match_to_dict=cfo_api._gst_lookup_no_match_to_dict,
-    )
+    try:
+        return gst_lookup.invoke(
+            slots, ctx, leg, result_to_dict=cfo_api._gst_lookup_result_to_dict, no_match_to_dict=cfo_api._gst_lookup_no_match_to_dict,
+        )
+    except cfo_api.OllamaUnavailable:
+        # Same meaning as the direct route's 503 (C20: one function, two entry paths): the model that reads the pages is down. That is a dependency outage,
+        # not a result and not a server bug; the choke point turns a 503 into an UNAVAILABLE leg, and nothing was written.
+        raise HTTPException(status_code=503, detail="The model that reads GST pages could not be reached, so nothing was looked up.") from None
 
 
 def _gst_entitlement(*, through_cfo: bool) -> EntitlementPreflight:
@@ -372,7 +378,21 @@ def build_default_registry() -> ActionRegistry:
                 writes_own_run=True,
             )
         )
-    return ActionRegistry(specs)
+    return ActionRegistry(_with_effects(specs))
+
+
+def _with_effects(specs: list[ActionSpec]) -> list[ActionSpec]:
+    """Attaches the reviewed `ACTION_EFFECTS` entry to every action and refuses a registry in which a registered key has no entry or an entry has no
+    action: a new action cannot be registered without being classified (approval prerequisite R1)."""
+    from dataclasses import replace
+
+    from backend.ceo.effects import ACTION_EFFECTS
+
+    keys = {s.key for s in specs}
+    missing, orphan = sorted(keys - set(ACTION_EFFECTS)), sorted(set(ACTION_EFFECTS) - keys)
+    if missing or orphan:
+        raise RegistryError(f"ACTION_EFFECTS does not match the registry: unclassified={missing} orphaned={orphan}")
+    return [replace(s, effects=ACTION_EFFECTS[s.key]) for s in specs]
 
 
 @lru_cache(maxsize=1)

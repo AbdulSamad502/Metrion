@@ -59,6 +59,7 @@ from product_intelligence.sources.tavily_client import TavilyClient, TavilyImage
 from product_intelligence.sources.youtube_client import YoutubeClient, YoutubeUnavailable, YoutubeVideo
 
 DEFAULT_CANDIDATE_CAP = 30
+MAX_CANDIDATE_CAP = 100  # the largest cap the API accepts; product_intelligence.timing derives its worst-case bounds for 1..this
 _MIN_YOUTUBE_MATCHED_SLOTS = 5  # reserved within candidate_cap for candidates with a real
 # grouped YouTube video (quality pass, 2026-10-01) — see _select_candidates_with_cap's own
 # docstring for why a plain source_diversity sort alone still isn't enough.
@@ -341,6 +342,7 @@ def _select_candidates_with_cap(rows: list[dict[str, Any]], *, candidate_cap: in
     twice. If a niche genuinely doesn't have enough YouTube-matched candidates to fill the
     reservation, the shortfall simply doesn't reserve anything it doesn't have — this never
     pads the result with a worse candidate just to hit a quota."""
+    candidate_cap = max(candidate_cap, 0)  # a negative cap must keep nothing (slice semantics would otherwise keep all but the last rows)
     youtube_matched = [r for r in rows if (r.get("engagement_signal") or {}).get("status") == "AVAILABLE"]
     youtube_matched_sorted = sorted(youtube_matched, key=lambda r: r["source_diversity"], reverse=True)
     reserved = youtube_matched_sorted[: min(_MIN_YOUTUBE_MATCHED_SLOTS, candidate_cap)]

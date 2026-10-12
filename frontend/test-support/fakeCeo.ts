@@ -3,9 +3,9 @@
  * no orchestration of its own: tests script what the "server" persisted and when, exactly as the real turn endpoint would. */
 
 import { ApiError } from "@/lib/api";
-import type { MemoryItem, NeedRow } from "@/lib/ceo";
+import type { MemoryItem, NeedRow, SharedFinding, SharedFindingsList } from "@/lib/ceo";
 import type {
-  AgentAvailability, AgentCode, CeoClient, UploadedAttachment, NewProductFormSupport, PriceImpactFormSupport, SaveInputBody, CeoMessage, CeoRoute, ClarificationCard, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationStatus,
+  AgentAvailability, AgentCode, CeoClient, UploadedAttachment, UploadedTable, NewProductFormSupport, PriceImpactFormSupport, SaveInputBody, CeoMessage, CeoRoute, ClarificationCard, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationStatus,
   InvestigationSummary, TurnEvent, TurnFlow, TurnResponse, TurnRow, UiAction,
 } from "@/lib/ceo";
 import type { FeedFactory, FeedOptions, FindingsFeed } from "@/lib/ceoPolling";
@@ -44,9 +44,13 @@ export class FakeCeo {
   store = new Map<string, Stored>();
   calls: { method: string; args: unknown[] }[] = [];
   failNextTurn: ApiError | null = null;
+  requestIds: (string | null)[] = []; // the clientRequestId of every postTurn, in order (kept apart from `calls`, whose argument shapes other tests pin)
   health: HealthEntry[] = [];
   healthError: ApiError | null = null;
   memory: MemoryItem[] = [];
+  shared: SharedFinding[] = [];
+  hiddenFindings: SharedFindingsList["hidden"] = [];
+  sharedError: ApiError | null = null;
   needs = new Map<string, NeedRow[]>();
   flows = new Map<string, TurnFlow>();
   /** live-event stream: tests push events; `streamFails` makes it refuse to open (the poll must still do the whole job) */
@@ -56,6 +60,8 @@ export class FakeCeo {
   saved: SaveInputBody[] = [];
   uploads: { id: string; name: string }[] = [];
   uploadFails: ApiError | null = null;
+  uploadFailsFor: string | null = null; // a file NAME whose upload fails (the others succeed)
+  uploadTable: UploadedTable | null = null; // what the backend reports about a spreadsheet it read (or could not read)
   streams: { id: string; emit: (e: TurnEvent) => void; closed: boolean }[] = [];
   private pending: { id: string; message: string; period: ExplicitPeriod | null; action: UiAction | null; clarification: ClarificationReply | null; resolve: (r: TurnResponse) => void; reject: (e: unknown) => void } | null = null;
 
@@ -153,7 +159,8 @@ export class FakeCeo {
           return structuredClone(detail) as InvestigationDetail;
         }),
       getFindings: (id: string) => rec("getFindings", [id], () => structuredClone(this.visible(id).findings)),
-      postTurn: (id: string, message: string, period?: ExplicitPeriod | null, action?: UiAction | null, clarification?: ClarificationReply | null, attachmentIds?: string[]) => {
+      postTurn: (id: string, message: string, period?: ExplicitPeriod | null, action?: UiAction | null, clarification?: ClarificationReply | null, attachmentIds?: string[], clientRequestId?: string | null) => {
+        this.requestIds.push(clientRequestId ?? null);
         this.calls.push({ method: "postTurn", args: attachmentIds && attachmentIds.length ? [id, message, period ?? null, action ?? null, clarification ?? null, attachmentIds] : clarification ? [id, message, period ?? null, action ?? null, clarification] : [id, message, period ?? null, action ?? null] });
         return new Promise<TurnResponse>((resolve, reject) => {
           try {
@@ -213,9 +220,10 @@ export class FakeCeo {
         rec("uploadAttachment", [id, file.name], (): UploadedAttachment => {
           this.visible(id);
           if (this.uploadFails) throw this.uploadFails;
+          if (this.uploadFailsFor === file.name) throw new ApiError(500, { detail: "boom" });
           const up = { id: uid("a"), name: file.name };
           this.uploads.push(up);
-          return { id: up.id, filename: file.name, type: "PDF", byteSize: file.size, status: "OK", note: null };
+          return { id: up.id, filename: file.name, type: "PDF", byteSize: file.size, status: "OK", note: null, table: this.uploadTable };
         }),
       getAvailability: () => rec("getAvailability", [], () => structuredClone(this.availability)),
       getPriceImpactForm: (sku?: string) => rec("getPriceImpactForm", [sku ?? null], () => structuredClone(this.priceForm)),
@@ -244,6 +252,18 @@ export class FakeCeo {
           const before = this.memory.length;
           this.memory = this.memory.filter((m) => m.id !== id);
           if (this.memory.length === before) throw new ApiError(404, { detail: "Not found" });
+          return { forgotten: id };
+        }),
+      getSharedFindings: () =>
+        rec("getSharedFindings", [], () => {
+          if (this.sharedError) throw this.sharedError;
+          return { items: structuredClone(this.shared), hidden: structuredClone(this.hiddenFindings), hiddenTotal: this.hiddenFindings.reduce((n, h) => n + h.count, 0) };
+        }),
+      forgetSharedFinding: (id: string) =>
+        rec("forgetSharedFinding", [id], () => {
+          const before = this.shared.length;
+          this.shared = this.shared.filter((f) => f.id !== id);
+          if (this.shared.length === before) throw new ApiError(404, { detail: "Not found" });
           return { forgotten: id };
         }),
       getHealth: () =>

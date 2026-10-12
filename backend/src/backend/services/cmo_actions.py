@@ -135,6 +135,34 @@ def _record_run(
         return False
 
 
+def _open_run(principal: Principal, trigger: str, run_id: UUID, started: datetime) -> bool:
+    """R5: the run row exists (RUNNING, owned by this process) BEFORE the domain call, so a process that dies mid-flight leaves a discoverable record that start-up
+    recovery settles `INTERRUPTED`. Best-effort like every CMO run write: without the row the call proceeds and `_close_run` falls back to the single terminal insert."""
+    try:
+        agent_run_repo.insert_run(
+            principal.tenant_id, agent_id=AGENT_ID, trigger_type="DIRECT", trigger_ref=trigger, requested_by=principal.user_id,
+            permission_check="PASS", entitlement_check="PASS", status="RUNNING", started_at=started, run_id=run_id, parent_run_id=PARENT_RUN_ID.get(),
+        )
+        return True
+    except Exception:  # noqa: BLE001
+        logger.exception("could not open CMO agent_run %s", run_id)
+        return False
+
+
+def _close_run(
+    principal: Principal, trigger: str, run_id: UUID, opened: bool, *, status: str, started: datetime, finished: datetime, error: str | None = None
+) -> bool:
+    """Terminal write of the row `_open_run` created (guarded: a row recovery already settled keeps that outcome). Without an opened row, the original single insert."""
+    if not opened:
+        return _record_run(principal, trigger, run_id, status=status, started=started, finished=finished, error=error)
+    try:
+        agent_run_repo.finish_run_if_unfinished(principal.tenant_id, run_id, status=status, error_reason=error, finished_at=finished)
+        return True
+    except Exception:  # noqa: BLE001
+        logger.exception("could not finish CMO agent_run %s", run_id)
+        return False
+
+
 # ---- settlement -----------------------------------------------------------------------------
 
 
@@ -185,18 +213,31 @@ def run_billable(
     if plan.to_generate:
         reservation_id = _admit(principal, action, key, plan.units_required, now)
         run_id = uuid4()
+    opened_flag = [False]
+    generation = getattr(runtime, "generation", None)
+    if run_id is not None and generation is not None and hasattr(generation, "before_model_call"):
+        def open_once() -> None:  # the first model call is the point of no return: from here a killed process must leave a discoverable record
+            if not opened_flag[0]:
+                opened_flag[0] = _open_run(principal, action.value, run_id, now)  # type: ignore[arg-type]
+        generation.before_model_call = open_once
 
     try:
         report = execute(run_id)
     except REQUEST_ERRORS:
         _finish_reservation(principal, reservation_id, "RELEASED", runtime.clock())
+        if opened_flag[0]:  # not expected (a rejection precedes any model call), but a row that exists must not stay RUNNING
+            _close_run(principal, action.value, run_id, True, status="DENIED", started=now, finished=runtime.clock(), error="request not accepted")  # type: ignore[arg-type]
         raise
-    except Exception:
+    except BaseException:
         _finish_reservation(principal, reservation_id, "RELEASED", runtime.clock())
         if run_id is not None:
-            _record_run(principal, action.value, run_id, status="FAILED", started=now, finished=runtime.clock(), error="execution failed")
+            _close_run(principal, action.value, run_id, opened_flag[0], status="FAILED", started=now, finished=runtime.clock(), error="execution failed")
         raise
+    finally:
+        if generation is not None and hasattr(generation, "before_model_call"):
+            generation.before_model_call = None
 
+    opened = opened_flag[0]
     rows: dict[UUID, StoredGeneration] = {}
     for art in report.artefacts:
         row = store.load_generation(tenant, art.generation_id)
@@ -207,7 +248,9 @@ def run_billable(
     executed = any(not a.reused for a in report.artefacts)  # a pure replay / lost race creates no new run
     run_recorded = False
     if executed and run_id is not None:
-        run_recorded = _record_run(principal, action.value, run_id, status=report.run_status.value, started=now, finished=runtime.clock())
+        run_recorded = _close_run(principal, action.value, run_id, opened, status=report.run_status.value, started=now, finished=runtime.clock())
+    elif opened:  # a lost race / pure replay: nothing new was run, so the row opened for it is closed as reused work, not left RUNNING
+        _close_run(principal, action.value, run_id, True, status=report.run_status.value, started=now, finished=runtime.clock(), error="nothing new was generated")  # type: ignore[arg-type]
 
     metered_ok = _settle(principal, runtime, report, rows, run_id if run_recorded else None, runtime.clock())
     # Reservation: SETTLED only when every delivered unit is now a recorded metered event; otherwise it keeps

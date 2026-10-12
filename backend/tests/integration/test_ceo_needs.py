@@ -78,6 +78,7 @@ def needs_of(tenant, inv):
     return ceo_need_repo.list_for_investigation(tenant, inv)
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_the_description_and_the_gst_rate_come_in_one_answer_and_the_step_is_recorded(two_tenants, app_user, lookup):
     a, _ = two_tenants
     calls: dict = {}
@@ -97,6 +98,7 @@ def test_the_description_and_the_gst_rate_come_in_one_answer_and_the_step_is_rec
     assert (need["need_key"], need["requester_agent"], need["provider_key"], need["status"]) == ("GST_RATE_FOR_PRODUCT", "CMO", "cfo.gst_lookup", "FULFILLED")
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_without_the_limit_configured_the_main_request_still_runs_and_the_gap_is_named(two_tenants, app_user, lookup, monkeypatch):
     a, _ = two_tenants
     monkeypatch.delenv("CEO_NEEDS_MAX_PER_TURN")
@@ -110,6 +112,7 @@ def test_without_the_limit_configured_the_main_request_still_runs_and_the_gap_is
     assert [n["status"] for n in needs_of(a, inv)] == ["CONFIG_MISSING"]
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_a_member_without_the_lookup_gets_the_description_and_the_wall_never_a_rate(two_tenants, app_user, lookup):
     a, _ = two_tenants
     calls: dict = {}
@@ -123,6 +126,7 @@ def test_a_member_without_the_lookup_gets_the_description_and_the_wall_never_a_r
     assert [n["status"] for n in needs_of(a, inv)] == ["DENIED"]
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_the_add_on_never_runs_when_the_main_request_did_not_complete(two_tenants, app_user, lookup):
     a, _ = two_tenants
     calls: dict = {}
@@ -148,6 +152,7 @@ def test_the_catalog_decides_what_an_add_on_can_be():
 
 
 # ------------------------------------------------------------------------------------------------ S2: the PI idea and competitor links are recorded
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_the_idea_link_is_recorded_only_when_the_seller_named_a_pi_idea(two_tenants, app_user):
     from tests.integration.test_ceo_cmo_chat import registry as cmo_registry  # noqa: F401
     from tests.integration.test_ceo_decision_playbooks import recording_registry
@@ -187,6 +192,7 @@ def test_the_append_only_tables_cannot_be_updated_or_deleted_by_the_app_role(mig
 
 
 # ------------------------------------------------------------------------------------------------ S4 (PI only): a research run is noted in the shared findings
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_the_pi_finding_is_recorded_once_and_is_labelled_not_verified(two_tenants, app_user, migrate_engine, monkeypatch):
     from backend.ceo import findings
     from tests.integration import test_ceo_pi_chat as pc
@@ -214,3 +220,4 @@ def test_the_pi_finding_is_recorded_once_and_is_labelled_not_verified(two_tenant
         with _scope(migrate_engine, a) as c:
             for stmt in ("DELETE FROM shared_finding WHERE tenant_id = :t", "DELETE FROM pi_research_run WHERE id = :r", "DELETE FROM niche_brief WHERE id = :b"):
                 c.execute(sql(stmt), {"t": str(a), "r": str(rid), "b": str(bid)})
+

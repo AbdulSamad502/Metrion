@@ -165,3 +165,69 @@ def test_another_tenant_cannot_read_or_write_the_summary(inv_ctx, two_tenants):
 def test_the_background_runner_never_raises(inv_ctx):
     a, _, inv, _ = inv_ctx
     assert summary.regenerate_if_due_locked(a, inv, _rt(Writer("x"))).status == "NOT_DUE"
+
+
+# ---- R-perf: the model call never holds the investigation's turn lock ----------------------------------------------
+
+
+def test_a_seller_turn_can_start_while_the_summary_model_call_is_running(inv_ctx):
+    a, _, inv, uid = inv_ctx
+    _fill(a, inv, uid, 5)
+    inside, release, observed = threading.Event(), threading.Event(), {}
+
+    def script(prompt, schema):
+        inside.set()  # we are in the model call now
+        try:
+            with investigation_turn_lock(inv, None):  # the seller's next turn takes the lock RIGHT NOW: it must not be refused
+                observed["turn_started"] = True
+        except Exception as exc:  # noqa: BLE001
+            observed["turn_started"] = type(exc).__name__
+        release.wait(5)
+        return "The seller asked about profit."
+
+    rt = dataclasses.replace(runtime(Scripted({}), Grounded()), composer=ScriptedModel(script, name="slow-summariser"))
+    out = []
+    t = threading.Thread(target=lambda: out.append(summary.regenerate_if_due_locked(a, inv, rt)))
+    t.start()
+    assert inside.wait(10)
+    release.set()
+    t.join(30)
+    assert observed["turn_started"] is True  # before the fix this was TurnInProgress for as long as the model took
+    assert out[0].status == "REGENERATED"
+
+
+def test_a_regeneration_that_lost_the_race_writes_nothing(inv_ctx):
+    a, _, inv, uid = inv_ctx
+    _fill(a, inv, uid, 5)
+
+    def script(prompt, schema):
+        last = repo.list_messages(a, inv)[-1]["id"]
+        repo.update_summary(a, inv, "Another worker's summary.", last)  # another regeneration finished first
+        return "The seller asked about profit."
+
+    rt = dataclasses.replace(runtime(Scripted({}), Grounded()), composer=ScriptedModel(script, name="racing"))
+    assert summary.regenerate_if_due_locked(a, inv, rt).status == "BUSY"
+    assert repo.get_investigation(a, inv)["summary"] == "Another worker's summary."  # the stale draft did not overwrite it
+
+
+def test_a_turn_running_at_write_time_defers_the_write_and_keeps_the_old_summary(inv_ctx):
+    a, _, inv, uid = inv_ctx
+    _fill(a, inv, uid, 5)
+    held = threading.Event()
+    done = threading.Event()
+
+    def script(prompt, schema):
+        held.set()
+        done.wait(10)
+        return "The seller asked about profit."
+
+    rt = dataclasses.replace(runtime(Scripted({}), Grounded()), composer=ScriptedModel(script, name="slow"))
+    out = []
+    t = threading.Thread(target=lambda: out.append(summary.regenerate_if_due_locked(a, inv, rt)))
+    t.start()
+    assert held.wait(10)
+    with investigation_turn_lock(inv, None):  # a turn is running when the draft is ready
+        done.set()
+        t.join(30)
+    assert out[0].status == "BUSY" and repo.get_investigation(a, inv)["summary"] is None
+    assert summary.regenerate_if_due_locked(a, inv, rt).status == "REGENERATED"  # nothing was lost: the next attempt does it

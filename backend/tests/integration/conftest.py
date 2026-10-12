@@ -13,6 +13,16 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from backend.tenant_context import tenant_scope
+from tests.integration.db_guard import refusal
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _refuse_the_development_database():
+    """Stop the whole session, before any test touches a row, when the configured database is the development one (port 5432). See `db_guard.py`."""
+    message = refusal()
+    if message:
+        pytest.exit(message, returncode=2)
+
 
 _APP_URL = os.environ.get("DATABASE_URL_APP")
 _MIGRATE_URL = os.environ.get("DATABASE_URL")
@@ -131,3 +141,14 @@ def _purge_tenants_created_by_test(migrate_engine):
     _tenant_tracker.reset()
     yield
     _tenant_tracker.purge(migrate_engine)
+
+
+@pytest.fixture
+def approval_gate_bypassed(monkeypatch):
+    """TEST-ONLY and explicit (never autouse): switches off the orchestrator's D-8 refusal for ONE test that exercises the guided-input / execution flow of an
+    approval-required chat action, the part a future stored-approval plan will reuse. In production chat these actions are refused until a stored approval plan exists
+    (tests/integration/test_ceo_approval_blocked_chat.py proves that with the real guard). This patches an attribute of the module in the test process only: there is no
+    setting, environment variable or request that can do the same. The `dispatch()` backstop is NOT bypassed here (these tests use effect-less stub specs, which it ignores)."""
+    from backend.ceo import orchestrator
+
+    monkeypatch.setattr(orchestrator, "plan_required", lambda keys: False)

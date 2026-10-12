@@ -29,7 +29,7 @@ export type InvestigationMeta = InvestigationSummary & {
 export type MessageKind = "TEXT" | "CLARIFICATION" | "ANSWER" | "BRIEFING" | "SYSTEM_NOTE";
 
 /** One real choice on a decision card. Built by the backend from the seller's own data; `reason` is the stated rule behind the recommendation. */
-export type ClarificationOption = { key: string; label: string; kind: "RECOMMENDED" | "ALTERNATIVE" | "OTHER" | "CANCEL"; reason: string; /** set on a FORM card option: opens that playbook's run-form instead of answering */ form?: string };
+export type ClarificationOption = { key: string; label: string; kind: "RECOMMENDED" | "ALTERNATIVE" | "OTHER" | "CANCEL" | "BACK"; reason: string; /** set by the backend on an option that records "unknown" on purpose: offered as Skip */ skip?: boolean; /** set on a FORM card option: opens that playbook's run-form instead of answering */ form?: string };
 /** A decision card (spec 6.32): the recommended option first, up to two alternatives, then "Other". Never padded with invented options. */
 export type ClarificationCard = { version: number; kind: string; slot: string; options: ClarificationOption[] };
 /** The seller answering a card: the card's message id and the chosen option key (null = the free-text "Other", sent as the message text). */
@@ -46,6 +46,8 @@ export type CeoMessage = {
   choices?: ClarificationCard | null;
   /** Client-only: a message the seller just sent that the server has not echoed back yet. */
   pending?: boolean;
+  /** The send failed and the thread could not be refreshed, so the server's copy is unknown: shown as not sent, never as still sending. */
+  failed?: boolean;
 };
 
 export type CeoRoute = "BUSINESS_STATE" | "ACTION" | "PLAYBOOK" | "ADVISORY" | "SYNTHESIZE" | "CLARIFY" | "OUT_OF_SCOPE";
@@ -58,6 +60,10 @@ export type TurnRow = {
   composition_mode: "LLM" | "TEMPLATE" | "TEMPLATE_FALLBACK" | null;
   /** UI_ACTION: the seller chose a quick action (no classifier ran); CLASSIFIER: the model routed a typed message. */
   route_source?: "CLASSIFIER" | "UI_ACTION";
+  /** How the execution ended, stored once with the turn: SUCCEEDED | PARTIAL | FAILED | PENDING_INPUT | DECLINED. Absent for turns from before the accounting cut-over. A DELIVERED turn can still be FAILED: a delivered answer alone is not a successful execution. */
+  outcome?: TurnOutcome | null;
+  /** The stored routing record (`investigation_turn.classifier_result`, returned with the turn rows). Only `approvalRequiredFor` is read: the action key a turn was refused for because it needs a stored approval plan, which does not exist yet. */
+  classifier_result?: { approvalRequiredFor?: string | null } | null;
   user_message_id: string;
   ceo_message_id: string | null;
   created_at: string;
@@ -71,6 +77,14 @@ export type FindingStatus = "COMPLETE" | "PARTIAL" | "DENIED" | "FAILED" | "UNAV
  * through `ref` for this tenant: the UI shows it verbatim and never computes, rounds or re-formats it. */
 /** One remembered item (spec agent-memory.md), as the seller gave it. `shared` items are visible to every agent; the rest belong to one agent. */
 export type MemoryItem = { id: string; label: string; value: string; shared: boolean; agent: string; basis: string; createdAt: string };
+
+/** One thing an agent reported (spec agent-needs-and-shared-knowledge.md 6.3, GET /ceo/findings). `trustLabel` is the fixed wording the backend chose for the trust level
+ * ("You said", "Calculated by the engine", "Reported by <agent>, not verified"); figures are references only: a value is never shown here. */
+export type SharedFinding = {
+  id: string; agent: string; kind: string; subject: string | null; text: string; trust: "SELLER_STATED" | "ENGINE_VERIFIED" | "AGENT_REPORTED"; trustLabel: string;
+  figureRefs: { kind: string; id: string; label?: string; resolvable: boolean }[]; sourceRef: { kind: string; id?: string } | null; createdAt: string;
+};
+export type SharedFindingsList = { items: SharedFinding[]; hidden: { agent: string; count: number; message: string }[]; hiddenTotal: number };
 
 export type PresentationFigure = { label: string; value: string; register: string; as_of: string | null; note: string | null; ref: Ref };
 export type PresentationFact = { label: string; text: string; basis: string };
@@ -140,7 +154,9 @@ export type TurnFlow = {
 
 /** A quick action the seller chose with a deterministic control. It skips the classifier and nothing else. */
 /** What the backend says about one stored attachment: its type is decided from the content, and `status` says whether its text could be read. */
-export type UploadedAttachment = { id: string; filename: string; type: string; byteSize: number; status: "OK" | "NOT_READ" | "FAILED"; note: string | null };
+/** What the backend says about a CSV / XLSX it could read as a table: the sheets and their sizes (never cell values). `UNREADABLE` carries a plain reason. */
+export type UploadedTable = { status: "READ"; sheets: { name: string; rows: number; columns: number; headerRow: number | null; truncated: boolean }[]; sheetsTruncated: boolean } | { status: "UNREADABLE"; note: string };
+export type UploadedAttachment = { id: string; filename: string; type: string; byteSize: number; status: "OK" | "NOT_READ" | "FAILED"; note: string | null; table?: UploadedTable | null; duplicate?: boolean };
 
 export type UiActionKind = "BUSINESS_STATE" | "ACTION" | "PLAYBOOK" | "SYNTHESIZE";
 /** A decision playbook's structured form inputs (spec 6.33): money is integer paise and every cost carries an explicit state. Built by a form, never by a model. */
@@ -173,7 +189,9 @@ export type NeedRow = { id: string; needKey: string; requesterAgent: string; pro
 export type AvailabilityStatus = "PRESENT" | "NOT_PERMITTED" | "NOT_ENTITLED";
 export type AgentAvailability = Record<AgentCode, { status: AvailabilityStatus; chatActions: number }>;
 
-export type TurnStatus = "DELIVERED" | "CLARIFIED" | "DENIED" | "FAILED";
+export type TurnOutcome = "SUCCEEDED" | "PARTIAL" | "FAILED" | "PENDING_INPUT" | "DECLINED";
+
+export type TurnStatus = "DELIVERED" | "CLARIFIED" | "DENIED" | "FAILED" | "PLANNED"; // PLANNED is vocabulary only: nothing produces it until the approval workflow exists
 
 export type TurnResponse = {
   turnId: string | null;
@@ -191,6 +209,8 @@ export type TurnResponse = {
   findings: FindingRow[];
   timings: Record<string, unknown>;
   events: { kind: string; atMs: number; data: Record<string, unknown> }[];
+  /** True when this is the STORED outcome of an earlier submission with the same clientRequestId: nothing new was written or run. */
+  replayed?: boolean;
 };
 
 /** One progress event of a running turn (labels only: never a figure or the answer; the backend's whitelist guarantees it). */
@@ -217,7 +237,7 @@ export function createCeoClient(getToken: GetToken) {
       form.append("file", file);
       return apiFetchForm<UploadedAttachment>(`${BASE}/investigations/${id}/attachments`, await getToken(), form);
     },
-    postTurn: (id: string, message: string, period?: ExplicitPeriod | null, action?: UiAction | null, clarification?: ClarificationReply | null, attachmentIds?: string[]) =>
+    postTurn: (id: string, message: string, period?: ExplicitPeriod | null, action?: UiAction | null, clarification?: ClarificationReply | null, attachmentIds?: string[], clientRequestId?: string | null) =>
       call<TurnResponse>(
         `/investigations/${id}/turns`,
         json("POST", {
@@ -226,11 +246,14 @@ export function createCeoClient(getToken: GetToken) {
           ...(action ? { action: { kind: action.kind, key: action.key ?? null, slots: action.slots ?? {}, ...(action.inputs ? { inputs: action.inputs } : {}) } } : {}),
           ...(clarification ? { clarification: { id: clarification.id, option: clarification.option } } : {}),
           ...(attachmentIds && attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
+          ...(clientRequestId ? { clientRequestId } : {}), // one logical submission = one id: the server answers a retry with the stored outcome instead of running it again
         }),
       ),
     getHealth: () => call<{ entries: HealthEntry[] }>("/state/health"),
     getMemory: () => call<{ items: MemoryItem[] }>("/memory"),
     forgetMemory: (id: string) => call<{ forgotten: string }>(`/memory/${encodeURIComponent(id)}/forget`, json("POST", {})),
+    getSharedFindings: () => call<SharedFindingsList>("/findings"),
+    forgetSharedFinding: (id: string) => call<{ forgotten: string }>(`/findings/${encodeURIComponent(id)}/forget`, json("POST", {})),
     getPriceImpactForm: (sku?: string) => call<PriceImpactFormSupport>(`/forms/price-impact${sku ? `?sku=${encodeURIComponent(sku)}` : ""}`),
     getNewProductForm: (sku?: string) => call<NewProductFormSupport>(`/forms/new-product${sku ? `?sku=${encodeURIComponent(sku)}` : ""}`),
     saveInput: async (body: SaveInputBody) => apiFetch<{ manualAdjustmentId?: string }>("/api/v1/cfo/expenses", await getToken(), { method: "PUT", body: JSON.stringify(body) }),

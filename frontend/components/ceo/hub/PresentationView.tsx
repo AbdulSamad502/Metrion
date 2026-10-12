@@ -1,8 +1,8 @@
 "use client";
 
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { Presentation } from "@/lib/ceo";
-import { asOfLabel, registerView } from "@/lib/ceoModel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
+import { asOfLabel } from "@/lib/ceoModel";
 
 const MAX_IDEA_CHIPS = 3; // the first ideas only: the numbers are the numbers of the list the seller sees (the backend turns "#2" back into the idea's name)
 const isIdeaList = (title: string) => title.startsWith("Product ideas found");
@@ -57,7 +57,6 @@ export function PresentationView({ presentation, compact = false, onAsk, askDisa
       {figures.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Verified figures">
           {figures.map((f) => {
-            const reg = registerView(f.register);
             const asOf = asOfLabel(f.as_of);
             return (
               <li key={`${f.ref.kind}-${f.ref.id}-${f.label}`} data-testid="figure" className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
@@ -68,7 +67,7 @@ export function PresentationView({ presentation, compact = false, onAsk, askDisa
                   <span data-testid="figure-value" className={compact ? "t-body font-semibold" : "t-card-title font-semibold"} style={{ color: "var(--text-1)" }}>
                     {f.value}
                   </span>
-                  <StatusBadge tone={reg.tone}>{reg.label}</StatusBadge>
+                  <ProvenanceBadge register={f.register} />
                   {asOf && (
                     <span className="t-meta" style={{ color: "var(--text-5)" }}>
                       {asOf}

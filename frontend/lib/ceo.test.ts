@@ -56,6 +56,14 @@ describe("CEO API client", () => {
     expect(lastCall().body).toEqual({ message: "Hello" });
   });
 
+  it("sends clientRequestId only when one is given, and never a tenant id", async () => {
+    await client().postTurn("abc", "Hello", null, null, null, [], "5d1b0b52-6f0c-4f0e-9d0a-0a7a2f1d9c11");
+    expect(lastCall().body).toEqual({ message: "Hello", clientRequestId: "5d1b0b52-6f0c-4f0e-9d0a-0a7a2f1d9c11" });
+    await client().postTurn("abc", "Hello");
+    expect(lastCall().body).toEqual({ message: "Hello" });
+    expect(JSON.stringify(lastCall().body)).not.toMatch(/tenant/i);
+  });
+
   it("sends a quick action as {kind, key, slots}, only when one was chosen; reads health and flow from their own endpoints", async () => {
     await client().postTurn("abc", "Health bands", null, { kind: "BUSINESS_STATE", key: "BS_HEALTH_BANDS" });
     expect(lastCall().body).toEqual({ message: "Health bands", action: { kind: "BUSINESS_STATE", key: "BS_HEALTH_BANDS", slots: {} } });

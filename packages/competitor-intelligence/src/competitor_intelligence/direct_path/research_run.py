@@ -62,6 +62,7 @@ def _run_status_for(capture_status: CaptureStatus) -> RunStatus:
     return RunStatus.PARTIAL
 
 
+@ci_capture_run_repo.settles_open_runs
 def submit_research_session(
     tenant_id: UUID,
     *,

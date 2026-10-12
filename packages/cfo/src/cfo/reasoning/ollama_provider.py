@@ -15,6 +15,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from cfo.reasoning.ollama_errors import describe_ollama_error
+
 # Strips a "thinking" model's <think>...</think> reasoning block (e.g. qwen3:8b emits one
 # before every answer) — CFO end-to-end evaluation, 2026-09-27: this codebase's narration
 # contract (narrate.py's own docstring) is that `narrate_figures` "returns the provider's
@@ -45,7 +47,7 @@ class OllamaLlmProvider:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise OllamaUnavailable(f"Ollama request failed: {exc}") from exc
+            raise OllamaUnavailable(f"Ollama request failed: {describe_ollama_error(exc, model)}") from None
 
         body = response.json()
         text = body.get("response")

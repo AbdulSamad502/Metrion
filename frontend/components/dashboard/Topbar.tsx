@@ -36,7 +36,7 @@ export function Topbar({
         type="button"
         onClick={onOpenMenu}
         aria-label="Open navigation"
-        className="mt-btn mt-focus flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl lg:hidden"
+        className="mt-btn mt-focus flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl lg:hidden"
         style={{ border: "1px solid var(--border-default)", color: "var(--text-4)" }}
       >
         <Icon name="menu" size={18} />
@@ -63,9 +63,9 @@ export function Topbar({
         {actions}
         <Link
           href="/dashboard/notifications"
-          aria-label={attentionCount > 0 ? `Notifications — ${attentionCount} need attention` : "Notifications"}
-          title="Notifications"
-          className="mt-btn mt-focus relative flex h-9 w-9 items-center justify-center rounded-xl"
+          aria-label={attentionCount > 0 ? `Action Center — ${attentionCount} need attention` : "Action Center"}
+          title="Action Center"
+          className="mt-btn mt-focus relative flex h-10 w-10 items-center justify-center rounded-xl"
           style={{ border: "1px solid var(--border-default)", color: "var(--text-4)" }}
         >
           <Icon name="notifications" size={17} />
@@ -82,8 +82,8 @@ export function Topbar({
             href="/dashboard/ceo-hub"
             className="mt-btn mt-btn-secondary mt-focus flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 t-body font-semibold"
           >
-            <span className="hidden sm:inline">CEO Hub</span>
-            <span className="sm:hidden">CEO</span>
+            <span className="hidden sm:inline">Ask Metrion</span>
+            <span className="sm:hidden">Ask</span>
             <Icon name="arrow" size={13} strokeWidth={1.9} />
           </Link>
         )}

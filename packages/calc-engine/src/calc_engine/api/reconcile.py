@@ -197,6 +197,7 @@ def _mint_exception_metric_result(
     )
 
 
+@reconciliation_repo.settles_open_runs
 def reconcile(
     tenant_id: UUID,
     *,

@@ -23,17 +23,19 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
+import logging
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from product_intelligence.discovery.discovery_run import DEFAULT_CANDIDATE_CAP
+from product_intelligence.discovery.discovery_run import DEFAULT_CANDIDATE_CAP, MAX_CANDIDATE_CAP
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_PI, RESEARCH_NICHE_RUN, has_permission
 from backend.entitlement import resolve_niche_run_entitlement, resolve_pi_entitlement
 from backend.repositories import agent_run_repo
+from backend.services import pi_usage
 from backend.services.pi_actions import (
     archive_niche_brief,
     create_niche_brief_draft,
@@ -51,6 +53,7 @@ from backend.services.pi_actions import (
 )
 
 router = APIRouter(prefix="/api/v1/pi")
+logger = logging.getLogger(__name__)
 
 PI_DISCOVER = "pi.discover"
 PI_SUPPLIER_LOOKUP = "pi.supplier_lookup"
@@ -73,13 +76,43 @@ def _require_pi_entitlement(tenant_id: UUID, *, direct_action_code: str) -> None
     )
 
 
+def _reserve_or_refuse(tenant_id: UUID, meters: Any, *, kind: str, worst_case_seconds: int | None, now: datetime) -> pi_usage.Held:
+    """R6: when a cap is configured, the unit is reserved atomically BEFORE any provider is called (no reservation when no cap exists)."""
+    try:
+        return pi_usage.reserve(tenant_id, meters, request_key=f"{kind}:{uuid4()}", worst_case_seconds=worst_case_seconds, now=now)
+    except pi_usage.QuotaDenied as exc:
+        raise HTTPException(status_code=402, detail=exc.detail) from None
+    except pi_usage.RequestInProgress:
+        raise HTTPException(status_code=409, detail={"code": "REQUEST_IN_PROGRESS"}) from None
+    except pi_usage.QuotaNotConfigured as exc:
+        logger.error("PI quota reservation is not usable: %s", exc)
+        raise HTTPException(status_code=503, detail={"code": "PI_NOT_CONFIGURED"}) from None
+
+
+def _finish_run(tenant_id: UUID, agent_run_id: UUID, *, status: str, error_reason: str | None) -> None:
+    """Terminal write of a PI run row, guarded like the CEO choke point's (R5 Stage A): a row someone else already settled keeps its status. Database errors
+    still propagate exactly as the unguarded write's did."""
+    if not agent_run_repo.finish_run_if_unfinished(tenant_id, agent_run_id, status=status, error_reason=error_reason, finished_at=datetime.now(timezone.utc)):
+        logger.warning("PI run %s finished after its row was already terminal; its row was left as it was (tenant=%s)", agent_run_id, tenant_id)
+
+
+def _mark_failed_and_release(tenant_id: UUID, agent_run_id: UUID, held: pi_usage.Held, exc: Exception) -> None:
+    """Failure path of a run: mark its row FAILED and free the reserved unit. Neither step may replace the failure being reported: a database error while
+    marking the row is logged and swallowed so the reservation is still released and the caller re-raises the ORIGINAL exception (`release` itself never raises)."""
+    try:
+        _finish_run(tenant_id, agent_run_id, status="FAILED", error_reason=str(exc))
+    except Exception:  # noqa: BLE001
+        logger.exception("could not mark PI run %s FAILED (tenant=%s)", agent_run_id, tenant_id)
+    pi_usage.release(tenant_id, held, now=datetime.now(timezone.utc))
+
+
 def _require_niche_run_entitlement(tenant_id: UUID) -> None:
     result = resolve_niche_run_entitlement(tenant_id)
     if result.passed:
         return
     raise HTTPException(
         status_code=402,
-        detail={"reason": result.reason, "service": "research.niche_run", "nicheRunCount": result.niche_run_count},
+        detail={"reason": result.reason, "service": "research.niche_run", "nicheRunCount": result.niche_run_count, "nicheRunsSuccessful": result.niche_runs_successful},
     )
 
 
@@ -190,7 +223,8 @@ def post_archive_niche_brief(brief_id: UUID, ctx: AuthContext = require_auth()) 
 class DiscoverRequest(BaseModel):
     niche_brief_id: UUID
     depth: str = Field(pattern="^(SHALLOW|COMPLETE)$")
-    candidate_cap: int | None = None
+    # 1..MAX_CANDIDATE_CAP (422 outside). Before 2026-10-10 any integer was accepted; a cap < 1 defeated the cap and made every worst-case duration meaningless.
+    candidate_cap: int | None = Field(default=None, ge=1, le=MAX_CANDIDATE_CAP)
 
 
 @router.post("/discover")
@@ -208,17 +242,23 @@ def post_discover(body: DiscoverRequest, ctx: AuthContext = require_auth(permiss
     _require_niche_run_entitlement(ctx.tenant_id)
 
     now = datetime.now(timezone.utc)
-    agent_run_id = agent_run_repo.insert_run(
-        ctx.tenant_id,
-        agent_id="PI",
-        trigger_type="DIRECT",
-        trigger_ref=PI_DISCOVER,
-        requested_by=ctx.app_user_id,
-        permission_check="PASS",
-        entitlement_check="PASS",
-        status="RUNNING",
-        started_at=now,
-    )
+    cap = body.candidate_cap if body.candidate_cap is not None else DEFAULT_CANDIDATE_CAP
+    held = _reserve_or_refuse(ctx.tenant_id, pi_usage.DISCOVER_METERS, kind="pi:discover", worst_case_seconds=pi_usage.discover_worst_case(cap), now=now)
+    try:
+        agent_run_id = agent_run_repo.insert_run(
+            ctx.tenant_id,
+            agent_id="PI",
+            trigger_type="DIRECT",
+            trigger_ref=PI_DISCOVER,
+            requested_by=ctx.app_user_id,
+            permission_check="PASS",
+            entitlement_check="PASS",
+            status="RUNNING",
+            started_at=now,
+        )
+    except Exception:  # noqa: BLE001 — nothing has been called yet, so the unit reserved above is freed at once; the error then propagates unchanged
+        pi_usage.release(ctx.tenant_id, held, now=datetime.now(timezone.utc))
+        raise
 
     try:
         result = run_discovery(
@@ -228,22 +268,21 @@ def post_discover(body: DiscoverRequest, ctx: AuthContext = require_auth(permiss
             requested_by=ctx.app_user_id,
             permission_check="PASS",
             entitlement_check="PASS",
-            candidate_cap=body.candidate_cap if body.candidate_cap is not None else DEFAULT_CANDIDATE_CAP,
+            candidate_cap=cap,
         )
     except Exception as exc:  # noqa: BLE001 — the agent_run row must reflect a real failure,
         # never be left RUNNING forever; the exception is then re-raised unchanged.
-        agent_run_repo.finish_run(
-            ctx.tenant_id, agent_run_id, status="FAILED", error_reason=str(exc), finished_at=datetime.now(timezone.utc)
-        )
+        _mark_failed_and_release(ctx.tenant_id, agent_run_id, held, exc)  # a failed run consumes no usage and frees its reserved unit
         raise
 
-    agent_run_repo.finish_run(
-        ctx.tenant_id,
-        agent_run_id,
-        status=result.status,
-        error_reason=result.failed_reason,
-        finished_at=datetime.now(timezone.utc),
-    )
+    _finish_run(ctx.tenant_id, agent_run_id, status=result.status, error_reason=result.failed_reason)
+
+    try:  # best-effort like every metering write: a failure never blocks the answer the seller already earned (the reservation then simply expires)
+        pi_usage.settle_discover(
+            ctx.tenant_id, requested_by=ctx.app_user_id, result=result, route_agent_run_id=agent_run_id, held=held, now=datetime.now(timezone.utc)
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("PI usage settlement failed (tenant=%s run=%s)", ctx.tenant_id, result.run_id)
 
     response = pi_run_result_to_dict(result)
     response["agentRunId"] = str(agent_run_id)
@@ -269,34 +308,40 @@ def post_supplier_lookup(
     _require_pi_entitlement(ctx.tenant_id, direct_action_code=PI_SUPPLIER_LOOKUP)
 
     now = datetime.now(timezone.utc)
-    agent_run_id = agent_run_repo.insert_run(
-        ctx.tenant_id,
-        agent_id="PI",
-        trigger_type="DIRECT",
-        trigger_ref=PI_SUPPLIER_LOOKUP,
-        requested_by=ctx.app_user_id,
-        permission_check="PASS",
-        entitlement_check="PASS",
-        status="RUNNING",
-        started_at=now,
+    held = _reserve_or_refuse(
+        ctx.tenant_id, pi_usage.LOOKUP_METERS, kind="pi:supplier", worst_case_seconds=pi_usage.lookup_worst_case(len(body.candidate_ids)), now=now
     )
+    try:
+        agent_run_id = agent_run_repo.insert_run(
+            ctx.tenant_id,
+            agent_id="PI",
+            trigger_type="DIRECT",
+            trigger_ref=PI_SUPPLIER_LOOKUP,
+            requested_by=ctx.app_user_id,
+            permission_check="PASS",
+            entitlement_check="PASS",
+            status="RUNNING",
+            started_at=now,
+        )
+    except Exception:  # noqa: BLE001 — same reason as post_discover: no provider call has happened, so the reserved unit is freed at once
+        pi_usage.release(ctx.tenant_id, held, now=datetime.now(timezone.utc))
+        raise
 
     try:
         results = run_supplier_lookup(ctx.tenant_id, run_id=body.run_id, candidate_ids=body.candidate_ids)
     except Exception as exc:  # noqa: BLE001 — see post_discover's identical rationale
-        agent_run_repo.finish_run(
-            ctx.tenant_id, agent_run_id, status="FAILED", error_reason=str(exc), finished_at=datetime.now(timezone.utc)
-        )
+        _mark_failed_and_release(ctx.tenant_id, agent_run_id, held, exc)
         raise
 
     any_degraded = any(r.degraded_reason is not None for r in results)
-    agent_run_repo.finish_run(
-        ctx.tenant_id,
-        agent_run_id,
-        status="PARTIAL" if any_degraded else "COMPLETE",
-        error_reason=None,
-        finished_at=datetime.now(timezone.utc),
-    )
+    _finish_run(ctx.tenant_id, agent_run_id, status="PARTIAL" if any_degraded else "COMPLETE", error_reason=None)
+
+    try:
+        pi_usage.settle_lookup(
+            ctx.tenant_id, requested_by=ctx.app_user_id, results=results, route_agent_run_id=agent_run_id, held=held, now=datetime.now(timezone.utc)
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("PI usage settlement failed (tenant=%s agent_run=%s)", ctx.tenant_id, agent_run_id)
 
     return {
         "agentRunId": str(agent_run_id),

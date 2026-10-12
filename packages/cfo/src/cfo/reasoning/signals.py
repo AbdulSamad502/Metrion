@@ -271,7 +271,14 @@ class DataRequestInput:
 
 def signals_from_data_requests(requests: Sequence[DataRequestInput]) -> list[StrategicSignal]:
     signals: list[StrategicSignal] = []
+    seen: set[tuple[str, str, str | None]] = set()
     for req in requests:
+        # Every failed run raises its own OPEN row, so asking again leaves several rows that say exactly the same thing. One signal per distinct (field, reason, blocking
+        # metric): requests that differ in any of the three (another SKU, another metric) are still all shown.
+        key = (req.requested_field, req.reason, req.blocking_metric)
+        if key in seen:
+            continue
+        seen.add(key)
         blocking = f" (blocks {req.blocking_metric})" if req.blocking_metric else ""
         signals.append(
             StrategicSignal(

@@ -1,0 +1,131 @@
+{
+ "GET /api/v1/cfo/expenses/budget-status": {
+  "__query": {
+   "category": "advertising",
+   "period_start": "2026-09-01",
+   "period_end": "2026-09-30"
+  }
+ },
+ "POST /api/v1/cfo/anomaly-check": {
+  "target_ref": "TENANT",
+  "period_start": "2026-09-01",
+  "period_end": "2026-09-30",
+  "as_of_date": "2026-09-30",
+  "include_narration": false
+ },
+ "POST /api/v1/cfo/batch-size": {
+  "sku": "SKU-1",
+  "supplier_quote_target_type": "SKU",
+  "supplier_quote_target_ref": "SKU-1",
+  "budget_target_type": "SKU",
+  "budget_target_ref": "tenant",
+  "lines": [],
+  "period_start": "2026-09-01",
+  "period_end": "2026-09-30",
+  "as_of_date": "2026-09-30"
+ },
+ "POST /api/v1/cfo/financial-health": {
+  "period_start": "2026-09-01",
+  "period_end": "2026-09-30",
+  "as_of_date": "2026-09-30"
+ },
+ "POST /api/v1/cfo/funding-readiness": {
+  "period_start": "2026-09-01",
+  "period_end": "2026-09-30",
+  "as_of_date": "2026-09-30",
+  "expected_periods": []
+ },
+ "POST /api/v1/cfo/landed-cost": {
+  "sku": "SKU-1",
+  "supplier_quote_target_type": "SKU",
+  "supplier_quote_target_ref": "SKU-1",
+  "quantity": 100,
+  "as_of_date": null
+ },
+ "POST /api/v1/cfo/period-comparison": {
+  "result_a_id": "7c1d3e50-0000-4000-8000-000000000001",
+  "result_b_id": "7c1d3e50-0000-4000-8000-000000000002",
+  "as_of_date": "2026-09-30"
+ },
+ "POST /api/v1/cfo/pnl": {
+  "lines": [
+   {
+    "sales_line_id": "7c1d3e50-0000-4000-8000-000000000003",
+    "marketplace": "AMAZON",
+    "document_type": "INVOICE",
+    "quantity": 1,
+    "gross_item_amount_paise": 99900,
+    "components": []
+   }
+  ],
+  "period_start": "2026-09-01",
+  "period_end": "2026-09-30",
+  "as_of_date": "2026-09-30",
+  "recognition_state": "RECOGNISED"
+ },
+ "POST /api/v1/cfo/preview": {
+  "marketplace": "AMAZON",
+  "period_start": "2026-09-01",
+  "period_end": "2026-09-30",
+  "as_of_date": "2026-09-30"
+ },
+ "POST /api/v1/cfo/pricing": {
+  "sku": "SKU-1",
+  "candidate_prices_paise": [
+   99900
+  ],
+  "basis": "INCLUSIVE",
+  "gst_rate_pct": null,
+  "marketplace": "AMAZON",
+  "category": "Home",
+  "fee_type": "referral",
+  "as_of_date": "2026-09-30",
+  "cogs_paise": null,
+  "cogs_unavailable_reason": null,
+  "shipping_logistics_paise": 0,
+  "shipping_logistics_unavailable_reason": null,
+  "advertising_costs_paise": 0,
+  "advertising_costs_unavailable_reason": null,
+  "return_rto_losses_paise": null,
+  "return_rto_losses_unavailable_reason": null,
+  "other_allocated_costs_paise": 0,
+  "other_allocated_costs_unavailable_reason": null
+ },
+ "POST /api/v1/cfo/reconcile": {
+  "marketplace": "FLIPKART",
+  "period_start": "2026-09-01",
+  "period_end": "2026-09-30",
+  "as_of_date": "2026-09-30"
+ },
+ "POST /api/v1/cfo/strategic-briefing": {
+  "period_start": "2026-09-01",
+  "period_end": "2026-09-30",
+  "as_of_date": "2026-09-30",
+  "include_narration": false
+ },
+ "POST /api/v1/cfo/suppliers/rank": {
+  "sku": "SKU-1",
+  "quantity": 100,
+  "as_of_date": null
+ },
+ "PUT /api/v1/cfo/expenses": {
+  "target_type": "ACCOUNT",
+  "target_ref": "default",
+  "field": "expense.advertising",
+  "value": {
+   "amount_paise": 50000
+  },
+  "reason": null
+ },
+ "PUT /api/v1/cfo/expenses/budget": {
+  "category": "advertising",
+  "amount_paise": 2000000,
+  "period_start": "2026-09-01",
+  "period_end": "2026-09-30"
+ },
+ "PUT /api/v1/cfo/seller-goal": {
+  "target_margin_pct": "15.00",
+  "priority_category": "reduce_fees",
+  "note": null
+ }
+}

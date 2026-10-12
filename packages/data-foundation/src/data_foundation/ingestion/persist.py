@@ -4,6 +4,7 @@ settlement-side (SETTLEMENT) adapters."""
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -17,8 +18,11 @@ from data_foundation.repositories import (
     ingestion_run_repo,
     sales_line_repo,
     settlement_line_repo,
+    validation_finding_repo,
 )
 from data_foundation.types import FileSample, RawFile
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +101,14 @@ def ingest_and_persist(
             tenant_id, ingestion_run_id=run_id, marketplace=adapter.marketplace,
             confidence=Confidence.PROVISIONAL.value, rows=to_persist,
         )
+
+    # The reason a row was rejected (data-foundation.md §4.4): the rule, the severity and the source row number, for every finding on a quarantined row. Warnings on
+    # accepted rows are not stored (their volume is unbounded; the quarantine threshold bounds this one), and a failure here never fails the import itself.
+    rejected_findings = tuple(f for r in result.row_results if r.quarantined for f in r.findings)
+    try:
+        validation_finding_repo.insert_findings_bulk(tenant_id, ingestion_run_id=run_id, findings=rejected_findings)
+    except Exception:  # noqa: BLE001 - diagnostics are secondary to the data that was already stored
+        logger.exception("could not store the rejected-row reasons for ingestion run %s", run_id)
 
     ingestion_run_repo.mark_finished(
         tenant_id, run_id, status="VALIDATED", row_count_read=result.row_count_read,

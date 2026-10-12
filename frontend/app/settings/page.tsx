@@ -1,5 +1,6 @@
 "use client";
 
+import { PAGE_COPY } from "@/lib/navigation";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
@@ -10,6 +11,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { ApiError, apiFetch, type DigestSubscription } from "@/lib/api";
+import { friendlyApiError } from "@/lib/apiErrors";
 import { errorText } from "@/lib/clerkErrors";
 import { estimatePasswordStrength } from "@/lib/passwordStrength";
 import { useShell } from "@/lib/ShellContext";
@@ -31,7 +33,7 @@ const SETTINGS_TABS = [
  * subscription). Marketplace and WhatsApp settings are intentionally absent: no backend exists. */
 export default function SettingsPage() {
   return (
-    <DashboardShell title="Settings" subtitle="Your account, business and notification preferences">
+    <DashboardShell {...PAGE_COPY["settings"]}>
       <SettingsWorkspace />
     </DashboardShell>
   );
@@ -116,14 +118,19 @@ function DigestPreferenceCard() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const load = async () => {
+    setLoadError(null);
+    try {
+      setSub(await apiFetch<DigestSubscription>("/api/v1/ci/digest/subscription", await getToken()));
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 403) setForbidden(true);
+      else setLoadError(friendlyApiError(e, "Could not reach the backend"));
+    }
+  };
+
   useEffect(() => {
     (async () => {
-      try {
-        setSub(await apiFetch<DigestSubscription>("/api/v1/ci/digest/subscription", await getToken()));
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 403) setForbidden(true);
-        else setLoadError(e instanceof ApiError ? e.message : "Could not reach the backend");
-      }
+      await load();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -142,7 +149,7 @@ function DigestPreferenceCard() {
       setSub({ ...sub, frequency, enabled: frequency !== "NONE", isDefault: false });
       setSaved(true);
     } catch (e) {
-      setSaveError(e instanceof ApiError ? e.message : "Could not save your preference");
+      setSaveError(friendlyApiError(e, "Could not save your preference"));
     } finally {
       setSaving(false);
     }
@@ -166,12 +173,12 @@ function DigestPreferenceCard() {
             Your role does not have access to Competitor Intelligence, so there is no digest to configure.
           </div>
         ) : loadError ? (
-          <ErrorNotice message={loadError} />
+          <ErrorNotice message={loadError} onRetry={() => void load()} />
         ) : !sub ? (
           <LoadingState label="Loading your preference…" />
         ) : (
           <>
-            <div role="radiogroup" aria-label="Digest frequency" className="flex gap-2">
+            <div role="radiogroup" aria-label="Digest frequency" aria-busy={saving} className="flex gap-2">
               {FREQUENCIES.map((f) => {
                 const selected = sub.frequency === f.value;
                 return (
@@ -195,8 +202,10 @@ function DigestPreferenceCard() {
               })}
             </div>
             <div className="mt-3 text-xs" style={{ color: "var(--text-6)" }} aria-live="polite">
-              {saveError ? (
-                <span style={{ color: "var(--negative)" }}>{saveError}</span>
+              {saving ? (
+                "Saving…"
+              ) : saveError ? (
+                <span role="alert" style={{ color: "var(--negative)" }}>{saveError}</span>
               ) : saved ? (
                 "Saved."
               ) : sub.isDefault ? (
@@ -246,7 +255,7 @@ function MethodRow({ label, connected }: { label: string; connected: boolean }) 
       </span>
       <span
         className="text-xs font-semibold"
-        style={{ color: connected ? "var(--accent)" : "var(--text-7)" }}
+        style={{ color: connected ? "var(--accent)" : "var(--text-5)" }}
       >
         {connected ? "Connected" : "Not set up"}
       </span>

@@ -12,7 +12,8 @@ from competitor_intelligence.repositories.ci_tenant_config_repo import (
     get_discovery_budget,
     get_discovery_enabled,
 )
-from competitor_intelligence.repositories.tenant_context import tenant_scope
+from competitor_intelligence.repositories.tenant_context import tenant_scope  # noqa: F401
+from tests.integration.owner_db import owner_tenant_scope
 
 import pytest
 
@@ -28,7 +29,7 @@ def test_defaults_when_no_config_row_exists(two_tenants) -> None:
 
 def test_reads_overridden_values_from_the_row(two_tenants) -> None:
     tenant_a, _ = two_tenants
-    with tenant_scope(tenant_a) as conn:
+    with owner_tenant_scope(tenant_a) as conn:  # per-tenant configuration is written by an operator (owner role)
         conn.execute(
             text(
                 """

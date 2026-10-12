@@ -16,30 +16,54 @@ export type NavItem = {
 
 export type NavGroup = { label: string; items: NavItem[] };
 
+/** What each page is called and what it is for, in plain words. The navigation labels ARE these titles (same constants), so a menu entry and the page it
+ * opens can never disagree. Internal role names (CFO, CMO, CEO) belong inside the pages that explain them, not in the menu or the headings. */
+export const PAGE_COPY = {
+  overview: { title: "Overview", subtitle: "What is happening, what matters, and what to do next" },
+  "ceo-hub": { title: "Ask Metrion", subtitle: "Ask in plain words. Metrion answers from your data, or hands the question to the right specialist." },
+  notifications: { title: "Action Center", subtitle: "Competitor price alerts and information Metrion needs from you, each with its next step" },
+  products: { title: "Products", subtitle: "Find product ideas, check whether they are worth stocking, and shortlist suppliers" },
+  competitors: { title: "Competitors", subtitle: "Track competitor prices, add your own evidence, and see what changed" },
+  cfo: { title: "Profit & Finance", subtitle: "Profit, cash, GST and where money leaks, calculated from the reports you upload" },
+  cmo: { title: "Listings & Marketing", subtitle: "Titles, listing copy, catalog answers and market research, for you to copy and never published for you" },
+  agents: { title: "Agents", subtitle: "The specialists behind Metrion: what each one does and whether it is available to you" },
+  settings: { title: "Settings", subtitle: "Your account, business and notification preferences" },
+} as const satisfies Record<string, { title: string; subtitle: string }>;
+
+const label = (id: keyof typeof PAGE_COPY) => PAGE_COPY[id].title;
+
+/** The full browser-tab title. Complete in every route segment (no template): Next applied a parent's title template inconsistently on client navigation. */
+export const pageTitle = (id: keyof typeof PAGE_COPY): string => `${PAGE_COPY[id].title} · Metrion`;
+
+/** Start: where a seller begins. Business: the four workspaces, in the order a seller thinks about them (what to sell, who competes, what it earns,
+ * how to list it). System sits below (`FOOTER_NAV`). */
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: "Profit Intelligence",
+    label: "Start",
     items: [
-      { id: "overview", label: "Overview", icon: "overview", href: "/dashboard", exact: true },
-      { id: "ceo-hub", label: "CEO Hub", icon: "ceo", href: "/dashboard/ceo-hub" },
+      { id: "overview", label: label("overview"), icon: "overview", href: "/dashboard", exact: true },
+      { id: "ceo-hub", label: label("ceo-hub"), icon: "ceo", href: "/dashboard/ceo-hub" },
+      { id: "notifications", label: label("notifications"), icon: "notifications", href: "/dashboard/notifications" },
     ],
   },
   {
-    label: "Analysis",
+    label: "Business",
     items: [
-      { id: "products", label: "Products", icon: "products", href: "/dashboard/pi" },
-      { id: "competitors", label: "Competitors", icon: "competitors", href: "/dashboard/competitors" },
-      { id: "cfo", label: "CFO", icon: "finance", href: "/dashboard/cfo" },
-      { id: "cmo", label: "Marketing", icon: "marketing", href: "/dashboard/cmo" },
+      { id: "products", label: label("products"), icon: "products", href: "/dashboard/pi" },
+      { id: "competitors", label: label("competitors"), icon: "competitors", href: "/dashboard/competitors" },
+      { id: "cfo", label: label("cfo"), icon: "finance", href: "/dashboard/cfo" },
+      { id: "cmo", label: label("cmo"), icon: "marketing", href: "/dashboard/cmo" },
     ],
   },
 ];
 
+export const SYSTEM_GROUP_LABEL = "System";
+
+/** "Agent Cart" is deliberately not listed: there is no purchasing or entitlement service yet (the Agents page says so in words),
+ * and an inert nav entry would only look like a feature. */
 export const FOOTER_NAV: NavItem[] = [
-  { id: "agents", label: "Agents", icon: "agents", href: "/dashboard/agents" },
-  { id: "cart", label: "Agent Cart", icon: "cart", soon: true },
-  { id: "settings", label: "Settings", icon: "settings", href: "/settings" },
-  { id: "notifications", label: "Notifications", icon: "notifications", href: "/dashboard/notifications" },
+  { id: "agents", label: label("agents"), icon: "agents", href: "/dashboard/agents" },
+  { id: "settings", label: label("settings"), icon: "settings", href: "/settings" },
 ];
 
 export function isActive(item: NavItem, pathname: string): boolean {

@@ -34,6 +34,7 @@ from pydantic import BaseModel, ValidationError
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_VIEW, has_permission
 from backend.ceo import provenance
+from backend.ceo.approval_gate import gate_leg
 from backend.ceo.contract import (
     ActionSpec,
     Denial,
@@ -256,6 +257,15 @@ def dispatch(
         turn.legs.append(leg)
         return leg
 
+    # Approval backstop (decision D-8; spec C1/C3): an action the registry marks approval-required runs ONLY from a stored, hash-bound approval plan, and that
+    # workflow does not exist yet. A confirmation card or a completed input session is an in-conversation answer, which is NOT approval, so nothing that
+    # needs approval is dispatched from here. The refusal is a DENIED leg like any other (no invoke, so no usage and no external call). A registry whose
+    # specs carry no effects (an ad hoc test registry) is unchanged; the production registry classifies every action (R1 refuses an unclassified one).
+    if spec.effects is not None and gate_leg(spec.key, effects={spec.key: spec.effects}).requires_approval:
+        return _refuse(
+            turn, spec, denial=Denial.APPROVAL_REQUIRED, status=LegStatus.DENIED, permission_check="PASS", entitlement_check="NOT_EVALUATED",
+            reason="approval required: this action needs an approved plan, which is not available yet", now=at, registry_agent_id=agent_id,
+        )
     # R2: permission first — agent.ceo + the agent's key + the registry extras
     missing = [k for k in reg.required_permissions(spec) if not has_permission(role=ctx.role, permissions=ctx.permissions, key=k)]
     if missing:
@@ -300,12 +310,21 @@ def dispatch(
         turn_run_id=turn.anchor_run_id, leg_run_id=leg_run, now=at,
     )
 
-    def finish(status: str, reason: str | None, refs: tuple[Ref, ...] = ()) -> None:
+    def finish(status: str, reason: str | None, refs: tuple[Ref, ...] = ()) -> bool:
+        """True when this call settled the row (or the leg has no row of its own to settle); False when the row was already terminal."""
         if leg_run is not None:
-            agent_run_repo.finish_run(
+            # Guarded: a leg that finishes after its row was already settled (a recovery or leg-deadline mark) must not overwrite it.
+            if not agent_run_repo.finish_run_if_unfinished(
                 ctx.tenant_id, leg_run, status=status, error_reason=reason, finished_at=datetime.now(timezone.utc),  # type: ignore[arg-type]
                 output_refs=[r.to_json() for r in refs] if refs else None,
-            )
+            ):
+                logger.warning("CEO leg %s finished after its run %s was already terminal; its row was left as it was", spec.key, leg_run)
+                return False
+        return True
+
+    def settled_earlier() -> LegResult:
+        """The leg's row was already settled (timed out or interrupted) when its late result arrived: that state stands, no new finding is written and nothing is added to the turn."""
+        return LegResult(spec.key, LegStatus.FAILED, agent_run_id=leg_run, reason="settled earlier")
 
     try:
         assert spec.invoke is not None
@@ -329,23 +348,41 @@ def dispatch(
             leg = _record(turn, spec, LegResult(spec.key, status, agent_run_id=leg_run, reason=reason, denial=kind), report=None, now=at)
         else:
             reason = "unavailable" if exc.status_code in (404, 409, 503) else "request rejected"
-            finish("FAILED", f"{exc.status_code}")
+            if not finish("FAILED", f"{exc.status_code}"):
+                return settled_earlier()
             leg = _record(turn, spec, LegResult(spec.key, LegStatus.UNAVAILABLE if exc.status_code in (404, 503) else LegStatus.FAILED,
                                                 agent_run_id=leg_run, reason=reason), report=None, now=at)
         turn.legs.append(leg)
         return leg
     except Exception:  # noqa: BLE001 — R12: never surface internals; the server log has them
         logger.exception("CEO leg %s failed (tenant=%s)", spec.key, ctx.tenant_id)
-        finish("FAILED", "dispatch failed")
+        if not finish("FAILED", "dispatch failed"):
+            return settled_earlier()
         leg = _record(turn, spec, LegResult(spec.key, LegStatus.FAILED, agent_run_id=leg_run, reason="the action failed"), report=None, now=at)
         turn.legs.append(leg)
         return leg
 
-    extractor = spec.extract_refs or provenance.default_extract_refs
-    refs = tuple(extractor(payload))
-    partial = any(payload.get(k) for k in _PARTIAL_KEYS)
+    try:
+        # A specialist's response is data from another module: a malformed one (not a mapping, or refs that cannot be read) is a failed leg, never an exception that
+        # escapes with the child run still RUNNING.
+        if not isinstance(payload, Mapping):
+            raise TypeError(f"{spec.key} returned {type(payload).__name__}, not a mapping")
+        extractor = spec.extract_refs or provenance.default_extract_refs
+        refs = tuple(extractor(payload))
+        partial = any(payload.get(k) for k in _PARTIAL_KEYS)
+    except Exception:  # noqa: BLE001 — R12: the server log has the detail; the caller gets a plain failed leg
+        logger.exception("CEO leg %s returned a malformed response (tenant=%s)", spec.key, ctx.tenant_id)
+        if not finish("FAILED", "malformed specialist response"):
+            return settled_earlier()
+        leg = _record(turn, spec, LegResult(spec.key, LegStatus.FAILED, agent_run_id=leg_run, reason="the action failed"), report=None, now=at)
+        turn.legs.append(leg)
+        return leg
     status = LegStatus.PARTIAL if partial else LegStatus.COMPLETE
-    finish(status.value, None, refs)
+    if not finish(status.value, None, refs):
+        # The row was settled earlier (timeout or recovery): that state stands and NO finding is written, so nothing contradicts it. The caller still sees what its call returned.
+        leg = LegResult(spec.key, status, agent_run_id=leg_run, payload=payload, figure_refs=refs)
+        turn.legs.append(leg)
+        return leg
     leg = _record(turn, spec, LegResult(spec.key, status, agent_run_id=leg_run, payload=payload, figure_refs=refs), report=provenance.report_pointers(payload), now=at)
     turn.legs.append(leg)
     return leg

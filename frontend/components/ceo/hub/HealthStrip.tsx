@@ -16,11 +16,19 @@ export function HealthStrip({ health, onRefresh }: { health: HealthState; onRefr
       </p>
     );
   }
+  if (health.entries.length === 0 && health.status === "ready") {
+    // The request worked and there is simply nothing saved yet: that is not a failure, so no "unavailable" wording and no retry.
+    return (
+      <p className="t-body-sm" style={{ color: "var(--text-5)" }} data-testid="health-none-saved">
+        No saved results yet. They appear here after you upload your reports in Profit &amp; Finance.
+      </p>
+    );
+  }
   if (health.entries.length === 0) {
     return (
       <div className="flex flex-wrap items-center gap-3 t-body-sm" style={{ color: "var(--text-5)" }} data-testid="health-unavailable">
         Your saved results are not available to show here.
-        <button type="button" onClick={onRefresh} className="mt-btn mt-focus rounded-lg px-2.5 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
+        <button type="button" onClick={onRefresh} className="mt-btn mt-focus min-h-[36px] rounded-lg px-3 py-1 t-meta font-bold sm:min-h-0 sm:px-2.5" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
           Try again
         </button>
       </div>

@@ -8,6 +8,7 @@ numbers or instructions, so it is not evidence (R9). Nothing here computes anyth
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -23,6 +24,8 @@ from backend.ceo.contract import (
     BusinessStateEntry, Conflict, Denial, EntryStatus, Fact, Figure, Gap, LegResult, LegStatus, Ref, RefKind, Register,
 )
 from backend.ceo.figure_format import format_paise, format_percent_number, format_units, register_for
+
+logger = logging.getLogger(__name__)
 
 MAX_CANDIDATES_SHOWN = 10  # how many product ideas one answer lists (a display bound; the rest stay on the Product Intelligence page, said so)
 MAX_FIGURES = 12  # how many verified figures one answer carries; the rest stay on the findings (stated as a gap, never dropped silently)
@@ -77,6 +80,8 @@ LEG_LABELS: Mapping[str, str] = {
     "cmo.generate_hashtags": "The hashtags",
     "cmo.generate_description": "The description",
     "cmo.generate_keywords": "The search keywords",
+    "cmo.market_trends": "The market trend research",
+    "cmo.market_trends_preview": "The market research plan",
     "cfo.financial_health": "The financial health check",
     "cfo.anomaly_check": "The anomaly check",
     "cfo.strategic_briefing": "The CFO briefing",
@@ -188,7 +193,14 @@ class EvidenceCollector:
             return
         if leg.status is LegStatus.PARTIAL:
             self.add_gap(f"{label} returned a partial result.")
-        self._leg_facts(leg)
+        snapshot = (len(self.facts), len(self.gaps), len(self.artefacts), len(self.attach), len(self.offers))
+        try:
+            self._leg_facts(leg)
+        except Exception:  # noqa: BLE001 — a result with the wrong inner shape costs only its own leg: nothing half-read is shown, and the other legs still reach the seller
+            logger.exception("could not read the result of %s", leg.action_key)
+            del self.facts[snapshot[0]:], self.artefacts[snapshot[2]:], self.attach[snapshot[3]:], self.offers[snapshot[4]:]
+            self.add_gap(f"{label} returned a result that could not be read, so it is not shown.")
+            return
         for ref in leg.figure_refs:
             self._add_ref(ref, label)
 
@@ -274,7 +286,7 @@ class EvidenceCollector:
         elif leg.action_key == "pi.report":
             self._pi_candidates(payload)
         elif leg.action_key == "cmo.market_trends_preview":
-            self.add_fact("Market research plan", "the exact searches were prepared and shown for confirmation; nothing was sent", "SOURCE_DERIVED")
+            self.add_fact("Market research plan", "the exact searches a trend run would send were prepared; nothing was sent", "SOURCE_DERIVED")
         elif leg.action_key == "cmo.market_trends":
             self._trend_report(payload)
         elif leg.action_key.startswith("cmo."):

@@ -1,0 +1,23 @@
+You are reading ONE screenshot of a product listing page from an Indian e-commerce marketplace (Amazon.in, Flipkart, or Meesho). Report ONLY what you can actually read in this exact image.
+
+Rules:
+- Copy every number digit for digit exactly as it is printed, including every digit before a comma: a price printed as 12,999 is 12999, not 1299; a price printed as 1,299 is 1299, not 199.
+- If a field is not visible in the image, leave its key out completely. Never write 0, 0.0, null or an empty value for something that is not shown, and never guess.
+- Never copy wording or numbers from these instructions. Every value must come from the image.
+- The listed_price is the current selling price in the largest print. The mrp is the separate struck-through list price. Prices of other items on the page are not the listed_price.
+
+Reply with ONLY one JSON object using only these keys (the type of each value is in angle brackets):
+{
+  "title": <string, the product title exactly as printed>,
+  "description": <string, only if a description paragraph is printed>,
+  "bullets": <list of strings, only if bullet points are printed>,
+  "seller_name": <string, only if a seller or store name is printed>,
+  "observed_category": <string, only if a category or breadcrumb is printed>,
+  "listed_price": <number, rupees>,
+  "mrp": <number, rupees, only if a struck-through price is printed>,
+  "visible_discount": <number, rupees, only if a rupee amount saved is printed>,
+  "discount_percent": <number, only if a percentage followed by "off" is printed>,
+  "rating": <number out of 5, only if printed>,
+  "rating_count": <whole number, only if printed>,
+  "availability": <string exactly as printed, for example the stock status text>
+}

@@ -35,6 +35,8 @@ from typing import Any, Protocol
 
 import httpx
 
+from market_signals.errors import describe
+
 _SEARCH_URL = "https://api.tavily.com/search"
 
 
@@ -105,7 +107,7 @@ class HttpTavilyClient:
             response = httpx.post(_SEARCH_URL, json=body, timeout=self._timeout_seconds)
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise TavilyUnavailable(f"Tavily request failed: {exc}") from exc
+            raise TavilyUnavailable(f"Tavily request failed: {describe(exc)}") from None
         try:
             parsed = response.json()
         except ValueError as exc:

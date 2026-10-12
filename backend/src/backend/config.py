@@ -13,6 +13,55 @@ class MissingConfig(RuntimeError):
         super().__init__(f"{name} is not set. See .env.example.")
 
 
+class LlmEndpointNotVerified(MissingConfig):
+    """A configured LLM endpoint is not attested as operator-controlled, so seller data must not be sent to it (approval prerequisite R7).
+    Subclasses `MissingConfig` so every existing handler answers 503 "not configured" instead of calling the model."""
+
+    def __init__(self, setting: str, url: str) -> None:
+        RuntimeError.__init__(
+            self,
+            f"{setting} points at {url!r}, which is not listed in LLM_OPERATOR_CONTROLLED_HOSTS. An LLM endpoint is treated as EXTERNAL until the "
+            "operator attests it (loopback alone is not evidence of control), and no seller data is sent to an external endpoint: the data-disclosure "
+            "policy for third-party model endpoints is not defined yet.",
+        )
+
+
+def _endpoint_key(url: str) -> str | None:
+    """`host:port` of an http(s) URL, lower-cased, with the scheme's default port filled in; None if it cannot be parsed."""
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url.strip())
+        host = (parts.hostname or "").lower()
+        port = parts.port or {"http": 80, "https": 443}.get(parts.scheme)
+    except ValueError:
+        return None
+    if parts.scheme not in ("http", "https") or not host or port is None:
+        return None
+    return f"{host}:{port}"
+
+
+def operator_controlled_llm_hosts() -> frozenset[str]:
+    """`LLM_OPERATOR_CONTROLLED_HOSTS`: comma-separated EXACT `host:port` entries the operator attests they control. No default, and not cached
+    (a change takes effect at once). An entry without a port never matches."""
+    raw = os.environ.get("LLM_OPERATOR_CONTROLLED_HOSTS") or ""
+    return frozenset(e.strip().lower() for e in raw.split(",") if e.strip())
+
+
+def llm_endpoint_trust(url: str) -> str:
+    """`INTERNAL` only when the endpoint's exact host:port is attested by the operator; everything else (including loopback, private ranges,
+    unparsable URLs) is `EXTERNAL` (Q-R9 / F5: loopback alone is insufficient evidence)."""
+    key = _endpoint_key(url)
+    return "INTERNAL" if key is not None and key in operator_controlled_llm_hosts() else "EXTERNAL"
+
+
+def verified_llm_endpoint(url: str, *, setting: str) -> str:
+    """The URL itself when it is attested operator-controlled; otherwise raises `LlmEndpointNotVerified` (fail closed, nothing is sent)."""
+    if llm_endpoint_trust(url) != "INTERNAL":
+        raise LlmEndpointNotVerified(setting, url)
+    return url
+
+
 def _required(name: str) -> str:
     value = os.environ.get(name)
     if not value:
@@ -68,9 +117,107 @@ def clerk_clock_skew_ms() -> int:
     return _CLOCK_SKEW_DEV_INSTANCE_MS if clerk_secret_key().startswith("sk_test_") else _CLOCK_SKEW_PRODUCTION_MS
 
 
+def deployment_like() -> bool:
+    """True when this process is configured as a real deployment: `METRION_ENV` is `production`, `prod` or `staging`, or the Clerk secret key is a LIVE key (`sk_live_`).
+    Local development and tests are neither, and keep their defaults."""
+    if (os.environ.get("METRION_ENV") or "").strip().lower() in {"production", "prod", "staging"}:
+        return True
+    return (os.environ.get("CLERK_SECRET_KEY") or "").startswith("sk_live_")
+
+
+class InvalidConfig(ValueError):
+    """A configuration value is present but unusable. The message names the setting and the rule, never the value of a secret."""
+
+
+DEFAULT_FRONTEND_ORIGIN = "http://localhost:3000"
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]"})
+
+
+def validate_origin(value: str, *, setting: str = "FRONTEND_ORIGIN") -> str:
+    """One browser origin: scheme + host (+ port), nothing else. No wildcard, no path, no query, no trailing slash, no credentials. Returns it normalised (lower case)."""
+    from urllib.parse import urlsplit
+
+    raw = value.strip()
+    if not raw or "*" in raw:
+        raise InvalidConfig(f"{setting} must be one explicit origin such as https://app.example.com (no wildcard)")
+    try:
+        parts = urlsplit(raw)
+        port = parts.port  # raises ValueError for a non-numeric / out-of-range port
+    except ValueError:
+        raise InvalidConfig(f"{setting} is not a valid origin") from None
+    if parts.scheme not in {"http", "https"} or not parts.hostname:
+        raise InvalidConfig(f"{setting} must start with http:// or https:// and name a host")
+    if parts.username or parts.password or parts.path not in {"", None} or parts.query or parts.fragment:
+        raise InvalidConfig(f"{setting} must be an origin only: no credentials, path, query or trailing slash")
+    host = parts.hostname.lower()
+    host = f"[{host}]" if ":" in host else host
+    return f"{parts.scheme}://{host}" + (f":{port}" if port else "")
+
+
 @lru_cache
 def frontend_origin() -> str:
-    return os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
+    """The one browser origin allowed by CORS. Development and tests default to http://localhost:3000. A deployment-like process (`deployment_like()`) must set
+    `FRONTEND_ORIGIN` explicitly, to an https origin (http only for a loopback host): it fails at start-up otherwise, instead of silently serving the development default."""
+    raw = (os.environ.get("FRONTEND_ORIGIN") or "").strip()
+    if not raw:
+        if deployment_like():
+            raise MissingConfig("FRONTEND_ORIGIN")
+        return DEFAULT_FRONTEND_ORIGIN
+    origin = validate_origin(raw)
+    if deployment_like() and origin.startswith("http://") and origin.split("://", 1)[1].split(":")[0] not in _LOCAL_HOSTS:
+        raise InvalidConfig("FRONTEND_ORIGIN must be https in a deployment")
+    return origin
+
+
+OPS_TOKEN_MIN_CHARS = 24
+
+
+def ops_token() -> str | None:
+    """`OPS_TOKEN`: the shared secret that unlocks the operations endpoints (`/api/v1/ops/*`: liveness, readiness, recovery diagnostics). Unset = those endpoints are OFF (they
+    answer 401 like any unauthenticated request). Set but shorter than 24 characters is a start-up error, never a weak secret in use. The value is never logged or returned."""
+    raw = (os.environ.get("OPS_TOKEN") or "").strip()
+    if not raw:
+        return None
+    if len(raw) < OPS_TOKEN_MIN_CHARS:
+        raise InvalidConfig(f"OPS_TOKEN must be at least {OPS_TOKEN_MIN_CHARS} characters")
+    return raw
+
+
+API_MAX_BODY_DEFAULT_BYTES = 1024 * 1024
+
+
+def api_max_body_bytes() -> int | None:
+    """`API_MAX_BODY_BYTES`: the largest request body any NON-upload route accepts (default 1 MiB, far above every JSON body the API defines; the upload routes keep their own
+    limits). Larger bodies are refused with 413 before the body is parsed. `0` turns the default limit off (a reverse proxy then has to enforce one). Invalid values are an error at start-up."""
+    raw = (os.environ.get("API_MAX_BODY_BYTES") or "").strip()
+    if not raw:
+        return API_MAX_BODY_DEFAULT_BYTES
+    value = int(raw)
+    if value < 0:
+        raise ValueError("API_MAX_BODY_BYTES must be 0 (off) or a positive number of bytes")
+    return value or None
+
+
+RECOVERY_SWEEP_DEFAULT_SECONDS = 300
+
+
+def recovery_sweep_interval_seconds() -> int | None:
+    """`RECOVERY_SWEEP_INTERVAL_SECONDS`: how often a running backend looks for runs whose owner died (default 300; `0` turns the periodic pass off, start-up recovery stays).
+    This is a polling interval, not a deadline: it decides how soon a dead worker's rows are noticed, never whether a live run is touched (that is decided by ownership). An
+    invalid value is an error at the first use, not a silent default."""
+    raw = (os.environ.get("RECOVERY_SWEEP_INTERVAL_SECONDS") or "").strip()
+    if not raw:
+        return RECOVERY_SWEEP_DEFAULT_SECONDS
+    value = int(raw)
+    if value < 0:
+        raise ValueError("RECOVERY_SWEEP_INTERVAL_SECONDS must be 0 (off) or a positive number of seconds")
+    return value or None
+
+
+def api_docs_enabled() -> bool:
+    """`API_DOCS_ENABLED=true` serves the interactive docs and the OpenAPI document (`/docs`, `/redoc`, `/openapi.json`). Default OFF: they are unauthenticated and list every route,
+    so a deployment opts in on purpose (a developer machine sets it in its own .env)."""
+    return (os.environ.get("API_DOCS_ENABLED") or "").strip().lower() in {"1", "true", "yes"}
 
 
 @lru_cache
@@ -101,7 +248,7 @@ def cmo_ollama_host() -> str:
     """The Ollama endpoint Slim CMO calls. REQUIRED, no default (P5) - deliberately separate from the
     shared `ollama_host()` (which other agents still default to localhost), so CMO never runs
     against an address nobody chose."""
-    return _required("CMO_OLLAMA_HOST")
+    return verified_llm_endpoint(_required("CMO_OLLAMA_HOST"), setting="CMO_OLLAMA_HOST")
 
 
 @lru_cache
@@ -121,7 +268,8 @@ def ceo_classifier_model() -> str:
 def ceo_ollama_host() -> str:
     """The local model server for the CEO. `CEO_OLLAMA_HOST`, else the shared `ollama_host()` (a local address by default; the model
     layer refuses a non-local host)."""
-    return (os.environ.get("CEO_OLLAMA_HOST") or "").strip() or ollama_host()
+    explicit = (os.environ.get("CEO_OLLAMA_HOST") or "").strip()
+    return verified_llm_endpoint(explicit, setting="CEO_OLLAMA_HOST") if explicit else ollama_host()
 
 
 @lru_cache
@@ -160,6 +308,13 @@ def ceo_leg_timeout_seconds() -> int | None:
     """`CEO_LEG_TIMEOUT_SECONDS`: the per-turn deadline for specialist legs (spec §6.12 rule 5, §6.26 L9). NO default: unset -> None -> any
     investigation with legs refuses with CONFIG_MISSING. Not cached, so a test or operator change takes effect."""
     return _optional_positive_int("CEO_LEG_TIMEOUT_SECONDS")
+
+
+def ceo_leg_abandon_seconds() -> int | None:
+    """`CEO_LEG_ABANDON_SECONDS`: the HARD leg deadline. A leg that is still running this long after it started, although its turn already answered without it (the soft
+    deadline `CEO_LEG_TIMEOUT_SECONDS` passed), is settled as timed out (`ceo/deadlines.py`). NO default: unset -> None -> a late leg is never settled by age and keeps running
+    until it finishes or its process dies. Must be longer than the soft deadline; a smaller value is raised to it. Not cached."""
+    return _optional_positive_int("CEO_LEG_ABANDON_SECONDS")
 
 
 def ceo_state_cache_max_entries() -> int | None:
@@ -231,6 +386,13 @@ def cmo_llm_timeout_seconds() -> int:
     return _required_positive_int("CMO_LLM_TIMEOUT_SECONDS")
 
 
+def pi_quota_reservation_ttl_seconds() -> int:
+    """How long an in-flight PI quota reservation counts against a cap before it is treated as abandoned (approval prerequisite R6). REQUIRED when a
+    cap is configured, NO default, and it must be at least the action's structural worst-case duration (`product_intelligence.timing`), otherwise a
+    still-running run could lose its reservation and the cap could be overshot; `services/pi_usage` refuses (503) when it is missing or too short."""
+    return _required_positive_int("PI_QUOTA_RESERVATION_TTL_SECONDS")
+
+
 @lru_cache
 def cmo_quota_reservation_ttl_seconds() -> int:
     """How long an in-flight CMO quota reservation counts against a cap before it is treated as
@@ -264,7 +426,7 @@ def cmo_vision_model() -> str:
 @lru_cache
 def cmo_vision_ollama_host() -> str:
     """The local Ollama endpoint for photo analysis. REQUIRED, no default (P6; local only - no hosted vision provider)."""
-    return _required("CMO_VISION_OLLAMA_HOST")
+    return verified_llm_endpoint(_required("CMO_VISION_OLLAMA_HOST"), setting="CMO_VISION_OLLAMA_HOST")
 
 
 @lru_cache
@@ -345,9 +507,10 @@ def ci_max_evidence_bytes() -> int:
 
 @lru_cache
 def ollama_host() -> str:
-    """C15 (local-only derivation): always a local address, never a hosted provider — not a
-    secret, so a default is fine. `OLLAMA_HOST` overrides for a non-default local port."""
-    return os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+    """C15: a local, operator-controlled model server, never a hosted provider. The default is a loopback address, but loopback ALONE is not
+    evidence of operator control (R7): the endpoint must also be listed in `LLM_OPERATOR_CONTROLLED_HOSTS`, else every model call refuses
+    (`LlmEndpointNotVerified`). `OLLAMA_HOST` overrides the default."""
+    return verified_llm_endpoint(os.environ.get("OLLAMA_HOST", "http://localhost:11434"), setting="OLLAMA_HOST")
 
 
 @lru_cache

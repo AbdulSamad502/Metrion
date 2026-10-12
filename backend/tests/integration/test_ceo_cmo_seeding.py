@@ -46,6 +46,7 @@ def to_hint_question(ctx, rt, product, inv=None):
     return first
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_themes_are_offered_with_their_source_and_a_not_verified_label_never_filled_in(two_tenants, app_user, seed, migrate_engine):  # noqa: F811
     a, _ = two_tenants
     calls: dict = {}
@@ -72,6 +73,7 @@ def test_themes_are_offered_with_their_source_and_a_not_verified_label_never_fil
             c.execute(text("DELETE FROM product_candidate WHERE id = :i"), {"i": str(cand)})
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_an_idea_pi_does_not_know_and_no_competitor_insight_means_only_skip_is_offered(two_tenants, app_user, seed):  # noqa: F811
     a, _ = two_tenants
     ctx = ctx_for(a, user_id=app_user)
@@ -80,6 +82,7 @@ def test_an_idea_pi_does_not_know_and_no_competitor_insight_means_only_skip_is_o
     assert [o["label"] for o in q.choices["options"] if o["kind"] in ("RECOMMENDED", "ALTERNATIVE")] == ["Skip"]  # no theme is invented
 
 
+@pytest.mark.usefixtures("approval_gate_bypassed")
 def test_another_tenants_themes_are_never_offered(two_tenants, app_user, seed, migrate_engine):  # noqa: F811
     a, b = two_tenants
     run_b = seed.run(b, "COMPLETE")
@@ -92,3 +95,4 @@ def test_another_tenants_themes_are_never_offered(two_tenants, app_user, seed, m
     finally:
         with _scope(migrate_engine, b) as c:
             c.execute(text("DELETE FROM product_candidate WHERE id = :i"), {"i": str(cand)})
+

@@ -21,6 +21,7 @@ request body (see backend/README.md, "Request-body limits"). The per-route limit
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -33,12 +34,25 @@ _BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
 
 
 class RequestBodyLimitMiddleware:
-    def __init__(self, app: Any, *, limits: Mapping[str, int], overhead_bytes: int = MULTIPART_OVERHEAD_BYTES) -> None:
+    def __init__(
+        self, app: Any, *, limits: Mapping[str, int], overhead_bytes: int = MULTIPART_OVERHEAD_BYTES, default_limit: int | None = None
+    ) -> None:
         self.app = app
-        self._max_body = {path: limit + overhead_bytes for path, limit in limits.items()}
+        # Every other body-carrying request (JSON routes, webhooks) gets `default_limit` when one is configured; the routes in `limits` keep their own, larger, upload limits.
+        self._default_limit = default_limit
+        # A key may carry `{name}` segments (an id in the path, e.g. a per-conversation attachment route): they match exactly one path segment.
+        self._max_body = {path: limit + overhead_bytes for path, limit in limits.items() if "{" not in path}
+        self._patterns = [(re.compile("^" + re.sub(r"\\{[^/}]+\\}", "[^/]+", re.escape(path)) + "$"), limit + overhead_bytes) for path, limit in limits.items() if "{" in path]
+
+    def _limit_for(self, path: str) -> int | None:
+        exact = self._max_body.get(path)
+        if exact is not None:
+            return exact
+        templated = next((limit for pattern, limit in self._patterns if pattern.match(path)), None)
+        return templated if templated is not None else self._default_limit
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
-        max_body = self._max_body.get(scope.get("path", "")) if scope["type"] == "http" else None
+        max_body = self._limit_for(scope.get("path", "")) if scope["type"] == "http" else None
         if max_body is None or scope["method"] not in _BODY_METHODS:
             await self.app(scope, receive, send)
             return
@@ -88,12 +102,17 @@ def _message(max_body: int) -> str:
 
 
 async def _respond(send: Any, status: int, detail: str) -> None:
-    body = ('{"detail":"%s"}' % detail).encode()
+    import json
+
+    from backend.errors import error_headers
+
+    body = json.dumps({"detail": detail}).encode()
+    extra = [(k.lower().encode(), v.encode()) for k, v in error_headers(status, detail).items()]  # machine-readable kind rides in headers; the body is unchanged
     await send(
         {
             "type": "http.response.start",
             "status": status,
-            "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())],
+            "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()), *extra],
         }
     )
     await send({"type": "http.response.body", "body": body})

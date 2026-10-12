@@ -34,6 +34,9 @@ export type CanvasNode = {
 };
 
 export function nodeState(attached: boolean | undefined, availability: AgentAvailability | null, code: AgentCode): NodeState {
+  // Attached only says what the conversation intends. Whether the agent is actually usable (plan, permission) is known only once availability has
+  // loaded: until then (or if it could not load) nothing may be shown as connected.
+  if (availability === null) return "UNKNOWN";
   const status = availability?.[code]?.status;
   if (status === "NOT_ENTITLED") return "LOCKED";
   if (attached === true) return status === "NOT_PERMITTED" ? "NO_ACCESS" : "ATTACHED";
@@ -133,6 +136,17 @@ const ACTION_LABELS: Record<string, string> = {
   BS_HEALTH_BANDS: "Health bands",
   BS_SELLER_CONTEXT: "Your saved goal and notes",
   BS_INGEST_STATUS: "Upload status",
+  // The CEO's own saved-results questions (the business-state catalog): plain words, never the key ("Qt leaks").
+  QT_AGENT_FINDINGS: "What the specialists found",
+  QT_COMPETITORS_PRICES: "Competitor prices",
+  QT_DATA_GAPS: "Inputs still needed",
+  QT_GOALS: "Your saved goal and notes",
+  QT_LEAKS: "Where money is leaking",
+  QT_LISTING_CONTENT: "Listing content written",
+  QT_NOT_STORED: "Not stored yet",
+  QT_PRODUCT_IDEAS: "Product ideas found",
+  QT_PROFIT_BY_PERIOD: "Profit by period",
+  QT_SELLER_FACTS: "What you told me",
 };
 
 export function actionLabel(key: string): string {
@@ -349,14 +363,22 @@ export function flowSteps(flow: TurnFlow): FlowStep[] {
 export type MessageView = { tone: "user" | "ceo" | "clarify" | "note"; badge: string | null; footnote: string | null };
 
 /** How a message should look. Pure labelling of what the backend already decided (kind, route, composition mode). */
+/** True only for a turn the backend refused because the action needs a stored approval plan (a supported field written with the turn), never inferred from text or status alone. */
+export const approvalRefused = (turn: TurnRow | null | undefined): boolean => turn?.status === "DENIED" && !!turn.classifier_result?.approvalRequiredFor;
+
 export function messageView(message: CeoMessage, turnById: Map<string, TurnRow>): MessageView {
   if (message.kind === "SYSTEM_NOTE" || message.role === "SYSTEM") return { tone: "note", badge: null, footnote: null };
   if (message.role === "USER") return { tone: "user", badge: null, footnote: null };
   const turn = message.turn_id ? turnById.get(message.turn_id) : undefined;
   if (message.kind === "CLARIFICATION") return { tone: "clarify", badge: "Needs your input", footnote: null };
   if (turn?.route === "OUT_OF_SCOPE") return { tone: "ceo", badge: "Out of scope", footnote: null };
+  if (approvalRefused(turn)) return { tone: "ceo", badge: "Needs an approved plan", footnote: "Approval of a stored plan is not available yet, so nothing was run." };
   if (turn?.status === "DENIED") return { tone: "ceo", badge: "Not permitted", footnote: null };
   if (turn?.status === "FAILED") return { tone: "ceo", badge: "Could not complete", footnote: null };
+  // A delivered answer is not proof of a successful execution: the stored outcome says whether a required step failed or is still waiting for the seller.
+  if (turn?.outcome === "FAILED") return { tone: "ceo", badge: "Could not complete", footnote: null };
+  if (turn?.outcome === "PENDING_INPUT") return { tone: "ceo", badge: "Waiting for your input", footnote: null };
+  if (turn?.outcome === "PARTIAL") return { tone: "ceo", badge: "Partly completed", footnote: null };
   return {
     tone: "ceo",
     badge: null,
@@ -402,6 +424,50 @@ export function visibleInvestigations(items: InvestigationSummary[], showArchive
 /** Appends the seller's just-sent message locally (flagged `pending`) so it shows immediately; the authoritative copy replaces it on refresh. */
 export function withPendingMessage(messages: CeoMessage[], text: string, now: string): CeoMessage[] {
   return [...messages, { id: `pending-${now}`, role: "USER", kind: "TEXT", content: text, turn_id: null, created_at: now, pending: true }];
+}
+
+/** One logical submission's identifier. A retry of the SAME submission reuses it; a new submission (even with identical text) gets a new one. */
+let submissionCounter = 0;
+export function newSubmissionId(): string {
+  const c = typeof globalThis !== "undefined" ? (globalThis as { crypto?: { randomUUID?: () => string; getRandomValues?: (a: Uint8Array) => Uint8Array } }).crypto : undefined;
+  if (c?.randomUUID) return c.randomUUID();
+  let hex: string;
+  if (c?.getRandomValues) {
+    hex = Array.from(c.getRandomValues(new Uint8Array(16)), (x) => x.toString(16).padStart(2, "0")).join("");
+  } else {
+    // No platform randomness at all (not a browser Metrion supports): still unique within this page, which is all an idempotency id needs.
+    submissionCounter += 1;
+    hex = (Date.now().toString(16) + submissionCounter.toString(16).padStart(8, "0")).padStart(32, "0").slice(-32);
+  }
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`; // a version-4 shaped UUID, the shape the API validates
+}
+
+/** What makes two sends the same submission: everything the server would act on. Used only to decide whether a send that just FAILED is being retried unchanged. */
+export function submissionFingerprint(investigationId: string, text: string, period: unknown, action: unknown, clarification: unknown, attachmentIds: string[]): string {
+  return JSON.stringify([investigationId, text, period ?? null, action ?? null, clarification ?? null, attachmentIds]);
+}
+
+/** The server holds a seller question that has no CEO answer yet (the page was refreshed or reopened while a turn was running, or the reply was lost). Derived only from the stored thread:
+ * nothing is assumed about WHY it has no answer, so the screen says "still being answered", never "failed" and never "done". */
+export function isAwaitingAnswer(messages: CeoMessage[] | undefined, investigationStatus: string | undefined): boolean {
+  if (investigationStatus !== "ACTIVE" || !messages || messages.length === 0) return false;
+  const last = messages[messages.length - 1];
+  return last.role === "USER" && !last.pending && !last.failed;
+}
+
+export const RECEIVED_BUT_NO_REPLY =
+  "Your question reached the server, but its reply did not come back. Check the conversation above before asking again: sending it again would ask it twice.";
+
+/** After a send whose reply was lost: does the server's own thread already hold this question as a NEW seller message? (There were `userBefore` seller messages before the send.)
+ * Only the client's own just-attempted submission is matched, by its text and by the count growing: this never decides that two separate submissions are one. */
+export function serverAlreadyHasSubmission(messages: CeoMessage[], text: string, userBefore: number): boolean {
+  const user = messages.filter((m) => m.role === "USER" && !m.pending && !m.failed);
+  return user.length > userBefore && user[user.length - 1].content.startsWith(text);
+}
+
+/** A send that failed leaves its local copy flagged `failed` (not `pending`): when the refresh that would replace it also fails, the question must not read "Sending…" forever. */
+export function markPendingFailed(messages: CeoMessage[]): CeoMessage[] {
+  return messages.map((m) => (m.pending ? { ...m, pending: false, failed: true } : m));
 }
 
 /** Light client-side guard for the date pickers. The backend re-validates with the deterministic resolver; this only avoids a round trip. */

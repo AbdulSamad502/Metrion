@@ -49,7 +49,7 @@ describe("empty and new states", () => {
     await openList();
     expect(await screen.findByText("No investigations yet")).toBeInTheDocument();
     expect(screen.getByTestId("welcome")).toBeInTheDocument(); // nothing selected: what the CEO can do, as things to click
-    expect(screen.getByTestId("canvas-idle")).toBeInTheDocument();
+    expect(screen.queryByTestId("canvas-idle")).not.toBeInTheDocument(); // the empty "nothing yet" blocks are not drawn; panels appear when they have something to show
     expect(screen.getByTestId("agent-canvas")).toBeInTheDocument(); // the agents are always shown; a new conversation connects all of them
     expect(screen.queryByText(/₹/)).not.toBeInTheDocument();
     expect(fake.count("postTurn")).toBe(0);
@@ -65,7 +65,7 @@ describe("empty and new states", () => {
     expect(fake.calls.find((c) => c.method === "createInvestigation")?.args).toEqual(["Margins"]);
     expect(screen.getByTestId("conversation")).toHaveAttribute("data-state", "NEW");
     expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "ATTACHED");
-    expect(screen.getByText("No findings yet")).toBeInTheDocument();
+    expect(screen.queryByText("No findings yet")).not.toBeInTheDocument();
     expect(screen.getByText("Margins", { selector: ".t-card-title" })).toBeInTheDocument();
   });
 
@@ -577,6 +577,17 @@ describe("business at a glance", () => {
     expect(screen.queryByText(/score/i)).not.toBeInTheDocument(); // no composite score exists
   });
 
+  it("says nothing is saved yet (not that it is unavailable) when the request worked and returned no results", async () => {
+    fake.health = [];
+    mount();
+    await openList();
+    await screen.findByText("No investigations yet");
+    expect(screen.queryByTestId("health-none-saved")).toBeNull(); // an empty, successful read draws nothing (an error still does, with a retry)
+    expect(screen.queryByTestId("summary-cards")).toBeNull();
+    expect(screen.queryByTestId("health-unavailable")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
   it("says plainly when the strip cannot be loaded, and lets the seller retry", async () => {
     fake.healthError = new ApiError(403, { code: "FORBIDDEN" });
     mount();
@@ -722,15 +733,21 @@ describe("decision cards (spec 6.32)", () => {
   it("shows exactly the real options the backend sent, the recommended one first with its rule, and an Other; nothing is invented", async () => {
     await askForCard();
     const card = screen.getByTestId("decision-card");
-    const options = within(card).getAllByRole("button");
-    expect(options.map((b) => b.textContent)).toEqual(["September 2026RecommendedLatest period with saved results", "August 2026An earlier period with saved results", "Other…"]);
+    const options = within(card).getAllByRole("radio");
+    expect(options.map((r) => r.closest("label")!.textContent)).toEqual(["September 2026RecommendedLatest period with saved results", "August 2026An earlier period with saved results", "Other…"]);
+    expect(within(card).getByTestId("card-continue")).toBeDisabled(); // nothing is chosen for the seller
+    expect(within(card).queryByTestId("card-back")).toBeNull(); // the backend offered no Back, so none is shown
+    expect(within(card).queryByTestId("card-skip")).toBeNull();
     expect(screen.getByLabelText("Ask the CEO")).toBeEnabled(); // typing a plain answer still works
   });
 
   it("choosing an option sends that option's key with the card's id, and the label is the thread text", async () => {
     await askForCard();
     const cardId = (await screen.findAllByTestId("message-ceo")).length && fake.store.get("inv-1")!.messages.at(-1)!.id;
-    await user().click(screen.getByTestId("card-option-period-2026-08-01/2026-08-31"));
+    const u = user();
+    await u.click(screen.getByTestId("card-option-period-2026-08-01/2026-08-31"));
+    expect(fake.calls.filter((c) => c.method === "postTurn")).toHaveLength(1); // choosing only stages the answer: the seller's own question is the only turn so far
+    await u.click(screen.getByTestId("card-continue"));
     await screen.findByTestId("processing");
     expect(fake.calls.filter((c) => c.method === "postTurn").at(-1)?.args).toEqual([
       "inv-1", "August 2026", null, null, { id: cardId, option: "period-2026-08-01/2026-08-31" },
@@ -743,10 +760,16 @@ describe("decision cards (spec 6.32)", () => {
     const u = user();
     await u.click(screen.getByTestId("card-option-other"));
     const field = screen.getByLabelText("Your own answer");
-    const send = within(screen.getByTestId("decision-card")).getByRole("button", { name: "Send" });
+    const send = screen.getByTestId("card-continue");
     expect(send).toBeDisabled();
+    await u.type(field, "   ");
+    expect(send).toBeDisabled(); // blank is not an answer
+    await u.clear(field);
     await u.type(field, "last quarter");
-    await u.click(send);
+    await u.click(screen.getByTestId("card-option-period-2026-09-01/2026-09-30")); // changing their mind keeps what was typed
+    await u.click(screen.getByTestId("card-option-other"));
+    expect(screen.getByLabelText("Your own answer")).toHaveValue("last quarter");
+    await u.click(screen.getByTestId("card-continue"));
     await screen.findByTestId("processing");
     const args = fake.calls.filter((c) => c.method === "postTurn").at(-1)!.args as unknown[];
     expect(args[1]).toBe("last quarter");
@@ -756,7 +779,9 @@ describe("decision cards (spec 6.32)", () => {
 
   it("an answered card is gone the moment the answer is sent, so it cannot be answered twice", async () => {
     await askForCard();
-    await user().click(screen.getByTestId("card-option-period-2026-09-01/2026-09-30"));
+    const u = user();
+    await u.click(screen.getByTestId("card-option-period-2026-09-01/2026-09-30"));
+    await u.click(screen.getByTestId("card-continue"));
     await screen.findByTestId("processing");
     expect(screen.queryByTestId("decision-card")).not.toBeInTheDocument();
     fake.completeTurn({ answer: "Here is September." });

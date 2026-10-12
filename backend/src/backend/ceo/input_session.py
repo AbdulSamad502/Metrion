@@ -40,6 +40,7 @@ class Option:
     label: str
     text: str  # what choosing it means: exactly the text that would be parsed if the seller typed it
     reason: str = ""
+    unknown: bool = False  # choosing it records "unknown" on purpose (dependent figures show as unavailable); the UI may offer it as "Skip"
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,7 +165,7 @@ def _window(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
 def _cost_field(name: str, question: str) -> Field:
     return Field(
         name, lambda ctx, got: question, _cost,
-        lambda ctx, got: (Option("None (0), I confirm", "none", "You are sure it is zero"), Option("Unknown", "unknown", "Margins that depend on it will show as unavailable")),
+        lambda ctx, got: (Option("None (0), I confirm", "none", "You are sure it is zero"), Option("Unknown", "unknown", "Margins that depend on it will show as unavailable", unknown=True)),
     )
 
 
@@ -213,7 +214,7 @@ PRICE_IMPACT: tuple[Field, ...] = (
     Field("basis", lambda c, g: "Do the prices you will give me include GST?", _basis,
           lambda c, g: _with_remembered((Option("Prices include GST", "inclusive"), Option("Prices exclude GST", "exclusive")),
                                         _remembered_choice(c, "CFO", "last_basis", lambda v: Option("Prices include GST" if v == "INCLUSIVE" else "Prices exclude GST", v.lower(), _LAST_TIME)))),
-    Field("gst_rate_pct", lambda c, g: "What GST rate applies? Type a number such as 18.", _gst, lambda c, g: (Option("I do not know", "unknown", "GST-dependent margins will show as unavailable"),)),
+    Field("gst_rate_pct", lambda c, g: "What GST rate applies? Type a number such as 18.", _gst, lambda c, g: (Option("I do not know", "unknown", "GST-dependent margins will show as unavailable", unknown=True),)),
     Field("current_price_paise", lambda c, g: "What is your current selling price, in rupees?", _amount),
     Field("candidate_prices_paise", lambda c, g: "Which prices should I compare? Give rupee amounts separated by commas"
           + (f", up to {c.max_candidate_prices}." if c.max_candidate_prices else "."), _prices,
@@ -562,9 +563,11 @@ class Blocked:
 
 
 def _card(playbook: str, f: Field, ctx: Ctx, collected: Mapping[str, Any]) -> dict[str, Any]:
-    opts: list[dict[str, Any]] = [{"key": f"opt-{i}", "label": o.label, "kind": "RECOMMENDED" if i == 0 else "ALTERNATIVE", "value": o.text, "reason": o.reason, "refs": {}}
+    opts: list[dict[str, Any]] = [{"key": f"opt-{i}", "label": o.label, "kind": "RECOMMENDED" if i == 0 else "ALTERNATIVE", "value": o.text, "reason": o.reason, "refs": {}, **({"skip": True} if o.unknown else {})}
             for i, o in enumerate(list(f.options(ctx, collected))[:MAX_OPTIONS])]
     opts.append({"key": "other", "label": "Other", "kind": "OTHER", "value": None, "reason": "Type your answer in the chat bar", "refs": {}})
+    if collected:  # not the first question: the seller may step back and answer the previous one again (the earlier answer stays visible in the thread)
+        opts.append({"key": "back", "label": "Back", "kind": "BACK", "value": None, "reason": "Change my previous answer", "refs": {}})
     opts.append({"key": "cancel", "label": "Cancel", "kind": "CANCEL", "value": None, "reason": "Stop asking; nothing will run", "refs": {}})
     return {"version": CARD_VERSION, "kind": "INPUT", "slot": f.name, "playbook": playbook, "pending": {"route": route_of(playbook), "key": playbook, "slots": {}, "refs": {}, "collected": dict(collected)},
             "options": opts}
@@ -639,6 +642,12 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
     if option_key is not None:
         if option_key == "cancel":
             return Cancelled()
+        if option_key == "back":
+            answered = [x for x in fields if x.name in collected]  # field ORDER, not dict order: the state round-trips through jsonb, which does not keep key order
+            if not answered:
+                raise ValueError("there is no previous question")
+            del collected[answered[-1].name]
+            return _ask(playbook, fields, ctx, collected, prefix="")
         opt = next((o for o in card.get("options", []) if o.get("key") == option_key), None)
         if opt is None or opt.get("kind") == "OTHER" or opt.get("value") is None:
             raise ValueError("not an option of this card")

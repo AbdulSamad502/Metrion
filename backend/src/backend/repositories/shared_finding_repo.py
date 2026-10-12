@@ -46,7 +46,7 @@ def insert(
     tenant_id: UUID, *, agent: str, kind: str, subject: str | None, body: str, trust: str, source_ref: Mapping[str, Any], figure_refs: Sequence[Mapping[str, Any]],
     dedupe_key: str, created_by: UUID | None, supersedes_id: UUID | None = None, status: str = "ACTIVE", now: datetime | None = None,
 ) -> UUID | None:
-    """Append one row. Returns None when the same source was already recorded (a repeat is a no-op); a database gate refusal raises. Nothing here relaxes the CHECKs."""
+    """Append one row. Returns None when the same source was already recorded, or when the finding being superseded was already superseded (a repeat is a no-op); a database gate refusal raises. Nothing here relaxes the CHECKs."""
     new_id = uuid4()
     src_table = SOURCE_TABLES.get(str(source_ref.get("kind")))
     with tenant_scope(tenant_id) as conn:
@@ -57,9 +57,13 @@ def insert(
                 if ref.get("kind") == "ESTIMATE" and not _exists(conn, "product_feasibility_estimate", tenant_id, str(ref.get("id"))):
                     raise FindingRefError("an ESTIMATE ref must be an estimate of this tenant")
         if supersedes_id is not None:
+            # One writer at a time per finding chain, held to the end of this transaction: a correction and a forget (or two forgets) of the same finding cannot both land.
+            conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"shared_finding|{tenant_id}|{dedupe_key}"})
             old = conn.execute(text("SELECT dedupe_key FROM shared_finding WHERE id = :id AND tenant_id = :t"), {"id": str(supersedes_id), "t": str(tenant_id)}).first()
             if old is None or old[0] != dedupe_key:
                 raise FindingRefError("a correction must replace a finding of this tenant for the same source")
+            if conn.execute(text("SELECT 1 FROM shared_finding WHERE supersedes_id = :id AND tenant_id = :t LIMIT 1"), {"id": str(supersedes_id), "t": str(tenant_id)}).first() is not None:
+                return None  # someone else already corrected or forgot it: this finding is no longer the active one, so nothing is written and nothing is reported as done
         res = conn.execute(
             text(f"INSERT INTO shared_finding ({_COLS}) VALUES (:id, :t, :agent, :kind, :subject, :body, :trust, CAST(:src AS jsonb), CAST(:figs AS jsonb), :dk, :sup, :status, :by, :at) "
                  "ON CONFLICT (tenant_id, dedupe_key) WHERE supersedes_id IS NULL DO NOTHING"),

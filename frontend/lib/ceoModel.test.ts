@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentAvailability, CeoMessage, FindingRow, InvestigationDetail, TurnRow } from "@/lib/ceo";
 import {
-  actionLabel, canvasNodes, describeError, findingStatusView, groupFindings, hubStateOf, isHistorical, mergeFindings, messageView, nodeState, refLabel,
+  actionLabel, approvalRefused, canvasNodes, describeError, findingStatusView, groupFindings, hubStateOf, isHistorical, mergeFindings, messageView, nodeState, refLabel,
   validatePeriod, visibleInvestigations, withPendingMessage,
 } from "@/lib/ceoModel";
 
@@ -301,5 +301,83 @@ describe("live progress and the new actions", () => {
   it("each specialist chip needs its own agent attached and no period", () => {
     const need = Object.fromEntries(QUICK_ACTIONS.filter((q) => ["competitors", "research", "report", "listing"].includes(q.id)).map((q) => [q.id, [q.needsAgent, q.needsPeriod]]));
     expect(need).toEqual({ competitors: ["CI", false], research: ["PI", false], report: ["PI", false], listing: ["CMO", false] });
+  });
+});
+
+describe("messageView reflects the stored outcome of a delivered turn", () => {
+  const msg = { id: "m", role: "CEO", kind: "ANSWER", content: "x", turn_id: "t", created_at: "2026-10-11T00:00:00Z" } as never;
+  const turn = (outcome: string | null) => new Map([["t", { id: "t", route: "PLAYBOOK", route_key: null, status: "DELIVERED", outcome, composition_mode: null, user_message_id: "u", ceo_message_id: "m", created_at: "2026-10-11T00:00:00Z" } as never]]);
+  it("badges a delivered answer whose required step failed or is waiting for the seller", () => {
+    expect(messageView(msg, turn("FAILED")).badge).toBe("Could not complete");
+    expect(messageView(msg, turn("PENDING_INPUT")).badge).toBe("Waiting for your input");
+    expect(messageView(msg, turn("PARTIAL")).badge).toBe("Partly completed");
+  });
+  it("adds no badge for a success, a declined reply or a legacy turn", () => {
+    for (const o of ["SUCCEEDED", "DECLINED", null]) expect(messageView(msg, turn(o)).badge).toBeNull();
+  });
+});
+
+describe("approval refusal label", () => {
+  const turn = (over: Record<string, unknown>) => ({ id: "t", route: "ADVISORY", route_key: null, status: "DENIED", composition_mode: null, user_message_id: "u", ceo_message_id: "c", created_at: "2026-10-10T10:00:00Z", ...over }) as never;
+  const ceoMsg = { id: "m", role: "CEO", kind: "ANSWER", content: "x", turn_id: "t", created_at: "2026-10-10T10:00:00Z" } as never;
+  it("labels a DENIED turn as needing an approved plan only when the backend recorded the approval refusal", () => {
+    const refused = turn({ classifier_result: { approvalRequiredFor: "pi.discover" } });
+    expect(approvalRefused(refused)).toBe(true);
+    expect(messageView(ceoMsg, new Map([["t", refused]])).badge).toBe("Needs an approved plan");
+  });
+  it("keeps 'Not permitted' for an ordinary denial and never infers approval from other states", () => {
+    for (const t of [turn({}), turn({ classifier_result: {} }), turn({ classifier_result: { approvalRequiredFor: null } }), turn({ status: "FAILED", classifier_result: { approvalRequiredFor: "pi.discover" } })]) {
+      expect(approvalRefused(t)).toBe(false);
+    }
+    expect(messageView(ceoMsg, new Map([["t", turn({})]])).badge).toBe("Not permitted");
+  });
+
+  it("does not trigger from approval-related wording in the message text or reason when the structured field is absent", () => {
+    const words = { ...(ceoMsg as object), content: "This needs an approved plan before it can run. Approval is required." } as never;
+    const t = turn({ classifier_result: { reason: "approval required" } });
+    expect(approvalRefused(t)).toBe(false);
+    expect(messageView(words, new Map([["t", t]])).badge).toBe("Not permitted");
+  });
+
+  it("shows no refusal label for turns that were not denied, even if the field is somehow present", () => {
+    for (const status of ["DELIVERED", "CLARIFIED", "FAILED", "PLANNED"]) {
+      const t = turn({ status, classifier_result: { approvalRequiredFor: "pi.discover" } });
+      expect(approvalRefused(t)).toBe(false);
+      expect(messageView(ceoMsg, new Map([["t", t]])).badge).not.toBe("Needs an approved plan");
+    }
+  });
+
+  it("tolerates missing or null data without throwing", () => {
+    expect(approvalRefused(undefined)).toBe(false);
+    expect(approvalRefused(null)).toBe(false);
+    expect(approvalRefused(turn({ classifier_result: null }))).toBe(false);
+    expect(() => messageView(ceoMsg, new Map())).not.toThrow(); // the turn row is not loaded yet
+  });
+
+  it("never says the action ran or was approved", () => {
+    const v = messageView(ceoMsg, new Map([["t", turn({ classifier_result: { approvalRequiredFor: "pi.discover" } })]]));
+    expect(v.badge).toBe("Needs an approved plan");
+    expect(v.footnote).toMatch(/not available yet, so nothing was run/);
+    expect(`${v.badge} ${v.footnote}`).not.toMatch(/approved(?! plan)|granted|completed|ran successfully/i);
+  });
+});
+
+describe("nodeState without availability", () => {
+  it("never reports an agent as connected before availability is known, whatever the conversation says", () => {
+    expect(nodeState(true, null, "CFO")).toBe("UNKNOWN");
+    expect(nodeState(false, null, "CFO")).toBe("UNKNOWN");
+    expect(nodeState(undefined, null, "CFO")).toBe("UNKNOWN");
+  });
+});
+
+
+describe("saved-results question keys read as plain words (found in practical acceptance: the Task status showed Qt leaks)", () => {
+  it("labels every business-state question the CEO can answer and never leaks a QT_ key", () => {
+    for (const key of ["QT_AGENT_FINDINGS", "QT_COMPETITORS_PRICES", "QT_DATA_GAPS", "QT_GOALS", "QT_LEAKS", "QT_LISTING_CONTENT", "QT_NOT_STORED", "QT_PRODUCT_IDEAS", "QT_PROFIT_BY_PERIOD", "QT_SELLER_FACTS"]) {
+      const label = actionLabel(key);
+      expect(label).not.toMatch(/^Qt|QT_|_/);
+      expect(label.length).toBeGreaterThan(5);
+    }
+    expect(actionLabel("QT_LEAKS")).toBe("Where money is leaking");
   });
 });

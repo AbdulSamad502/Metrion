@@ -146,3 +146,17 @@ describe("decision forms", () => {
     expect(fake.count("postTurn")).toBe(before);
   });
 });
+
+describe("opened from a link on another page", () => {
+  it("shows the new-product form straight away, without sending anything", async () => {
+    render(<CeoHubWorkspace client={fake.client()} feedFactory={feed.factory} initialForm="NEW_PRODUCT_DECISION" />);
+    expect(await screen.findByTestId("decide-panel")).toBeInTheDocument();
+    expect(fake.count("postTurn")).toBe(0);
+  });
+
+  it("shows no form when no link asked for one", async () => {
+    mount();
+    await screen.findByTestId("welcome");
+    expect(screen.queryByTestId("decide-panel")).not.toBeInTheDocument();
+  });
+});

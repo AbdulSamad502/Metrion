@@ -1,0 +1,759 @@
+[
+ {
+  "file": "v2_00.png",
+  "tags": [
+   "digits2",
+   "format"
+  ],
+  "price_text": "₹99",
+  "expected": {
+   "title": "Cotton Floral Kurti for Women - Pack of 2",
+   "listed_price_paise": 9900,
+   "mrp_paise": 15000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_01.png",
+  "tags": [
+   "digits2",
+   "format"
+  ],
+  "price_text": "Rs. 99",
+  "expected": {
+   "title": "Wireless Bluetooth Earbuds with Mic - Pack of 2",
+   "listed_price_paise": 9900,
+   "mrp_paise": 15000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_02.png",
+  "tags": [
+   "digits2",
+   "format"
+  ],
+  "price_text": "99",
+  "expected": {
+   "title": "Stainless Steel Water Bottle 1L - Pack of 2",
+   "listed_price_paise": 9900,
+   "mrp_paise": 15000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_03.png",
+  "tags": [
+   "digits3",
+   "format"
+  ],
+  "price_text": "₹129",
+  "expected": {
+   "title": "Men Running Shoes Lightweight - Pack of 2",
+   "listed_price_paise": 12900,
+   "mrp_paise": 19000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_04.png",
+  "tags": [
+   "digits3",
+   "format"
+  ],
+  "price_text": "Rs. 129",
+  "expected": {
+   "title": "Cotton Floral Kurti for Women - Pack of 2",
+   "listed_price_paise": 12900,
+   "mrp_paise": 19000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_05.png",
+  "tags": [
+   "digits3",
+   "format"
+  ],
+  "price_text": "129",
+  "expected": {
+   "title": "Wireless Bluetooth Earbuds with Mic - Pack of 2",
+   "listed_price_paise": 12900,
+   "mrp_paise": 19000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_06.png",
+  "tags": [
+   "digits3",
+   "format"
+  ],
+  "price_text": "₹999",
+  "expected": {
+   "title": "Stainless Steel Water Bottle 1L - Pack of 2",
+   "listed_price_paise": 99900,
+   "mrp_paise": 150000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_07.png",
+  "tags": [
+   "digits3",
+   "format"
+  ],
+  "price_text": "Rs. 999",
+  "expected": {
+   "title": "Men Running Shoes Lightweight - Pack of 2",
+   "listed_price_paise": 99900,
+   "mrp_paise": 150000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_08.png",
+  "tags": [
+   "digits3",
+   "format"
+  ],
+  "price_text": "999",
+  "expected": {
+   "title": "Cotton Floral Kurti for Women - Pack of 2",
+   "listed_price_paise": 99900,
+   "mrp_paise": 150000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_09.png",
+  "tags": [
+   "digits4",
+   "format"
+  ],
+  "price_text": "₹1,299",
+  "expected": {
+   "title": "Wireless Bluetooth Earbuds with Mic - Pack of 2",
+   "listed_price_paise": 129900,
+   "mrp_paise": 195000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_10.png",
+  "tags": [
+   "digits4",
+   "format"
+  ],
+  "price_text": "Rs. 1,299",
+  "expected": {
+   "title": "Stainless Steel Water Bottle 1L - Pack of 2",
+   "listed_price_paise": 129900,
+   "mrp_paise": 195000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_11.png",
+  "tags": [
+   "digits4",
+   "format"
+  ],
+  "price_text": "1299",
+  "expected": {
+   "title": "Men Running Shoes Lightweight - Pack of 2",
+   "listed_price_paise": 129900,
+   "mrp_paise": 195000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_12.png",
+  "tags": [
+   "digits4",
+   "format"
+  ],
+  "price_text": "₹1,999",
+  "expected": {
+   "title": "Cotton Floral Kurti for Women - Pack of 2",
+   "listed_price_paise": 199900,
+   "mrp_paise": 300000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_13.png",
+  "tags": [
+   "digits4",
+   "format"
+  ],
+  "price_text": "Rs. 1,999",
+  "expected": {
+   "title": "Wireless Bluetooth Earbuds with Mic - Pack of 2",
+   "listed_price_paise": 199900,
+   "mrp_paise": 300000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_14.png",
+  "tags": [
+   "digits4",
+   "format"
+  ],
+  "price_text": "1999",
+  "expected": {
+   "title": "Stainless Steel Water Bottle 1L - Pack of 2",
+   "listed_price_paise": 199900,
+   "mrp_paise": 300000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_15.png",
+  "tags": [
+   "digits5",
+   "format"
+  ],
+  "price_text": "₹12,999",
+  "expected": {
+   "title": "Men Running Shoes Lightweight - Pack of 2",
+   "listed_price_paise": 1299900,
+   "mrp_paise": 1950000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_16.png",
+  "tags": [
+   "digits5",
+   "format"
+  ],
+  "price_text": "Rs. 12,999",
+  "expected": {
+   "title": "Cotton Floral Kurti for Women - Pack of 2",
+   "listed_price_paise": 1299900,
+   "mrp_paise": 1950000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_17.png",
+  "tags": [
+   "digits5",
+   "format"
+  ],
+  "price_text": "12999",
+  "expected": {
+   "title": "Wireless Bluetooth Earbuds with Mic - Pack of 2",
+   "listed_price_paise": 1299900,
+   "mrp_paise": 1950000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_18.png",
+  "tags": [
+   "digits4",
+   "format"
+  ],
+  "price_text": "₹1299",
+  "expected": {
+   "title": "Stainless Steel Water Bottle 1L - Pack of 2",
+   "listed_price_paise": 129900,
+   "mrp_paise": 195000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_19.png",
+  "tags": [
+   "digits5",
+   "format"
+  ],
+  "price_text": "₹12999",
+  "expected": {
+   "title": "Men Running Shoes Lightweight - Pack of 2",
+   "listed_price_paise": 1299900,
+   "mrp_paise": 1950000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_20.png",
+  "tags": [
+   "digits4",
+   "format",
+   "decimal"
+  ],
+  "price_text": "₹1,299.00",
+  "expected": {
+   "title": "Cotton Floral Kurti for Women - Pack of 2",
+   "listed_price_paise": 129900,
+   "mrp_paise": 195000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_21.png",
+  "tags": [
+   "digits3",
+   "format",
+   "decimal"
+  ],
+  "price_text": "₹999.00",
+  "expected": {
+   "title": "Wireless Bluetooth Earbuds with Mic - Pack of 2",
+   "listed_price_paise": 99900,
+   "mrp_paise": 150000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_22.png",
+  "tags": [
+   "digits5",
+   "decimal"
+  ],
+  "price_text": "₹24,999.00",
+  "expected": {
+   "title": "Stainless Steel Water Bottle 1L - Pack of 2",
+   "listed_price_paise": 2499900,
+   "mrp_paise": 3750000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_23.png",
+  "tags": [
+   "digits5",
+   "decimal"
+  ],
+  "price_text": "₹10,499.50",
+  "expected": {
+   "title": "Men Running Shoes Lightweight - Pack of 2",
+   "listed_price_paise": 1049950,
+   "mrp_paise": 1575000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_24.png",
+  "tags": [
+   "digits4"
+  ],
+  "price_text": "₹7,499",
+  "expected": {
+   "title": "Cotton Floral Kurti for Women - Pack of 2",
+   "listed_price_paise": 749900,
+   "mrp_paise": 1125000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_25.png",
+  "tags": [
+   "digits4",
+   "decimal"
+  ],
+  "price_text": "₹4,599.00",
+  "expected": {
+   "title": "Wireless Bluetooth Earbuds with Mic - Pack of 2",
+   "listed_price_paise": 459900,
+   "mrp_paise": 690000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_26.png",
+  "tags": [
+   "digits4",
+   "no_mrp"
+  ],
+  "price_text": "₹1,299",
+  "expected": {
+   "title": "Stainless Steel Water Bottle 1L - Pack of 2",
+   "listed_price_paise": 129900,
+   "mrp_paise": null,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_27.png",
+  "tags": [
+   "digits5",
+   "no_mrp"
+  ],
+  "price_text": "₹12,999",
+  "expected": {
+   "title": "Men Running Shoes Lightweight - Pack of 2",
+   "listed_price_paise": 1299900,
+   "mrp_paise": null,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_28.png",
+  "tags": [
+   "digits3",
+   "rating"
+  ],
+  "price_text": "₹899",
+  "expected": {
+   "title": "Cotton Floral Kurti for Women - Pack of 2",
+   "listed_price_paise": 89900,
+   "mrp_paise": 135000,
+   "visible_discount_paise": null,
+   "rating": "4.3",
+   "rating_count": 1234,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_29.png",
+  "tags": [
+   "digits4",
+   "rating"
+  ],
+  "price_text": "₹2,499",
+  "expected": {
+   "title": "Wireless Bluetooth Earbuds with Mic - Pack of 2",
+   "listed_price_paise": 249900,
+   "mrp_paise": 375000,
+   "visible_discount_paise": null,
+   "rating": "3.8",
+   "rating_count": 12408,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_30.png",
+  "tags": [
+   "digits4",
+   "multi_price"
+  ],
+  "price_text": "₹1,299",
+  "expected": {
+   "title": "Stainless Steel Water Bottle 1L - Pack of 2",
+   "listed_price_paise": 129900,
+   "mrp_paise": 195000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_31.png",
+  "tags": [
+   "digits5",
+   "multi_price"
+  ],
+  "price_text": "₹12,999",
+  "expected": {
+   "title": "Men Running Shoes Lightweight - Pack of 2",
+   "listed_price_paise": 1299900,
+   "mrp_paise": 1950000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_32.png",
+  "tags": [
+   "digits4",
+   "blurred"
+  ],
+  "price_text": "₹1,299",
+  "expected": {
+   "title": "Cotton Floral Kurti for Women - Pack of 2",
+   "listed_price_paise": 129900,
+   "mrp_paise": 195000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_33.png",
+  "tags": [
+   "digits5",
+   "rotated"
+  ],
+  "price_text": "₹12,999",
+  "expected": {
+   "title": "Wireless Bluetooth Earbuds with Mic - Pack of 2",
+   "listed_price_paise": 1299900,
+   "mrp_paise": 1950000,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_34.png",
+  "tags": [
+   "digits4",
+   "unreadable_price"
+  ],
+  "price_text": "₹1,299",
+  "expected": {
+   "title": null,
+   "listed_price_paise": null,
+   "mrp_paise": null,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ },
+ {
+  "file": "v2_35.png",
+  "tags": [
+   "digits5",
+   "unreadable_price"
+  ],
+  "price_text": "₹12,999",
+  "expected": {
+   "title": null,
+   "listed_price_paise": null,
+   "mrp_paise": null,
+   "visible_discount_paise": null,
+   "rating": null,
+   "rating_count": null,
+   "availability": "IN_STOCK",
+   "seller_name": "StyleHub Retail",
+   "description": null,
+   "observed_category": null,
+   "bullets": null
+  }
+ }
+]

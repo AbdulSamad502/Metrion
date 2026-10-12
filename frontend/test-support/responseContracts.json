@@ -1,0 +1,778 @@
+{
+ "GET /api/v1/session": {
+  "appUserId": null,
+  "emailVerified": null,
+  "membershipStatus": null,
+  "onboardingState": null,
+  "role": null,
+  "tenantId": null
+ },
+ "GET /api/v1/ci/summary": {
+  "lastResearchAt": null,
+  "pendingManualEntry": null,
+  "recentPriceEvents7d": null,
+  "staleCompetitors": null,
+  "trackedCompetitors": null
+ },
+ "GET /api/v1/ceo-hub/agents": [
+  {
+   "id": null,
+   "name": null,
+   "status": null
+  }
+ ],
+ "GET /api/v1/cfo/data-requests": [
+  {
+   "blockingMetric": null,
+   "createdAt": null,
+   "id": null,
+   "reason": null,
+   "requestedField": null,
+   "status": null
+  }
+ ],
+ "GET /api/v1/ci/alerts": {
+  "alerts": [
+   {
+    "availabilityChange": null,
+    "competitorLabel": null,
+    "competitorUrlId": null,
+    "createdAt": null,
+    "deltaPct": null,
+    "direction": null,
+    "findingType": null,
+    "handoff": {
+     "competitorRefs": null,
+     "createdAt": null,
+     "createdBy": null,
+     "evidenceRefs": null,
+     "findingId": null,
+     "findingType": null,
+     "implication": null,
+     "suggestedAction~": {
+      "suggestedQuestion": null,
+      "targetAgent": null
+     },
+     "validatedFact": [
+      {
+       "capturedAt": null,
+       "confidence": null,
+       "fact": null,
+       "isStale": null
+      }
+     ]
+    },
+    "message": null,
+    "priceEventId": null,
+    "thresholdBreached": null
+   }
+  ],
+  "since": null,
+  "until": null
+ },
+ "GET /api/v1/ci/digest/subscription": {
+  "channel": null,
+  "enabled": null,
+  "frequency": null,
+  "isDefault": null,
+  "lastSentAt": null
+ },
+ "POST /api/v1/cfo/cash-reconciliation": {
+  "cashExpected": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valuePaise": null
+  },
+  "cashReceived": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valuePaise": null
+  },
+  "cashVariance": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valuePaise": null
+  },
+  "datesMissingCount": null,
+  "settledWithinLagCount": null,
+  "tcsCollected": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valuePaise": null
+  },
+  "tdsDeducted": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valuePaise": null
+  },
+  "unsettledBeyondLagCount": null
+ },
+ "POST /api/v1/cfo/reconcile": {
+  "ambiguousMatchCount": null,
+  "datesMissingCount": null,
+  "exceptionCount": null,
+  "findings": [
+   {
+    "amountPaise": null,
+    "engineResultRef": null,
+    "leakCategory": null,
+    "leakFindingId": null,
+    "marketplace": null,
+    "severity": null,
+    "windowStatus": null
+   }
+  ],
+  "matchCount": null,
+  "reconciliationRunId": null
+ },
+ "POST /api/v1/cfo/preview": {
+  "affectedSkuCount": null,
+  "affectedSkuCountUnavailable": null,
+  "headlineEngineResultRef": null,
+  "headlineTotalPaise": null,
+  "lockedFindingsCount": null,
+  "revealedFinding~": {
+   "amountPaise": null,
+   "engineResultRef": null,
+   "leakCategory": null,
+   "leakFindingId": null,
+   "marketplace": null,
+   "severity": null,
+   "sku": null,
+   "windowStatus": null
+  }
+ },
+ "POST /api/v1/cfo/anomaly-check": {
+  "methods": [
+   {
+    "configurationGap~": {
+     "method": null,
+     "metric": null,
+     "reason": null,
+     "targetRef": null
+    },
+    "flag~": {
+     "asOfDate": null,
+     "computedAt": null,
+     "configVersion": null,
+     "dataConfidence": null,
+     "decoratesEngineResultRef": null,
+     "fired": null,
+     "formulaVersion": null,
+     "id": null,
+     "method": null,
+     "metric": null,
+     "minSeriesLengthRequired": null,
+     "period": null,
+     "score": null,
+     "seriesLength": null,
+     "severity": null,
+     "sourceEngineResultRefs": null,
+     "targetRef": null
+    },
+    "insufficientHistory~": {
+     "method": null,
+     "metric": null,
+     "minSeriesLengthRequired": null,
+     "reason": null,
+     "seriesLength": null,
+     "targetRef": null
+    },
+    "method": null,
+    "zeroVariance~": {
+     "method": null,
+     "metric": null,
+     "reason": null,
+     "seriesLength": null,
+     "targetRef": null
+    }
+   }
+  ],
+  "metric": null,
+  "narration?": null,
+  "seriesLength": null,
+  "targetRef": null
+ },
+ "POST /api/v1/cfo/period-comparison": {
+  "dataRequestId": null,
+  "delta~": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valuePaise": null
+  },
+  "narration": null
+ },
+ "POST /api/v1/cfo/landed-cost": {
+  "dataRequestId": null,
+  "result~": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valuePaise": null
+  }
+ },
+ "POST /api/v1/cfo/suppliers/rank": {
+  "dataRequestId": null,
+  "isSingleQuote": null,
+  "quarantined": [
+   {
+    "adjustmentId": null,
+    "reason": null,
+    "supplierName": null
+   }
+  ],
+  "ranked": [
+   {
+    "leadTimeDays": null,
+    "moq": null,
+    "paymentTerms": null,
+    "reliabilityNote": null,
+    "result": {
+     "asOfDate": null,
+     "calculationBasis": null,
+     "confidence": null,
+     "engineResultRef": null,
+     "isAvailable": null,
+     "metricCode": null,
+     "unavailableReason": null,
+     "valuePaise": null
+    },
+    "supplierName": null
+   }
+  ]
+ },
+ "POST /api/v1/cfo/batch-size": {
+  "dataRequestId": null,
+  "landedCostResult~": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valuePaise": null
+  },
+  "leadTimeDays": null,
+  "moq": null,
+  "observedUnitsSold": null,
+  "referenceQuantity": null,
+  "referenceQuantityBasis": null,
+  "referenceQuantityCaveat": null,
+  "referenceQuantityCaveatApplies": null,
+  "result~": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valuePaise": null
+  },
+  "velocityStatus": null,
+  "velocityUnavailableReason": null
+ },
+ "POST /api/v1/cfo/funding-readiness": {
+  "contributionProfitHistory": [
+   {
+    "asOfDate": null,
+    "calculationBasis": null,
+    "confidence": null,
+    "engineResultRef": null,
+    "isAvailable": null,
+    "metricCode": null,
+    "unavailableReason": null,
+    "valuePaise": null
+   }
+  ],
+  "dataRequestId": null,
+  "deferredSections": [
+   {
+    "blockedOn": null,
+    "name": null,
+    "reason": null
+   }
+  ],
+  "gaps": [
+   {
+    "kind": null,
+    "period": null,
+    "reason": null
+   }
+  ],
+  "trend": [
+   {
+    "asOfDate": null,
+    "calculationBasis": null,
+    "confidence": null,
+    "engineResultRef": null,
+    "isAvailable": null,
+    "metricCode": null,
+    "unavailableReason": null,
+    "valuePaise": null
+   }
+  ]
+ },
+ "PUT /api/v1/cfo/seller-goal": {
+  "manualAdjustmentId": null
+ },
+ "PUT /api/v1/cfo/expenses": {
+  "manualAdjustmentId": null
+ },
+ "PUT /api/v1/cfo/expenses/budget": {
+  "manualAdjustmentId": null
+ },
+ "POST /api/v1/cfo/pricing": {
+  "curve": [
+   {
+    "asOfDate": null,
+    "calculationBasis": null,
+    "confidence": null,
+    "engineResultRef": null,
+    "isAvailable": null,
+    "metricCode": null,
+    "unavailableReason": null,
+    "valuePaise": null
+   }
+  ],
+  "dataRequestId": null
+ },
+ "POST /api/v1/cfo/pnl": {
+  "contributionProfit": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valueFraction": null,
+   "valuePaise": null
+  },
+  "dataRequestId": null,
+  "feeRatioPct": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valueFraction": null,
+   "valuePaise": null
+  },
+  "marginPct": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valueFraction": null,
+   "valuePaise": null
+  },
+  "marketplaceFeeFlags": null,
+  "nrr": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valueFraction": null,
+   "valuePaise": null
+  },
+  "returnRatePct": {
+   "asOfDate": null,
+   "calculationBasis": null,
+   "confidence": null,
+   "engineResultRef": null,
+   "isAvailable": null,
+   "metricCode": null,
+   "unavailableReason": null,
+   "valueFraction": null,
+   "valuePaise": null
+  }
+ },
+ "GET /api/v1/ceo/findings": {
+  "hidden": [
+   {
+    "agent": null,
+    "count": null,
+    "message": null
+   }
+  ],
+  "hiddenTotal": null,
+  "items": [
+   {
+    "agent": null,
+    "createdAt": null,
+    "figureRefs": [
+     {
+      "id": null,
+      "kind": null,
+      "label?": null,
+      "resolvable": null
+     }
+    ],
+    "id": null,
+    "kind": null,
+    "sourceRef~": {
+     "id?": null,
+     "kind": null
+    },
+    "subject": null,
+    "text": null,
+    "trust": null,
+    "trustLabel": null
+   }
+  ]
+ },
+ "GET /api/v1/ceo/memory": {
+  "items": [
+   {
+    "agent": null,
+    "basis": null,
+    "createdAt": null,
+    "id": null,
+    "label": null,
+    "shared": null,
+    "value": null
+   }
+  ]
+ },
+ "GET /api/v1/ceo/state/health": {
+  "entries": [
+   {
+    "asOf": null,
+    "key": null,
+    "period": null,
+    "presentation~": {
+     "artefacts?": [
+      {
+       "items": null,
+       "note": null,
+       "title": null
+      }
+     ],
+     "conflicts?": [
+      {
+       "kind": null,
+       "refIds": null,
+       "text": null,
+       "what": null
+      }
+     ],
+     "facts": [
+      {
+       "basis": null,
+       "label": null,
+       "text": null
+      }
+     ],
+     "figures": [
+      {
+       "as_of": null,
+       "label": null,
+       "note": null,
+       "ref": {
+        "as_of?": null,
+        "id": null,
+        "kind": null,
+        "source?": null
+       },
+       "register": null,
+       "value": null
+      }
+     ],
+     "gaps": null,
+     "headline": null,
+     "offers": [
+      {
+       "key": null,
+       "label": null
+      }
+     ],
+     "version": null
+    },
+    "previewHint": null,
+    "status": null
+   }
+  ]
+ },
+ "GET /api/v1/ceo/investigations": [
+  {
+   "created_at": null,
+   "id": null,
+   "last_message_at": null,
+   "origin": null,
+   "status": null,
+   "title": null
+  }
+ ],
+ "GET /api/v1/ceo/investigations/{investigation_id}": {
+  "agents": {
+   "CFO?": null,
+   "CI?": null,
+   "CMO?": null,
+   "PI?": null
+  },
+  "findings": [
+   {
+    "action_key": null,
+    "agent_run_id": null,
+    "created_at": null,
+    "figure_refs": [
+     {
+      "as_of?": null,
+      "id": null,
+      "kind": null,
+      "source?": null
+     }
+    ],
+    "gap_reason": null,
+    "id": null,
+    "presentation~?": {
+     "artefacts?": [
+      {
+       "items": null,
+       "note": null,
+       "title": null
+      }
+     ],
+     "conflicts?": [
+      {
+       "kind": null,
+       "refIds": null,
+       "text": null,
+       "what": null
+      }
+     ],
+     "facts": [
+      {
+       "basis": null,
+       "label": null,
+       "text": null
+      }
+     ],
+     "figures": [
+      {
+       "as_of": null,
+       "label": null,
+       "note": null,
+       "ref": null,
+       "register": null,
+       "value": null
+      }
+     ],
+     "gaps": null,
+     "headline": null,
+     "offers": [
+      {
+       "key": null,
+       "label": null
+      }
+     ],
+     "version": null
+    },
+    "report_ref": null,
+    "source": null,
+    "status": null,
+    "turn_id?": null
+   }
+  ],
+  "investigation": {
+   "created_at": null,
+   "id": null,
+   "last_message_at": null,
+   "origin": null,
+   "resolution_note": null,
+   "resolved_at": null,
+   "status": null,
+   "summary": null,
+   "title": null
+  },
+  "messages": [
+   {
+    "choices~?": {
+     "kind": null,
+     "options": [
+      {
+       "form?": null,
+       "key": null,
+       "kind": null,
+       "label": null,
+       "reason": null,
+       "skip?": null
+      }
+     ],
+     "slot": null,
+     "version": null
+    },
+    "content": null,
+    "created_at": null,
+    "failed?": null,
+    "id": null,
+    "kind": null,
+    "pending?": null,
+    "role": null,
+    "turn_id": null
+   }
+  ],
+  "turns": [
+   {
+    "ceo_message_id": null,
+    "classifier_result~?": {
+     "approvalRequiredFor?": null
+    },
+    "composition_mode": null,
+    "created_at": null,
+    "id": null,
+    "outcome?": null,
+    "route": null,
+    "route_key": null,
+    "route_source?": null,
+    "status": null,
+    "user_message_id": null
+   }
+  ]
+ },
+ "POST /api/v1/ceo/investigations/{investigation_id}/turns": {
+  "answer": null,
+  "choices~?": {
+   "kind": null,
+   "options": [
+    {
+     "form?": null,
+     "key": null,
+     "kind": null,
+     "label": null,
+     "reason": null,
+     "skip?": null
+    }
+   ],
+   "slot": null,
+   "version": null
+  },
+  "clarificationId?": null,
+  "clarifyFor": null,
+  "compositionMode": null,
+  "events": [
+   {
+    "atMs": null,
+    "data": null,
+    "kind": null
+   }
+  ],
+  "findings": [
+   {
+    "action_key": null,
+    "agent_run_id": null,
+    "created_at": null,
+    "figure_refs": [
+     {
+      "as_of?": null,
+      "id": null,
+      "kind": null,
+      "source?": null
+     }
+    ],
+    "gap_reason": null,
+    "id": null,
+    "presentation~?": {
+     "artefacts?": [
+      {
+       "items": null,
+       "note": null,
+       "title": null
+      }
+     ],
+     "conflicts?": [
+      {
+       "kind": null,
+       "refIds": null,
+       "text": null,
+       "what": null
+      }
+     ],
+     "facts": [
+      {
+       "basis": null,
+       "label": null,
+       "text": null
+      }
+     ],
+     "figures": [
+      {
+       "as_of": null,
+       "label": null,
+       "note": null,
+       "ref": null,
+       "register": null,
+       "value": null
+      }
+     ],
+     "gaps": null,
+     "headline": null,
+     "offers": [
+      {
+       "key": null,
+       "label": null
+      }
+     ],
+     "version": null
+    },
+    "report_ref": null,
+    "source": null,
+    "status": null,
+    "turn_id?": null
+   }
+  ],
+  "messageId": null,
+  "notes": null,
+  "replayed?": null,
+  "route": null,
+  "routeKey": null,
+  "routeSource?": null,
+  "status": null,
+  "timings": null,
+  "turnId": null
+ }
+}

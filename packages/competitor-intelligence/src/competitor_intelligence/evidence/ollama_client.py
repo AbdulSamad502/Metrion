@@ -19,6 +19,8 @@ from typing import Protocol
 
 import httpx
 
+from competitor_intelligence.evidence.ollama_errors import describe_ollama_error
+
 
 class OllamaUnavailable(Exception):
     """The model server could not be reached, timed out, or returned a non-2xx response —
@@ -55,7 +57,7 @@ class HttpOllamaClient:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise OllamaUnavailable(f"Ollama request failed: {exc}") from exc
+            raise OllamaUnavailable(f"Ollama request failed: {describe_ollama_error(exc, model)}") from None
 
         body = response.json()
         text = body.get("response")

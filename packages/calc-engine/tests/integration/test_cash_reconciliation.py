@@ -191,7 +191,9 @@ def _insert_tolerance(
     settlement_lag_days: int = 90,
     grace_period_days: int = 30,
 ) -> None:
-    with engine_tenant_scope(tenant_id) as conn:
+    from tests.integration.owner_db import owner_tenant_scope  # configuration is written by an operator (owner role), not the app role
+
+    with owner_tenant_scope(tenant_id) as conn:
         conn.execute(
             text(
                 """

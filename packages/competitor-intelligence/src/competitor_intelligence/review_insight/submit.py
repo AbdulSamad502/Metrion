@@ -36,6 +36,7 @@ class ReviewResearchResult:
     insight_state: str | None
 
 
+@ci_capture_run_repo.settles_open_runs
 def submit_review_research(
     tenant_id: UUID,
     *,

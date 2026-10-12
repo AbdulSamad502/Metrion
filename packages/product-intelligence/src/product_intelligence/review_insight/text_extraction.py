@@ -22,6 +22,7 @@ import json
 import re
 from dataclasses import dataclass
 from typing import Protocol, Sequence
+from product_intelligence.ollama_errors import describe_ollama_error
 
 SENTIMENTS = ("POSITIVE", "NEGATIVE", "NEUTRAL")
 SOURCE_TYPES = ("YOUTUBE_COMMENTARY", "WEB_EDITORIAL")
@@ -174,7 +175,7 @@ class OllamaTextInsightExtractor:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            return TextExtractionFailed(insight_source_type=insight_source_type, reason=f"Ollama request failed: {exc}")
+            return TextExtractionFailed(insight_source_type=insight_source_type, reason=f"Ollama request failed: {describe_ollama_error(exc, self.model)}")
 
         body = response.json()
         raw_text = body.get("response")

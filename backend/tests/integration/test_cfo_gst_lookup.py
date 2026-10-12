@@ -312,7 +312,7 @@ def test_gst_lookup_route_succeeds_when_both_permissions_present_cache_hit(
     end-to-end without touching any real fetcher/LLM (the route always composes the real
     `HttpxGstFetcher`/`OllamaLlmProvider` defaults, but a cache hit never reaches them)."""
     tenant_a, _ = two_tenants
-    seeded = _seed_cached_result(tenant_a, query_text="Mobile phone", retrieved_at=_NOW)
+    seeded = _seed_cached_result(tenant_a, query_text="Mobile phone", retrieved_at=datetime.now(timezone.utc))  # the route reads the real clock; a fixed date ages out of the cache TTL
     headers = _register_partner_with_permissions(
         fake_clerk, tenant_a, permissions={"agent.cfo": True, "service.gst_lookup": True}
     )
