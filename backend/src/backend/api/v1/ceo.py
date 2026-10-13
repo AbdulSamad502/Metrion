@@ -34,12 +34,13 @@ import hashlib
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CEO, AGENT_CFO, AGENT_CI, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
 from backend.ceo.approval_gate import plan_required
-from backend.ceo import business_state, findings as ceo_findings, memory as agent_memory, orchestrator, summary
+from backend.ceo import cmo_delegation
+from backend.ceo import approval, approval_run, business_state, findings as ceo_findings, memory as agent_memory, orchestrator, summary
 from backend.ceo.capabilities import NOT_ENTITLED, compute_capabilities
 from backend.ceo.contract import AgentCode
 from backend.ceo.periods import PeriodUnresolvable, resolve_period
@@ -53,7 +54,7 @@ from backend.ceo.registry import get_registry
 from backend.ceo.runtime import CeoRuntime
 from backend import config
 from backend.config import MissingConfig
-from backend.repositories import agent_run_repo, investigation_repo as repo
+from backend.repositories import agent_run_repo, investigation_plan_repo, investigation_repo as repo
 from backend.services import ceo_attachment_analysis, ceo_attachments, ceo_reads, ceo_runtime
 
 router = APIRouter(prefix="/api/v1/ceo")
@@ -207,6 +208,7 @@ def get_investigation(investigation_id: UUID, ctx: AuthContext = require_auth(pe
         "investigation": inv, "agents": repo.agent_states(tenant, investigation_id), "messages": repo.list_messages(tenant, investigation_id),
         "turns": [{**t, "outcome": ((t.get("safety_result") or {}).get("billing") or {}).get("outcome")} for t in repo.list_turns(tenant, investigation_id)],
         "findings": repo.list_findings(tenant, investigation_id),
+        "plans": [_plan_json(ctx, r, with_events=False) for r in investigation_plan_repo.list_for_investigation(tenant, investigation_id)],
     })
 
 
@@ -279,14 +281,102 @@ def post_turn(
         raise HTTPException(status_code=409, detail={"code": "CLIENT_REQUEST_ID_REUSED"}) from None
     if result.turn_id is not None and result.status != "DENIED" and not result.replayed:  # spec D2: due-ness is checked after the answer is sent, so the seller never waits for it
         background.add_task(summary.regenerate_if_due_locked, _tenant(ctx), investigation_id, runtime)
-    return _jd({
+    return _turn_payload(ctx, runtime, result, "UI_ACTION" if (body.action is not None or body.clarification is not None) else "CLASSIFIER")
+
+
+def _turn_payload(ctx: AuthContext, runtime: CeoRuntime, result: orchestrator.TurnResult, route_source: str) -> dict[str, Any]:
+    """The one response shape of a turn (a chat turn and the execution turn of an approved plan). A PLANNED turn also carries its stored plan."""
+    payload = {
         "turnId": result.turn_id, "status": result.status, "route": result.route, "routeKey": result.route_key,
-        "routeSource": "UI_ACTION" if (body.action is not None or body.clarification is not None) else "CLASSIFIER", "answer": result.answer,
+        "routeSource": route_source, "answer": result.answer,
         "choices": result.choices, "clarificationId": str(result.message_id) if result.choices and result.message_id else None,
         "messageId": result.message_id, "compositionMode": result.composition_mode, "clarifyFor": result.clarify_for, "notes": result.notes,
         "findings": result.findings, "timings": result.timings, "outcome": result.outcome, "replayed": result.replayed,
         "events": [{"kind": e.kind, "atMs": e.at_ms, "data": e.data} for e in result.events],
-    })
+    }
+    if result.plan_id is not None and result.turn_id is not None:
+        inv = (repo.get_turn(_tenant(ctx), result.turn_id) or {}).get("investigation_id")
+        row = investigation_plan_repo.get(_tenant(ctx), inv, result.plan_id) if inv is not None else None
+        payload["planId"] = result.plan_id
+        payload["plan"] = _plan_json(ctx, row, with_events=False) if row is not None else None
+    return _jd(payload)
+
+
+# ------------------------------------------------------------------------------------------------ approval plans (ceo-approval-workflow.md 6.5)
+class ApproveBody(BaseModel):
+    """Approval is bound to the plan id (the path) AND the hash the seller was shown. The server recomputes the hash; this value is only compared, never used as content."""
+
+    plan_hash: str = Field(validation_alias=AliasChoices("plan_hash", "planHash"), min_length=1, max_length=200)
+
+
+class DeclineBody(BaseModel):
+    reason: str | None = Field(default=None, max_length=200)
+
+
+def _plan_json(ctx: AuthContext, row: dict[str, Any], *, with_events: bool) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "id": row["id"], "investigationId": row["investigation_id"], "status": row["status"], "planHash": row["plan_hash"], "plan": row["plan"],
+        "createdAt": row["created_at"], "expiresAt": row["expires_at"], "plannedTurnId": row["planned_turn_id"], "executionTurnId": row["execution_turn_id"],
+        "requestedBy": row["requested_by"], "viewerIsRequester": row["requested_by"] == ctx.app_user_id,  # the card shows Approve / Decline only to the requester (AC-A17)
+        "decidedAt": row["decided_at"], "decisionReason": row["decision_reason"],
+    }
+    if with_events:
+        out["events"] = [
+            {"event": e["event"], "fromStatus": e["from_status"], "toStatus": e["to_status"], "actorKind": e["actor_kind"], "occurredAt": e["occurred_at"],
+             "reasonCode": e["reason_code"], "metadata": e["metadata"]}
+            for e in investigation_plan_repo.events(_tenant(ctx), row["id"])
+        ]
+    return _jd(out)
+
+
+def _refused(exc: approval.ApprovalRefused) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": exc.message, **exc.extra})
+
+
+@router.get("/investigations/{investigation_id}/plans")
+def list_plans(investigation_id: UUID, ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW), runtime: CeoRuntime = Depends(get_runtime)) -> dict[str, Any]:
+    _also(ctx, AGENT_CEO)
+    _require_visible(ctx, investigation_id)
+    return {"items": [_plan_json(ctx, r, with_events=True) for r in approval.read_plans(_tenant(ctx), investigation_id, now=runtime.clock())]}
+
+
+@router.get("/investigations/{investigation_id}/plans/{plan_id}")
+def get_plan(investigation_id: UUID, plan_id: UUID, ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW), runtime: CeoRuntime = Depends(get_runtime)) -> dict[str, Any]:
+    _also(ctx, AGENT_CEO)
+    _require_visible(ctx, investigation_id)
+    row = approval.read_plan(_tenant(ctx), investigation_id, plan_id, now=runtime.clock())
+    if row is None:  # a foreign tenant's plan, another investigation's plan and an unknown id are all the same 404
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
+    return _plan_json(ctx, row, with_events=True)
+
+
+@router.post("/investigations/{investigation_id}/plans/{plan_id}/approve")
+def approve_plan(
+    investigation_id: UUID, plan_id: UUID, body: ApproveBody, ctx: AuthContext = require_auth(permission=AGENT_CEO), runtime: CeoRuntime = Depends(get_runtime),
+) -> dict[str, Any]:
+    """The ONLY way a plan is approved: an explicit call bound to the plan id and the plan hash, by the person who asked. Typed chat text never reaches this."""
+    bus = event_bus.get_bus()
+    try:
+        outcome = approval_run.approve_plan(ctx, runtime, investigation_id, plan_id, body.plan_hash, sink=bus.sink_for(_tenant(ctx), investigation_id))
+    except approval.ApprovalRefused as exc:
+        raise _refused(exc) from None
+    if outcome.result is None:  # the idempotent replay: the same execution turn, reported as it stands (RUNNING until it finishes); nothing new was started
+        return _jd({"replayed": True, "turnId": outcome.turn_id, "status": outcome.turn_status, "plan": _plan_json(ctx, outcome.plan, with_events=False)})
+    bus.done(_tenant(ctx), investigation_id, status=outcome.result.status)
+    return {**_turn_payload(ctx, runtime, outcome.result, "APPROVAL"), "plan": _plan_json(ctx, outcome.plan, with_events=False)}
+
+
+@router.post("/investigations/{investigation_id}/plans/{plan_id}/decline")
+def decline_plan(
+    investigation_id: UUID, plan_id: UUID, body: DeclineBody, ctx: AuthContext = require_auth(permission=AGENT_CEO), runtime: CeoRuntime = Depends(get_runtime),
+) -> dict[str, Any]:
+    """AWAITING_APPROVAL -> DECLINED by the requester. No model call, no CEO unit, nothing run."""
+    _also(ctx, INVESTIGATION_VIEW)
+    try:
+        row = approval.decline_plan(ctx, runtime, investigation_id, plan_id, body.reason, now=runtime.clock())
+    except approval.ApprovalRefused as exc:
+        raise _refused(exc) from None
+    return _plan_json(ctx, row, with_events=False)
 
 
 @router.post("/investigations/{investigation_id}/attachments", status_code=201)
@@ -531,13 +621,13 @@ def get_turn_flow(investigation_id: UUID, turn_id: UUID, ctx: AuthContext = requ
 @router.get("/agents/availability")
 def agent_availability(ctx: AuthContext = require_auth(permission=INVESTIGATION_VIEW), runtime: CeoRuntime = Depends(get_runtime)) -> dict[str, Any]:
     """What this member can use right now, independent of any investigation: `status` is PRESENT, NOT_PERMITTED or NOT_ENTITLED (the
-    UI shows the last two as locked, never as attached); `chatActions` is how many of the agent's actions the CEO can run from chat today: an approval-required action (decision D-8) is refused from chat until a stored approval plan exists, so it is NOT counted."""
+    UI shows the last two as locked, never as attached); `chatActions` is how many of the agent's actions the CEO can run from chat today: an approval-required action (decision D-8) is refused from chat until a stored approval plan exists, so it is NOT counted, except the CMO actions, which the CEO takes to a plan card."""
     _also(ctx, AGENT_CEO)
     caps = compute_capabilities(ctx, runtime.registry, frozenset(a.value for a in AgentCode), now=runtime.clock())
     reg = get_registry()
     # The GST lookup is one action to the model; it is counted under the agent of its first route (CFO's Route A). Route B (no agent) stays available to a
     # member without CFO, but it is not an action of any specialist.
-    chat_actions = {a.value: sum(1 for k in ACTIONS if not plan_required([k]) and reg.get(VIRTUAL_ROUTES.get(k, (k,))[0]).agent is a) for a in AgentCode}
+    chat_actions = {a.value: sum(1 for k in ACTIONS if (not plan_required([k]) or k in cmo_delegation.DELEGATED_ACTIONS) and reg.get(VIRTUAL_ROUTES.get(k, (k,))[0]).agent is a) for a in AgentCode}
     return {code: {"status": status, "chatActions": chat_actions.get(code, 0)} for code, status in caps.agent_status.items()}
 
 

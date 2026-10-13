@@ -83,7 +83,7 @@ Classification: **[B]** Blocking · **[P]** Important but can be provisional · 
 | OP9 | **Shared-service principle** | **Bounded services are shared; agent reasoning is CEO-brokered.** Brain 1 and GST Applicability Lookup are callable by any agent. Anything requiring another agent's *reasoning* routes through CEO. Shared services carry their own entitlement caps. |
 | OP10 | **LLM computation access** | **Fixed tool catalog** with typed, pre-built, tested tools. No LLM-generated SQL or Python execution in V1. Matches planning doc p.11. |
 | OP11 | **Vision pipeline** | External vision model extracts a **defined structured schema** from the seller's product image; the local text model consumes only that structure. Vision sits behind a `VisionProvider` abstraction slot, swappable like the LLM provider. **Amended 2026-10-03:** vision may emit only `IMAGE_OBSERVED`/`UNKNOWN` attributes and never a price, weight or dimension. **Trust gate (decided):** image-derived facts are `UNVERIFIED_HINT` — never used as claims — until a provider passes a recorded evaluation (CI Q18 measured the local llava 7B reporting absent fields and dropping digits). Pass-bar values are a human decision (`slim-cmo-agent.md` §6.2.1, Q4). |
-| OP12 | **Seller document RAG** | In V1, on pgvector. No Qdrant. |
+| OP12 | **Seller document RAG** | In V1, on pgvector. No Qdrant. **Specified 2026-10-12 in `docs/specs/rag-knowledge.md`** (PDF/DOCX/TXT, no OCR; CEO + narrow CMO first; read-only retrieval over approved findings/memory; CI derived-only; `nomic-embed-text` provisional behind a benchmark gate). Not built. |
 | OP13 | **GST rate source — layered, in precedence order** | **(1) Observed** from the seller's own uploaded reports (`CGST %`, `SGST %`, `IGST %` are present per line) — authoritative for anything they have sold. **(2) Curated HSN→rate knowledge base** maintained by Metrion in the policy KB — for products not yet sold. **(3) GST Applicability Lookup** (web, provisional) — fallback for unknown or new products. Sellers are never asked to upload rate schedules. |
 | OP14 | **GST Portal is not a Metrion data source** | Metrion never logs in to the GST Portal and never asks for GST credentials. If a tax figure is needed and is missing from uploaded reports, the agent **asks the seller for it** (OP1). Consistent with T3 (no GSTIN or credentials at signup) and T4 (file-first). The GSTR2A TCS cross-check described in the mapping PDF is explicitly **not adopted**. |
 
@@ -127,7 +127,7 @@ Classification: **[B]** Blocking · **[P]** Important but can be provisional · 
 | 2.10 | Web search provider (Tavily / Brave / Serper) | **[P]** — *note 2026-10-03:* Tavily + YouTube are de facto wired in PI and become the Market Signal Retrieval service's sources (OP17). Formal closure of this item is the seller's/your call, not asserted here |
 | 2.11 | Google Trends source — pytrends vs paid; now load-bearing for Market Outlook | **[P]** — *note 2026-10-03:* dropped from PI (PI C14), **not adopted in CMO V1**; CMO trend reports carry `demand_evidence = UNOBSERVED`. The "Market Outlook" named in §1 is the forecasting-gate fallback and is **not** a PI feature; it is unbuilt and untouched by OP17 |
 | 2.12 | Alert channel for sellers who decline WhatsApp opt-in | **[P]** |
-| 2.13 | Embedding model permanence — swapping it is a re-index migration, not config | **[P]** |
+| 2.13 | Embedding model permanence — swapping it is a re-index migration, not config | **[P]** — *note 2026-10-12:* `nomic-embed-text` kept provisionally; finalised only after the `rag-knowledge.md` P-1 benchmark gate. |
 | 2.14 | ~~Competitor snapshot staleness~~ | **RESOLVED** — OP3: 7-day ceiling with age stamp |
 | 2.15 | ~~Scrape-failure UX~~ | **RESOLVED** — OP3 |
 | 2.16 | WhatsApp completion behaviour — send summary back, or silently update dashboard | **[P]** |
@@ -330,3 +330,27 @@ Planning doc p.17 ranks CFO as the heaviest token consumer. CFO is now also the 
 ### Phase 2 order
 
 Per §7. Specs 2 (tenant/identity) and 3 (entitlement/metering) have no open dependencies and may begin immediately.
+
+---
+
+## Decisions of record — 2026-10-12: CEO-first delegation (CMO first)
+
+Owner-confirmed; specified in `docs/specs/ceo-cmo-delegation.md` (draft, **not implemented**). Amends `ceo-approval-workflow.md`, `slim-cmo-agent.md`, `ceo-agent-orchestration.md` §6.44.
+
+- **CEO-first.** The seller interacts only with the CEO for AI tasks; the CEO delegates to the CMO, collects missing inputs, handles approval and presents results (CMO → CEO → seller → CEO → CMO). Only validated inputs reach the CMO; confirmed facts are preserved; attributes are never guessed from an unverified image (labelled "from your attachment", observation and inference separated). PI, CI and CFO dashboards get the same treatment **later** (future direction only). Account, settings and data-management workflows (e.g. Finance report upload) stay.
+- **Approval first.** The existing approval workflow is built before CMO generation is enabled from chat (generation consumes plan quota; approval and quota are never bypassed), but approval is made natural in chat: the exact plan is a chat card with Approve/Decline for the requester. Migration numbering in that spec was stale (`20261011_0018` is taken); **re-issued, see "Final decisions" below.**
+- **Attachments by reference.** One shared tenant-scoped store (`investigation_attachment`); the CEO hands an `attachment_id`, the agent loads bytes through its own tenant-scoped read, no bytes through a model; per-agent accepted types; the plan shows the hand-off and the receiving endpoint; only `LLM_OPERATOR_CONTROLLED_HOSTS` endpoints may receive an image.
+- **CMO dashboard is a read-only showcase** (market trends & news with stored source and date; frequently used SEO titles per marketplace; grounded copy pack; hashtags & compliance summary); all generation/regeneration/input controls removed; scope is the whole tenant; "Frequently used" only from recorded activity, otherwise "Frequently used unavailable". Verified 2026-10-12: no usage tracking exists today.
+### Final decisions — 2026-10-12 (owner-approved; supersede the "Open" list previously here)
+
+Recorded in `docs/specs/ceo-cmo-delegation.md` §1 as CD9-CD15; consequences in `ceo-approval-workflow.md` (Amendment 2026-10-12). Specification only, nothing implemented.
+
+- **Migration order (CD9).** `20261012_0015_rag_foundation` (down `20261012_0018`) is the current single head. The approval migration is `20261012_0019_ceo_approval_workflow`, `down_revision = "20261012_0015"`. Unrelated unfinished migration work is not merged; the implementer re-verifies one head when writing it.
+- **Image analysis = option A (CD10).** Small in-chat approval card for the analysis (0 CMO units, names the endpoint), then a separate generation approval card. Quota never charged twice for the same operation; never consumed by a failed action.
+- **No typed approval (CD11).** Only a click on the correct card (API call bound to plan id + `plan_hash`) approves quota-consuming work. Approval C3 stands.
+- **Niche confirmation moves into the CEO conversation (CD12)**, reversing `ceo-agent-orchestration.md` §6.40; the CMO dashboard has no input forms.
+- **Delegation limits (CD13).** Config: `CMO_DELEGATION_MAX_QUESTIONS`=8, `CMO_DELEGATION_MAX_REASKS`=2, `CMO_DELEGATION_IDLE_EXPIRY_SECONDS`=86400. Collected inputs survive expiry; a fresh confirmation is required before execution; at a limit the CEO explains the blocker and the seller may restart.
+- **Usage tracking (CD14).** New tenant-scoped, `FORCE` RLS, append-only table `cmo_result_usage_event` (events GENERATED, VIEWED, COPIED, MARKED_USED, distinct). Generation/approval is not "used on a marketplace". "Frequently used" is fed only by COPIED + MARKED_USED (specified by the spec at the owner's request); otherwise "Frequently used unavailable".
+- **Direct CMO routes (CD15).** Kept as internal authorized capabilities used by the CEO; removed from the seller-facing dashboard; deprecated safely behind `CMO_DIRECT_ROUTES_ENABLED` per the dependents audit in `ceo-cmo-delegation.md` §6.11; none deleted now.
+- **Dashboard.** Follows the reference closely in the black/green/white theme; real saved data only; search, filters, copy, detail view; no generation forms.
+- **Still open (owner/architect), by checkpoint** (`ceo-cmo-delegation.md` §13): approval backend — OQ-9 (VP-1/VP-2/R5 restatement, blocks enabling approval); delegation — OQ-3, OQ-17; attachment hand-off — OQ-18, OQ-2 (OQ-8 retention/EXIF blocks production use); read API — OQ-6, OQ-16, OQ-15, OQ-12, OQ-19 (frequent view only); frontend — OQ-11.

@@ -255,7 +255,7 @@ def test_out_of_scope_is_explained_plainly(two_tenants, app_user):
     assert res.status == "DELIVERED" and res.route == "OUT_OF_SCOPE" and "can't change anything on a marketplace" in res.answer and children(a, res) == []
 
 
-def test_a_classifier_failure_degrades_to_a_clarification(two_tenants, app_user):
+def test_a_classifier_failure_is_reported_as_an_outage_not_as_an_unclear_request(two_tenants, app_user):
     a, _ = two_tenants
 
     def boom(prompt, schema):
@@ -264,7 +264,7 @@ def test_a_classifier_failure_degrades_to_a_clarification(two_tenants, app_user)
     rt = CeoRuntime(classifier=ScriptedModel(boom), composer=Grounded().model(), leg_timeout_seconds=30, max_legs=5, clock=ticking_clock())
     ctx = ctx_for(a, user_id=app_user)
     res = orchestrator.run_turn(ctx, rt, start(ctx, rt), "anything")
-    assert res.status == "CLARIFIED" and "secret-internal-detail" not in res.answer and children(a, res) == []
+    assert res.status == "FAILED" and "secret-internal-detail" not in res.answer and "not sure what you" not in res.answer and "could not reach" in res.answer and children(a, res) == []
 
 
 # ------------------------------------------------------------------------------------------------ absent / detached / permission / entitlement
@@ -604,7 +604,7 @@ def test_only_an_active_investigation_accepts_turns_and_resolution_needs_a_note(
     with pytest.raises(orchestrator.InvestigationNotActive):
         orchestrator.run_turn(ctx, rt, inv, "hi")
     repo.reopen_investigation(a, inv)
-    assert orchestrator.run_turn(ctx, rt, inv, "hi").status == "CLARIFIED"
+    assert orchestrator.run_turn(ctx, rt, inv, "hi").status == "DELIVERED"  # a greeting is answered by code
     repo.archive_investigation(a, inv)
     with pytest.raises(orchestrator.InvestigationNotActive):
         orchestrator.run_turn(ctx, rt, inv, "hi")

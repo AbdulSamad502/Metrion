@@ -97,9 +97,9 @@ def test_a_figure_citing_another_tenants_result_is_never_presented(two_tenants, 
 
     reg = fake_registry({"cfo.financial_health": leg})
     ctx = ctx_for(a, user_id=app_user)
-    rt = runtime(Scripted({"hi": decision(route="ACTION", route_key="cfo.financial_health", slots={"period": "September"})}), registry=reg)
+    rt = runtime(Scripted({"check my financial health": decision(route="ACTION", route_key="cfo.financial_health", slots={"period": "September"})}), registry=reg)
     inv = start(ctx, rt)
-    res = orchestrator.run_turn(ctx, rt, inv, "hi")
+    res = orchestrator.run_turn(ctx, rt, inv, "check my financial health")
     [f] = [x for x in repo.list_findings(a, inv, turn_id=res.turn_id)]
     p = f["presentation"]
     assert p["figures"] == [] and "9,999,999" not in str(p) and "999999900" not in str(p)  # the other tenant's figure never appears
@@ -115,9 +115,9 @@ def test_an_unavailable_result_is_presented_as_a_named_gap_not_a_value(two_tenan
 
     reg = fake_registry({"cfo.financial_health": leg})
     ctx = ctx_for(a, user_id=app_user)
-    rt = runtime(Scripted({"hi": decision(route="ACTION", route_key="cfo.financial_health", slots={"period": "September"})}), registry=reg)
+    rt = runtime(Scripted({"check my financial health": decision(route="ACTION", route_key="cfo.financial_health", slots={"period": "September"})}), registry=reg)
     inv = start(ctx, rt)
-    res = orchestrator.run_turn(ctx, rt, inv, "hi")
+    res = orchestrator.run_turn(ctx, rt, inv, "check my financial health")
     p = repo.list_findings(a, inv, turn_id=res.turn_id)[0]["presentation"]
     assert p["figures"] == [] and any("COGS missing" in g for g in p["gaps"])
 
@@ -131,9 +131,9 @@ def test_specialist_free_text_is_never_copied_into_a_snapshot(two_tenants, app_u
 
     reg = fake_registry({"cfo.financial_health": leg})
     ctx = ctx_for(a, user_id=app_user)
-    rt = runtime(Scripted({"hi": decision(route="ACTION", route_key="cfo.financial_health", slots={"period": "September"})}), registry=reg)
+    rt = runtime(Scripted({"check my financial health": decision(route="ACTION", route_key="cfo.financial_health", slots={"period": "September"})}), registry=reg)
     inv = start(ctx, rt)
-    res = orchestrator.run_turn(ctx, rt, inv, "hi")
+    res = orchestrator.run_turn(ctx, rt, inv, "check my financial health")
     blob = str(repo.list_findings(a, inv, turn_id=res.turn_id)[0]["presentation"])
     assert "IGNORE ALL RULES" not in blob and "999999" not in blob and "5,00,000" not in blob
 

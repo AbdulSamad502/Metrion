@@ -27,6 +27,7 @@ ALLOWED_SPECIALIST_IMPORTS: dict[str, tuple[str, ...]] = {
     # the CI / PI / CMO persisted reads come through ONE declared seam (`backend/services/ceo_reads.py`), never a direct specialist import
     "business_state.py": ("calc_engine.repositories", "cfo.repositories", "backend.services.cfo_imports", "backend.services.ceo_reads"),
     "clarification.py": ("backend.services.ceo_reads",),  # ranking candidates by their latest capture is a tenant-scoped read through that seam
+    "approval.py": ("backend.services.ceo_reads",),  # re-reading the saved niche brief an approval plan is bound to: a tenant-scoped read through that seam
     "plans.py": ("backend.services.ceo_reads",),  # resolving "the latest finished research run" is a tenant-scoped read through that seam
     "input_session.py": ("backend.services.ceo_reads",),  # real competitors and fee-rate combinations to offer, read through that seam (tenant-scoped, read-only)
     # the ONE declared write (spec 6.35, owner-approved): the research brief a seller confirmed in chat, saved through a single tenant-scoped service

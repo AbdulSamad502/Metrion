@@ -71,7 +71,11 @@ def converse(ctx, rt, inv):
     assert res.clarify_for == "marketplace" and res.choices["addons"] == ["GST_RATE_FOR_PRODUCT"]  # the add-on rides on the questions
     res = orchestrator.run_turn(ctx, rt, inv, "Amazon")
     assert res.clarify_for == "seller_title" and res.choices["addons"] == ["GST_RATE_FOR_PRODUCT"]
-    return orchestrator.run_turn(ctx, rt, inv, TITLE)
+    res = orchestrator.run_turn(ctx, rt, inv, TITLE)
+    while res.status == "CLARIFIED" and str(res.clarify_for).startswith("fact_"):  # the skippable extra details (brand, size, features); the add-on still rides along
+        assert res.choices["addons"] == ["GST_RATE_FOR_PRODUCT"]
+        res = orchestrator.run_turn(ctx, rt, inv, "skip")
+    return res
 
 
 def needs_of(tenant, inv):

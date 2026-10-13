@@ -1,0 +1,26 @@
+{
+  "_READ_ME": "TEMPLATE, NOT DATA. Every value is empty on purpose: Metrion does not ship marketplace rules it has not sourced. The owner must fill each rule from the CURRENT seller-central / seller-hub documentation of that marketplace, write the exact page in source_url and the date it was checked in verified_at, then run: python seed_format_constraints.py <this file copied and filled> [--apply]. null = the page does not state it (it is then not enforced and not guessed). count_rule = how that marketplace counts characters: UTF16_CODE_UNITS (an emoji counts 2, the conservative reading) or CODE_POINTS. backend_terms_max_bytes is Amazon only.",
+  "rules": [
+    {
+      "marketplace": "AMAZON", "category": null,
+      "source_url": "", "verified_at": "", "count_rule": "",
+      "title_max_chars": null, "title_option_count": null, "bullet_count": null, "bullet_max_chars": null,
+      "description_type": null, "description_max_chars": null, "keywords_max_count": null, "keywords_max_chars": null,
+      "backend_terms_max_bytes": null, "hashtags_supported": null
+    },
+    {
+      "marketplace": "FLIPKART", "category": null,
+      "source_url": "", "verified_at": "", "count_rule": "",
+      "title_max_chars": null, "title_option_count": null, "bullet_count": null, "bullet_max_chars": null,
+      "description_type": null, "description_max_chars": null, "keywords_max_count": null, "keywords_max_chars": null,
+      "backend_terms_max_bytes": null, "hashtags_supported": null
+    },
+    {
+      "marketplace": "MEESHO", "category": null,
+      "source_url": "", "verified_at": "", "count_rule": "",
+      "title_max_chars": null, "title_option_count": null, "bullet_count": null, "bullet_max_chars": null,
+      "description_type": null, "description_max_chars": null, "keywords_max_count": null, "keywords_max_chars": null,
+      "backend_terms_max_bytes": null, "hashtags_supported": null
+    }
+  ]
+}

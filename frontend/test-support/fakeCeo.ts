@@ -78,6 +78,7 @@ export class FakeCeo {
       messages: over.messages ?? [],
       turns: over.turns ?? [],
       findings: over.findings ?? [],
+      ...(over.plans ? { plans: over.plans } : {}),
     });
     return id;
   }
@@ -159,6 +160,25 @@ export class FakeCeo {
           return structuredClone(detail) as InvestigationDetail;
         }),
       getFindings: (id: string) => rec("getFindings", [id], () => structuredClone(this.visible(id).findings)),
+      // The plan endpoints: approving needs the plan id AND the exact hash (a mismatch is refused, as the real server does), and a decided plan is final.
+      approvePlan: (id: string, planId: string, planHash: string) =>
+        rec("approvePlan", [id, planId, planHash], () => {
+          const s = this.visible(id);
+          const p = (s.plans ?? []).find((x) => x.id === planId);
+          if (!p) throw new ApiError(404, { code: "NOT_FOUND" });
+          if (p.planHash !== planHash) throw new ApiError(409, { code: "PLAN_CHANGED", message: "This plan changed, or the approval does not match it. Nothing was run." });
+          if (p.status !== "AWAITING_APPROVAL") throw new ApiError(409, { code: "PLAN_NOT_AWAITING", message: "This plan is no longer waiting for approval. Nothing was run." });
+          p.status = "APPROVED";
+          s.messages.push({ id: uid("m"), role: "CEO", kind: "ANSWER", content: "Here is what Slim CMO wrote for the plan you approved.", turn_id: null, created_at: ts() });
+          return { status: "DELIVERED" };
+        }),
+      declinePlan: (id: string, planId: string) =>
+        rec("declinePlan", [id, planId], () => {
+          const p = (this.visible(id).plans ?? []).find((x) => x.id === planId);
+          if (!p) throw new ApiError(404, { code: "NOT_FOUND" });
+          p.status = "DECLINED";
+          return { status: "DECLINED" };
+        }),
       postTurn: (id: string, message: string, period?: ExplicitPeriod | null, action?: UiAction | null, clarification?: ClarificationReply | null, attachmentIds?: string[], clientRequestId?: string | null) => {
         this.requestIds.push(clientRequestId ?? null);
         this.calls.push({ method: "postTurn", args: attachmentIds && attachmentIds.length ? [id, message, period ?? null, action ?? null, clarification ?? null, attachmentIds] : clarification ? [id, message, period ?? null, action ?? null, clarification] : [id, message, period ?? null, action ?? null] });

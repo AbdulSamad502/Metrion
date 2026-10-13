@@ -373,6 +373,22 @@ async def post_image(file: UploadFile, ctx: AuthContext = require_auth(permissio
     return await run_in_threadpool(_guarded, lambda: cmo_images.upload_image(p, rt, data, declared))
 
 
+class AnalyzeAttachmentBody(_Body):
+    """The CEO -> CMO hand-off of a photo BY REFERENCE (ceo-cmo-delegation.md CD5): an attachment id of the CEO conversation and, optionally, the content hash the CEO saw. Nothing
+    else - no bytes, no text. There is deliberately NO HTTP route for it: the CEO reaches it in-process (`cmo.analyze_attachment`), and the seller never calls it directly."""
+
+    attachment_id: UUID
+    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+def analyze_attachment_for_ceo(body: AnalyzeAttachmentBody, ctx: AuthContext, investigation_id: UUID) -> dict[str, Any]:
+    """`cmo.analyze_attachment` - loads the referenced photo through the CMO's OWN tenant-scoped read and runs the existing normalise -> store -> analyse path. 0 units."""
+    from backend.services import cmo_attachment
+
+    p = _principal(ctx)
+    return _guarded(lambda: cmo_attachment.analyze_attachment(p, investigation_id, body.attachment_id, body.sha256))
+
+
 @router.post("/image-analyses")
 def post_image_analysis(body: AnalyzeBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
     """`cmo.analyze_image` - run the local vision model over a stored image and persist a validated, IMMUTABLE analysis. 0 units;

@@ -1,0 +1,345 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 920" width="100%" height="100%">
+  <defs>
+    <!-- Studio Dark Radial Canvas Background -->
+    <radialGradient id="ciBg" cx="24%" cy="8%" r="68%">
+      <stop offset="0%" stop-color="#081A0F" />
+      <stop offset="42%" stop-color="#070907" />
+      <stop offset="100%" stop-color="#040504" />
+    </radialGradient>
+
+    <!-- Obsidian Primary Card Linear Gradient -->
+    <linearGradient id="cardGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#121813" stop-opacity="0.94" />
+      <stop offset="100%" stop-color="#080C08" stop-opacity="0.98" />
+    </linearGradient>
+
+    <!-- Elevated Focus Surface Gradient -->
+    <linearGradient id="focusPanelGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#17241A" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#0C120D" stop-opacity="0.92" />
+    </linearGradient>
+
+    <!-- Metrion Brand Emerald Gradient -->
+    <linearGradient id="brandEmerald" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#52E082" />
+      <stop offset="100%" stop-color="#28C765" />
+    </linearGradient>
+
+    <!-- Clean Elevation Drop Shadow -->
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.6" />
+    </filter>
+
+    <!-- Subdued Laser Glow -->
+    <filter id="emeraldGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <style>
+    .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; }
+    .label-caps { font-size: 8.5px; font-weight: 700; fill: #6B796D; letter-spacing: 0.09em; text-transform: uppercase; }
+    .card-title { font-size: 15px; font-weight: 700; fill: #FFFFFF; letter-spacing: -0.01em; }
+    .num-hero { font-family: "Inter", -apple-system, sans-serif; font-weight: 700; fill: #FFFFFF; letter-spacing: -0.02em; }
+    .text-muted { fill: #879488; font-size: 11px; }
+    .border-standard { stroke: rgba(255, 255, 255, 0.08); stroke-width: 1; rx: 12; }
+    .border-active { stroke: rgba(40, 199, 101, 0.40); stroke-width: 1.2; rx: 12; }
+  </style>
+
+  <!-- Base Canvas Background -->
+  <rect width="1440" height="920" fill="url(#ciBg)" />
+
+  <!-- ================= LEFT NAVIGATION SIDEBAR ================= -->
+  <g id="sidebar">
+    <rect x="0" y="0" width="248" height="920" fill="#060806" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+    
+    <!-- Metrion Brand Logo -->
+    <g transform="translate(24, 26)">
+      <path d="M 6 36 Q 16 4 28 6 Q 18 20 22 34 Q 30 14 44 2 Q 40 18 36 34" fill="none" stroke="url(#brandEmerald)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+      <polygon points="43,2 45,4 43,6 41,4" fill="#52E082" />
+      <text x="56" y="22" class="font-sans" font-size="20" font-weight="700" fill="#FFFFFF" letter-spacing="-0.02em">Metrion</text>
+      <text x="56" y="34" class="font-sans label-caps" font-size="7.5" fill="#28C765" letter-spacing="0.14em">ENGINE OF GROWTH</text>
+    </g>
+
+    <!-- Navigation List -->
+    <g transform="translate(14, 96)" class="font-sans">
+      <text x="14" y="0" class="label-caps" font-size="9" fill="#435044">Profit Intelligence</text>
+      
+      <g transform="translate(0, 14)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Overview</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+      <g transform="translate(0, 52)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">CEO Hub</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+      <g transform="translate(0, 90)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Products (PI)</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+
+      <!-- ACTIVE: Competitors (CI) Tab -->
+      <g transform="translate(0, 128)">
+        <rect x="0" y="4" width="220" height="38" rx="10" fill="rgba(40,199,101,0.12)" stroke="rgba(40,199,101,0.28)" stroke-width="1" />
+        <rect x="0" y="4" width="4" height="38" rx="2" fill="#28C765" />
+        <circle cx="22" cy="23" r="3.5" fill="#28C765" filter="url(#emeraldGlow)" />
+        <text x="36" y="27" font-size="13" font-weight="700" fill="#28C765">Competitors (CI)</text>
+      </g>
+
+      <g transform="translate(0, 180)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Finance (CFO)</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+      <g transform="translate(0, 218)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Marketing (CMO)</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+
+      <text x="14" y="278" class="label-caps" font-size="9" fill="#435044">Autonomous Ops</text>
+      <g transform="translate(0, 292)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Evidence Queue</text><circle cx="22" cy="20" r="3" fill="#28C765" /></g>
+      <g transform="translate(0, 330)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">WhatsApp Sync</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+    </g>
+
+    <!-- Bottom Account Status -->
+    <g transform="translate(16, 848)">
+      <rect x="0" y="0" width="216" height="50" rx="10" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+      <circle cx="25" cy="25" r="14" fill="rgba(40,199,101,0.16)" />
+      <text x="18" y="29" class="font-sans" font-size="11" font-weight="700" fill="#28C765">ZS</text>
+      <text x="48" y="21" class="font-sans" font-size="12" font-weight="600" fill="#FFFFFF">Zyquora Store</text>
+      <text x="48" y="35" class="font-sans" font-size="10" fill="#6B796D">CI Evidence Radar · Active</text>
+    </g>
+  </g>
+
+  <!-- ================= TOP HEADER ================= -->
+  <g transform="translate(278, 22)">
+    <text x="0" y="22" class="font-sans" font-size="22" font-weight="700" fill="#FFFFFF">Competitor Intelligence (CI)</text>
+    <text x="0" y="40" class="font-sans text-muted">Evidence-based price monitoring · Customer voice gap mining · Brain 1 price positioning</text>
+
+    <!-- SKU Selector & Action -->
+    <g transform="translate(800, 4)">
+      <rect x="0" y="0" width="180" height="34" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+      <text x="14" y="21" class="font-sans" font-size="11" fill="#FFFFFF">SKU: Emerald Chrono ▾</text>
+    </g>
+    <g transform="translate(994, 4)">
+      <rect x="0" y="0" width="144" height="34" rx="8" fill="#28C765" />
+      <text x="14" y="21" class="font-sans" font-size="12" font-weight="700" fill="#041208">+ Upload Evidence</text>
+    </g>
+  </g>
+
+  <!-- ================= ROW 1: 4 CORE CI METRICS ================= -->
+  <g transform="translate(278, 80)">
+    
+    <!-- 1. Tracked Rivals & Evidence Status -->
+    <g transform="translate(0, 0)">
+      <rect x="0" y="0" width="268" height="136" rx="12" fill="url(#cardGrad)" class="border-active" filter="url(#softShadow)" />
+      <g transform="translate(18, 18)" class="font-sans">
+        <text x="0" y="0" class="label-caps" fill="#28C765">Tracked Rivals (Active)</text>
+        <text x="0" y="32" class="num-hero" font-size="30">7 Verified</text>
+        <text x="0" y="52" font-size="12" font-weight="700" fill="#28C765">All Evidence-Backed <tspan font-weight="400" fill="#879488">(C23)</tspan></text>
+        <line x1="0" y1="68" x2="232" y2="68" stroke="rgba(255,255,255,0.06)" />
+        <text x="0" y="86" class="text-muted" font-size="10">Amazon: 4 · Flipkart: 2 · Meesho: 1</text>
+      </g>
+    </g>
+
+    <!-- 2. Market Price Band (IQR / Quartiles from Brain 1) -->
+    <g transform="translate(290, 0)">
+      <rect x="0" y="0" width="268" height="136" rx="12" fill="url(#cardGrad)" class="border-standard" filter="url(#softShadow)" />
+      <g transform="translate(18, 18)" class="font-sans">
+        <text x="0" y="0" class="label-caps">Market Price Band (IQR)</text>
+        <text x="0" y="32" class="num-hero" font-size="28" fill="#52E082">₹2,499 – ₹3,199</text>
+        <text x="0" y="52" font-size="12" font-weight="700" fill="#FFFFFF">Your Price: ₹2,899 <tspan fill="#28C765">(Mid-Band)</tspan></text>
+        <line x1="0" y1="68" x2="232" y2="68" stroke="rgba(255,255,255,0.06)" />
+        <text x="0" y="86" class="text-muted" font-size="10">Brain 1 §5.15.1 · Q1: ₹2.5K · Q3: ₹3.2K</text>
+      </g>
+    </g>
+
+    <!-- 3. Active Layer 1 Alerts -->
+    <g transform="translate(580, 0)">
+      <rect x="0" y="0" width="268" height="136" rx="12" fill="url(#cardGrad)" class="border-standard" filter="url(#softShadow)" />
+      <g transform="translate(18, 18)" class="font-sans">
+        <text x="0" y="0" class="label-caps">Price Threshold Breaches</text>
+        <text x="0" y="32" class="num-hero" font-size="30">2 Active</text>
+        <text x="0" y="52" font-size="12" font-weight="600" fill="#E2E8F0">Layer 1 Observational Alert</text>
+        <line x1="0" y1="68" x2="232" y2="68" stroke="rgba(255,255,255,0.06)" />
+        <text x="0" y="86" class="text-muted" font-size="10">Titan: -9.2% cut · Fossil: Stockout detected</text>
+      </g>
+    </g>
+
+    <!-- 4. Customer Voice Feedback Insights -->
+    <g transform="translate(870, 0)">
+      <rect x="0" y="0" width="268" height="136" rx="12" fill="url(#cardGrad)" class="border-standard" filter="url(#softShadow)" />
+      <g transform="translate(18, 18)" class="font-sans">
+        <text x="0" y="0" class="label-caps">Mined Defect Themes</text>
+        <text x="0" y="32" class="num-hero" font-size="30">2 Explored</text>
+        <text x="0" y="52" font-size="12" font-weight="600" fill="#52E082">Actionable Listing Gaps</text>
+        <line x1="0" y1="68" x2="232" y2="68" stroke="rgba(255,255,255,0.06)" />
+        <text x="0" y="86" class="text-muted" font-size="10">Rigid strap (27/80) · Dial glass condensation</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ================= ROW 2: FOCUSED DUAL WORKSPACES ================= -->
+  <g transform="translate(278, 236)">
+    
+    <!-- LEFT PANEL: COMPETITOR PRICE RADAR & EVENTS (560px) -->
+    <g transform="translate(0, 0)">
+      <rect x="0" y="0" width="560" height="474" rx="14" fill="url(#cardGrad)" class="border-standard" filter="url(#softShadow)" />
+      
+      <!-- Panel Header -->
+      <g transform="translate(24, 20)">
+        <circle cx="5" cy="8" r="3" fill="#28C765" filter="url(#emeraldGlow)" />
+        <text x="14" y="12" class="font-sans card-title">Competitor Price Radar &amp; Events (Layer 1)</text>
+        <text x="14" y="30" class="font-sans text-muted">Evidence-backed price changes · Verified by uploaded screenshot · No continuous scrape</text>
+      </g>
+      <line x1="24" y1="46" x2="536" y2="46" stroke="rgba(255,255,255,0.06)" />
+
+      <!-- Active Threat Spotlight Card -->
+      <g transform="translate(24, 62)" class="font-sans">
+        <rect x="0" y="0" width="512" height="136" rx="10" fill="url(#focusPanelGrad)" stroke="rgba(40,199,101,0.35)" stroke-width="1.2" />
+        
+        <!-- Header row -->
+        <rect x="14" y="14" width="108" height="18" rx="4" fill="rgba(40,199,101,0.16)" />
+        <text x="20" y="26" font-size="8.5" font-weight="700" fill="#28C765">PRICE_DROP -9.2%</text>
+        
+        <rect x="130" y="14" width="94" height="18" rx="4" fill="rgba(255,255,255,0.06)" />
+        <text x="138" y="26" font-size="8.5" font-weight="700" fill="#FFFFFF">VERIFIED &lt; 8H</text>
+
+        <text x="404" y="28" class="num-hero" font-size="20" fill="#52E082">₹2,699</text>
+        
+        <!-- Details -->
+        <text x="14" y="56" font-size="13.5" font-weight="700" fill="#FFFFFF">Titan Octane Chronograph (Amazon India)</text>
+        <text x="14" y="74" class="text-muted" font-size="11">Dropped from ₹2,970 → ₹2,699 (-₹271). Now priced ₹200 below your Emerald Chrono (₹2,899).</text>
+        
+        <!-- Action row -->
+        <line x1="14" y1="92" x2="498" y2="92" stroke="rgba(255,255,255,0.06)" />
+        <text x="14" y="112" class="text-muted" font-size="10.5">Evidence ID #EV-AMZ-882 · High OCR Confidence · Exact Match</text>
+        
+        <g transform="translate(382, 100)">
+          <rect x="0" y="0" width="116" height="26" rx="5" fill="#28C765" />
+          <text x="12" y="17" font-size="10" font-weight="700" fill="#041208">Handoff to CFO ↗</text>
+        </g>
+      </g>
+
+      <!-- Competitor Row 2: Stockout Event (Fossil) -->
+      <g transform="translate(24, 214)" class="font-sans">
+        <rect x="0" y="0" width="512" height="74" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <text x="16" y="24" font-size="12.5" font-weight="700" fill="#FFFFFF">Fossil Grant Chrono: OUT_OF_STOCK Transition</text>
+        <text x="16" y="42" class="text-muted" font-size="10.5">Flipkart stockout confirmed. Opportunity to increase bid on keyword "men chrono watch".</text>
+        <text x="424" y="28" class="num-hero" font-size="16" fill="#FFFFFF">₹3,495</text>
+        <g transform="translate(422, 42)">
+          <rect x="0" y="0" width="76" height="22" rx="4" fill="rgba(255,255,255,0.05)" />
+          <text x="10" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">View Proof ↗</text>
+        </g>
+      </g>
+
+      <!-- Competitor Row 3: Stable Competitor (Fastrack) -->
+      <g transform="translate(24, 302)" class="font-sans">
+        <rect x="0" y="0" width="512" height="74" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <text x="16" y="24" font-size="12.5" font-weight="700" fill="#FFFFFF">Fastrack Casual Quartz: Stable at ₹2,195</text>
+        <text x="16" y="42" class="text-muted" font-size="10.5">Amazon · Verified 14h ago · Lower spec (Mineral Glass / Alloy casing vs 316L Stainless).</text>
+        <text x="424" y="28" class="num-hero" font-size="16" fill="#FFFFFF">₹2,195</text>
+        <g transform="translate(422, 42)">
+          <rect x="0" y="0" width="76" height="22" rx="4" fill="rgba(255,255,255,0.05)" />
+          <text x="10" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">View Proof ↗</text>
+        </g>
+      </g>
+
+      <!-- Price Positioning Statement -->
+      <g transform="translate(24, 390)" class="font-sans">
+        <rect x="0" y="0" width="512" height="60" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.04)" stroke-width="1" />
+        <text x="16" y="24" font-size="11.5" font-weight="700" fill="#28C765">Price Positioning (compute_price_positioning §5.15):</text>
+        <text x="16" y="42" class="text-muted" font-size="10.5">Market Median: ₹2,799 · Your Price: ₹2,899 (+3.5% premium justified by Sapphire glass spec).</text>
+      </g>
+    </g>
+
+    <!-- RIGHT PANEL: CUSTOMER VOICE MINING & GAPS (554px) -->
+    <g transform="translate(584, 0)">
+      <rect x="0" y="0" width="554" height="474" rx="14" fill="url(#cardGrad)" class="border-standard" filter="url(#softShadow)" />
+
+      <!-- Panel Header -->
+      <g transform="translate(24, 20)">
+        <circle cx="5" cy="8" r="3" fill="#52E082" />
+        <text x="14" y="12" class="font-sans card-title">Customer-Voice Mining &amp; Listing Gaps (§6.18, §6.19)</text>
+        <text x="14" y="30" class="font-sans text-muted">Recurring competitor complaint themes with sample frequency · Stored snippet proof (C27)</text>
+      </g>
+      <line x1="24" y1="46" x2="530" y2="46" stroke="rgba(255,255,255,0.06)" />
+
+      <!-- Theme 1: Rigid Leather Strap (Defect to Exploit) -->
+      <g transform="translate(24, 62)" class="font-sans">
+        <rect x="0" y="0" width="506" height="88" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <circle cx="18" cy="24" r="4.5" fill="#28C765" />
+        <text x="32" y="22" font-size="12" font-weight="700" fill="#FFFFFF">Competitor Defect: Stiff Leather Strap (27/80 Reviews)</text>
+        <text x="32" y="38" class="text-muted" font-size="10.5">Titan &amp; Fossil reviews repeatedly criticize rigid wristband and buckle pin bite.</text>
+        <text x="32" y="54" class="text-muted" font-size="10">Snippet: <tspan fill="#E2E8F0">"Leather feels like cardboard out of the box, cracked in 2 weeks"</tspan></text>
+        <text x="32" y="70" font-size="10" font-weight="700" fill="#28C765">Differentiation Angle: Highlight "Top-Grain Italian Leather" in bullets</text>
+        <g transform="translate(416, 20)">
+          <rect x="0" y="0" width="76" height="22" rx="4" fill="rgba(255,255,255,0.05)" />
+          <text x="10" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">View Proof ↗</text>
+        </g>
+      </g>
+
+      <!-- Theme 2: Water Condensation Fogging (18/80 Reviews) -->
+      <g transform="translate(24, 162)" class="font-sans">
+        <rect x="0" y="0" width="506" height="88" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <circle cx="18" cy="24" r="4.5" fill="#28C765" />
+        <text x="32" y="22" font-size="12" font-weight="700" fill="#FFFFFF">Competitor Defect: Dial Glass Fogging (18/80 Reviews)</text>
+        <text x="32" y="38" class="text-muted" font-size="10.5">Buyers complain of internal dial condensation during Indian monsoon &amp; handwashing.</text>
+        <text x="32" y="54" class="text-muted" font-size="10">Snippet: <tspan fill="#E2E8F0">"Fog developed under glass after washing hands once"</tspan></text>
+        <text x="32" y="70" font-size="10" font-weight="700" fill="#28C765">Differentiation Angle: Emphasize "Screw-Down Crown &amp; 5ATM Tested"</text>
+        <g transform="translate(416, 20)">
+          <rect x="0" y="0" width="76" height="22" rx="4" fill="rgba(255,255,255,0.05)" />
+          <text x="10" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">View Proof ↗</text>
+        </g>
+      </g>
+
+      <!-- Theme 3: Positive Feature to Match (Sunray Dial) -->
+      <g transform="translate(24, 262)" class="font-sans">
+        <rect x="0" y="0" width="506" height="88" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <circle cx="18" cy="24" r="4.5" fill="#52E082" />
+        <text x="32" y="22" font-size="12" font-weight="700" fill="#FFFFFF">Market Delight: Emerald Dial Sunray Finish (38/80 Reviews)</text>
+        <text x="32" y="38" class="text-muted" font-size="10.5">High customer praise for deep green sunray reflection in outdoor lighting.</text>
+        <text x="32" y="54" class="text-muted" font-size="10">Snippet: <tspan fill="#E2E8F0">"The dial color looks royal under sunlight, looks like a ₹10,000 watch"</tspan></text>
+        <text x="32" y="70" font-size="10" font-weight="700" fill="#52E082">Your Position: Already matched in your Emerald Chrono design</text>
+        <g transform="translate(416, 20)">
+          <rect x="0" y="0" width="76" height="22" rx="4" fill="rgba(255,255,255,0.05)" />
+          <text x="10" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">View Proof ↗</text>
+        </g>
+      </g>
+
+      <!-- Discovery Candidate Pipeline Status Card -->
+      <g transform="translate(24, 362)" class="font-sans">
+        <rect x="0" y="0" width="506" height="88" rx="8" fill="rgba(40,199,101,0.05)" stroke="rgba(40,199,101,0.22)" stroke-width="1" />
+        <text x="16" y="24" font-size="11.5" font-weight="700" fill="#FFFFFF">Discovery Pipeline: 3 Candidates Awaiting Evidence (C23)</text>
+        <text x="16" y="42" class="text-muted" font-size="10.5">Discovered via search leads · Awaiting screenshot upload to enter radar:</text>
+        <text x="16" y="58" font-size="10" font-weight="600" fill="#DADFD6">1. Sonata Poze Chrono (Score: 13/16) · 2. Timex Modern Easy Reader (11/16)</text>
+        <g transform="translate(366, 24)">
+          <rect x="0" y="0" width="124" height="26" rx="5" fill="#28C765" />
+          <text x="12" y="17" font-size="10" font-weight="700" fill="#041208">Review Candidates ↗</text>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <!-- ================= ROW 3: STRATEGIC COMPETITIVE BRIEF & ACTIONS ================= -->
+  <g transform="translate(278, 726)">
+    <rect x="0" y="0" width="1138" height="150" rx="12" fill="url(#cardGrad)" class="border-active" filter="url(#softShadow)" />
+
+    <g transform="translate(24, 18)" class="font-sans">
+      <!-- Briefing Header -->
+      <g transform="translate(0, 0)">
+        <rect x="0" y="0" width="34" height="18" rx="4" fill="#28C765" />
+        <text x="9" y="13" font-size="9.5" font-weight="700" fill="#041208">CI</text>
+        <text x="44" y="15" class="card-title" font-size="14.5">Autonomous Strategic Competitive Brief (§6.20)</text>
+        <text x="690" y="15" class="text-muted">Target SKU: <tspan fill="#28C765" font-weight="700">Emerald Sunray Chrono</tspan> · Routes to CEO</text>
+      </g>
+      <line x1="0" y1="28" x2="1090" y2="28" stroke="rgba(255,255,255,0.06)" />
+
+      <!-- Directives -->
+      <g transform="translate(0, 42)">
+        <g transform="translate(0, 0)">
+          <rect x="0" y="0" width="4" height="34" rx="2" fill="#28C765" />
+          <text x="14" y="14" font-size="12" font-weight="700" fill="#FFFFFF">1. Pricing Strategy Directive → Target: CFO</text>
+          <text x="14" y="30" class="text-muted" font-size="10.5">Titan dropped to ₹2,699. Action: Do NOT match without CFO check. "Ask CFO to model contribution margin if price drops from ₹2,899 to ₹2,699".</text>
+        </g>
+
+        <g transform="translate(540, 0)">
+          <rect x="0" y="0" width="4" height="34" rx="2" fill="#52E082" />
+          <text x="14" y="14" font-size="12" font-weight="700" fill="#FFFFFF">2. Listing Differentiation Directive → Target: CMO</text>
+          <text x="14" y="30" class="text-muted" font-size="10.5">Rival strap stiffness &amp; dial fogging gaps identified across 45 sampled reviews. Action: "Ask CMO to inject 'Soft Italian Leather &amp; 5ATM Tested' into Bullet 2".</text>
+        </g>
+      </g>
+
+      <!-- Bottom Button -->
+      <g transform="translate(930, 84)">
+        <rect x="0" y="0" width="160" height="30" rx="6" fill="#28C765" />
+        <text x="14" y="19" font-size="11" font-weight="700" fill="#041208">Export Brief to CEO ↗</text>
+      </g>
+    </g>
+  </g>
+</svg>

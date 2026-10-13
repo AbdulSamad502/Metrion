@@ -304,6 +304,38 @@ def _optional_positive_int(name: str) -> int | None:
     return int(raw)
 
 
+class ConfigInvalid(ValueError):
+    """A setting is present but not usable (`CONFIG_INVALID`). The caller fails CLOSED: it declines to start the work with a plain message and guesses nothing."""
+
+    code = "CONFIG_INVALID"
+
+
+def _positive_int_or_default(name: str, default: int) -> int:
+    """Unset or blank -> `default`. Present -> it must be a positive whole number; anything else (0, negative, 1.5, text) raises `ConfigInvalid`."""
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    if not raw.isdigit() or int(raw) <= 0:
+        raise ConfigInvalid(f"{name} must be a positive integer, got {raw!r}")
+    return int(raw)
+
+
+def cmo_delegation_max_questions() -> int:
+    """`CMO_DELEGATION_MAX_QUESTIONS` (default 8): the most clarification questions the CEO asks for one CMO task, re-asks included (ceo-cmo-delegation.md CD13, 6.3-3).
+    Questions 1-8 are asked; a 9th never is. Server-side only. Not cached."""
+    return _positive_int_or_default("CMO_DELEGATION_MAX_QUESTIONS", 8)
+
+
+def cmo_delegation_max_reasks() -> int:
+    """`CMO_DELEGATION_MAX_REASKS` (default 2): the most times the SAME field is re-asked after an unusable reply; a field is asked at most 1 + this many times. Not cached."""
+    return _positive_int_or_default("CMO_DELEGATION_MAX_REASKS", 2)
+
+
+def cmo_delegation_idle_expiry_seconds() -> int:
+    """`CMO_DELEGATION_IDLE_EXPIRY_SECONDS` (default 86400 = 24 h): a pending CMO task expires when `now - last_activity >= this` (server clock). Not cached."""
+    return _positive_int_or_default("CMO_DELEGATION_IDLE_EXPIRY_SECONDS", 86400)
+
+
 def ceo_leg_timeout_seconds() -> int | None:
     """`CEO_LEG_TIMEOUT_SECONDS`: the per-turn deadline for specialist legs (spec §6.12 rule 5, §6.26 L9). NO default: unset -> None -> any
     investigation with legs refuses with CONFIG_MISSING. Not cached, so a test or operator change takes effect."""
@@ -332,6 +364,19 @@ def ceo_turn_lock_wait_seconds() -> int | None:
 def ceo_playbook_max_legs() -> int | None:
     """`CEO_PLAYBOOK_MAX_LEGS`: the most legs one playbook may fan out to (§6.12 rule 5). NO default; unset -> CONFIG_MISSING for playbooks with legs."""
     return _optional_positive_int("CEO_PLAYBOOK_MAX_LEGS")
+
+
+def ceo_approval_enabled() -> bool:
+    """`CEO_APPROVAL_ENABLED=true|false`: whether a CEO turn that would run an approval-required action (the CEO approval-gate module) PRODUCES A PLAN for the seller to approve
+    (ceo-approval-workflow.md section 6.1). DEFAULT OFF, which keeps the existing behaviour exactly: such a turn is refused with APPROVAL_UNAVAILABLE_TEXT and nothing is run,
+    asked, saved or sent. The plan/approve/decline API works either way (it acts on stored plans only); this switch controls only whether CHAT creates plans. It is the owner's
+    enablement gate (VP-1/VP-2 restatement, ceo-cmo-delegation.md OQ-9): set it only after that is accepted. Not cached, so a test or operator change takes effect."""
+    raw = (os.environ.get("CEO_APPROVAL_ENABLED") or "").strip().lower()
+    if raw in ("", "false", "0", "no"):
+        return False
+    if raw in ("true", "1", "yes"):
+        return True
+    raise ValueError(f"CEO_APPROVAL_ENABLED must be true or false, got {raw!r}")
 
 
 def ceo_needs_max_per_turn() -> int | None:
@@ -427,6 +472,17 @@ def cmo_vision_model() -> str:
 def cmo_vision_ollama_host() -> str:
     """The local Ollama endpoint for photo analysis. REQUIRED, no default (P6; local only - no hosted vision provider)."""
     return verified_llm_endpoint(_required("CMO_VISION_OLLAMA_HOST"), setting="CMO_VISION_OLLAMA_HOST")
+
+
+def cmo_vision_endpoint_verified() -> str:
+    """The vision endpoint, checked NOW and never cached: it must be listed in `LLM_OPERATOR_CONTROLLED_HOSTS` or this raises `LlmEndpointNotVerified` (`MissingConfig` if unset).
+    Used by the plan builder, the approval re-check and the image hand-off, so a seller's photo is never read, let alone sent, towards an endpoint that stopped being attested."""
+    return verified_llm_endpoint(_required("CMO_VISION_OLLAMA_HOST"), setting="CMO_VISION_OLLAMA_HOST")
+
+
+def cmo_vision_model_label() -> str:
+    """The configured vision model name, read now (not cached), for the plan card's endpoint label."""
+    return _required("CMO_VISION_MODEL")
 
 
 @lru_cache
@@ -627,3 +683,43 @@ def ceo_attachment_max_files() -> int | None:
 def ceo_attachment_max_pages() -> int | None:
     """`CEO_ATTACHMENT_MAX_PAGES`: how many PDF pages are read. NO default: unset -> attachments are refused."""
     return _optional_positive_int("CEO_ATTACHMENT_MAX_PAGES")
+
+
+# --- RAG (rag-knowledge.md). Every value is configuration, never a spec constant. ---------------------------------------------------
+
+
+@lru_cache
+def rag_embedding_model() -> str:
+    """`RAG_EMBEDDING_MODEL`: the embedding model for the shared RAG index. Provisional (rag-knowledge.md §1, §11 P-1): it must be a model registered in
+    `backend.rag.embedding.KNOWN_MODELS`; switching is a re-index, not a config-only change."""
+    return (os.environ.get("RAG_EMBEDDING_MODEL") or "nomic-embed-text").strip()
+
+
+@lru_cache
+def rag_ollama_host() -> str:
+    """`RAG_OLLAMA_HOST`, else the shared local `ollama_host()`. Self-hosted only (rag-knowledge.md §1): no hosted embedding provider without a new decision."""
+    return (os.environ.get("RAG_OLLAMA_HOST") or "").strip() or ollama_host()
+
+
+@lru_cache
+def rag_embed_timeout_seconds() -> float:
+    """`RAG_EMBED_TIMEOUT_SECONDS`: hard timeout of one embedding request (rag-knowledge.md §5.9: 3 s on the chat path; ingestion workers pass their own)."""
+    raw = os.environ.get("RAG_EMBED_TIMEOUT_SECONDS")
+    if raw is None or not raw.strip():
+        return 3.0
+    value = float(raw)
+    if value <= 0:
+        raise ValueError(f"RAG_EMBED_TIMEOUT_SECONDS must be positive, got {raw!r}")
+    return value
+
+
+@lru_cache
+def rag_max_document_bytes() -> int:
+    """`RAG_MAX_DOCUMENT_BYTES`: pilot per-document cap (owner decision Q7: 10 MB)."""
+    return _positive_int_env("RAG_MAX_DOCUMENT_BYTES", 10 * 1024 * 1024)
+
+
+@lru_cache
+def rag_max_documents_per_tenant() -> int:
+    """`RAG_MAX_DOCUMENTS_PER_TENANT`: pilot per-tenant document cap (owner decision Q7: 50)."""
+    return _positive_int_env("RAG_MAX_DOCUMENTS_PER_TENANT", 50)

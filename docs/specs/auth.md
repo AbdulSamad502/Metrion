@@ -226,6 +226,7 @@ Stored on `membership.permissions`. **An absent key means denied** (D4).
 | `usage.view` | Usage visibility |
 | `billing.view` | Billing visibility |
 | `team.manage` | Partner invitation, removal, permission assignment, integration configuration, team settings |
+| `knowledge.manage` | Upload, list, view, delete and re-index the tenant's RAG knowledge documents (`rag-knowledge.md` §9). *Added 2026-10-12.* Deny-by-default for PARTNER: the OWNER grants it explicitly to make a partner a document administrator. Retrieval over those documents needs no seller permission beyond the calling agent's own (`agent.ceo`, `agent.cmo`). |
 
 **OWNER holds every permission implicitly and is not configurable**, including `financials.adjust`. Only `PARTNER` rows carry a meaningful grid.
 

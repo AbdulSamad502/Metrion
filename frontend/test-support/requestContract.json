@@ -54,6 +54,14 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/ceo/investigations/{investigation_id}/plans": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/investigations/{investigation_id}/plans/{plan_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/ceo/investigations/{investigation_id}/turns/{turn_id}/flow": {
    "query": [],
    "requiredQuery": []
@@ -187,6 +195,63 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cmo/showcase/compliance": {
+   "query": [
+    "marketplace",
+    "sku"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/showcase/copy-packs": {
+   "query": [
+    "cursor",
+    "limit",
+    "marketplace",
+    "q",
+    "sku"
+   ],
+   "requiredQuery": [
+    "marketplace"
+   ]
+  },
+  "GET /api/v1/cmo/showcase/hashtags": {
+   "query": [
+    "cursor",
+    "limit",
+    "q",
+    "sku"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/showcase/products": {
+   "query": [
+    "q"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/showcase/titles": {
+   "query": [
+    "approvedOnly",
+    "cursor",
+    "from",
+    "limit",
+    "marketplace",
+    "q",
+    "sku",
+    "to",
+    "view"
+   ],
+   "requiredQuery": [
+    "marketplace"
+   ]
+  },
+  "GET /api/v1/cmo/showcase/trends": {
+   "query": [
+    "cursor",
+    "limit"
+   ],
+   "requiredQuery": []
+  },
   "GET /api/v1/ops/live": {
    "query": [],
    "requiredQuery": []
@@ -266,6 +331,20 @@
   },
   "POST /api/v1/ceo/investigations/{investigation_id}/attachments": {
    "multipart": true,
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/investigations/{investigation_id}/plans/{plan_id}/approve": {
+   "body": {
+    "$ref": "#/components/schemas/ApproveBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/investigations/{investigation_id}/plans/{plan_id}/decline": {
+   "body": {
+    "$ref": "#/components/schemas/DeclineBody"
+   },
    "query": [],
    "requiredQuery": []
   },
@@ -568,6 +647,13 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cmo/showcase/usage-events": {
+   "body": {
+    "$ref": "#/components/schemas/UsageEventBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cmo/title-approvals": {
    "body": {
     "$ref": "#/components/schemas/ApprovalBody"
@@ -855,6 +941,22 @@
     "generation_id"
    ],
    "title": "ApprovalBody",
+   "type": "object"
+  },
+  "ApproveBody": {
+   "description": "Approval is bound to the plan id (the path) AND the hash the seller was shown. The server recomputes the hash; this value is only compared, never used as content.",
+   "properties": {
+    "plan_hash": {
+     "maxLength": 200,
+     "minLength": 1,
+     "title": "Plan Hash",
+     "type": "string"
+    }
+   },
+   "required": [
+    "plan_hash"
+   ],
+   "title": "ApproveBody",
    "type": "object"
   },
   "AttachBody": {
@@ -1480,6 +1582,24 @@
     "value"
    ],
    "title": "DeclareLineStatusOverrideHttpRequest",
+   "type": "object"
+  },
+  "DeclineBody": {
+   "properties": {
+    "reason": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Reason"
+    }
+   },
+   "title": "DeclineBody",
    "type": "object"
   },
   "DigestSubscriptionRequest": {
@@ -3977,6 +4097,75 @@
     }
    },
    "title": "UpdateSellerProductRequest",
+   "type": "object"
+  },
+  "UsageEventBody": {
+   "additionalProperties": false,
+   "properties": {
+    "generationId": {
+     "format": "uuid",
+     "title": "Generationid",
+     "type": "string"
+    },
+    "kind": {
+     "enum": [
+      "VIEWED",
+      "COPIED",
+      "MARKED_USED"
+     ],
+     "title": "Kind",
+     "type": "string"
+    },
+    "optionId": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Optionid"
+    },
+    "resultPart": {
+     "anyOf": [
+      {
+       "enum": [
+        "TITLE",
+        "BULLET_1",
+        "BULLET_2",
+        "BULLET_3",
+        "BULLET_4",
+        "BULLET_5",
+        "DESCRIPTION",
+        "BACKEND_TERMS",
+        "FULL_PACK",
+        "HASHTAGS"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Resultpart"
+    },
+    "surface": {
+     "enum": [
+      "DASHBOARD",
+      "CHAT"
+     ],
+     "title": "Surface",
+     "type": "string"
+    }
+   },
+   "required": [
+    "generationId",
+    "kind",
+    "surface"
+   ],
+   "title": "UsageEventBody",
    "type": "object"
   }
  }

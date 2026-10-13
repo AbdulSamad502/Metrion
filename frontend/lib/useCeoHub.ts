@@ -349,6 +349,31 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
     [client, loadDetail, refreshList],
   );
 
+  // The Approve / Decline buttons of a plan card. Approving is an explicit call bound to the plan id AND the plan hash the seller was shown; the server runs exactly the frozen
+  // plan once. Nothing typed in the chat reaches this. The thread is re-read afterwards: the result (or the refusal) is a stored message, never composed here.
+  const [planBusy, setPlanBusy] = useState<string | null>(null);
+  const decidePlan = useCallback(
+    async (planId: string, act: () => Promise<unknown>) => {
+      const id = selectedRef.current;
+      if (!id || planBusy) return;
+      setPlanBusy(planId);
+      setNotice(null);
+      try {
+        await act();
+      } catch (e) {
+        const detail = e instanceof ApiError && e.detail && typeof e.detail === "object" ? (e.detail as { message?: unknown }).message : null;
+        setNotice(typeof detail === "string" && detail.trim() ? detail : failure(e));
+      } finally {
+        setPlanBusy(null);
+        await Promise.all([loadDetail(id, true), refreshList()]);
+        void refreshHealth();
+      }
+    },
+    [planBusy, loadDetail, refreshList, refreshHealth],
+  );
+  const approvePlan = useCallback((planId: string, planHash: string) => decidePlan(planId, () => client.approvePlan(selectedRef.current as string, planId, planHash)), [client, decidePlan]);
+  const declinePlan = useCallback((planId: string) => decidePlan(planId, () => client.declinePlan(selectedRef.current as string, planId, null)), [client, decidePlan]);
+
   const reopen = useCallback(async () => {
     const id = selectedRef.current;
     if (!id) return;
@@ -384,6 +409,6 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
 
   return {
     awaitingAnswer, state, list, availability, health, memory, needs, forgetMemory, shared, forgetShared, refreshShared, flows, loadFlow, refreshHealth, selectedId, detail, turn, showArchived, setShowArchived, busyAgent, notice, dismissNotice: () => setNotice(null),
-    refreshList, select, create, sendTurn, setAttached, resolve, reopen, archive, retryDetail: () => selectedRef.current && loadDetail(selectedRef.current, false),
+    refreshList, select, create, sendTurn, setAttached, resolve, reopen, archive, approvePlan, declinePlan, planBusy, retryDetail: () => selectedRef.current && loadDetail(selectedRef.current, false),
   };
 }

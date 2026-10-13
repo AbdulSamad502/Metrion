@@ -88,7 +88,8 @@ def _collect(live, inv, headers, post_json, *, post_headers=None):
 def test_a_turn_streams_its_progress_in_order_and_then_ends(api, live):  # noqa: F811
     client, owner, _, a, _ = api
     inv = start(client, owner)
-    r, out = _collect(live, inv, owner, {"message": "hello"})
+    # not "hello": a bare greeting is now answered directly from fixed text (conversational.py) without a classification step, so it has no CLASSIFIED event
+    r, out = _collect(live, inv, owner, {"message": "how should I think about pricing my products"})
     assert r.status_code == 200 and out[0] == ("status", 200)
     kinds = [k for k, _ in out[1:]]
     assert kinds[0] == "TURN_RECEIVED" and kinds[-1] == event_bus.DONE and "CLASSIFIED" in kinds and "ANSWER_READY" in kinds

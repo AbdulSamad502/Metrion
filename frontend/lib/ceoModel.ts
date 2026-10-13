@@ -370,6 +370,7 @@ export function messageView(message: CeoMessage, turnById: Map<string, TurnRow>)
   if (message.kind === "SYSTEM_NOTE" || message.role === "SYSTEM") return { tone: "note", badge: null, footnote: null };
   if (message.role === "USER") return { tone: "user", badge: null, footnote: null };
   const turn = message.turn_id ? turnById.get(message.turn_id) : undefined;
+  if (message.kind === "PLAN") return { tone: "ceo", badge: "Plan to approve", footnote: null };
   if (message.kind === "CLARIFICATION") return { tone: "clarify", badge: "Needs your input", footnote: null };
   if (turn?.route === "OUT_OF_SCOPE") return { tone: "ceo", badge: "Out of scope", footnote: null };
   if (approvalRefused(turn)) return { tone: "ceo", badge: "Needs an approved plan", footnote: "Approval of a stored plan is not available yet, so nothing was run." };

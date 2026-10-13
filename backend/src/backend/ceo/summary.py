@@ -52,7 +52,7 @@ class SummaryOutcome:
 
 
 def _due_messages(tenant: UUID, inv: dict[str, Any]) -> list[dict[str, Any]]:
-    return [m for m in repo.list_messages(tenant, inv["id"], after_message_id=inv.get("summary_covers_through")) if m["kind"] != "SYSTEM_NOTE"]
+    return [m for m in repo.list_messages(tenant, inv["id"], after_message_id=inv.get("summary_covers_through")) if m["kind"] not in ("SYSTEM_NOTE", "PLAN")]
 
 
 def build_prompt(previous: str | None, seller_lines: list[str], findings: list[str]) -> str:

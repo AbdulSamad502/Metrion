@@ -1302,7 +1302,7 @@ The CEO orchestrator is responsible for:
 | AC4 | Non-allowlisted hosts are refused server-side (now a labeling/format check, C4/D7 — not a fetch gate, since nothing is fetched). |
 | AC5 | No scraped review text, no scraped listing copy and no rehosted image is persisted anywhere — including logs, traces, APM, Redis and vector stores. **Narrowed by C16's carve-out:** the seller's own submitted title/description/bullets, extracted from their own evidence, are the one permitted exception and are persisted as structured fields. |
 | AC5d | No raw review or listing text is ever transmitted to a hosted model provider (C15). |
-| AC5b | No vector embedding is ever generated from review text; no review-text corpus exists. |
+| AC5b | No vector embedding is ever generated from review text; no review-text corpus exists. *Cross-reference (2026-10-12):* the shared RAG index (`rag-knowledge.md`) may index only CI's **derived** `COMPETITOR_CHANGE` findings (the shared-findings ledger's own text, which the ledger already forbids from carrying free numbers) - never review text, listing copy, scraped pages or C27 snippets; `rag-knowledge.md` AC15 tests this with a known-phrase grep of the index. AC5b is unchanged. |
 | AC5c | User-facing output contains no full review and no long quotation. |
 | AC6 | Every displayed figure carries a source link and capture timestamp. |
 | AC7 | Snapshots whose evidence is older than 7 days are reported unavailable and never fire an alert (OP3, §6.8). |

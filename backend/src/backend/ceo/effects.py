@@ -112,6 +112,9 @@ ACTION_EFFECTS: Mapping[str, ActionEffects] = {
     "cmo.approve_title": _NONE,
     "cmo.confirm_niche_terms": _NONE,
     "cmo.confirm_image_hint": _NONE,
+    # The seller's attached product photo goes (by reference; the CMO reads it itself) to Metrion's own operator-controlled vision model. 0 CMO units, but it ALWAYS needs its own
+    # small plan card (ceo-cmo-delegation.md CD10, option A): the card names the photo and the endpoint label before anything is read.
+    "cmo.analyze_attachment": ActionEffects(external=External.MODEL, destinations=("Metrion vision model",), model_egress=("PRODUCT_IMAGE",), force_approval=True),
 }
 
 for _key, _fx in ACTION_EFFECTS.items():

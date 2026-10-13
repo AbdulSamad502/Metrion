@@ -121,7 +121,9 @@ def test_the_seller_can_follow_up_on_a_numbered_idea_and_the_next_agent_works_on
     assert "Taking #2 as “Leather Formal Shoes”" in q.answer and q.choices["pending"]["collected"] == {"product_name": "Leather Formal Shoes"}
     assert q.choices["pending"]["key"] == "cmo.generate_title_sets"
     orchestrator.run_turn(ctx, rt, inv, "skip")  # category
-    orchestrator.run_turn(ctx, rt, inv, "Amazon")
+    res = orchestrator.run_turn(ctx, rt, inv, "Amazon")
+    while res.status == "CLARIFIED" and str(res.clarify_for).startswith("fact_"):  # the skippable extra details (brand, size, features...)
+        res = orchestrator.run_turn(ctx, rt, inv, "skip")
     [slots] = calls["cmo.generate_title_sets"]
     assert slots.product_name == "Leather Formal Shoes"
     out_of_range = orchestrator.run_turn(ctx, rt, inv, "write titles for #99")

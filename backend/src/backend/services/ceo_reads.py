@@ -18,14 +18,15 @@ from competitor_intelligence.repositories import competitor_listing_insight_repo
 from competitor_intelligence.types import Unavailable as CiUnavailable
 from product_intelligence.repositories import pi_research_run_repo, product_candidate_repo
 from slim_cmo.repositories import generation_repo as cmo_generation_repo
+from slim_cmo.repositories.niche_repo import PostgresNicheStore
 
 from cfo.repositories import agent_data_request_repo
 
-from backend.services import cfo_actions
+from backend.services import cfo_actions, pi_actions
 
 __all__ = [
     "CiHandoffSnapshot", "CiUnavailable", "competitor_handoff", "list_active_competitors", "latest_pi_run", "recent_cmo_generations", "recent_cmo_content",
-    "StoredCogs", "stored_cogs", "SalesHistory", "sales_history", "stored_quotes", "stored_budget", "fee_reference_options",
+    "confirmed_niche_terms", "StoredCogs", "stored_cogs", "SalesHistory", "sales_history", "stored_quotes", "stored_budget", "fee_reference_options",
 ]
 
 
@@ -39,6 +40,16 @@ def competitor_handoff(tenant_id: UUID, competitor_url_id: UUID, *, now: Any) ->
 
 def latest_pi_run(tenant_id: UUID, *, finished_only: bool = False) -> dict[str, Any] | None:
     return pi_research_run_repo.latest_run_for_tenant(tenant_id, finished_only=finished_only)
+
+
+def niche_brief(tenant_id: UUID, brief_id: UUID) -> dict[str, Any] | None:
+    """A saved niche brief of this tenant (an approval plan binds a research run to its data basis), or None."""
+    return pi_actions.get_niche_brief(tenant_id, brief_id)
+
+
+def confirmed_niche_terms(tenant_id: UUID) -> list[str]:
+    """The niche terms this tenant has CONFIRMED (the seller's own choice), oldest first. Read-only; suggestions and rejected terms are not returned."""
+    return [t.term for t in PostgresNicheStore().list_terms(tenant_id) if t.status.value == "CONFIRMED"]
 
 
 def recent_cmo_generations(tenant_id: UUID, *, limit: int) -> list[dict[str, Any]]:

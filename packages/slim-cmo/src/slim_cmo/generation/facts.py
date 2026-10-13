@@ -167,6 +167,16 @@ def build_fact_context(facts: Sequence[FactInput], image_attrs: Sequence[Attribu
     )
 
 
+MIN_DETAIL_FACTS = 2  # a writing-quality heuristic, not a marketplace or business rule: fewer confirmed details than this and the writing is flagged as thin
+_NOT_A_DETAIL = frozenset({"product_name", "category"})
+
+
+def is_thin_input(ctx: FactContext) -> bool:
+    """True when fewer than `MIN_DETAIL_FACTS` claim-eligible details (brand, size, material, features...) beyond the product name and category were confirmed. Counted from the same
+    eligible facts the model is shown, so it can never be satisfied by a hint or an estimate."""
+    return sum(1 for a in ctx.eligible if a.name.strip().casefold() not in _NOT_A_DETAIL) < MIN_DETAIL_FACTS
+
+
 # Public names for the latest-wins helpers, so other layers (catalog Q&A) apply the SAME precedence
 # rather than re-implementing it.
 fact_key = _key

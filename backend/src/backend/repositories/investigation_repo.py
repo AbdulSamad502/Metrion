@@ -146,6 +146,7 @@ def resolve_investigation(
             ),
             {"id": str(investigation_id), "note": resolution_note.strip(), "by": str(resolved_by), "at": _now(now)},
         )
+        _supersede_plans(conn, tenant_id, investigation_id, "INVESTIGATION_RESOLVED", _now(now))  # E3: an open approval plan never outlives the investigation's active state
 
 
 def reopen_investigation(tenant_id: UUID, investigation_id: UUID) -> None:
@@ -200,6 +201,14 @@ def archive_investigation(tenant_id: UUID, investigation_id: UUID) -> None:
             ),
             {"id": str(investigation_id)},
         )
+        _supersede_plans(conn, tenant_id, investigation_id, "INVESTIGATION_ARCHIVED", _now(None))
+
+
+def _supersede_plans(conn: Connection, tenant_id: UUID, investigation_id: UUID, reason_code: str, at: datetime) -> None:
+    """Approval workflow E3: resolving or archiving supersedes any plan still AWAITING_APPROVAL, in the SAME transaction as the status change (reopening never revives it)."""
+    from backend.repositories import investigation_plan_repo
+
+    investigation_plan_repo.supersede_open(conn, tenant_id, investigation_id, reason_code=reason_code, new_plan_id=None, at=at)
 
 
 # ------------------------------------------------------------------------------ attachment
@@ -562,10 +571,21 @@ def get_attachment_contents(tenant_id: UUID, investigation_id: UUID, ids: Sequen
         return []
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(
-            text("SELECT id, filename, detected_type, content FROM investigation_attachment WHERE investigation_id = :inv AND id = ANY(CAST(:ids AS uuid[])) ORDER BY created_at"),
+            text("SELECT id, filename, detected_type, sha256, content FROM investigation_attachment WHERE investigation_id = :inv AND id = ANY(CAST(:ids AS uuid[])) ORDER BY created_at"),
             {"inv": str(investigation_id), "ids": [str(i) for i in ids]},
         )
         return [{**dict(r._mapping), "content": bytes(r._mapping["content"])} for r in rows]
+
+
+def latest_attachments(tenant_id: UUID, investigation_id: UUID, limit: int = 1) -> list[dict[str, Any]]:
+    """The most recently stored attachment(s) of THIS investigation in THIS tenant, newest first, without their bytes (attachment continuity across turns)."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text("SELECT id, filename, detected_type, byte_size, extraction_status, extraction_note, extracted_text, created_at FROM investigation_attachment "
+                 "WHERE investigation_id = :inv ORDER BY created_at DESC LIMIT :n"),
+            {"inv": str(investigation_id), "n": limit},
+        )
+        return [dict(r._mapping) for r in rows]
 
 
 def find_attachment_by_sha(tenant_id: UUID, investigation_id: UUID, sha256: str) -> dict[str, Any] | None:
@@ -587,8 +607,17 @@ def get_attachments(tenant_id: UUID, investigation_id: UUID, ids: Sequence[UUID]
         return []
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(
-            text("SELECT id, filename, detected_type, byte_size, extraction_status, extraction_note, extracted_text FROM investigation_attachment "
+            text("SELECT id, filename, detected_type, byte_size, sha256, extraction_status, extraction_note, extracted_text, created_at FROM investigation_attachment "
                  "WHERE investigation_id = :inv AND id = ANY(CAST(:ids AS uuid[])) ORDER BY created_at"),
             {"inv": str(investigation_id), "ids": [str(i) for i in ids]},
         )
         return [dict(r._mapping) for r in rows]
+
+
+def get_attachment_meta(tenant_id: UUID, attachment_id: UUID) -> dict[str, Any] | None:
+    """One attachment's metadata (no bytes) by id, under this tenant's RLS - used to re-resolve a stored plan's data basis. Another tenant's id is simply absent."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text("SELECT id, investigation_id, filename, detected_type, sha256, created_at FROM investigation_attachment WHERE id = :id"), {"id": str(attachment_id)},
+        ).first()
+    return dict(row._mapping) if row else None

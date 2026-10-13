@@ -58,7 +58,9 @@ class TestRouteSurface:
         spec = create_app().openapi()["paths"]
         paths = [(p, sorted(m.upper() for m in methods)) for p, methods in spec.items()]
         cmo_paths = [p for p, _ in paths if p.startswith("/api/v1/cmo")]
-        assert set(cmo_paths) == EXPECTED_ROUTES
+        # the read-only showcase (api/v1/cmo_showcase.py, ceo-cmo-delegation.md 6.8-6.10) is its own router under /api/v1/cmo/showcase: it is exempt from the exact action set
+        # but NOT from the write-back checks below (banned words, no PUT/PATCH/DELETE), and its own surface is pinned in its tests
+        assert {p for p in cmo_paths if not p.startswith("/api/v1/cmo/showcase/")} == EXPECTED_ROUTES
         banned = ("publish", "update", "sync", "push", "listing-write", "marketplace", "write-back", "submit")
         assert not [p for p in cmo_paths if any(b in p for b in banned)]
         assert not [p for p, methods in paths if p.startswith("/api/v1/cmo") and set(methods) & {"PUT", "PATCH", "DELETE"}]
@@ -147,7 +149,7 @@ class TestResponseAllowList:
         row = _row(O.TITLE_SET, structured={**LEAKY, "expected_option_count": 3, "delivered_option_count": 1, "short": True, "short_label": "short", "unverified_limits": ["title_max_chars"], "count_rule": "UTF16_CODE_UNITS"}, options=[opt])
         out = cmo_response.artefact_json(row, reused=False)
         assert out["options"] == [{"id": str(opt.id), "rank": 1, "text": "AquaKeep Bottle", "charCount": 15}]
-        assert out["constraint"] == {"sourceUrl": "https://rules.example/x", "verifiedAt": "2026-10-01T00:00:00+00:00", "version": 2}
+        assert out["constraint"] == {"sourceUrl": "https://rules.example/x", "verifiedAt": "2026-10-01T00:00:00+00:00", "version": 2, "ruleKind": None}
         assert out["short"] is True and out["unverifiedLimits"] == ["title_max_chars"]
         blob = json.dumps(out)
         for forbidden in ("SECRET PROMPT", "RAW", "sk-123", "fact_ids", "TARGET_PRICE", "internal-id", "provenance", "00000000-0000-0000-0000-000000000001"):

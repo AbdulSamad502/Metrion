@@ -43,6 +43,13 @@ def rt_for(calls, classifier, reply=None):
     return runtime(classifier, Grounded(), registry=registry(calls, reply))
 
 
+def skip_extras(ctx, rt, inv, res):
+    """The optional extra-detail questions (brand, features...) that follow the required ones: each is skipped."""
+    while res.status == "CLARIFIED" and str(res.choices["slot"]).startswith("fact_"):
+        res = orchestrator.run_turn(ctx, rt, inv, "skip")
+    return res
+
+
 ASK = "give me hashtags for my steel water bottle"
 ASK_ALL = "write hashtags for my steel water bottle on Amazon"
 HASHTAGS = lambda **slots: decision(route="ACTION", route_key="cmo.generate_hashtags", slots=slots)  # noqa: E731
@@ -56,9 +63,11 @@ def test_the_ceo_asks_only_for_what_is_missing_then_runs_cmo_and_shows_what_was_
     rt = rt_for(calls, Scripted({ASK: HASHTAGS(product="steel water bottle")}))
     inv = start(ctx, rt)
     q = orchestrator.run_turn(ctx, rt, inv, ASK)
-    assert q.status == "CLARIFIED" and calls == {} and "Which marketplace" in q.answer and q.answer.startswith("(2 of 2)")  # the product was already said: not asked again
+    assert q.status == "CLARIFIED" and calls == {} and "Which marketplace" in q.answer and q.answer.startswith("(2 of 4)")  # the product was already said: not asked again
     assert q.choices["kind"] == "INPUT" and q.choices["pending"]["route"] == "ACTION" and q.choices["pending"]["key"] == "cmo.generate_hashtags"
-    done = orchestrator.run_turn(ctx, rt, inv, "Amazon")  # a typed reply to the open question is the ANSWER (no classifier)
+    asked = orchestrator.run_turn(ctx, rt, inv, "Amazon")  # a typed reply to the open question is the ANSWER (no classifier)
+    assert asked.status == "CLARIFIED" and asked.choices["slot"] == "fact_brand" and calls == {}  # then the optional, skippable extra details
+    done = skip_extras(ctx, rt, inv, asked)
     assert done.status == "DELIVERED" and done.composition_mode == "TEMPLATE"
     [slots] = calls["cmo.generate_hashtags"]
     assert slots.product_name == "steel water bottle" and slots.marketplace.value == "AMAZON" and slots.request_key.startswith("ceo-")
@@ -74,7 +83,10 @@ def test_everything_in_the_first_message_runs_with_no_questions(two_tenants, app
     calls: dict = {}
     ctx = ctx_for(a, user_id=app_user)
     rt = rt_for(calls, Scripted({ASK_ALL: HASHTAGS(product="steel water bottle", marketplace="Amazon")}))
-    res = orchestrator.run_turn(ctx, rt, start(ctx, rt), ASK_ALL)
+    inv = start(ctx, rt)
+    res = orchestrator.run_turn(ctx, rt, inv, ASK_ALL)
+    assert res.status == "CLARIFIED" and res.choices["slot"] == "fact_brand" and calls == {}  # only the optional extra details are left to ask; nothing ran yet
+    res = skip_extras(ctx, rt, inv, res)
     assert res.status == "DELIVERED" and len(calls["cmo.generate_hashtags"]) == 1
 
 
@@ -106,7 +118,7 @@ def test_title_sets_take_several_marketplaces_and_an_optional_category(two_tenan
     orchestrator.run_turn(ctx, rt, inv, ask)  # asks the category
     q = orchestrator.run_turn(ctx, rt, inv, "skip")
     assert "Which marketplace" in q.answer
-    res = orchestrator.run_turn(ctx, rt, inv, "Amazon and Flipkart")
+    res = skip_extras(ctx, rt, inv, orchestrator.run_turn(ctx, rt, inv, "Amazon and Flipkart"))
     [slots] = calls["cmo.generate_title_sets"]
     assert [m.value for m in slots.marketplaces] == ["AMAZON", "FLIPKART"] and slots.category_hint is None  # a skipped field is absent, never defaulted
     assert "Steel Water Bottle 1L" in res.answer and "example.test/rule" in res.answer
@@ -134,8 +146,11 @@ def test_the_same_answer_to_the_same_card_sends_the_same_idempotency_key(two_ten
     inv = start(ctx, rt)
     q = orchestrator.run_turn(ctx, rt, inv, ASK)
     reply = orchestrator.ClarificationReply(q.message_id, None)
-    orchestrator.run_turn(ctx, rt, inv, "Amazon", clarification=reply)
-    orchestrator.run_turn(ctx, rt, inv, "Amazon", clarification=reply)  # a retry of the same answer
+    res = orchestrator.run_turn(ctx, rt, inv, "Amazon", clarification=reply)
+    res = orchestrator.run_turn(ctx, rt, inv, "skip")  # brand
+    last = orchestrator.ClarificationReply(res.message_id, None)  # the final card (key features)
+    orchestrator.run_turn(ctx, rt, inv, "skip", clarification=last)
+    orchestrator.run_turn(ctx, rt, inv, "skip", clarification=last)  # a retry of the same answer
     keys = [s.request_key for s in calls["cmo.generate_hashtags"]]
     assert len(keys) == 2 and keys[0] == keys[1]  # CMO treats an identical key as the same request: no second charge, same artefact
 

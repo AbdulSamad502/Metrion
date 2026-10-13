@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DecisionCard } from "@/components/ceo/hub/DecisionCard";
+import { PlanCard } from "@/components/ceo/hub/PlanCard";
 import { Welcome } from "@/components/ceo/hub/Welcome";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState, Spinner } from "@/components/ui/LoadingState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import type { AgentCode, CeoMessage, ClarificationReply, ExplicitPeriod, FindingRow, InvestigationDetail, NeedRow, TurnRow, UiAction } from "@/lib/ceo";
+import type { AgentCode, CeoMessage, ClarificationReply, ExplicitPeriod, FindingRow, InvestigationDetail, NeedRow, PlanView, TurnRow, UiAction } from "@/lib/ceo";
 import { findingLink, investigationTitle, messageView, needStepView, needsByMessage, type HubState } from "@/lib/ceoModel";
 import type { TurnProgress } from "@/lib/useCeoHub";
 
@@ -32,7 +33,14 @@ export function Conversation({
   onArchive,
   onRetry,
   awaiting = false,
+  onApprovePlan,
+  onDeclinePlan,
+  planBusy = null,
 }: {
+  /** the Approve / Decline buttons of a plan card (the only approval there is); absent = the cards are read-only */
+  onApprovePlan?: (planId: string, planHash: string) => void;
+  onDeclinePlan?: (planId: string) => void;
+  planBusy?: string | null;
   /** the stored thread ends with a question that has no answer yet (page reopened mid-run, or the reply was lost) */
   awaiting?: boolean;
   onOpenForm: (form: string) => void;
@@ -101,6 +109,11 @@ export function Conversation({
         onAsk={(text) => onSend(text, null)}
         agents={detail.agents}
         needs={needs}
+        plans={detail.plans ?? []}
+        closed={closed}
+        planBusy={planBusy}
+        onApprovePlan={onApprovePlan}
+        onDeclinePlan={onDeclinePlan}
       />
 
 
@@ -147,8 +160,13 @@ function lastCardId(messages: CeoMessage[]): string | null {
 }
 
 function Thread({
-  messages, findings, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs,
+  messages, findings, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs, plans, closed, planBusy, onApprovePlan, onDeclinePlan,
 }: {
+  plans: PlanView[];
+  closed: boolean;
+  planBusy: string | null;
+  onApprovePlan?: (planId: string, planHash: string) => void;
+  onDeclinePlan?: (planId: string) => void;
   messages: CeoMessage[];
   findings: FindingRow[];
   turnById: Map<string, TurnRow>;
@@ -172,6 +190,9 @@ function Thread({
       {messages.map((m) => (
         <li key={m.id}>
           <Bubble message={m} turnById={turnById} />
+          {m.role === "CEO" && m.kind === "PLAN" && (
+            <PlanCard plan={plans.find((p) => p.plannedTurnId === m.turn_id) ?? null} busy={planBusy} closed={closed} onApprove={onApprovePlan} onDecline={onDeclinePlan} />
+          )}
           {m.role === "CEO" && m.kind === "ANSWER" && <ReportButtons links={reportLinks(findings, m.turn_id)} />}
           <NeedSteps needs={placed.byMessage.get(m.id) ?? []} />
           {m.id === answerableCardId && m.choices && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}

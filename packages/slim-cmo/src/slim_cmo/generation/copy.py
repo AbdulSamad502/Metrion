@@ -21,7 +21,7 @@ from typing import Any
 from slim_cmo.claims import shared_text_findings
 from slim_cmo.constraints import ResolvedConstraint
 from slim_cmo.generation.engine import Evaluation, classify_failure, run_attempts
-from slim_cmo.generation.facts import FactContext
+from slim_cmo.generation.facts import FactContext, is_thin_input
 from slim_cmo.generation.outcomes import Delivered, Failed, Outcome
 from slim_cmo.generation.parse import Parsed
 from slim_cmo.generation.prompts import pack_prompt, pack_repair_prompt, prompt_facts
@@ -133,6 +133,7 @@ def generate_listing_copy(
             "unverified_limits": list(resolved.unverified_limits),
             "attempts": log.attempts,
             "excluded_facts": list(facts.excluded),
+            "thin_input": is_thin_input(facts),
         }
     )
     if marketplace is Marketplace.FLIPKART:

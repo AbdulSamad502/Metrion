@@ -46,11 +46,11 @@ def _count(tenant, table):
 
 # ------------------------------------------------------------------------------------------------ inventory pins
 def test_inventory_is_exactly_what_the_report_states():
-    assert len(REG.specs()) == 36 and len(WIRED) == 35
+    assert len(REG.specs()) == 37 and len(WIRED) == 36
     assert [s.key for s in REG.specs() if not s.wired] == ["ci.research_now"]  # intentionally unwired; must stay so
     assert set(APPROVAL_GATED) == {
         "pi.discover", "pi.supplier_lookup", "cmo.generate_title_sets", "cmo.generate_listing_copy", "cmo.generate_description", "cmo.generate_bullets",
-        "cmo.generate_keywords", "cmo.generate_backend_terms", "cmo.generate_hashtags", "cmo.catalog_answer", "cmo.market_trends",
+        "cmo.generate_keywords", "cmo.generate_backend_terms", "cmo.generate_hashtags", "cmo.catalog_answer", "cmo.market_trends", "cmo.analyze_attachment",
     }
 
 

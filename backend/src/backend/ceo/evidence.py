@@ -68,18 +68,83 @@ _CMO_KINDS: Mapping[str, str] = {
     "TITLE_SET": "Title options", "DESCRIPTION": "Description", "KEYWORDS": "Search keywords", "HASHTAGS": "Hashtags", "BULLETS": "Bullet points",
     "LISTING_COPY": "Listing copy", "BACKEND_TERMS": "Backend search terms",
 }
+def _counted(text: str, a: Mapping[str, Any], stored: Any = None) -> str:
+    """The text with its length, counted by CODE: the CMO's own stored count for a title, else the marketplace's counting rule applied here (UTF-16 code units unless the
+    stored rule says otherwise). Never a model's figure."""
+    n = stored if isinstance(stored, int) and not isinstance(stored, bool) else (
+        len(text.encode("utf-16-le")) // 2 if (a.get("countRule") or "UTF16_CODE_UNITS") == "UTF16_CODE_UNITS" else len(text))
+    return text  # the chat shows clean text; the character count is on the Slim CMO dashboard (n is still computed by code for it)
+
+
 _CMO_ITEMS: Mapping[str, Any] = {
-    "TITLE_SET": lambda a: [str(o.get("text")) for o in a.get("options") or [] if o.get("text")],
-    "DESCRIPTION": lambda a: [str(a["description"])] if a.get("description") else [],
+    "TITLE_SET": lambda a: [_counted(str(o.get("text")), a, o.get("charCount")) for o in a.get("options") or [] if o.get("text")],
+    "DESCRIPTION": lambda a: [_counted(str(a["description"]), a)] if a.get("description") else [],
     "KEYWORDS": lambda a: [str(k) for k in a.get("keywords") or []],
     "HASHTAGS": lambda a: [str(h) for h in a.get("hashtags") or []],
-    "BULLETS": lambda a: [str(b) for b in a.get("bullets") or []],
+    "BULLETS": lambda a: [_counted(str(b), a) for b in a.get("bullets") or []],
+    "LISTING_COPY": lambda a: ([f"Description: {_counted(str(a['description']), a)}"] if a.get("description") else [])
+    + [_counted(str(b), a) for b in a.get("bullets") or []]
+    + ([f"Keywords: {', '.join(str(k) for k in a['keywords'])}"] if a.get("keywords") else []),
+    "BACKEND_TERMS": lambda a: ([f"{' '.join(str(t) for t in a['terms'])} ({a['byteCount']} bytes)" if isinstance(a.get("byteCount"), int) and not isinstance(a.get("byteCount"), bool)
+                                else ' '.join(str(t) for t in a['terms'])] if a.get("terms") else []),
 }
+def _trend_sources(finding: Mapping[str, Any]) -> str:
+    """The sources behind one trend finding, as the report recorded them: the title, the address and the publication date (or 'date not given'). Copied, never written by a model."""
+    out: list[str] = []
+    for src in (finding.get("sources") or [])[:2]:
+        if not isinstance(src, Mapping) or not src.get("url"):
+            continue
+        published = str(src.get("published_at") or "")[:10] or "date not given"
+        title = " ".join(str(src.get("title") or "").split())[:80]
+        out.append(f"{title + ' - ' if title else ''}{src['url']} (published {published})")
+    return " [Source: " + "; ".join(out) + "]" if out else ""
+
+
+_CMO_FAILURE_WHY: Mapping[str, str] = {
+    "VALIDATION_FAILED": "it could not be written from the details you confirmed without adding things you did not tell me, so nothing was invented. Add the brand, size or capacity and 1-3 key features, then ask again",
+    "UNPARSEABLE_OUTPUT": "the writing service's reply could not be read, so nothing was used. Ask again in a moment",
+    "OUTPUT_TOO_LARGE": "the writing service's reply was unusably large, so nothing was used. Ask again",
+    "PROVIDER_ERROR": "the writing service did not answer, so nothing was written. Ask again in a moment",
+    "CONSTRAINT_BLOCKED": "there is no verified marketplace rule to write against yet, so I did not guess one",
+    "CONFIG_MISSING": "a setting it needs has not been configured by the operator yet",
+}
+
+
+def _cmo_failure_text(kind: str, where: str, failure: Mapping[str, Any]) -> str:
+    """Why a CMO artefact was not delivered, in plain words (never internals: no attempt counts, rule ids or model text). Nothing was used up."""
+    head = f"{kind}{where} could not be written"
+    missing = ", ".join(str(m) for m in (failure.get("missingFacts") or []))
+    if missing:
+        return f"{head}: more detail is needed about {missing}."
+    why = _CMO_FAILURE_WHY.get(str(failure.get("code")))
+    return f"{head}: {why}." if why else f"{head}."
+
+
+def _cmo_rule_note(a: Mapping[str, Any]) -> str | None:
+    """The marketplace rule an artefact was fitted to, and how far to trust it. A test-fixture (or otherwise unsourced) rule is said to be exactly that, never presented as the
+    marketplace's real rule; a thin set of confirmed details is flagged."""
+    cite = a.get("constraint") or {}
+    notes: list[str] = []
+    if cite:
+        unsourced = cite.get("ruleKind") == "TEST_FIXTURE" or ".invalid" in str(cite.get("sourceUrl") or "")
+        if unsourced:
+            notes.append("Length rule used: placeholder limits for testing, NOT a verified marketplace rule. Check the real limit in your seller account before using this text.")
+        elif cite.get("sourceUrl") and cite.get("verifiedAt"):
+            notes.append(f"Fitted to the marketplace rule from {cite['sourceUrl']}, checked {cite['verifiedAt']}")
+    if a.get("thinInput"):
+        notes.append(f"Thin input - add brand/size/features for stronger {'titles' if a.get('outputType') == 'TITLE_SET' else 'results'}.")
+    return " ".join(notes) or None
+
+
 LEG_LABELS: Mapping[str, str] = {
     "cmo.generate_title_sets": "The title options",
     "cmo.generate_hashtags": "The hashtags",
     "cmo.generate_description": "The description",
     "cmo.generate_keywords": "The search keywords",
+    "cmo.generate_bullets": "The bullet points",
+    "cmo.generate_backend_terms": "The backend search terms",
+    "cmo.generate_listing_copy": "The listing copy",
+    "cmo.analyze_attachment": "The reading of your photo",
     "cmo.market_trends": "The market trend research",
     "cmo.market_trends_preview": "The market research plan",
     "cfo.financial_health": "The financial health check",
@@ -289,6 +354,8 @@ class EvidenceCollector:
             self.add_fact("Market research plan", "the exact searches a trend run would send were prepared; nothing was sent", "SOURCE_DERIVED")
         elif leg.action_key == "cmo.market_trends":
             self._trend_report(payload)
+        elif leg.action_key == "cmo.analyze_attachment":
+            pass  # the reading is shown to the seller by the photo-reading step as labelled suggestions; it is not a deliverable and carries no figure
         elif leg.action_key.startswith("cmo."):
             self._cmo_artefacts(payload)
         elif leg.action_key == "cfo.strategic_briefing":
@@ -332,7 +399,7 @@ class EvidenceCollector:
         note = "From public web sources and not verified. This shows attention in the press and online, not demand or your sales."
         for sec, body in (report.get("sections") or {}).items():
             label = labels.get(str(sec), str(sec).replace("_", " ").title())
-            items = [" ".join(f"{f.get('theme', '')}. {f.get('summary', '')}".split())[:260] for f in (body.get("findings") or [])[:MAX_TREND_ITEMS]]
+            items = [" ".join(f"{f.get('theme', '')}. {f.get('summary', '')}".split())[:260] + _trend_sources(f) for f in (body.get("findings") or [])[:MAX_TREND_ITEMS]]
             if body.get("state") == "COMPLETE" and items:
                 self.artefacts.append((f"Market trends: {label}", tuple(items), note))
             else:
@@ -352,17 +419,13 @@ class EvidenceCollector:
             kind = _CMO_KINDS.get(str(a.get("outputType")), "Content")
             where = f" for {str(a['marketplace']).title()}" if a.get("marketplace") else ""
             if a.get("status") != "COMPLETE":
-                failure = a.get("failure") or {}
-                missing = ", ".join(str(m) for m in (failure.get("missingFacts") or []))
-                self.add_gap(f"{kind}{where} could not be written" + (f": more detail is needed about {missing}." if missing else "."))
+                self.add_gap(_cmo_failure_text(kind, where, a.get("failure") or {}))
                 continue
             items = _CMO_ITEMS.get(str(a.get("outputType")), lambda x: [])(a)
             if not items:
                 self.add_gap(f"{kind}{where} came back empty.")
                 continue
-            cite = a.get("constraint") or {}
-            note = f"Fitted to the marketplace rule from {cite['sourceUrl']}, checked {cite['verifiedAt']}" if cite.get("sourceUrl") and cite.get("verifiedAt") else None
-            self.artefacts.append((f"{kind}{where}", tuple(items), note))
+            self.artefacts.append((f"{kind}{where}", tuple(items), _cmo_rule_note(a)))
 
     @staticmethod
     def _rate_text(raw: Any) -> str | None:

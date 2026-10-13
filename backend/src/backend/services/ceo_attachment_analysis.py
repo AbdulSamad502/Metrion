@@ -8,6 +8,7 @@ silently and never described as analysed.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from typing import Any
@@ -24,6 +25,28 @@ SPREADSHEET_TYPES = ("CSV", "XLSX")
 def is_analysis_request(text: str) -> bool:
     """Is this message a question about the attached file (rather than a request for something else)?"""
     return tables.is_analysis_request(text)
+
+
+_PRIOR_FILE = re.compile(
+    r"\b(?:file|attachment|spreadsheet|csv|xlsx|report|sheet)\b.*\b(?:attached|uploaded|sent|shared)\b.*\b(?:previous|earlier|before|last|prior)\b|"
+    r"\b(?:attached|uploaded|sent|shared)\b.*\b(?:in|with) (?:my |the )?(?:previous|earlier|last|prior)\b|\b(?:previous|earlier|last|prior) (?:file|attachment|upload|spreadsheet)\b|"
+    r"\b(?:the|that|this) (?:file|spreadsheet|csv)\b.*\b(?:i|we) (?:attached|uploaded|sent|shared)\b", re.IGNORECASE)
+
+
+def refers_to_earlier_file(text: str) -> bool:
+    """Does this message (which has no attachment of its own) point back at a file attached earlier in the conversation?"""
+    return bool(_PRIOR_FILE.search(" ".join(text.split())))
+
+
+def answer_from_earlier(tenant: UUID, investigation_id: UUID, question: str) -> str:
+    """A follow-up about "the file I attached before": uses the newest spreadsheet stored in this conversation and says which file that is, or says plainly that there is none."""
+    found = [a for a in repo.latest_attachments(tenant, investigation_id, limit=5) if a.get("detected_type") in SPREADSHEET_TYPES]
+    if not found:
+        return ("I cannot find a spreadsheet attached earlier in this conversation, so I have nothing to continue from. Attach the file again and I will read it. "
+                "Nothing was imported or changed.")
+    chosen = found[0]
+    body = answer(tenant, investigation_id, [chosen], question)
+    return f"Using the most recent spreadsheet attached in this conversation: {tables._q(chosen['filename'])}. If you meant a different file, attach it again.\n\n{body}"
 
 
 def spreadsheets(attachments: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:

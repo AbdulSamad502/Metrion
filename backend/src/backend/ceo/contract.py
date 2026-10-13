@@ -242,6 +242,18 @@ class LegResult:
     denial: Denial | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ApprovalGrant:
+    """Proof, carried by the execution of an APPROVED plan and by nothing else, that the legs named here may run although the registry says they need approval.
+
+    Only `ceo/approval_run.py` constructs one, after the approve transaction committed (status APPROVED, execution turn created); `dispatch()` honours it only for the
+    same tenant and only for the action keys frozen in that plan. It authorizes nothing else: permission, attachment and entitlement are still checked per leg."""
+
+    plan_id: UUID
+    tenant_id: UUID
+    action_keys: frozenset[str]
+
+
 class UnregisteredAction(KeyError):
     """The key is not in the registry. Raised, never executed — a classifier or UI value outside the closed catalog."""
 

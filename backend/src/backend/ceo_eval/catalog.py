@@ -145,12 +145,13 @@ class Catalog:
 def _registry_actions() -> dict[str, tuple[str, bool]]:
     """key -> (owning agent code, metered) for every action CEO may offer in chat: wired, attachable, not the denial surface."""
     from backend.ceo.contract import Effect
+    from backend.ceo.plans import INTERNAL_ACTIONS
     from backend.ceo.registry import get_registry
 
     return {
         s.key: (s.agent.value, s.effect is Effect.GENERATE_METERED)
         for s in get_registry().specs()
-        if s.wired and s.agent is not None and not s.denial_surface
+        if s.wired and s.agent is not None and not s.denial_surface and s.key not in INTERNAL_ACTIONS  # internal hand-offs are never offered to the classifier
     }
 
 

@@ -70,6 +70,7 @@ class FormatConstraint:
             "source_url": self.source_url,
             "verified_at": self.verified_at.isoformat(),
             "version": self.version,
+            "row_kind": self.row_kind.value,  # VERIFIED, or TEST_FIXTURE (placeholder limits, not a sourced marketplace rule): shown to the seller so a fixture is never read as a real rule
         }
 
     @property

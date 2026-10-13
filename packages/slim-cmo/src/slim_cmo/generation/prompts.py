@@ -86,10 +86,18 @@ def title_prompt(
     data["marketplace"] = marketplace.value
     data["limits"] = _limits(constraint, "title_max_chars")
     data["already_accepted_titles_do_not_repeat"] = list(existing)
+    limit = constraint.title_max_chars
+    length_hint = (
+        f"The marketplace allows up to {limit} characters. Make good use of that room by including EVERY confirmed fact in DATA that a buyer searches by, "
+        "but never pad with filler words and never invent anything to fill space: a shorter title made only of real facts is better than a longer one with invented words. "
+        if limit is not None else "Include every confirmed fact in DATA that a buyer searches by, and never pad with filler or invented words. "
+    )
     return (
         f"{_RULES}\n\nTask: write {count} distinct, search-friendly product title options for {marketplace.value}. "
-        "Each title is one line and uses only facts from DATA. Options may differ in emphasis (brand first, "
-        "feature first, use case first). Their order does not imply quality.\n"
+        "Each title is one line and uses only facts from DATA. Default writing order (a style default, not a marketplace rule): brand, product type, "
+        "key feature or material, size or capacity, colour, main use; leave out any item DATA does not give. "
+        f"{length_hint}"
+        "Options may differ in emphasis (brand first, feature first, use case first). Their order does not imply quality.\n"
         'Reply shape: {"titles": ["...", "..."]}\n\n'
         f"{_data_block(data)}{_feedback(feedback)}"
     )
@@ -113,7 +121,8 @@ def pack_prompt(
     return (
         f"{_RULES}\n\nTask: write the listing copy pack for {marketplace.value}: one description, the bullet points "
         "and a list of search keywords, all consistent with the approved title and using only facts from DATA. "
-        "Write it for this marketplace only.\n"
+        "Write it for this marketplace only. "
+        f"Description: {description_guidance(constraint.description_max_chars)}\n"
         'Reply shape: {"description": "...", "bullets": ["..."], "keywords": ["..."]}\n\n'
         f"{_data_block(data)}{_feedback(feedback)}"
     )
@@ -157,12 +166,57 @@ def pack_repair_prompt(
     )
 
 
+DESCRIPTION_TARGET_LOW = 0.55  # a marketplace description is a full body of text, not a one-liner: aim for this fraction of the allowed length ...
+DESCRIPTION_TARGET_HIGH = 0.85  # ... up to this one (the hard limit stays a validator rule; this is only a writing target)
+
+
+def description_target(max_chars: int | None) -> tuple[int, int] | None:
+    """(low, high) character target for a description, computed by code from the resolved limit; None when no limit is known."""
+    if max_chars is None or max_chars <= 0:
+        return None
+    return int(max_chars * DESCRIPTION_TARGET_LOW), int(max_chars * DESCRIPTION_TARGET_HIGH)
+
+
+def description_guidance(max_chars: int | None) -> str:
+    t = description_target(max_chars)
+    size = (f"The marketplace allows at most {max_chars} characters. Write a full, substantial description of roughly {t[0]} to {t[1]} characters (never more than {max_chars}). "
+            if t else "Write a full, substantial description of several paragraphs. ")
+    return (
+        size + "Structure: an opening paragraph naming the brand, product type and what it is; then one or two paragraphs that walk through EVERY confirmed fact in DATA "
+        "(material, size or capacity, colour, features, intended use) in readable, buyer-friendly sentences; then a short closing paragraph that restates the product and its main confirmed facts. "
+        "Use the seller's own wording for each fact and vary the sentence openings so it reads naturally. Reach the length only by describing the confirmed facts fully and in plain words: "
+        "never add an attribute, benefit, certification, warranty, price, performance figure or claim that DATA does not state, and never write filler."
+    )
+
+
 _COMPONENT_TASK = {
     "DESCRIPTION": ('one product description', '{"description": "..."}', ()),
     "BULLETS": ("the bullet points", '{"bullets": ["..."]}', ("bullet_count", "bullet_max_chars")),
     "KEYWORDS": ("a list of search keywords", '{"keywords": ["..."]}', ("keywords_max_count", "keywords_max_chars")),
     "BACKEND_TERMS": ("hidden backend search terms (single words or short phrases, no repeats of the title)", '{"terms": ["..."]}', ("backend_terms_max_bytes",)),
 }
+
+
+def _component_guidance(kind: str, c: FormatConstraint) -> str:
+    """Concrete, code-written instructions for one artefact: the exact count and length it must meet (from the verified row) and how to work when facts are few. Adds no fact."""
+    if kind == "BULLETS":
+        n, m = c.bullet_count, c.bullet_max_chars
+        return (
+            f"Write exactly {n} bullets" + (f", each at most {m} characters" if m is not None else "") + ". Every bullet is a short plain phrase or sentence covering a DIFFERENT confirmed "
+            "fact (brand, product type, material, size or capacity, colour, main use, listed features) in wording close to the seller's own. If there are fewer distinct facts than bullets, "
+            "restate the approved title and the facts in different plain words, but never add a fact, benefit, claim or number that DATA does not contain. "
+            'Only if that is impossible, reply {"needs_facts": [...]}.'
+        )
+    if kind == "DESCRIPTION":
+        m = c.description_max_chars
+        return description_guidance(m)
+    if kind == "KEYWORDS":
+        n, m = c.keywords_max_count, c.keywords_max_chars
+        return (
+            "Give search keywords a buyer would type, each built only from confirmed facts (product type, brand, material, size, colour, use)"
+            + (f"; up to {n} keywords" if n is not None else "") + (f", each at most {m} characters" if m is not None else "") + "; no repeats."
+        )
+    return ""
 
 
 def component_prompt(
@@ -176,13 +230,14 @@ def component_prompt(
 ) -> str:
     task, shape, limit_names = _COMPONENT_TASK[kind]
     names = limit_names + (("description_max_chars",) if kind == "DESCRIPTION" else ())
+    guidance = _component_guidance(kind, constraint)
     data = _facts_data(facts)
     data["marketplace"] = marketplace.value
     data["approved_title"] = anchor_title
     data["limits"] = _limits(constraint, *names)
     return (
         f"{_RULES}\n\nTask: write {task} for {marketplace.value}, consistent with the approved title and using only "
-        f"facts from DATA.\nReply shape: {shape}\n\n{_data_block(data)}{_feedback(feedback)}"
+        f"facts from DATA. {guidance}\nReply shape: {shape}\n\n{_data_block(data)}{_feedback(feedback)}"
     )
 
 

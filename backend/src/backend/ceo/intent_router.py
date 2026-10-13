@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from backend.ceo.classifier import Catalog, Decision, parse_decision
+from backend.ceo.plans import PLAYBOOKS
 
 _MARKETPLACE = re.compile(r"\b(amazon|flipkart|meesho)\b", re.IGNORECASE)
 _WRITE = r"(?:write|give|generate|create|make|suggest|need|want|get|draft|find|show)"
@@ -36,6 +37,14 @@ class Rule:
     addons: tuple[str, ...] = ()  # need keys the matching request also asks for (spec agent-needs 5.3)
 
 
+# Common misspellings of the CMO keywords are accepted; the wording is only used to pick a route, every value is still parsed by the session's own parsers.
+_DESC = r"(?:descriptions?|discriptions?|descriptons?|descriptoins?|descrip\w*|desc)"
+_BULLETS = r"(?:bullet[- ]?points?|bulletpoints?|bullets?|bulet\w*)"
+_TITLES = r"(?:titles?|titels?|tittles?)"
+_KEYWORDS = r"(?:key ?words?|keyowrds?|keywrds?)"
+_HASHTAGS = r"(?:hash ?tags?|hastags?|hashtgs?)"
+
+
 def _rx(p: str) -> re.Pattern[str]:
     return re.compile(p, re.IGNORECASE)
 
@@ -47,13 +56,17 @@ def _rx(p: str) -> re.Pattern[str]:
 _NOT_A_WHY = r"^(?!.*\b(?:why|drop|dropped|fall|fell|declin\w*|decreas\w*|increas\w*|improv\w*|compar\w*)\b)"
 STATE_RULES: tuple[Rule, ...] = (
     Rule("QT_PROFIT_BY_PERIOD", "CFO", _rx(
-        _NOT_A_WHY + r".*(?:\b(?:what|how much)\b.*\b(?:profit|revenue|earnings|income)\b|\b(?:my|our) (?:profit|revenue|earnings|income)\b|\bhow much (?:did i|have i|did we) (?:make|made|earn|earned)\b)"), "BUSINESS_STATE"),
+        _NOT_A_WHY + r".*(?:\b(?:what|how much)\b.*\b(?:profit|revenue|earnings|income)\b|\b(?:my|our) (?:profit|revenue|earnings|income)\b|\b(?:my|our) (?:latest |recent |last |current )?(?:p&l|pnl|profit (?:and|&) loss)\b|\bhow much (?:did i|have i|did we) (?:make|made|earn|earned)\b)"), "BUSINESS_STATE"),
     Rule("QT_LEAKS", "CFO", _rx(
-        r"\bwhere (?:am i|are we) (?:losing|leaking|bleeding)\b|\b(?:losing|leaking) money\b|\b(?:my|our|open) (?:leaks?|leak findings?)\b|\bwhat(?:'s| is| are) (?:my )?leaks?\b"), "BUSINESS_STATE"),
+        r"\bwhere (?:am i|are we) (?:losing|leaking|bleeding)\b|\b(?:losing|leaking) money\b|\b(?:my|our|open) (?:leaks?|leak findings?)\b|\bwhat(?:'s| is| are) (?:my )?leaks?\b"
+        r"|\b(?:investigate|identify|find|review|analy[sz]e|check)\b.*\b(?:losing|leaking|leaks?)\b|\bprofit leaks?\b"), "BUSINESS_STATE"),
     Rule("QT_DATA_GAPS", "CFO", _rx(
         r"\bwhat (?:data|inputs?|information|reports?|details?) (?:are you|is|do you) (?:still )?(?:missing|need|needed|required)\b|\bwhat (?:are you|do you) (?:still )?(?:missing|need)\b|\bwhat(?:'s| is) missing\b|\bdata gaps?\b"), "BUSINESS_STATE"),
     Rule("QT_COMPETITORS_PRICES", "CI", _rx(
         r"^(?!.*\b(?:margin|scenarios?)\b).*(?:\bwhat(?:'s| is| are)? (?:my |our |the )?competitors?\b.*\b(?:charg\w*|pric\w*|sell\w* (?:at|for))\b|\bcompetitors?'? prices?\b|\bhow much (?:are|is|do) (?:my |our |the )?competitors?\b.*\b(?:charg\w*|sell\w*)\b)"), "BUSINESS_STATE"),
+    # A status question about the seller's saved product research ("status of my Product Intelligence brief ... do not run discovery") is a READ of the latest saved run.
+    Rule("QT_PRODUCT_IDEAS", "PI", _rx(
+        r"\b(?:status|progress|state)\b.*\b(?:product intelligence|product research|research run|discovery|niche brief|brief)\b|\b(?:product intelligence|product research|niche brief)\b.*\b(?:status|progress)\b"), "BUSINESS_STATE"),
     Rule("QT_PRODUCT_IDEAS", "PI", _rx(
         r"\bwhat (?:product )?(?:ideas?|products?)\b.*\b(?:did you|have you|you) (?:find|found|list|listed|come up with)\b|\bproduct ideas? (?:you|we) (?:found|listed|have)\b|\bwhat did (?:you|the (?:product )?research|product intelligence) (?:find|found)\b"), "BUSINESS_STATE"),
     Rule("QT_LISTING_CONTENT", "CMO", _rx(
@@ -68,9 +81,19 @@ STATE_RULES: tuple[Rule, ...] = (
         r"\b(?:my|our) (?:inventory|stock levels?|ad spend|advertising spend|customers?|order count|sales volume|best[- ]?selling (?:sku|product)s?)\b|\bhow (?:much|many) (?:stock|inventory|orders?|units|customers?)\b.*\b(?:do i|have i|did i|do we|have we|did we)\b"), "BUSINESS_STATE"),
 )
 
+# An overview request is the BUSINESS_BRIEFING playbook (saved results only, no slot). It comes BEFORE the state rules because a briefing prompt usually also says
+# "what data is missing", which would otherwise be read as the narrower data-gaps question.
+BRIEFING_RULES: tuple[Rule, ...] = (
+    Rule("BUSINESS_BRIEFING", "CFO", _rx(
+        r"\b(?:business|cross[- ]domain|overall|overview|executive|morning)\s+(?:briefing|brief|overview|summary|snapshot)\b|\bbriefing\b.*\b(?:business|my (?:store|company|shop))\b|\bbrief me\b"
+        r"|\b(?:overview|summary|snapshot) of (?:my|the|our) (?:whole |entire )?(?:business|store|company|shop)\b"), "PLAYBOOK"),
+)
+
 # Ordered: the first match wins. Each pattern needs a clear verb or noun for the work, not just a keyword anywhere.
-RULES: tuple[Rule, ...] = STATE_RULES + (
-    Rule("cmo.generate_description", "CMO", _rx(r"(?=.*\bdescriptions?\b)(?=.*\bgst\b)(?=.*\b(?:with|along|also|and|plus|together)\b)"), "ACTION", ("GST_RATE_FOR_PRODUCT",)),
+RULES: tuple[Rule, ...] = BRIEFING_RULES + STATE_RULES + (
+    Rule("cmo.generate_description", "CMO", _rx(rf"(?=.*\b{_DESC}\b)(?=.*\bgst\b)(?=.*\b(?:with|along|also|and|plus|together)\b)"), "ACTION", ("GST_RATE_FOR_PRODUCT",)),
+    # Description AND bullets together: the listing copy pack already writes both (plus keywords) as ONE artefact, one approval, one CMO unit.
+    Rule("cmo.generate_listing_copy", "CMO", _rx(rf"^(?!.*\bgst\b)(?!\s*(?:tell me about|explain|what|how|why|were|are|is|do|does|did)\b)(?=.*\b{_BULLETS}\b)(?=.*\b{_DESC}\b)(?=.*\b{_WRITE}\b|.*\b(?:and|together|also|with|plus)\b)")),
     Rule("gst_lookup", "CFO", _rx(r"\bgst\b.*\b(?:rate|percent|percentage|%|slab|apply|applies|applicable|charge)\b|\b(?:rate|percent|percentage|slab)\b.*\bgst\b|\bgst (?:on|for|of)\b")),
     Rule("NEW_PRODUCT_DECISION", "CFO", _rx(r"\bworth (?:stocking|buying|importing|selling)\b|\bshould i (?:stock|buy|import|order)\b"), "PLAYBOOK"),
     Rule("COMPETITOR_PRICE_IMPACT", "CI", _rx(r"(?=.*\bmargin\b)(?:.*\b(?:at|match|matched|matching|beat|undercut)\b.*\bprice\b|.*\b(?:is|are|dropped|cut|lowered)\b.*\b(?:at|to)\s*(?:₹|rs\.?)?\s*\d)"), "PLAYBOOK"),
@@ -81,13 +104,24 @@ RULES: tuple[Rule, ...] = STATE_RULES + (
         "cmo.generate_hashtags", "CMO",
         _rx(
             r"^(?!\s*(?:tell me about|explain|what (?:is|are|makes?)|what's|how (?:do|does|should|many|to|can)|why|were|are|is|do|does|did)\b)"
-            r"(?:.*\b(?:write|give|generate|create|make|suggest|draft|need|want|get)\b.*\bhash\s?tags?\b|.*\bhash\s?tags?\s+(?:for|ideas?)\b)"
+            rf"(?:.*\b(?:write|give|generate|create|make|suggest|draft|need|want|get)\b.*\b{_HASHTAGS}\b|.*\b{_HASHTAGS}\s+(?:for|ideas?)\b)"
         ),
     ),
-    Rule("cmo.generate_title_sets", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing |product |amazon |flipkart |meesho )?titles?\b|\btitles? (?:options?|ideas?|for)\b")),
-    Rule("cmo.generate_description", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:product |listing )?descriptions?\b")),
-    Rule("cmo.generate_keywords", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:search |seo )?keywords?\b|\bkeywords? (?:for|ideas?)\b")),
-    Rule("cmo.market_trends", "CMO", _rx(r"\b(?:market|niche|category|marketplace) trends?\b|\btrend (?:report|research|analysis)\b|\bwhat(?:'s| is) (?:happening|trending|new) in (?:my|the) (?:market|niche|category)\b")),
+    Rule("cmo.generate_listing_copy", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing copy|copy pack|full listing|complete listing)\b|\b(?:listing copy|copy pack)\b.*\bfor\b")),
+    Rule("cmo.generate_backend_terms", "CMO", _rx(rf"\b{_WRITE}\b.*\bbackend (?:search )?(?:terms|keywords)\b|\bbackend (?:search )?(?:terms|keywords)\b.*\bfor\b")),
+    Rule("cmo.generate_bullets", "CMO", _rx(rf"\b{_WRITE}\b.*\b{_BULLETS}\b|\b{_BULLETS}\b.*\bfor\b")),
+    Rule("cmo.generate_title_sets", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing |product |amazon |flipkart |meesho )?{_TITLES}\b|\b{_TITLES} (?:options?|ideas?|for)\b")),
+    Rule("cmo.generate_description", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:product |listing )?{_DESC}\b")),
+    Rule("cmo.generate_keywords", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:search |seo )?{_KEYWORDS}\b|\b{_KEYWORDS} (?:for|ideas?)\b")),
+    Rule("cmo.market_trends", "CMO", _rx(
+        r"\b(?:market|niche|category|marketplace) trends?\b|\btrend (?:report|research|analysis)\b|\bwhat(?:'s| is) (?:happening|trending|new) in (?:my|the) (?:market|niche|category)\b"
+        # News phrasings (a main feature): the seller wants CURRENT public news, which only the market-research flow can fetch, source and date.
+        r"|\b(?:e-?commerce|amazon|flipkart|meesho|marketplace|market|seller|online selling)\s+(?:news|updates)\b"
+        r"|\bnews\b.*\b(?:e-?commerce|amazon|flipkart|meesho|marketplaces?|online sell\w*|sellers?|market)\b"
+        r"|\b(?:e-?commerce|amazon|flipkart|meesho|marketplaces?)\b.*\bnews\b"
+        r"|\b(?:latest|current|recent|today'?s|fresh) (?:e-?commerce |market |seller |marketplace )?news\b|\b(?:latest|current|recent) (?:e-?commerce|market|seller|marketplace) updates\b"
+        r"|\bwhat(?:'s| is) (?:happening|going on|new) (?:in|on|with) (?:the )?(?:e-?commerce|amazon|flipkart|meesho|online selling|marketplaces?)\b"
+        r"|\bupdates? (?:in|on|about|from) (?:the )?(?:e-?commerce|amazon|flipkart|meesho|marketplaces?)\b")),
     Rule("pi.report", "PI", _rx(r"\b(?:show|see|open|view|display|get|give)\b.*\b(?:research|discovery|product ideas?|ideas)\b.*\b(?:report|results?|details?|run)\b|\b(?:latest|last|previous)\b.*\b(?:product )?research\b.*\b(?:report|results?)\b|\bresearch report\b")),
     Rule(
         "pi.discover", "PI",
@@ -182,7 +216,7 @@ def route(text: str, cat: Catalog) -> Decision | None:
     for rule in RULES:
         if not rule.pattern.search(t):
             continue
-        if rule.kind == "PLAYBOOK" and not _slots(rule, t):
+        if rule.kind == "PLAYBOOK" and PLAYBOOKS[rule.key].required_slots and not _slots(rule, t):
             continue  # no product named ("find products worth stocking"): the model decides, nothing is guessed
         item = cat.item(rule.kind, rule.key)
         if item is None:  # the member cannot run it here: say why, do not ask something unrelated

@@ -20,7 +20,7 @@ import io
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
@@ -86,6 +86,9 @@ _AMOUNT_WORDS = re.compile(
     r"royalty|closing|collection|net|gross|igst|cgst|sgst", re.IGNORECASE)
 _ID_WORDS = re.compile(r"(?:^|[^a-z])(?:id|ids|no|number|num|ref|reference|awb|sku|utr|asin|fsn|hsn|pincode|pin|gstin|invoice|order|suborder|sub order|transaction|settlement|shipment|tracking)(?:[^a-z]|$)", re.IGNORECASE)
 _DATE_HEADER = re.compile(r"date|time|period|day|month|settled|placed|shipped|delivered|returned", re.IGNORECASE)
+# Numeric columns that are never money even when their header also contains a money word ("GST Filing Year", "Ship To Postal Code", "Igst Rate"): they are not summed or
+# ranked as amounts. Detected from the header only; the cells are still read, and the column is listed with its plain type.
+_NOT_MONEY_WORDS = re.compile(r"year|postal|post ?code|zip|pin ?code|\bcode\b|\brate\b|percent|pct|%|month|quarter|\bfy\b", re.IGNORECASE)
 _QTY_WORDS = re.compile(r"quantity|qty|units|count|weight", re.IGNORECASE)
 _CURRENCY = re.compile(r"₹|\brs\.?|\binr\b", re.IGNORECASE)
 _DATE_FORMATS = ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y/%m/%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d/%m/%Y %H:%M:%S", "%d-%m-%Y %H:%M:%S", "%d %b %Y", "%d-%b-%Y", "%d %B %Y", "%b %d, %Y")
@@ -232,7 +235,7 @@ def _build_sheet(name: str, grid: list[tuple[int, list[Any]]], *, skipped_empty:
             else:
                 values.append(None)  # a cell that does not fit the column is not counted; its row is named
                 bad.append(no)
-        amount_like = kind == "number" and (bool(_AMOUNT_WORDS.search(cname)) or symbol) and not id_like
+        amount_like = kind == "number" and (bool(_AMOUNT_WORDS.search(cname)) or symbol) and not id_like and not _NOT_MONEY_WORDS.search(cname)
         columns.append(Column(cname, kind, values, bad, amount_like, symbol))
     return Sheet(name, header_row, columns, row_numbers, ragged_rows=ragged, truncated_rows=truncated_rows, truncated_cols=truncated_cols,
                  skipped_empty_rows=skipped_empty, formulas_without_value=formulas)
@@ -344,6 +347,20 @@ def _rows(nums: list[int]) -> str:
 
 
 # ------------------------------------------------------------------------------------------------ analyses
+_MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), start=1)}
+_FILENAME_MONTH = re.compile(r"(?<![a-z])(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\W_]*(20\d{2})(?!\d)", re.IGNORECASE)
+
+
+def filename_month_hint(filename: str) -> tuple[date, date] | None:
+    """(first day, last day) of a month-and-year written in the file name ("amazon_mtr_sep_2025.csv"), or None. A hint to check the dates against, never a period."""
+    m = _FILENAME_MONTH.search(filename)
+    if not m:
+        return None
+    month, year = _MONTHS[m.group(1).lower()], int(m.group(2))
+    first = date(year, month, 1)
+    return first, (date(year + (month == 12), month % 12 + 1, 1) - timedelta(days=1))
+
+
 def describe(wb: Workbook) -> list[str]:
     out = [f"File {_q(wb.filename)} ({wb.kind}): {len(wb.sheets)} sheet{'s' if len(wb.sheets) != 1 else ''}."]
     if wb.sheets_truncated:
@@ -362,7 +379,15 @@ def describe(wb: Workbook) -> list[str]:
         if s.skipped_empty_rows:
             out.append(f"{s.skipped_empty_rows} completely empty row{'s were' if s.skipped_empty_rows != 1 else ' was'} skipped.")
     if wb.dates_day_first:
-        out.append("Dates written like 03/04/2026 were read day first (3 April).")
+        out.append("Dates written like 03/04/2026 are ambiguous (3 April or 4 March) and the file does not say which; I read them day first (3 April). Confirm this before relying on any period below.")
+    p = _period(wb)
+    if p is not None:
+        out.append(f"Reporting period suggested by the dates in {_q(p[0])}: {p[1].isoformat()} to {p[2].isoformat()}" + (" (reading slash dates day first)." if wb.dates_day_first else "."))
+        hint = filename_month_hint(wb.filename)
+        if hint is not None and not (p[1] <= hint[1] and hint[0] <= p[2]):
+            out.append(f"The file name suggests {hint[0].strftime('%B %Y')}, but its dates do not fall in that month, so the reporting period is unverified: check the file and the date format before using any total as that month's figure.")
+    else:
+        out.append("No date column was found, so the reporting period cannot be established from the file.")
     return out
 
 

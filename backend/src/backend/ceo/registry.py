@@ -378,6 +378,20 @@ def build_default_registry() -> ActionRegistry:
                 writes_own_run=True,
             )
         )
+    # The CEO -> CMO photo hand-off by reference (ceo-cmo-delegation.md DD2). `cmo.image_upload` (raw bytes, a write) stays forbidden; this action's only slots are an attachment id and
+    # the hash the CEO saw, and it always needs its own 0-unit plan card (effects.force_approval).
+    analyze_slots = cmo_api.AnalyzeAttachmentBody
+
+    def _analyze_attachment(slots: Any, ctx: AuthContext, leg: LegContext) -> Mapping[str, Any]:
+        assert leg.investigation_id is not None  # a hand-off only exists inside a conversation: the reference is validated against it
+        return cmo_api.analyze_attachment_for_ceo(slots, ctx, leg.investigation_id)
+
+    specs.append(
+        ActionSpec(
+            key="cmo.analyze_attachment", source="CMO", agent=AgentCode.CMO, effect=Effect.COMPUTE_PERSIST, description="CMO reads an attached product photo (by reference)",
+            slot_model=analyze_slots, invoke=_analyze_attachment, entitlement=None, writes_own_run=True,
+        )
+    )
     return ActionRegistry(_with_effects(specs))
 
 

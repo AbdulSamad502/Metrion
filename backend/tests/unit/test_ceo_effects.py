@@ -12,7 +12,7 @@ from backend.ceo.registry import ActionRegistry, RegistryError, _with_effects, g
 
 def test_every_registered_action_has_exactly_one_effects_entry_and_vice_versa():
     keys = {s.key for s in get_registry().specs()}
-    assert len(keys) == 36
+    assert len(keys) == 37
     assert keys == set(ACTION_EFFECTS)
     assert all(s.effects is ACTION_EFFECTS[s.key] for s in get_registry().specs())
 
@@ -48,7 +48,7 @@ def test_inconsistent_metadata_is_refused():
 def test_the_derived_approval_set_is_a_visible_diff_when_it_changes():
     gated = {s.key for s in get_registry().specs() if s.effects.requires_approval}
     assert gated == {
-        "cmo.catalog_answer", "cmo.generate_backend_terms", "cmo.generate_bullets", "cmo.generate_description", "cmo.generate_hashtags",
+        "cmo.analyze_attachment", "cmo.catalog_answer", "cmo.generate_backend_terms", "cmo.generate_bullets", "cmo.generate_description", "cmo.generate_hashtags",
         "cmo.generate_keywords", "cmo.generate_listing_copy", "cmo.generate_title_sets", "cmo.market_trends", "pi.discover", "pi.supplier_lookup",
     }
 

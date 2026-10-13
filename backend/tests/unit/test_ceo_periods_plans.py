@@ -84,6 +84,9 @@ def test_every_planned_action_is_a_wired_registry_action_with_valid_slots():
         "cmo.generate_hashtags": {"request_key": "k", "product_name": "bottle"},
         "cmo.generate_description": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
         "cmo.generate_keywords": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
+        "cmo.generate_bullets": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
+        "cmo.generate_backend_terms": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
+        "cmo.generate_listing_copy": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
         "cmo.market_trends": {"request_key": "k", "marketplaces": ["AMAZON"], "plan_digest": "a" * 64},  # spec 6.40: the run is bound to a confirmed preview
         "cmo.market_trends_preview": {"marketplaces": ["AMAZON"]},
     }

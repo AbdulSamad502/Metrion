@@ -26,7 +26,7 @@ export type InvestigationMeta = InvestigationSummary & {
   summary: string | null;
 };
 
-export type MessageKind = "TEXT" | "CLARIFICATION" | "ANSWER" | "BRIEFING" | "SYSTEM_NOTE";
+export type MessageKind = "TEXT" | "CLARIFICATION" | "ANSWER" | "BRIEFING" | "SYSTEM_NOTE" | "PLAN";
 
 /** One real choice on a decision card. Built by the backend from the seller's own data; `reason` is the stated rule behind the recommendation. */
 export type ClarificationOption = { key: string; label: string; kind: "RECOMMENDED" | "ALTERNATIVE" | "OTHER" | "CANCEL" | "BACK"; reason: string; /** set by the backend on an option that records "unknown" on purpose: offered as Skip */ skip?: boolean; /** set on a FORM card option: opens that playbook's run-form instead of answering */ form?: string };
@@ -174,7 +174,24 @@ export type NewProductFormSupport = { quotes: StoredInputRow[]; budget: StoredIn
 /** One seller input saved through the existing CFO expense path (needs the CFO key and financials.adjust). */
 export type SaveInputBody = { target_type: "SKU" | "ACCOUNT"; target_ref: string; field: "cogs_per_unit" | "supplier.quote" | "batch.budget"; value: Record<string, unknown>; supersedes_id?: string | null };
 
+export type PlanStatus = "AWAITING_APPROVAL" | "APPROVED" | "DECLINED" | "EXPIRED" | "SUPERSEDED" | string;
+/** A stored approval plan (ceo-approval-workflow.md). The PLAN message of the thread is rendered from THIS row (matched by `plannedTurnId`), never parsed from text.
+ * `planHash` is what the Approve button sends back with the plan id: the server recomputes it and refuses a mismatch. */
+export type PlanView = {
+  id: string;
+  status: PlanStatus;
+  planHash: string;
+  plan: { summary_text?: string; title?: string; compact_lines?: string[]; details?: string[]; legs?: { action_key: string; meters?: { meter_code: string; units: number }[] }[]; [k: string]: unknown };
+  createdAt: string;
+  expiresAt: string;
+  plannedTurnId: string | null;
+  executionTurnId: string | null;
+  viewerIsRequester: boolean;
+  decisionReason?: string | null;
+};
+
 export type InvestigationDetail = {
+  plans?: PlanView[];
   investigation: InvestigationMeta;
   agents: Partial<Record<AgentCode, boolean>>;
   messages: CeoMessage[];
@@ -249,6 +266,9 @@ export function createCeoClient(getToken: GetToken) {
           ...(clientRequestId ? { clientRequestId } : {}), // one logical submission = one id: the server answers a retry with the stored outcome instead of running it again
         }),
       ),
+    /** The ONLY way a plan is approved: the plan id and the plan hash the seller was shown. Typing "yes" in the chat never reaches this. */
+    approvePlan: (id: string, planId: string, planHash: string) => call<{ status: string; replayed?: boolean }>(`/investigations/${id}/plans/${planId}/approve`, json("POST", { plan_hash: planHash })),
+    declinePlan: (id: string, planId: string, reason?: string | null) => call<{ status: string }>(`/investigations/${id}/plans/${planId}/decline`, json("POST", { reason: reason ?? null })),
     getHealth: () => call<{ entries: HealthEntry[] }>("/state/health"),
     getMemory: () => call<{ items: MemoryItem[] }>("/memory"),
     forgetMemory: (id: string) => call<{ forgotten: string }>(`/memory/${encodeURIComponent(id)}/forget`, json("POST", {})),

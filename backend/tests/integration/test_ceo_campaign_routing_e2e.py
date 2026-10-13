@@ -55,12 +55,12 @@ CASES = [
     # --- misrouting guards: these must NOT start a market-wide discovery run
     ("Research my competitor's product reviews", "MODEL", None, None, None, []),
     ("What are my top selling products?", "MODEL", None, None, None, []),
-    # --- marketing / CMO (metered: approval-gated)
-    ("Write hashtags for my steel water bottle on Amazon", None, "ADVISORY", None, "DENIED", []),
-    ("Write a title for my steel bottle on Flipkart", None, "ADVISORY", None, "DENIED", []),
-    ("Write a description for my yoga mat", None, "ADVISORY", None, "DENIED", []),
-    ("Give me keywords for my yoga mat", None, "ADVISORY", None, "DENIED", []),
-    ("What's trending in my niche?", None, "ADVISORY", None, "DENIED", []),
+    # --- marketing / CMO (metered): the CEO asks for what is missing, or - when everything is given - stores a plan card; NOTHING runs before the seller approves it
+    ("Write hashtags for my steel water bottle on Amazon", None, "CLARIFY", None, "CLARIFIED", []),  # product and marketplace are given; the optional brand question is asked before the plan
+    ("Write a title for my steel bottle on Flipkart", None, "CLARIFY", None, "CLARIFIED", []),
+    ("Write a description for my yoga mat", None, "CLARIFY", None, "CLARIFIED", []),
+    ("Give me keywords for my yoga mat", None, "CLARIFY", None, "CLARIFIED", []),
+    ("What's trending in my niche?", None, "CLARIFY", None, "CLARIFIED", []),
     ("What titles did we write?", None, "BUSINESS_STATE", "QT_LISTING_CONTENT", "DELIVERED", []),
     # --- competitors / pricing (non-financial routing only)
     ("What are my competitors charging?", None, "BUSINESS_STATE", "QT_COMPETITORS_PRICES", "DELIVERED", []),

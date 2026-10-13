@@ -35,7 +35,7 @@ Status: specified 2026-10-10 (architect, owner-directed). Not built. Authority f
 
 **Goals.** (1) A fixed, auditable way for one agent's information need to be served by another, still a strict star. (2) A shared findings ledger the seller controls, with the trust of each entry on its face. (3) A CEO that answers "what is my profit / what leaks / what did the agents find" strictly from stored, cited data, and says plainly when something is not stored. (4) The Hub shows who asked whom for what.
 
-**Non-goals.** Any agent-to-agent call. A model choosing a provider or a slot. Same-turn data dependencies (D3). Vector search, RAG or embeddings over findings (the pgvector option in `agent-memory.md` §2 stays V2). Model-written SQL. Writing to a marketplace or the seller's books (C21). Findings from direct (dashboard) runs (D5). Writing findings from seller documents or attachments. Proactive situations (V1-later, §6.17).
+**Non-goals.** Any agent-to-agent call. A model choosing a provider or a slot. Same-turn data dependencies (D3). Vector search, RAG or embeddings **inside the findings ledger or as a way to write to it** (read-only semantic retrieval over active findings is specified separately in `rag-knowledge.md`, 2026-10-12; the ledger stays authoritative and append-only). Model-written SQL. Writing to a marketplace or the seller's books (C21). Findings from direct (dashboard) runs (D5). Writing findings from seller documents or attachments. Proactive situations (V1-later, §6.17).
 
 ## 5. Core rules and data model, by part
 

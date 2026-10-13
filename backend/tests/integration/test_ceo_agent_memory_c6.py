@@ -34,6 +34,13 @@ def keep(tenant, user, agent, key, value):
     return memory.note(tenant, agent=agent, key=key, value=value, basis="CONFIRMED_DECISION", source_ref=SRC, created_by=user)
 
 
+def skip_extras(ctx, rt, inv, res):
+    """The optional extra-detail questions (brand, features) that follow the required ones are skipped."""
+    while res.status == "CLARIFIED" and str(res.choices["slot"]).startswith("fact_"):
+        res = orchestrator.run_turn(ctx, rt, inv, "skip")
+    return res
+
+
 def first_option(card):
     return card["options"][0]
 
@@ -53,7 +60,7 @@ def test_cmo_remembers_the_confirmed_marketplace_and_offers_it_first_without_fil
     q = orchestrator.run_turn(ctx, rt, inv, ASK)
     assert q.status == "CLARIFIED" and memory.offered(a, "CMO", "last_marketplaces") is None  # a session still asking writes nothing
     assert [o["label"] for o in q.choices["options"]][:3] == ["Amazon", "Flipkart", "Meesho"]  # no memory yet: the existing options only
-    done = orchestrator.run_turn(ctx, rt, inv, "Flipkart")
+    done = skip_extras(ctx, rt, inv, orchestrator.run_turn(ctx, rt, inv, "Flipkart"))
     assert done.status == "DELIVERED"
     [row] = repo.list_active(a, scope="PRIVATE", agent="CMO", kind="NOTE", key="last_marketplaces")
     assert row["value"] == "FLIPKART" and row["basis"] == "CONFIRMED_DECISION" and row["source_ref"]["message_id"]
@@ -97,7 +104,7 @@ def test_skipping_the_optional_marketplace_remembers_nothing(two_tenants, app_us
     rt = cmo_rt(calls, Scripted({ASK: HASHTAGS(product="steel water bottle")}))
     inv = start(ctx, rt)
     orchestrator.run_turn(ctx, rt, inv, ASK)
-    assert orchestrator.run_turn(ctx, rt, inv, "skip").status == "DELIVERED"
+    assert skip_extras(ctx, rt, inv, orchestrator.run_turn(ctx, rt, inv, "skip")).status == "DELIVERED"
     assert memory.offered(a, "CMO", "last_marketplaces") is None
 
 

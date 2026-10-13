@@ -66,9 +66,11 @@ def test_a_question_about_hashtags_does_not_start_generation_or_claim_approval_i
 
 
 @pytest.mark.parametrize("text", ["Generate hashtags for my product.", "Give me 20 hashtags for this product."])
-def test_an_explicit_hashtag_request_is_still_stopped_by_the_approval_gate(text, two_tenants, app_user):
+def test_an_explicit_hashtag_request_asks_for_the_missing_inputs_and_runs_nothing_before_approval(text, two_tenants, app_user):
     a, _ = two_tenants
     rt, called, _ = build(None)
     ctx = ctx_for(a, user_id=app_user)
-    res = orchestrator.run_turn(ctx, rt, start(ctx, rt), text)
-    assert called == [] and res.status == "DENIED" and repo.get_turn(a, res.turn_id)["classifier_result"]["approvalRequiredFor"] == "cmo.generate_hashtags"
+    inv = start(ctx, rt)
+    res = orchestrator.run_turn(ctx, rt, inv, text)
+    assert called == [] and res.status == "CLARIFIED"  # the CEO asks for the product / marketplace first; the plan card, then the Approve click, come later
+    assert "approvalRequiredFor" not in (repo.get_turn(a, res.turn_id)["classifier_result"] or {}) and repo.list_findings(a, inv) == []

@@ -1,3 +1,5 @@
+-- !! OWNER: THESE LIMITS ARE PLACEHOLDERS, NOT THE REAL MARKETPLACE RULES. Verify them against the current Amazon / Flipkart / Meesho seller-central documentation before relying on any
+--    result fitted to them. Chat results fitted to these rows are labelled "placeholder limits for testing". Real rules go in through seed_format_constraints.py (VERIFIED, sourced, dated).
 -- LOCAL DEVELOPMENT ONLY. Insert-only (idempotent); deletes nothing. NOT a migration, NOT production data.
 -- 1) Three TEST_FIXTURE format-constraint rows with PLACEHOLDER limits (NOT verified marketplace rules). Used only when the backend runs
 --    with CMO_ACCEPT_TEST_FIXTURE_CONSTRAINTS=true. Version 100000 so they outrank leftover test-suite rows.

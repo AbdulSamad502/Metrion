@@ -56,6 +56,7 @@ class Field:
     options: Callable[[Ctx, Mapping[str, Any]], Sequence[Option]] = lambda ctx, got: ()
     unanswerable: Callable[[Ctx, Mapping[str, Any]], str | None] = lambda ctx, got: None  # a reason the question can never be answered (nothing to choose from)
     applies: Callable[[Ctx, Mapping[str, Any]], bool] = lambda ctx, got: True  # False = not asked (e.g. a quote is already stored); the field is simply absent
+    optional: bool = False  # a skippable extra detail: when the question limit is reached with only these left, the task goes on without them instead of stopping
 
 
 # ------------------------------------------------------------------------------------------------ parsers
@@ -294,7 +295,55 @@ def _cmo_marketplace_options(single: bool, *, skip: bool = False) -> Callable[[C
 
 
 _SKIP = lambda why: (lambda ctx, got: (Option("Skip", "skip", why),))  # noqa: E731
-_PRODUCT = Field("product_name", lambda c, g: "What is the product? Name it the way a buyer would search for it.", _text(200))
+_PRONOUNS = frozenset({"it", "this", "that", "this one", "that one", "this product", "that product", "the product", "my product", "the same", "same", "same product", "the same product", "them"})
+
+
+def _product_text(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    """The product the seller sells, in their own words. A pronoun ("it", "this product") is NOT a product name: it is asked for again, never stored as if it were one."""
+    t = " ".join(raw.split())
+    if t.casefold().strip(" .!?") in _PRONOUNS:
+        return Reject("Please name the product itself, for example steel water bottle.")
+    return _text(200)(raw, ctx, got)
+
+
+# ---- facts read from an attached product photo (ceo-cmo-delegation.md CD2, 6.4). The hidden entries "_obs" / "_attachment" ride in `collected` (JSON, text only); they are never an
+# input of the CMO action. An observation is only ever OFFERED as a one-click confirmation of the SELLER's own statement; it is never filled in, and visible text is never offered.
+IMAGE_FACT_ATTRS: tuple[str, ...] = ("color", "material", "size", "brand")  # asked one by one, only when the photo showed a value; product_type is offered for the product name
+_FROM_ATTACHMENT = "From your attachment: a suggestion, not verified. Choosing it confirms it as your own statement"
+
+
+def observed(got: Mapping[str, Any]) -> Mapping[str, str]:
+    obs = got.get("_obs")
+    return {k: v for k, v in obs.items() if isinstance(k, str) and isinstance(v, str) and v.strip()} if isinstance(obs, Mapping) else {}
+
+
+def _product_question(ctx: Ctx, got: Mapping[str, Any]) -> str:
+    seen = observed(got).get("product_type")
+    if seen:
+        return f"What is the product? Your attachment looks like a {seen} (read from the photo, not verified). Confirm that, or type the product the way a buyer would search for it."
+    return ("What is the product? Name it the way a buyer would search for it. If you would rather show me, attach a photo of it and ask again: I will read what is visible and "
+            "ask you to confirm each detail.")
+
+
+def _product_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    seen = observed(got).get("product_type")
+    return (Option(f"Yes, a {seen}", seen, _FROM_ATTACHMENT),) if seen and len(seen) <= 200 else ()
+
+
+_PRODUCT = Field("product_name", _product_question, _product_text, _product_options)
+
+
+def _fact_field(attr: str) -> Field:
+    return Field(
+        f"fact_{attr}",
+        lambda c, g: f"Your attachment suggests the {attr} is \u201c{observed(g).get(attr, '')}\u201d (read from the photo, not verified). Is that right? Confirm it, type the correct {attr}, or skip.",
+        _optional_text(60),
+        lambda c, g: (Option(f"Yes, {observed(g).get(attr, '')}", observed(g).get(attr, ""), _FROM_ATTACHMENT), Option("Skip", "skip", f"The {attr} is not used")),
+        applies=lambda c, g, a=attr: bool(observed(g).get(a)),
+    )
+
+
+IMAGE_FACT_FIELDS: tuple[Field, ...] = tuple(_fact_field(a) for a in IMAGE_FACT_ATTRS)
 _SELLER_TITLE = Field("seller_title", lambda c, g: "What title do you use for it today (or want to use)? I will write from it, so what you give me is what the copy is based on.", _text(500))
 
 def _fit(words: Sequence[str], limit: int = 100) -> str:
@@ -327,19 +376,63 @@ def _theme_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
     return (*out, Option("Skip", "skip", "Titles are written without a category hint"))[:MAX_OPTIONS]
 
 
+def _marketplace_question(noun: str) -> str:
+    return f"Which marketplace do you want {noun} for (Amazon, Flipkart, Meesho)?"
+
+
+def _detail(attr: str, question: str, why: str, max_len: int = 200) -> Field:
+    """An optional, skippable high-value detail the seller may add (brand, size, features...). It is the seller's own statement, never guessed and never filled in; skipping it is fine
+    (the result then warns that the input was thin). Where a photo already suggested a value for the same detail, the photo-confirmation question is asked instead."""
+    return Field(
+        f"fact_{attr}", lambda c, g: question, _optional_text(max_len), _SKIP(why), applies=lambda c, g, a=attr: not observed(g).get(a), optional=True,
+    )
+
+
+_BRAND_Q = _detail("brand", "What is the brand? Skip it if it has none.", "No brand is used", 80)
+_SIZE_Q = _detail("size", "What size or capacity is it (for example 1 litre, large, 500 g)? Skip it if not relevant.", "No size is used", 60)
+_FEATURES_Q = _detail("key_features", "What are 1 to 3 key features buyers care about? Only what is true; I add none of my own. Skip if you would rather not say.", "No features are used")
+_USE_Q = _detail("main_use", "What is it mainly used for, or who is it for (for example gym, school, office, kids)? Skip if not relevant.", "No main use is used", 120)
+_KEYWORDS_Q = _detail("search_keywords", "Any 1 to 3 search words you want people to find it by? Separate them with commas, or skip.", "No extra search words are used", 120)
+
+_COMMON_FIRST = (_PRODUCT, *IMAGE_FACT_FIELDS)
 CMO_TITLES: tuple[Field, ...] = (
-    _PRODUCT,
-    Field("category_hint", lambda c, g: "Which category is it in? For example kitchen, apparel, electronics. Or choose themes I already hold.", _optional_text(100), _theme_options),
-    Field("marketplaces", lambda c, g: "Which marketplace should the titles be written for? You can name more than one.", _marketplaces, _cmo_marketplace_options(False)),
+    *_COMMON_FIRST,
+    Field("category_hint", lambda c, g: "Which category is it in? For example kitchen, apparel, electronics. Or choose themes I already hold.", _optional_text(100), _theme_options, optional=True),
+    Field("marketplaces", lambda c, g: _marketplace_question("titles"), _marketplaces, _cmo_marketplace_options(False)),
+    _BRAND_Q, _SIZE_Q, _FEATURES_Q, _USE_Q, _KEYWORDS_Q,
 )
 CMO_HASHTAGS: tuple[Field, ...] = (
-    _PRODUCT,
-    Field("marketplace", lambda c, g: "Which marketplace are the hashtags for?", _optional_marketplace, _cmo_marketplace_options(True, skip=True)),
+    *_COMMON_FIRST,
+    Field("marketplace", lambda c, g: _marketplace_question("hashtags"), _optional_marketplace, _cmo_marketplace_options(True, skip=True)),
+    _BRAND_Q, _FEATURES_Q,
 )
-CMO_GROUNDED: tuple[Field, ...] = (
-    _PRODUCT,
-    Field("marketplace", lambda c, g: "Which marketplace is this for?", _one_marketplace, _cmo_marketplace_options(True)),
+
+
+def _grounded(noun: str) -> tuple[Field, ...]:
+    return (
+        *_COMMON_FIRST,
+        Field("marketplace", lambda c, g: _marketplace_question(noun), _one_marketplace, _cmo_marketplace_options(True)),
+        _SELLER_TITLE,
+        _BRAND_Q, _SIZE_Q, _FEATURES_Q,
+    )
+
+
+CMO_DESCRIPTION, CMO_KEYWORDS, CMO_BULLETS, CMO_LISTING = _grounded("a description"), _grounded("keywords"), _grounded("bullets"), _grounded("the listing copy")
+CMO_GROUNDED = CMO_BULLETS  # kept for importers that only need "the grounded shape"; each action has its own table so the question names what is being written
+
+
+def _amazon_only(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    found = _one_marketplace(raw, ctx, got)
+    if isinstance(found, Reject):
+        return found
+    return found if found == "AMAZON" else Reject("Backend search terms are an Amazon-only field, so this can only be written for Amazon. Type Amazon.")
+
+
+CMO_BACKEND_TERMS: tuple[Field, ...] = (
+    *_COMMON_FIRST,
+    Field("marketplace", lambda c, g: "Backend search terms are an Amazon field. Confirm Amazon.", _amazon_only, lambda c, g: (Option("Amazon", "Amazon"),)),
     _SELLER_TITLE,
+    _BRAND_Q, _FEATURES_Q,
 )
 def _niche(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     t = " ".join(raw.split())
@@ -504,16 +597,70 @@ def _optional_marketplaces(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     return [] if raw.strip().casefold() in _SKIP_WORDS else _marketplaces(raw, ctx, got)
 
 
+def _niche_terms(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    """The niche the seller wants researched (ceo-cmo-delegation.md CD12): "skip" -> None (marketplace news only), "use my confirmed terms" -> the marker KEEP, otherwise up to
+    5 short terms separated by commas. CMO's own screening still decides whether each term may be saved and sent; nothing here is guessed."""
+    t = " ".join(raw.split())
+    if t.casefold() in _SKIP_WORDS:
+        return None
+    if t.casefold() in ("use my confirmed terms", "keep", "keep my confirmed terms", "use confirmed"):
+        return KEEP_CONFIRMED
+    terms = [x.strip() for x in re.split(r"[,;]", t) if x.strip()]
+    if not terms or len(terms) > 5 or any(not (2 <= len(x) <= 60) for x in terms) or any(re.fullmatch(r"[\d\s.,%-]+", x) for x in terms):
+        return Reject("Name the niche in words: up to five short terms separated by commas, for example steel water bottle, insulated flask. Or skip it.")
+    return terms
+
+
+def _niche_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    try:
+        have = ceo_reads.confirmed_niche_terms(ctx.tenant_id)
+    except Exception:  # noqa: BLE001 - an offer is a convenience; the question is still asked
+        have = []
+    keep = (Option("Use my confirmed terms: " + ", ".join(have[:5]), "use my confirmed terms", "Terms you confirmed earlier; I will not change them"),) if have else ()
+    return (*keep, Option("Skip", "skip", "Only marketplace news is researched; no niche search is sent"))[:MAX_OPTIONS]
+
+
+KEEP_CONFIRMED = "KEEP_CONFIRMED"
+
+def _news_kind(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    """The one choice question for news: A niche / B everyday trending / C both. Typed a/b/c or the words work like the buttons."""
+    t = " ".join(raw.casefold().split()).strip(" .!?)(")
+    if t == "c" or "both" in t:
+        return "BOTH"
+    if t == "a" or "niche" in t or "business" in t:
+        return "NICHE"
+    if t == "b" or any(w in t for w in ("trend", "everyday", "daily", "general")):
+        return "TRENDING"
+    return Reject("Please choose A (news for my business niche), B (everyday trending ecommerce news) or C (both).")
+
+
+def _has_confirmed_niche(ctx: Ctx) -> bool:
+    try:
+        return bool(ceo_reads.confirmed_niche_terms(ctx.tenant_id))
+    except Exception:  # noqa: BLE001 - unknown: the niche is asked rather than assumed
+        return False
+
+
+NEWS_SECTIONS: Mapping[str, tuple[str, ...]] = {"NICHE": ("NICHE",), "TRENDING": ("MARKET_NEWS",), "BOTH": ("NICHE", "MARKET_NEWS")}  # NICHE = confirmed terms; MARKET_NEWS = the reviewed generic marketplace-news searches (slim_cmo.trends.queries)
+
 CMO_TRENDS: tuple[Field, ...] = (
-    Field("marketplaces", lambda c, g: "Which marketplace should the market research focus on? You can name more than one, or skip to cover all.", _optional_marketplaces,
-          lambda c, g: (Option("All three", "all"), Option("Amazon", "Amazon"), Option("Flipkart", "Flipkart"))),
+    Field("news_kind", lambda c, g: "What news do you want? A) News for my business niche, B) Everyday trending ecommerce news (Amazon, Flipkart, Meesho, seller policy, festive-season updates), or C) Both.",
+          _news_kind, lambda c, g: (Option("A) My business niche", "niche", "Searches use your confirmed niche terms"), Option("B) Everyday trending news", "trending", "Needs no niche"),
+                                    Option("C) Both", "both", "Niche news and everyday trending news"))),
+    # marketplaces are not asked: the generic news searches cover Amazon, Flipkart and Meesho by default
+    Field("marketplaces", lambda c, g: "Which marketplace should the market research focus on?", _optional_marketplaces, applies=lambda c, g: False),
+    Field("niche", lambda c, g: "Which niche should the news cover? Type up to five short terms separated by commas (for example steel water bottle, insulated flask). "
+                                "I will save them as your confirmed niche terms, and only those terms are sent to the search providers.", _niche_terms, _niche_options,
+          applies=lambda c, g: g.get("news_kind") in ("NICHE", "BOTH") and not _has_confirmed_niche(c)),
 )
+CEO_ONLY_INPUTS = frozenset({"niche", "news_kind"})  # collected by the CEO, never a slot of the CMO action
 DR_TREND_RUN: tuple[Field, ...] = (
     Field("preview", lambda c, g: "", _text(4000)),
     Field("confirm", lambda c, g: str(g.get("preview", "")), _yes, lambda c, g: (Option("Yes, run the research", "yes", "Sends exactly these searches"),)),
 )
 
-CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords", "cmo.market_trends")
+CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords", "cmo.generate_bullets", "cmo.generate_backend_terms",
+                "cmo.generate_listing_copy", "cmo.market_trends")
 # classifier slot name -> session field it can pre-fill (the seller already said it); the answer still goes through the same parser
 PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget", "candidate_prices_paise"),
                                           "competitor": ("competitor",)}
@@ -524,7 +671,8 @@ SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "pi.discover": PI_DISCOVER,
     "cmo.market_trends": CMO_TRENDS, "dr.trend_run": DR_TREND_RUN,
     "dr.cogs_per_unit": DR_COGS, "dr.supplier_quote": DR_QUOTE, "dr.batch_budget": DR_BUDGET,
-    "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_GROUNDED, "cmo.generate_keywords": CMO_GROUNDED,
+    "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_DESCRIPTION, "cmo.generate_keywords": CMO_KEYWORDS,
+    "cmo.generate_bullets": CMO_BULLETS, "cmo.generate_backend_terms": CMO_BACKEND_TERMS, "cmo.generate_listing_copy": CMO_LISTING,
 }
 
 
@@ -583,14 +731,21 @@ def _next_field(fields: Sequence[Field], ctx: Ctx, collected: Mapping[str, Any])
 
 
 def _progress(fields: Sequence[Field], collected: Mapping[str, Any], ctx: Ctx) -> str:
-    return f"({len(collected) + 1} of {len(_active(fields, ctx, collected))}) "
+    names = {f.name for f in fields}
+    answered = sum(1 for k in collected if k in names)  # hidden entries (a photo's observations) and facts carried from earlier in the conversation are not answers to this task's questions
+    return f"({answered + 1} of {len(_active(fields, ctx, collected))}) "
 
 
-def start(playbook: str, ctx: Ctx, prefill: Mapping[str, str] | None = None) -> Ask | Done | Blocked:
+def start(
+    playbook: str, ctx: Ctx, prefill: Mapping[str, str] | None = None, hidden: Mapping[str, Any] | None = None, carry: Mapping[str, str] | None = None,
+) -> Ask | Done | Blocked:
     """Begin a session. Anything the seller already said (`prefill`, classifier slot text) is parsed by the SAME field parser and skipped when it reads cleanly;
-    text that does not parse is simply asked again."""
+    text that does not parse is simply asked again. `hidden` seeds underscore-named entries (the observations read from the seller's photo): never answers, never inputs."""
     fields = SESSIONS[playbook]
-    collected: dict[str, Any] = {}
+    collected: dict[str, Any] = {k: v for k, v in (hidden or {}).items() if k.startswith("_")}
+    for name, value in (carry or {}).items():  # details the seller already confirmed earlier in this conversation for the SAME product: not asked again (the plan card shows them)
+        if isinstance(value, str) and value.strip() and (name.startswith("fact_") or name in {f.name for f in fields}):
+            collected[name] = value
     for f in fields:
         slot = next((k for k, v in PREFILL.items() if f.name in v), None)
         raw = (prefill or {}).get(slot) if slot else None
@@ -617,6 +772,30 @@ def start_confirm(session: str, ctx: Ctx, text: str, resume: Mapping[str, Any]) 
     assert isinstance(ask, Ask)
     ask.card["resume"] = dict(resume)
     return ask
+
+
+def resume_ask(playbook: str, ctx: Ctx, collected: Mapping[str, Any]) -> Ask | Done | Blocked:
+    """The question that follows what is already `collected` (used to carry on after a pause), or `Done` when nothing is left to ask."""
+    fields = SESSIONS[playbook]
+    if _next_field(fields, ctx, collected) is None:
+        return Done(playbook, _to_inputs(playbook, dict(collected)))
+    return _ask(playbook, fields, ctx, collected, prefix="")
+
+
+def only_optional_left(playbook: str, ctx: Ctx, collected: Mapping[str, Any]) -> bool:
+    """True when every question still to be asked is a skippable extra detail."""
+    left = [f for f in SESSIONS[playbook] if f.name not in collected and f.applies(ctx, collected)]
+    return bool(left) and all(f.optional for f in left)
+
+
+def finish_without_optional(playbook: str, collected: Mapping[str, Any]) -> Done:
+    """The task goes on with what has been given; the skippable details not yet asked are simply absent (never defaulted)."""
+    return Done(playbook, _to_inputs(playbook, dict(collected)))
+
+
+def field_names(playbook: str, ctx: Ctx, collected: Mapping[str, Any]) -> list[str]:
+    """The names of the fields still to be asked, given `collected`, in order."""
+    return [f.name for f in SESSIONS[playbook] if f.name not in collected and f.applies(ctx, collected)]
 
 
 def _ask(playbook: str, fields: Sequence[Field], ctx: Ctx, collected: Mapping[str, Any], *, prefix: str) -> Ask | Blocked:
@@ -695,7 +874,17 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
             **({"target_price_min_paise": rng["min"], "target_price_max_paise": rng["max"]} if rng else {}),
         }
     if playbook in CMO_SESSIONS:
-        out = {k: v for k, v in c.items() if v is not None}  # a skipped optional field is simply absent: nothing is defaulted
+        out = {k: v for k, v in c.items() if v is not None and not k.startswith("_")}  # a skipped optional field is simply absent: nothing is defaulted
+        if playbook == "cmo.market_trends":
+            out["sections"] = list(NEWS_SECTIONS.get(str(out.get("news_kind")), NEWS_SECTIONS["BOTH"]))
+            if "niche" in c and c["niche"] is None:  # the seller was asked for a niche and skipped it: no niche searches exist, so the everyday trending news is what runs (the plan card lists the searches)
+                out["sections"] = [s for s in out["sections"] if s != "NICHE"] or list(NEWS_SECTIONS["TRENDING"])
+            out.pop("marketplaces", None)
+        facts = {k[len("fact_"):]: out.pop(k) for k in list(out) if k.startswith("fact_")}  # only what the seller CONFIRMED or typed, as their own statement
+        if "brand" in facts:
+            out["brand"] = facts.pop("brand")
+        if facts:
+            out["attributes"] = [{"name": name.replace("_", " ").title(), "value": value} for name, value in facts.items()]
         return out
     if playbook == "NEW_PRODUCT_DECISION":
         out: dict[str, Any] = {"sku": c["sku"], "quantity": c["quantity"], **c["window"]}
