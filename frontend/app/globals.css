@@ -1561,3 +1561,42 @@ aside nav {
     overflow-wrap: anywhere;
   }
 }
+
+/* ---- CEO Hub "galaxy" canvas (docs/design/design_status.md: look is not final, so every hue below is a token) ----
+   Cheap by construction: layered radial-gradients and one very slow opacity twinkle. No canvas, no images, no layout shift. */
+:root {
+  --hub-space: #040605;
+  --hub-star: rgba(240, 250, 244, 0.95);
+  --hub-glow: rgba(62, 207, 116, 0.42);
+  --hub-glow-soft: rgba(62, 207, 116, 0.14);
+  --hub-card-bg: rgba(5, 14, 9, 0.88);
+  --agent-pi: #F2506B;
+  --agent-ci: #F2C94C;
+  --agent-cfo: #5B8DEF;
+  --agent-cmo: #22D3EE;
+}
+.mt-galaxy {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--hub-space); /* plain near-black: the starfield / nebula background was removed at the owner's request */
+}
+
+.mt-glow-card {
+  background: var(--hub-card-bg);
+  border: 1px solid var(--accent-border-strong);
+  box-shadow: 0 0 16px var(--hub-glow-soft), inset 0 0 14px var(--hub-glow-soft);
+  border-color: var(--hub-glow);
+}
+.mt-glow-card--off {
+  border-color: var(--connector-inactive);
+  border-style: dashed;
+  box-shadow: none;
+  opacity: 0.8;
+}
+.mt-hub-edge { filter: drop-shadow(0 0 3px var(--hub-glow)); }
+.mt-hub-edge--flow { animation: mt-hub-dash 2.4s linear infinite; }
+@keyframes mt-hub-dash { to { stroke-dashoffset: -16; } }
+.mt-hub-card { background: var(--hub-card-bg); border: 1px solid var(--border-default); border-radius: 14px; }
+@media (prefers-reduced-motion: reduce) {
+  .mt-hub-edge--flow { animation: none; }
+}

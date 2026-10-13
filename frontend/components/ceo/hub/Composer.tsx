@@ -48,8 +48,8 @@ export function Composer({
   return (
     <form
       data-testid="composer"
-      className="flex w-full flex-col gap-2 rounded-2xl px-3.5 py-2.5"
-      style={{ background: "var(--bg-card)", border: "1px solid var(--field-edge, var(--border-hover))", boxShadow: "var(--glass-shadow-hover)", outline: dragging ? "2px dashed var(--accent)" : undefined }}
+      className="flex w-full flex-col gap-2 rounded-2xl px-3 py-2.5"
+      style={{ background: "var(--hub-card-bg)", border: "1px solid var(--accent-border-default)", boxShadow: "0 0 18px var(--hub-glow-soft), var(--glass-shadow-hover)", outline: dragging ? "2px dashed var(--accent)" : undefined }}
       onSubmit={(e) => { e.preventDefault(); void submit(); }}
       onDragOver={(e) => { if (!disabled && e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); setDragging(true); } }}
       onDragLeave={() => setDragging(false)}
@@ -88,9 +88,10 @@ export function Composer({
       {error && <div role="alert" className="t-meta" style={{ color: "var(--negative)" }}>{error}</div>}
       <div className="flex items-end gap-2.5">
         <input ref={picker} type="file" multiple accept={ACCEPT} className="hidden" data-testid="file-input" aria-label="Attach files" onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
-        <button type="button" disabled={disabled || sending} aria-label="Attach a file" title="Attach images, PDFs, CSV or Excel files" onClick={() => picker.current?.click()} className="mt-btn mt-focus flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)", opacity: disabled ? 0.45 : 1 }}>
-          <Icon name="plus" size={16} />
+        <button type="button" disabled={disabled || sending} aria-label="Add a file" title="Attach images, PDFs, CSV or Excel files" onClick={() => picker.current?.click()} className="mt-btn mt-focus flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: "var(--fill-hover)", border: "1px solid var(--border-subtle)", color: "var(--text-3)", opacity: disabled ? 0.45 : 1 }}>
+          <Icon name="plus" size={18} />
         </button>
+        <div className="flex min-h-[44px] min-w-0 flex-1 items-end gap-1 rounded-xl px-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border-subtle)" }}>
         <textarea
           ref={box}
           value={text}
@@ -106,15 +107,19 @@ export function Composer({
           disabled={disabled}
           aria-label="Ask the CEO"
           placeholder={placeholder}
-          className="mt-focus max-h-40 min-h-[40px] min-w-0 flex-1 resize-none bg-transparent py-2 t-body outline-none"
+          className="mt-focus max-h-40 min-h-[40px] min-w-0 flex-1 resize-none bg-transparent py-2.5 t-body-sm outline-none"
           style={{ color: "var(--text-2)" }}
         />
+        <button type="button" disabled={disabled || sending} aria-label="Attach a file" title="Attach images, PDFs, CSV or Excel files" onClick={() => picker.current?.click()} className="mt-focus flex h-10 w-8 flex-shrink-0 items-center justify-center rounded-lg" style={{ color: "var(--text-5)", opacity: disabled ? 0.45 : 1 }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.9-8.9a3.7 3.7 0 0 1 5.2 5.2l-8.9 8.9a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2" /></svg>
+        </button>
+        </div>
         <button
           type="submit" disabled={!canSend} aria-label="Send"
           className="mt-btn mt-focus flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-          style={{ background: "var(--accent)", color: "var(--accent-on-fill)", opacity: canSend ? 1 : 0.45 }}
+          style={{ background: "var(--accent)", color: "var(--accent-on-fill)", opacity: canSend ? 1 : 0.45, boxShadow: canSend ? "0 0 14px var(--hub-glow)" : undefined }}
         >
-          {disabled || sending ? <Spinner /> : <Icon name="arrow" size={16} />}
+          {disabled || sending ? <Spinner /> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" /></svg>}
         </button>
       </div>
     </form>

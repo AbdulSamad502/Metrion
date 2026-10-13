@@ -31,6 +31,7 @@ export function PlanCard({
   onApprove?: (planId: string, planHash: string) => void;
   onDecline?: (planId: string) => void;
 }) {
+  const [showDetails, setShowDetails] = useState(false); // a hook must run on every render, before any early return
   if (!plan) {
     return (
       <div data-testid="plan-card" data-status="UNKNOWN" className="mt-2 rounded-xl px-4 py-3 t-body-sm" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-4)" }}>
@@ -39,8 +40,7 @@ export function PlanCard({
     );
   }
   const state = STATE[plan.status] ?? { tone: "neutral" as Tone, label: plan.status, note: "" };
-  const [showDetails, setShowDetails] = useState(false);
-  const full = String(plan.plan.summary_text ?? "").split("\n").filter((l) => l.trim());
+  const full =String(plan.plan.summary_text ?? "").split("\n").filter((l) => l.trim());
   const compact = Array.isArray(plan.plan.compact_lines) ? plan.plan.compact_lines.map(String).filter((l) => l.trim()) : [];
   const short = compact.length > 0 ? compact : full.slice(0, 3); // an older plan without compact lines: its first lines
   const title = typeof plan.plan.title === "string" && plan.plan.title.trim() ? plan.plan.title : short[0] ?? "Plan";
@@ -51,7 +51,7 @@ export function PlanCard({
   return (
     <section
       aria-label="Plan to approve" data-testid="plan-card" data-status={plan.status}
-      className="mt-2 flex flex-col gap-2.5 rounded-xl px-4 py-3" style={{ border: "1px solid var(--accent-border-default)", background: "var(--bg-card)" }}
+      className="mt-2 flex flex-col gap-2.5 rounded-xl px-4 py-3" style={{ border: "1px solid var(--accent-border-default)", background: "var(--hub-card-bg)", boxShadow: "0 0 14px var(--hub-glow-soft)" }}
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="t-meta font-bold" style={{ color: "var(--accent)" }}>Plan</span>

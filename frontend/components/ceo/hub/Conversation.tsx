@@ -1,13 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "@/components/ui/Icon";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DecisionCard } from "@/components/ceo/hub/DecisionCard";
 import { PlanCard } from "@/components/ceo/hub/PlanCard";
 import { Welcome } from "@/components/ceo/hub/Welcome";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState, Spinner } from "@/components/ui/LoadingState";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { AgentCode, CeoMessage, ClarificationReply, ExplicitPeriod, FindingRow, InvestigationDetail, NeedRow, PlanView, TurnRow, UiAction } from "@/lib/ceo";
 import { findingLink, investigationTitle, messageView, needStepView, needsByMessage, type HubState } from "@/lib/ceoModel";
@@ -142,13 +145,32 @@ function Banner({ tone, title, children }: { tone: "info" | "neutral"; title: st
 }
 
 function Processing({ question, arrived, stage }: { question: string | null; arrived: number; stage: string | null }) {
+  // The checklist is the live event stream's own stage words, in the order they arrived (nothing is invented: no events, no list). The latest is still running.
+  const [seen, setSeen] = useState<string[]>([]);
+  if (stage && seen[seen.length - 1] !== stage) setSeen([...seen, stage]);
   return (
-    <div role="status" aria-live="polite" data-testid="processing" className="flex items-center gap-3 rounded-xl px-3.5 py-3 t-body-sm" style={{ border: "1px dashed var(--accent-border-default)", color: "var(--text-3)" }}>
-      <Spinner />
-      <span className="min-w-0 flex-1">
-        The CEO is working on {question ? <>&ldquo;{question}&rdquo;</> : "your question"}.{stage ? <span data-testid="stage"> {stage}</span> : null}{" "}
-        {arrived > 0 ? `${arrived} ${arrived === 1 ? "finding has" : "findings have"} arrived so far; see the activity panel.` : "Findings appear in the activity panel as each specialist finishes."}
-      </span>
+    <div role="status" aria-live="polite" data-testid="processing" className="mt-hub-card flex flex-col gap-2.5 px-3.5 py-3 t-body-sm" style={{ borderStyle: "dashed", borderColor: "var(--accent-border-default)", color: "var(--text-3)" }}>
+      <div className="flex items-center gap-3">
+        <Spinner />
+        <span className="min-w-0 flex-1">
+          The CEO is working on {question ? <>&ldquo;{question}&rdquo;</> : "your question"}.{stage ? <span data-testid="stage"> {stage}</span> : null}{" "}
+          {arrived > 0 ? `${arrived} ${arrived === 1 ? "finding has" : "findings have"} arrived so far; see the activity panel.` : "Findings appear in the activity panel as each specialist finishes."}
+        </span>
+      </div>
+      {seen.length > 0 && (
+        <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Progress" data-testid="progress-steps">
+          {seen.map((step, i) => {
+            const running = i === seen.length - 1;
+            return (
+              <li key={`${i}-${step}`} data-state={running ? "running" : "done"} className="flex items-center gap-2 t-meta" style={{ color: "var(--text-3)" }}>
+                {running ? <Spinner size={14} /> : <span aria-hidden style={{ color: "var(--accent)" }}><Icon name="check" size={15} strokeWidth={1.8} /></span>}
+                <span>{step}</span>
+                <span className="sr-only">{running ? " (in progress)" : " (done)"}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -189,7 +211,7 @@ function Thread({
     <ol tabIndex={0} className="mt-focus m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto rounded-lg p-0 pr-1" aria-label="Conversation" aria-live="polite">
       {messages.map((m) => (
         <li key={m.id}>
-          <Bubble message={m} turnById={turnById} />
+          <Bubble message={m} turnById={turnById} findings={findings} />
           {m.role === "CEO" && m.kind === "PLAN" && (
             <PlanCard plan={plans.find((p) => p.plannedTurnId === m.turn_id) ?? null} busy={planBusy} closed={closed} onApprove={onApprovePlan} onDecline={onDeclinePlan} />
           )}
@@ -252,7 +274,47 @@ const timeOf = (iso: string): string => {
   return d.toString() === "Invalid Date" ? "" : d.toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 
-function Bubble({ message, turnById }: { message: CeoMessage; turnById: Map<string, TurnRow> }) {
+/** "Key Insights": only when this answer's own saved results carry structured facts or figures (the backend's snapshot, verbatim, never re-worded or computed here). */
+function insightsFor(findings: FindingRow[], turnId: string | null | undefined): { key: string; text: string; register?: string }[] {
+  if (!turnId) return [];
+  const out: { key: string; text: string; register?: string }[] = [];
+  for (const f of findings) {
+    if (f.turn_id !== turnId || f.status !== "COMPLETE" || !f.presentation) continue;
+    f.presentation.facts.forEach((x, i) => out.push({ key: `${f.id}-fact-${i}`, text: `${x.label}: ${x.text}` }));
+    f.presentation.figures.forEach((x) => out.push({ key: `${f.id}-fig-${x.ref.kind}-${x.ref.id}-${x.label}`, text: `${x.label}: ${x.value}`, register: x.register }));
+  }
+  return out.slice(0, 5);
+}
+
+function KeyInsights({ items }: { items: { key: string; text: string; register?: string }[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section aria-label="Key insights" data-testid="key-insights" className="mt-3 rounded-xl px-3.5 py-3" style={{ background: "var(--accent-fill-subtle)", border: "1px solid var(--accent-border-subtle)" }}>
+      <h4 className="m-0 mb-1.5 flex items-center gap-1.5 t-meta font-semibold" style={{ color: "var(--accent)" }}>
+        <Icon name="reports" size={14} /> Key Insights
+      </h4>
+      <ul className="m-0 flex list-disc flex-col gap-1 pl-4">
+        {items.map((it) => (
+          <li key={it.key} className="t-body-sm" style={{ color: "var(--text-2)" }}>
+            {it.text} {it.register && <ProvenanceBadge register={it.register} />}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function Avatar({ mine }: { mine: boolean }) {
+  return mine ? (
+    <span aria-hidden className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full" style={{ background: "var(--fill-hover)", border: "1px solid var(--border-default)", color: "var(--text-3)" }}><Icon name="customers" size={17} /></span>
+  ) : (
+    <span aria-hidden className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full" style={{ background: "var(--hub-card-bg)", border: "1px solid var(--accent-border-strong)", boxShadow: "0 0 10px var(--hub-glow-soft)" }}>
+      <Image src="/metrion-mark.png" alt="" width={22} height={14} />
+    </span>
+  );
+}
+
+function Bubble({ message, turnById, findings }: { message: CeoMessage; turnById: Map<string, TurnRow>; findings: FindingRow[] }) {
   const v = messageView(message, turnById);
   if (v.tone === "note") {
     return (
@@ -262,25 +324,25 @@ function Bubble({ message, turnById }: { message: CeoMessage; turnById: Map<stri
     );
   }
   const mine = v.tone === "user";
+  const insights = !mine && message.kind === "ANSWER" ? insightsFor(findings, message.turn_id) : [];
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-      <div
-        data-testid={mine ? "message-user" : "message-ceo"}
-        className={`rounded-2xl px-4 py-3 ${mine ? "max-w-[min(85%,36rem)]" : "max-w-[min(96%,50rem)]"}`}
-        style={{
-          background: mine ? "var(--accent-fill-subtle, rgba(62,207,116,0.10))" : "var(--bg-card)",
-          border: `1px solid ${v.tone === "clarify" ? "var(--warning-border)" : mine ? "var(--accent-border-default)" : "var(--border-subtle)"}`,
-          boxShadow: !mine && v.tone !== "clarify" ? "inset 2px 0 0 var(--accent-border-strong)" : undefined,
-          opacity: message.pending ? 0.7 : 1,
-        }}
-      >
-        <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="t-meta font-bold" style={{ color: mine ? "var(--text-3)" : "var(--accent)" }}>{mine ? "You" : "CEO"}</span>
+    <div
+      data-testid={mine ? "message-user" : "message-ceo"}
+      className="mt-hub-card flex gap-3 px-3.5 py-3"
+      style={{
+        borderColor: v.tone === "clarify" ? "var(--warning-border)" : "var(--border-subtle)",
+        opacity: message.pending ? 0.7 : 1,
+      }}
+    >
+      <Avatar mine={mine} />
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="t-body-sm font-semibold" style={{ color: "var(--text-1)" }}>{mine ? "You" : "CEO Agent"}</span>
           {v.badge && <StatusBadge tone={v.tone === "clarify" ? "warning" : "neutral"}>{v.badge}</StatusBadge>}
-          <time className="t-meta" dateTime={message.created_at} style={{ color: "var(--text-6)" }}>{message.pending ? "Sending…" : message.failed ? "Not sent" : timeOf(message.created_at)}</time>
+          <time className="ml-auto t-meta" dateTime={message.created_at} style={{ color: "var(--text-6)" }}>{message.pending ? "Sending…" : message.failed ? "Not sent" : timeOf(message.created_at)}</time>
         </div>
         {/* the backend's gated text, shown verbatim: line breaks kept, nothing re-formatted or re-computed here */}
-        <div className="whitespace-pre-wrap break-words t-body" style={{ color: "var(--text-1)", lineHeight: 1.6 }}>
+        <div className="whitespace-pre-wrap break-words t-body-sm" style={{ color: "var(--text-3)", lineHeight: 1.6 }}>
           {message.content}
         </div>
         {v.footnote && (
@@ -288,6 +350,7 @@ function Bubble({ message, turnById }: { message: CeoMessage; turnById: Map<stri
             {v.footnote}
           </div>
         )}
+        <KeyInsights items={insights} />
       </div>
     </div>
   );

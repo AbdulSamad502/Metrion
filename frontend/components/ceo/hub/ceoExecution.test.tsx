@@ -81,16 +81,18 @@ describe("approval refusal", () => {
 describe("hub layout", () => {
   let fake: FakeCeo;
   beforeEach(() => { fake = new FakeCeo(); });
-  it("puts the composer inside the (wider, right) conversation column and the activity panel to its left, with a mobile switch that keeps both mounted", async () => {
+  it("puts the canvas and the chat bar in the centre and the conversation in the right-hand panel, with the activity one tab away (both stay mounted)", async () => {
     render(<CeoHubWorkspace client={fake.client()} feedFactory={new ManualFeed().factory} />);
     const chat = await screen.findByTestId("chat-column");
-    expect(within(chat).getByTestId("composer")).toBeInTheDocument();
-    const activity = screen.getByTestId("work-area");
-    expect(within(activity).getByTestId("agent-canvas")).toBeInTheDocument(); // a fresh hub has no task to report, so the left column opens with the canvas
-    expect(chat.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy(); // activity is the left column; the conversation is the wider right one
-    await userEvent.setup().click(screen.getByTestId("mobile-tab-activity"));
-    expect(screen.getByTestId("mobile-tab-activity")).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByTestId("chat-column")).toBeInTheDocument();
+    const bar = screen.getByTestId("chat-bar");
+    expect(within(bar).getByTestId("composer")).toBeInTheDocument();
+    expect(within(chat).queryByTestId("composer")).toBeNull(); // the chat bar sits under the canvas, not inside the conversation panel
+    const canvasArea = screen.getByTestId("work-area");
+    expect(within(canvasArea).getByTestId("agent-canvas")).toBeInTheDocument(); // a fresh hub has no task to report, so the centre is the canvas
+    expect(chat.compareDocumentPosition(canvasArea) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy(); // canvas first, then the conversation, then (on a phone) the sticky chat bar
+    await userEvent.setup().click(screen.getByTestId("right-tab-results"));
+    expect(screen.getByTestId("right-tab-results")).toHaveAttribute("aria-selected", "true");
+    expect(within(chat).getByTestId("results-area")).toBeInTheDocument();
   });
 });
 

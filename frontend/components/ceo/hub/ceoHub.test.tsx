@@ -60,7 +60,7 @@ describe("empty and new states", () => {
     await openList();
     await screen.findByText("No investigations yet");
     await user().type(screen.getByLabelText(/Title for a new investigation/), "Margins");
-    await user().click(screen.getByRole("button", { name: /New/ }));
+    await user().click(within(screen.getByTestId("drawer")).getByRole("button", { name: /New/ })); // the list's own button (the canvas has a separate "New Investigation" one)
     expect(await screen.findByTestId("welcome")).toBeInTheDocument();
     expect(fake.calls.find((c) => c.method === "createInvestigation")?.args).toEqual(["Margins"]);
     expect(screen.getByTestId("conversation")).toHaveAttribute("data-state", "NEW");
@@ -257,78 +257,6 @@ describe("a turn: processing, progressive findings, completion", () => {
     expect(fake.calls.find((c) => c.method === "postTurn")?.args).toEqual([id, "Why did profit drop in September?", null, null]);
     fake.completeTurn({ answer: "ok" });
   });
-});
-
-describe("agents on the canvas", () => {
-  it("detaching a wire is future-only: history stays visible, marked historical, with its provenance", async () => {
-    const id = fake.seed({
-      id: "inv-1",
-      findings: [finding({ id: "fc", turn_id: "t0", source: "CFO", action_key: "cfo.financial_health", status: "COMPLETE", figure_refs: [{ kind: "ENGINE_RESULT", id: "33333333-aaaa" }] })],
-    });
-    mount();
-    await openInvestigation(id);
-    expect(screen.getByTestId("finding-fc")).toHaveAttribute("data-historical", "false");
-    await openAgent("CFO");
-    await user().click(screen.getByTestId("wire-CFO"));
-    await waitFor(() => expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "DETACHED"));
-    expect(fake.calls.find((c) => c.method === "setAgentAttached")?.args).toEqual([id, "CFO", false]);
-    expect(screen.getByTestId("system-note")).toHaveTextContent("CFO was detached from this investigation");
-    const card = screen.getByTestId("finding-fc");
-    expect(card).toHaveAttribute("data-historical", "true");
-    expect(within(card).getByText("Historical")).toBeInTheDocument();
-    expect(within(card).getByText(/historical evidence; its original sources are unchanged/)).toBeInTheDocument();
-    expect(within(card).getByText("Engine result · 33333333")).toBeInTheDocument(); // original provenance intact
-    await openAgent("CFO");
-    expect(screen.getByTestId("wire-CFO")).toHaveAccessibleName("Attach CFO to this investigation"); // wiring it back is the seller's choice
-    expect(screen.getByTestId("agent-node-CI")).toHaveAttribute("data-state", "ATTACHED"); // the others are untouched
-  });
-
-  it("opens an investigation where an agent was already detached: node detached, its old finding historical", async () => {
-    const id = fake.seed({
-      id: "inv-1", agents: { CI: true, CFO: false, PI: true, CMO: true },
-      findings: [finding({ id: "old", turn_id: "t0", source: "CFO", action_key: "cfo.reconcile", status: "COMPLETE" })],
-    });
-    mount();
-    await openInvestigation(id);
-    expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "DETACHED");
-    expect(screen.getByTestId("finding-old")).toHaveAttribute("data-historical", "true");
-    expect(within(screen.getByTestId("agent-node-CFO")).getByText("Removed: not used for new work")).toBeInTheDocument();
-  });
-
-  it("a locked (not entitled) agent is shown as locked, has no wire to add, and is never shown as attached", async () => {
-    fake.availability.CFO = { status: "NOT_ENTITLED", chatActions: 5 };
-    const id = fake.seed({ id: "inv-1", agents: { CI: true, CFO: false, PI: true, CMO: true } });
-    mount();
-    await openInvestigation(id);
-    const node = screen.getByTestId("agent-node-CFO");
-    expect(node).toHaveAttribute("data-state", "LOCKED");
-    expect(within(node).getByText("Locked: not on your plan")).toBeInTheDocument();
-    expect(screen.queryByTestId("wire-CFO")).not.toBeInTheDocument();
-    expect(within(node).queryByRole("button")).not.toBeInTheDocument();
-    expect(fake.count("setAgentAttached")).toBe(0);
-  });
-
-  it("a member without access sees the agent as no-access, not usable", async () => {
-    fake.availability.PI = { status: "NOT_PERMITTED", chatActions: 0 };
-    const id = fake.seed({ id: "inv-1" });
-    mount();
-    await openInvestigation(id);
-    const node = screen.getByTestId("agent-node-PI");
-    expect(node).toHaveAttribute("data-state", "NO_ACCESS");
-    expect(screen.queryByTestId("wire-PI")).not.toBeInTheDocument();
-  });
-
-  it("if the server refuses an attach (not entitled), the UI says so and does not pretend it worked", async () => {
-    const id = fake.seed({ id: "inv-1", agents: { CI: true, CFO: false, PI: true, CMO: true } });
-    mount();
-    await openInvestigation(id);
-    fake.availability.CFO = { status: "NOT_ENTITLED", chatActions: 5 }; // entitlement changed after the canvas loaded
-    await openAgent("CFO");
-    await user().click(screen.getByTestId("wire-CFO"));
-    expect(await screen.findByText(/not on your plan, so it cannot be attached/)).toBeInTheDocument();
-    expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "DETACHED");
-  });
-
 });
 
 describe("investigation lifecycle", () => {
@@ -550,16 +478,14 @@ describe("quick actions", () => {
 });
 
 describe("turning an agent on", () => {
-  it("only an agent that can be attached has an on switch, and turning it on wires it back in", async () => {
+  it("a locked agent offers nothing to click, and no agent has a remove, detach or connect control on the canvas", async () => {
     const id = fake.seed({ id: "inv-1", agents: { CI: true, CFO: false, PI: false, CMO: true } });
     fake.availability.PI = { status: "NOT_ENTITLED", chatActions: 0 };
     mount();
     await openInvestigation(id);
     expect(screen.getByTestId("agent-node-PI").tagName).toBe("DIV"); // locked: nothing to click, never offered
-    await openAgent("CFO");
-    await user().click(screen.getByTestId("wire-CFO"));
-    await waitFor(() => expect(screen.getByTestId("agent-node-CFO")).toHaveAttribute("data-state", "ATTACHED"));
-    expect(fake.calls.find((c) => c.method === "setAgentAttached")?.args).toEqual([id, "CFO", true]);
+    expect(screen.queryByTestId("wire-CFO")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Remove|Detach|Connect)/ })).not.toBeInTheDocument();
   });
 });
 
@@ -651,6 +577,7 @@ describe("live progress (SSE) is an accelerator over the poll, never a dependenc
     const before = fake.count("getFindings");
     fake.streams[0].emit({ kind: "CLASSIFIED", atMs: 3, data: { route: "PLAYBOOK" } });
     expect(await screen.findByTestId("stage")).toHaveTextContent("Choosing what to check");
+    expect(within(screen.getByTestId("progress-steps")).getAllByRole("listitem")).toHaveLength(1); // the checklist is the real stage words, nothing more
     fake.emitFinding(finding({ source: "CFO", action_key: "cfo.financial_health", status: "COMPLETE" }));
     fake.streams[0].emit({ kind: "LEG_FINISHED", atMs: 9, data: { action: "cfo.financial_health", status: "COMPLETE" } });
     await waitFor(() => expect(fake.count("getFindings")).toBe(before + 1)); // fetched by the event: the manual feed never ticked

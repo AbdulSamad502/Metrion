@@ -22,10 +22,12 @@ describe("canvas edges", () => {
     expect(screen.getByTestId("port-ceo").style.left).toBe("50%");
   });
 
-  it("draws one edge per specialist and nothing else, with removed and locked ones dashed", () => {
+  it("draws one edge per specialist and nothing else, with removed and locked ones dim", () => {
     render(<AgentCanvas nodes={nodes} busy={null} onToggle={() => {}} />);
     expect(screen.getByTestId("edges").querySelectorAll("path")).toHaveLength(4);
-    expect(screen.getByTestId("edge-CI").getAttribute("stroke-dasharray")).toBeNull();
+    expect(screen.getByTestId("edge-CI").getAttribute("stroke-dasharray")).toBe("4 4"); // connected: bright, glowing, short dashes (the design draws every wire dashed)
+    expect(screen.getByTestId("edge-CI").getAttribute("stroke")).toBe("var(--accent)");
+    expect(screen.getByTestId("edge-CFO").getAttribute("stroke")).not.toBe("var(--accent)"); // removed / locked stay visibly dim
     expect(screen.getByTestId("edge-CFO").getAttribute("stroke-dasharray")).toBe("5 5");
     expect(screen.getByTestId("edge-PI").getAttribute("stroke-dasharray")).toBe("5 5");
   });

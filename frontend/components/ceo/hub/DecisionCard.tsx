@@ -53,8 +53,8 @@ export function DecisionCard({
   return (
     <div
       data-testid="decision-card"
-      className="mt-2 flex max-w-[92%] flex-col gap-3 rounded-2xl px-4 py-3.5"
-      style={{ border: "1px solid var(--warning-border)", background: "var(--bg-card)" }}
+      className="mt-2 flex w-full flex-col gap-3 rounded-2xl px-4 py-3.5"
+      style={{ border: "1px solid var(--warning-border)", background: "var(--hub-card-bg)" }}
     >
       {progress && (
         <div data-testid="card-progress" className="flex flex-col gap-1.5">

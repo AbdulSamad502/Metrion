@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/LoadingState";
 import { agentMeta } from "@/lib/agents";
@@ -19,7 +19,25 @@ const STATE_LABEL: Record<NodeState, string> = {
 /** What each specialist is for: a fixed description of the role, never data. */
 const TAGLINE: Record<AgentCode, string> = { CI: "Competitors & market", CFO: "Financials & P&L", PI: "Discover & research", CMO: "Listings & marketing" };
 /** Identity hue per specialist (decorative, icon only; meaning is always carried by the text and the state label as well). */
-const HUE: Record<AgentCode, string> = { CI: "#F59E5B", CFO: "#6F8DFF", PI: "#EC6FA9", CMO: "var(--accent)" };
+const HUE: Record<AgentCode, string> = { CI: "var(--agent-ci)", CFO: "var(--agent-cfo)", PI: "var(--agent-pi)", CMO: "var(--agent-cmo)" };
+
+/** The CEO's robot mark (the shared icon set has no robot). Decorative. */
+function RobotIcon({ size = 26 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="5" y="8" width="14" height="11" rx="3" /><path d="M12 8V5" /><circle cx="12" cy="4" r="1" /><circle cx="9.3" cy="13" r="1.1" fill="currentColor" stroke="none" /><circle cx="14.7" cy="13" r="1.1" fill="currentColor" stroke="none" /><path d="M2.5 12.5v3M21.5 12.5v3M10 16.5h4" />
+    </svg>
+  );
+}
+
+/** True when the visitor asked for less motion (false on the server and where it cannot be known, so the first render matches). */
+function useReducedMotion(): boolean {
+  return useSyncExternalStore(
+    (notify) => { const mq = typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null; mq?.addEventListener?.("change", notify); return () => mq?.removeEventListener?.("change", notify); },
+    () => typeof window !== "undefined" && typeof window.matchMedia === "function" && !!window.matchMedia("(prefers-reduced-motion: reduce)")?.matches,
+    () => false,
+  );
+}
 
 /** Where the four nodes sit (percent of the canvas width) and where the CEO sits. */
 const X: Record<AgentCode, number> = { CI: 12.5, CFO: 37.5, PI: 62.5, CMO: 87.5 };
@@ -48,34 +66,33 @@ export function AgentCanvas({
   ceoTone?: "idle" | "working" | "input";
 }) {
   const dot = ceoTone === "input" ? "var(--warning)" : ceoTone === "working" ? "var(--accent)" : "var(--positive)";
+  const still = useReducedMotion();
   return (
     <div
-      className="relative shrink-0 overflow-hidden rounded-xl p-1 pt-12 @container @[1px]:pt-4"
-      style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px)", backgroundSize: "20px 20px", border: "none", backgroundColor: "transparent" }}
+      className="relative flex shrink-0 flex-col justify-center overflow-hidden rounded-xl p-1 pt-12 @container @[640px]:min-h-[440px] @[640px]:pt-4"
+      style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px)", backgroundSize: "22px 22px", border: "none", backgroundColor: "transparent" }}
       data-testid="agent-canvas" aria-label="CEO orchestration canvas"
     >
       <AddAgent nodes={nodes} busy={busy} onToggle={onToggle} />
       <div className="relative mx-auto w-full max-w-[880px]">
-        <div className="relative flex justify-start pt-9 @[1px]:justify-center @[1px]:pt-0">
-          <span aria-hidden className="absolute left-6 top-full block h-4 w-px @[1px]:hidden" style={{ background: "var(--accent-border-strong)" }} />
-          <div className={`mt-panel mt-panel--elevated flex min-w-[132px] flex-col items-center gap-1.5 rounded-2xl px-5 py-3 text-center ${ceoTone === "working" ? "mt-working-pulse" : ""}`} style={{ boxShadow: "var(--glass-shadow-hover)", borderColor: "var(--accent-border-default)" }} data-testid="ceo-node">
-            <span className="relative" style={{ color: "var(--accent)" }}>
-              <Icon name="ceo" size={28} />
-              <span aria-hidden className="absolute -right-1.5 -top-1 h-2.5 w-2.5 rounded-full" style={{ background: dot }} />
-            </span>
-            <div>
-              <div className="t-card-title font-bold leading-none" style={{ color: "var(--text-1)" }}>
-                CEO
-              </div>
-              <div className="mt-1 flex items-center justify-center gap-1 t-meta" style={{ color: ceoTone === "input" ? "var(--warning)" : "var(--text-4)" }} data-testid="ceo-status">
-                {ceoTone === "working" && <Spinner size={10} />}
-                {ceoStatus}
-              </div>
+        <div className="relative flex justify-start pt-9 @[640px]:justify-center @[640px]:pt-0">
+          <span aria-hidden className="absolute left-6 top-full block h-4 w-px @[640px]:hidden" style={{ background: "var(--accent-border-strong)" }} />
+          <div className={`mt-glow-card flex min-w-[132px] flex-col items-center gap-1 rounded-xl px-5 py-2.5 text-center ${ceoTone === "working" ? "mt-working-pulse" : ""}`} data-testid="ceo-node">
+            <div className="flex items-center gap-2.5">
+              <span className="relative" style={{ color: "var(--accent)" }}>
+                <RobotIcon size={30} />
+                <span aria-hidden className="absolute -right-1.5 -top-1 h-2.5 w-2.5 rounded-full" style={{ background: dot }} />
+              </span>
+              <span className="t-card-title font-semibold leading-none" style={{ color: "var(--text-1)" }}>CEO</span>
+            </div>
+            <div className="flex items-center justify-center gap-1 t-meta" style={{ color: ceoTone === "input" ? "var(--warning)" : "var(--text-5)" }} data-testid="ceo-status">
+              {ceoTone === "working" && <Spinner size={10} />}
+              {ceoStatus}
             </div>
           </div>
         </div>
 
-        <div className="relative hidden h-[96px] @[1px]:block" data-testid="fan">
+        <div className="relative hidden h-[150px] @[640px]:block" data-testid="fan">
           <svg className="absolute inset-0 z-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden data-testid="edges">
             {nodes.map((n) => {
               const attached = n.state === "ATTACHED";
@@ -86,14 +103,15 @@ export function AgentCanvas({
                   d={`M ${CEO_X} 0 C ${CEO_X} 55, ${X[n.code]} 45, ${X[n.code]} 100`}
                   fill="none"
                   vectorEffect="non-scaling-stroke"
-                  strokeWidth={working[n.code] ? 2.5 : 1.75}
+                  strokeWidth={working[n.code] ? 2.5 : 1.5}
                   strokeLinecap="round"
                   data-testid={`edge-${n.code}`}
-                  strokeDasharray={working[n.code] ? "6 6" : attached ? undefined : "5 5"}
-                  stroke={working[n.code] ? "var(--accent)" : attached ? "rgba(62,207,116,0.55)" : "rgba(140,148,138,0.5)"}
+                  className={attached ? `mt-hub-edge ${working[n.code] ? "" : "mt-hub-edge--flow"}` : undefined}
+                  strokeDasharray={working[n.code] ? "6 6" : attached ? "4 4" : "5 5"}
+                  stroke={working[n.code] ? "var(--accent)" : attached ? "var(--accent)" : "rgba(140,148,138,0.5)"}
                   opacity={dead ? 0.55 : 1}
                 >
-                  {working[n.code] && <animate attributeName="stroke-dashoffset" from="12" to="0" dur="0.8s" repeatCount="indefinite" />}
+                  {working[n.code] && !still && <animate attributeName="stroke-dashoffset" from="12" to="0" dur="0.8s" repeatCount="indefinite" />}
                 </path>
               );
             })}
@@ -101,16 +119,13 @@ export function AgentCanvas({
           {/* ports: the edge starts at the CEO's lower port and ends at each specialist's upper port (same percentages as the paths) */}
           <span aria-hidden data-testid="port-ceo" className="absolute z-[1] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ left: `${CEO_X}%`, top: 0, background: "var(--bg-base)", border: "2px solid var(--accent)" }} />
           {nodes.map((n) => (
-            <span key={`port-${n.code}`} aria-hidden data-testid={`port-${n.code}`} className="absolute z-[1] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ left: `${X[n.code]}%`, top: "100%", background: "var(--bg-base)", border: `2px solid ${n.state === "ATTACHED" ? "var(--accent)" : "rgba(140,148,138,0.6)"}` }} />
-          ))}
-          {nodes.map((n) => (
-            <WireControl key={n.code} node={n} busy={busy === n.code} onToggle={onToggle} />
+            <span key={`port-${n.code}`} aria-hidden data-testid={`port-${n.code}`} className="absolute z-[1] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ left: `${X[n.code]}%`, top: "100%", background: n.state === "ATTACHED" ? "var(--accent)" : "var(--bg-base)", boxShadow: n.state === "ATTACHED" ? "0 0 8px var(--hub-glow)" : undefined, border: `2px solid ${n.state === "ATTACHED" ? "var(--accent)" : "rgba(140,148,138,0.6)"}` }} />
           ))}
         </div>
 
-        <ul className="relative m-0 ml-6 mt-4 grid list-none grid-cols-1 gap-3 p-0 @[1px]:ml-0 @[1px]:mt-0 @[1px]:grid-cols-4 @[1px]:gap-0" aria-label="Specialist agents">
+        <ul className="relative m-0 ml-6 mt-4 grid list-none grid-cols-1 gap-3 p-0 @[640px]:ml-0 @[640px]:mt-0 @[640px]:grid-cols-4 @[640px]:gap-0" aria-label="Specialist agents">
           {nodes.map((n, i) => (
-            <li key={n.code} className="relative pl-6 @[1px]:px-1.5">
+            <li key={n.code} className="relative pl-6 @[640px]:px-1.5">
               <TreeConnector node={n} first={i === 0} last={i === nodes.length - 1} running={!!working[n.code]} />
               <AgentNode node={n} busy={busy === n.code} onToggle={onToggle} working={working[n.code] ?? null} />
             </li>
@@ -135,7 +150,7 @@ function CanvasLegend() {
       {item("Connected", <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: "var(--positive)" }} />)}
       {item("Removed", <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: "var(--text-6)" }} />)}
       {item("Checking", <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: "var(--warning)" }} />)}
-      {item("Wired to this conversation", <span aria-hidden className="block w-5" style={{ borderTop: "2px solid var(--accent-border-strong)" }} />)}
+      {item("Wired to this conversation", <span aria-hidden className="block w-5" style={{ borderTop: "2px dashed var(--accent)" }} />)}
       {item("Removed or locked", <span aria-hidden className="block w-5" style={{ borderTop: "2px dashed var(--connector-inactive)" }} />)}
     </ul>
   );
@@ -149,7 +164,7 @@ function TreeConnector({ node, first, last, running }: { node: CanvasNode; first
   const color = attached ? "var(--accent-border-strong)" : "var(--connector-inactive)";
   const dash = attached ? "solid" : "dashed";
   return (
-    <span aria-hidden className="@[1px]:hidden" data-testid={`tree-wire-${node.code}`}>
+    <span aria-hidden className="@[640px]:hidden" data-testid={`tree-wire-${node.code}`}>
       <span className="absolute left-0 w-px" style={{ top: first ? "-1rem" : "-0.75rem", height: last ? `calc(${first ? 1 : 0.75}rem + 1.75rem)` : `calc(100% + ${first ? 1 : 0.75}rem)`, borderLeft: `1px ${dash} ${color}`, opacity: dead ? 0.5 : 1 }} />
       <span className="absolute left-0 top-7 h-px w-6" style={{ borderTop: `2px ${dash} ${color}`, opacity: dead ? 0.5 : 1 }} />
       <span className={`absolute top-[calc(1.75rem-3px)] h-1.5 w-1.5 rounded-full ${running ? "animate-pulse" : ""}`} style={{ left: "calc(1.5rem - 3px)", background: attached ? "var(--accent)" : "var(--text-6)" }} />
@@ -200,32 +215,6 @@ function AddAgent({ nodes, busy, onToggle }: { nodes: CanvasNode[]; busy: AgentC
   );
 }
 
-function WireControl({ node, busy, onToggle }: { node: CanvasNode; busy: boolean; onToggle: (c: AgentCode, attach: boolean) => void }) {
-  if (!node.canToggle) return null;
-  const attached = node.state === "ATTACHED";
-  const label = attached ? `Detach ${node.name} from this investigation` : `Attach ${node.name} to this investigation`;
-  return (
-    <button
-      type="button"
-      data-testid={`wire-${node.code}`}
-      title={label}
-      aria-label={label}
-      disabled={busy}
-      onClick={() => onToggle(node.code, !attached)}
-      className="mt-btn mt-focus absolute z-10 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full"
-      style={{
-        left: `${(CEO_X + X[node.code]) / 2}%`,
-        top: "52%",
-        background: "var(--bg-popover)",
-        border: `1px solid ${attached ? "var(--accent-border-strong)" : "var(--border-hover)"}`,
-        color: attached ? "var(--accent)" : "var(--text-4)",
-      }}
-    >
-      {busy ? <Spinner size={12} /> : <Icon name={attached ? "close" : "plus"} size={13} strokeWidth={1.9} />}
-    </button>
-  );
-}
-
 function AgentNode({ node, busy, onToggle, working }: { node: CanvasNode; busy: boolean; onToggle: (c: AgentCode, attach: boolean) => void; working: string | null }) {
   const meta = agentMeta(node.code);
   const live = node.state === "ATTACHED";
@@ -236,12 +225,11 @@ function AgentNode({ node, busy, onToggle, working }: { node: CanvasNode; busy: 
     <div
       data-testid={`agent-node-${node.code}`}
       data-state={node.state}
-      className={`mt-chip mt-dash-card ${live ? "mt-dash-card--elevated" : ""} ${dead ? "mt-dash-card--locked" : ""} flex h-full flex-col items-center gap-1.5 rounded-xl px-2 py-3 text-center`}
-      style={{ borderColor: live ? "var(--accent-border-default)" : undefined, borderStyle: node.state === "DETACHED" || dead ? "dashed" : undefined, opacity: dead ? 0.75 : 1 }}
+      className={`mt-glow-card ${live ? "" : "mt-glow-card--off"} flex h-full flex-col items-center gap-1.5 rounded-xl px-2 py-4 text-center`}
     >
       <span className="flex flex-col items-center gap-1.5 text-center">
         <span className="relative" style={{ color: live ? HUE[node.code] : dead ? "var(--text-7)" : "var(--text-4)" }}>
-          <Icon name={icon} size={26} />
+          <Icon name={icon} size={30} strokeWidth={1.5} />
         </span>
         <span className="min-w-0">
           <span className="block break-words t-body font-semibold leading-tight" style={{ color: dead ? "var(--text-5)" : "var(--text-1)" }}>
@@ -255,12 +243,6 @@ function AgentNode({ node, busy, onToggle, working }: { node: CanvasNode; busy: 
         {working ? <Spinner size={10} /> : <span aria-hidden className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: live ? "var(--positive)" : node.state === "UNKNOWN" ? "var(--warning)" : "var(--text-6)" }} />}
         {working ?? STATE_LABEL[node.state]}
       </span>
-      {/* The same control as the wire, for small screens (where the wire is not drawn) and for keyboard / assistive-tech users. */}
-      {node.canToggle && (
-        <button type="button" disabled={busy} onClick={() => onToggle(node.code, !attached)} className="mt-btn mt-focus min-h-[28px] rounded-md px-2 py-0.5 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
-          {attached ? "Remove" : "Connect"}
-        </button>
-      )}
       </span>
       {meta.href && !dead && (
         <Link href={meta.href} data-testid={`workspace-${node.code}`} className="mt-focus inline-flex min-h-6 items-center self-center t-meta font-bold" style={{ color: "var(--text-3)" }}>

@@ -23,7 +23,6 @@ import { createCeoClient, type AgentCode, type CeoClient, type UiAction } from "
 import { canvasNodes, QUICK_ACTIONS, quickActionState } from "@/lib/ceoModel";
 import type { FeedFactory } from "@/lib/ceoPolling";
 import { useCeoHub } from "@/lib/useCeoHub";
-import { useDesktopLayout, useWideLayout } from "@/lib/useDesktopLayout";
 import { useModalFocus } from "@/lib/useModalFocus";
 
 /** The real CEO Hub. Production wiring: the typed client over the signed-in user's Clerk token. */
@@ -58,12 +57,10 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   const uploadedIds = useRef(new Map<string, string>());
   const fileKey = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
   const setFileState = (f: File, st: FileStatus) => setFileStates((m) => ({ ...m, [fileKey(f)]: st }));
-  /** Below the desktop breakpoint the conversation is full width and the task activity is one tap away; both stay mounted. */
-  const [mobileView, setMobileView] = useState<"chat" | "activity">("chat");
-  const desktop = useDesktopLayout();
-  const wide = useWideLayout();
-  /** Wide screens: the right column has two views, the conversation and the activity / results; both stay mounted. */
+  /** The right panel has two views, the conversation and the activity / results (health, findings, memory, what is running); both stay mounted. */
   const [rightView, setRightView] = useState<"chat" | "results">("chat");
+  /** Wide screens: the right panel can fold away to its header so the canvas gets the room. Its content stays mounted. */
+  const [collapsed, setCollapsed] = useState(false);
   const data = hub.detail.data;
   // before any conversation exists, every agent the member can use is shown as ready (a new conversation attaches them all); locked / no-access ones still show as such
   const nodes = canvasNodes(data?.agents ?? { CI: true, CFO: true, PI: true, CMO: true }, hub.availability, data?.investigation.status ?? "ACTIVE", data?.findings ?? []);
@@ -128,8 +125,6 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   const waiting = hub.awaitingAnswer && !closed;
   const ceoTone = needsInput ? "input" : processing || waiting ? "working" : "idle";
   const ceoStatus = needsInput ? "Needs your input" : processing ? hub.turn.stage ?? "Working…" : waiting ? "Answering your last question…" : hub.selectedId ? "Ready" : "Start a conversation";
-  // On a phone the four tall specialist cards would push what is running and what was found a screen and a half down, so there the canvas follows the activity. The
-  // document order changes with it (not CSS `order`), so the keyboard order always matches what is on screen.
   const canvas = (
     <AgentCanvas
       nodes={nodes} busy={hub.busyAgent} onToggle={(c, attach) => void toggleAgent(c, attach)}
@@ -138,8 +133,13 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   );
   const connected = nodes.filter((n) => n.state === "ATTACHED");
   const quick = QUICK_ACTIONS.filter((q) => ["pnl", "research", "competitors"].includes(q.id));
-  const panelH = "h-[calc(100dvh-215px)] min-h-[440px] xl:h-[calc(100dvh-150px)]";
-  const tabs = [["chat", "Conversation"], ["activity", processing ? "Activity · live" : needsInput ? "Activity · waiting" : "Activity"]] as const;
+  const tabBtn = (id: "chat" | "results", label: string) => (
+    <button key={id} type="button" role="tab" aria-selected={rightView === id} data-testid={`right-tab-${id}`} onClick={() => setRightView(id)}
+      className="mt-btn mt-focus min-h-[36px] flex-1 rounded-lg px-3 py-1.5 t-body-sm font-semibold"
+      style={{ border: `1px solid ${rightView === id ? "var(--accent-border-default)" : "var(--border-subtle)"}`, color: rightView === id ? "var(--text-1)" : "var(--text-4)", background: rightView === id ? "var(--accent-fill-subtle)" : "transparent" }}>
+      {label}
+    </button>
+  );
 
   const activity = (
     <>
@@ -166,92 +166,85 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
       {hub.list.status === "error" && hub.list.items.length === 0 && (
         <div data-testid="hub-unavailable"><ErrorNotice message={`Your conversations could not be loaded. ${hub.list.error ?? ""}`.trim()} onRetry={hub.refreshList} /></div>
       )}
-      <div className="flex gap-1 xl:hidden" role="tablist" aria-label="Conversation or task activity">
-        {tabs.map(([id, label]) => (
-          <button
-            key={id} type="button" role="tab" aria-selected={mobileView === id} data-testid={`mobile-tab-${id}`} onClick={() => setMobileView(id)}
-            className="mt-btn mt-focus min-h-[44px] flex-1 rounded-lg px-3 py-2 t-body-sm font-semibold"
-            style={{ border: "1px solid var(--border-subtle)", color: mobileView === id ? "var(--text-1)" : "var(--text-4)", background: mobileView === id ? "var(--fill-hover)" : "transparent" }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(480px,44%)]">
-        {/* LEFT / "Activity" tab: who the CEO works with, what is running, and what the specialists found. */}
-        <section
-          className={`mt-panel min-w-0 flex-col gap-5 overflow-y-auto p-4 xl:flex ${panelH} ${mobileView === "activity" ? "flex" : "hidden"}`}
-          aria-label="Specialists and task activity" data-testid="work-area"
-        >
-          <header className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <h2 className="m-0 t-card-title font-bold" style={{ color: "var(--text-1)" }}>Your specialists</h2>
-              <p className="m-0 mt-0.5 t-meta" style={{ color: "var(--text-5)" }}>
-                {data ? `Investigation · ${new Date(data.investigation.created_at).toLocaleDateString()}` : "Metrion sends each question to the right specialist. Remove one to stop it being used here; a new conversation starts with all of them."}
-              </p>
+      {/* One grid, in reading order on every screen size: canvas, conversation, chat bar. On a phone that is the stack (the chat bar sticks to the bottom); from xl the
+          canvas and chat bar share the centre column and the conversation is the right-hand panel. */}
+      <div className={`grid grid-cols-1 gap-3 xl:h-[calc(100dvh-150px)] xl:min-h-[560px] xl:grid-rows-[minmax(0,1fr)_auto] ${collapsed ? "xl:grid-cols-[minmax(0,1fr)_64px]" : "xl:grid-cols-[minmax(0,1fr)_minmax(440px,38%)]"}`}>
+        {/* CENTRE: the CEO and its specialists on the galaxy canvas. */}
+        <div className="flex min-h-0 min-w-0 flex-col gap-2.5 xl:col-start-1 xl:row-start-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <button type="button" onClick={() => setDrawer(true)} aria-label="Conversations and business overview" data-testid="open-drawer" className="mt-btn mt-focus flex min-h-[40px] items-center gap-1.5 rounded-lg px-2.5 py-1.5 t-meta font-bold" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
+                <Icon name="menu" size={14} /> Conversations
+              </button>
+              {data && <StatusBadge tone={data.investigation.status === "ACTIVE" ? "accent" : "neutral"} dot={data.investigation.status === "ACTIVE"}>{data.investigation.status === "ACTIVE" ? "Active" : data.investigation.status.toLowerCase()}</StatusBadge>}
+              <span className="hidden truncate t-meta sm:inline" style={{ color: "var(--text-5)" }}>
+                {data ? `Investigation · ${new Date(data.investigation.created_at).toLocaleDateString()}` : "Remove a specialist to stop it being used here; a new conversation starts with all of them."}
+              </span>
             </div>
-            {data && <StatusBadge tone={data.investigation.status === "ACTIVE" ? "accent" : "neutral"} dot={data.investigation.status === "ACTIVE"}>{data.investigation.status === "ACTIVE" ? "Active" : data.investigation.status.toLowerCase()}</StatusBadge>}
-          </header>
+            <button type="button" data-testid="new-investigation" disabled={processing || empty} onClick={() => hub.select(null)} title={empty ? "You are already on a new investigation: type below to start it." : "Start a new investigation"} className="mt-btn mt-focus flex min-h-[40px] items-center gap-2 rounded-lg px-3 py-1.5 t-body-sm font-medium" style={{ border: "1px solid var(--border-default)", background: "var(--hub-card-bg)", color: "var(--text-2)", opacity: processing || empty ? 0.55 : 1 }}>
+              <Icon name="plus" size={14} /> New Investigation
+            </button>
+          </div>
+          <section
+            className="mt-galaxy flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl p-3 sm:p-5"
+            style={{ border: "1px solid var(--border-default)" }}
+            aria-label="Specialists" data-testid="work-area"
+          >
+            <h2 className="sr-only">Your specialists</h2>
+            {canvas}
+          </section>
+        </div>
 
-          {desktop && canvas}
-          {(hub.health.entries.length > 0 || hub.health.status === "error" || hub.list.items.length > 0) && <div className="@container"><div className="grid grid-cols-1 gap-3 @[760px]:grid-cols-2" data-testid="summary-cards">
-            <section aria-labelledby="ceo-health-inline" className="flex min-w-0 flex-col gap-2">
-              <h3 id="ceo-health-inline" className="m-0 mt-eyebrow">Business at a glance</h3>
-              <HealthStrip health={hub.health} onRefresh={() => void hub.refreshHealth()} />
-            </section>
-            <RecentDecisions status={hub.list.status} items={hub.list.items} onOpen={(id) => hub.select(id)} />
-          </div></div>}
-
-          {!desktop && canvas}
-          {!wide && activity}
-        </section>
-
-        {/* RIGHT / "Conversation" tab: the dominant column. Messages scroll; the chat bar stays at the bottom. */}
+        {/* RIGHT: the conversation panel. Messages scroll; the activity / results (health, findings, memory, what is running) is its second tab. */}
         <section
-          className={`mt-panel min-w-0 flex-col gap-3 p-4 xl:flex ${panelH} ${mobileView === "chat" ? "flex" : "hidden"}`}
+          className="mt-galaxy flex min-h-[420px] min-w-0 flex-col gap-3 rounded-2xl p-3 max-xl:max-h-[78dvh] xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:min-h-0"
+          style={{ border: "1px solid var(--border-default)" }}
           aria-label="CEO conversation" data-testid="chat-column"
         >
-          <header className="flex items-center gap-3 pb-2" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: "var(--fill-hover)", color: "var(--accent)" }}><Icon name="ceo" size={18} /></span>
-            <div className="min-w-0 flex-1">
-              <div className="t-body font-bold" style={{ color: "var(--text-1)" }}>CEO</div>
+          <header className="flex items-center gap-2.5 pb-2" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+            <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center" style={{ color: "var(--accent)" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 5.5h16v10H12l-5 4v-4H4z" /><path d="M8 9.5h8M8 12.5h5" /></svg>
+            </span>
+            <div className={`min-w-0 flex-1 ${collapsed ? "xl:hidden" : ""}`}>
+              <h2 className="m-0 t-body font-semibold" style={{ color: "var(--text-1)" }}>Conversation</h2>
               <div className="truncate t-meta" style={{ color: needsInput ? "var(--warning)" : "var(--text-5)" }} data-testid="chat-status">{ceoStatus}</div>
             </div>
-            <button type="button" onClick={() => setDrawer(true)} aria-label="Conversations and business overview" data-testid="open-drawer" className="mt-btn mt-focus flex min-h-[40px] items-center gap-1.5 rounded-lg px-2.5 py-1.5 t-meta font-bold" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
-              <Icon name="menu" size={14} /> Conversations
+            <button type="button" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed} aria-label={collapsed ? "Expand conversation panel" : "Collapse conversation panel"} data-testid="collapse-conversation" className="mt-btn mt-focus hidden h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg xl:flex" style={{ color: "var(--text-3)" }}>
+              <span style={{ display: "inline-flex", transform: collapsed ? undefined : "rotate(180deg)" }}><Icon name="collapse" size={16} /></span>
             </button>
           </header>
 
-          {wide && (
+          <div className={`flex min-h-0 flex-1 flex-col gap-3 ${collapsed ? "xl:hidden" : ""}`}>
             <div className="flex gap-1" role="tablist" aria-label="Conversation or activity and results">
-              {([["chat", "Conversation"], ["results", processing ? "Activity & results · live" : needsInput ? "Activity & results · waiting" : "Activity & results"]] as const).map(([id, label]) => (
-                <button key={id} type="button" role="tab" aria-selected={rightView === id} data-testid={`right-tab-${id}`} onClick={() => setRightView(id)}
-                  className="mt-btn mt-focus min-h-[36px] flex-1 rounded-lg px-3 py-1.5 t-body-sm font-semibold"
-                  style={{ border: "1px solid var(--border-subtle)", color: rightView === id ? "var(--text-1)" : "var(--text-4)", background: rightView === id ? "var(--fill-hover)" : "transparent" }}>
-                  {label}
-                </button>
-              ))}
+              {tabBtn("chat", "Conversation")}
+              {tabBtn("results", processing ? "Activity & results · live" : needsInput ? "Activity & results · waiting" : "Activity & results")}
             </div>
-          )}
-          {wide && (
             <div className={`min-h-0 flex-1 flex-col gap-5 overflow-y-auto ${rightView === "results" ? "flex" : "hidden"}`} data-testid="results-area" role="tabpanel" aria-label="Activity and results">
+              {(hub.health.entries.length > 0 || hub.health.status === "error" || hub.list.items.length > 0) && <div className="@container"><div className="grid grid-cols-1 gap-3 @[760px]:grid-cols-2" data-testid="summary-cards">
+                <section aria-labelledby="ceo-health-inline" className="flex min-w-0 flex-col gap-2">
+                  <h3 id="ceo-health-inline" className="m-0 mt-eyebrow">Business at a glance</h3>
+                  <HealthStrip health={hub.health} onRefresh={() => void hub.refreshHealth()} />
+                </section>
+                <RecentDecisions status={hub.list.status} items={hub.list.items} onOpen={(id) => hub.select(id)} />
+              </div></div>}
               {activity}
             </div>
-          )}
-
-          <div className={`min-h-0 flex-1 flex-col gap-3 ${wide && rightView === "results" ? "hidden" : "flex"}`}>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {empty ? (
-              <Welcome agents={{ CI: true, CFO: true, PI: true, CMO: true }} onAsk={(t) => void send(t, null)} onAction={(l, a) => void send(l, null, a)} onOpenForm={(f) => setForm(f as DecideKind)} />
-            ) : (
-              <Conversation
-                onOpenForm={(f) => setForm(f as DecideKind)} state={hub.state} detail={data} turn={hub.turn} needs={hub.needs} notice={hub.notice} onDismissNotice={hub.dismissNotice}
-                onSend={hub.sendTurn} awaiting={hub.awaitingAnswer} onApprovePlan={(id, h) => void hub.approvePlan(id, h)} onDeclinePlan={(id) => void hub.declinePlan(id)} planBusy={hub.planBusy} onResolve={hub.resolve} onReopen={hub.reopen} onArchive={hub.archive} onRetry={() => void hub.retryDetail()}
-              />
-            )}
+            <div className={`min-h-0 flex-1 flex-col overflow-y-auto ${rightView === "results" ? "hidden" : "flex"}`}>
+              {empty ? (
+                <Welcome agents={{ CI: true, CFO: true, PI: true, CMO: true }} onAsk={(t) => void send(t, null)} onAction={(l, a) => void send(l, null, a)} onOpenForm={(f) => setForm(f as DecideKind)} />
+              ) : (
+                <Conversation
+                  onOpenForm={(f) => setForm(f as DecideKind)} state={hub.state} detail={data} turn={hub.turn} needs={hub.needs} notice={hub.notice} onDismissNotice={hub.dismissNotice}
+                  onSend={hub.sendTurn} awaiting={hub.awaitingAnswer} onApprovePlan={(id, h) => void hub.approvePlan(id, h)} onDeclinePlan={(id) => void hub.declinePlan(id)} planBusy={hub.planBusy} onResolve={hub.resolve} onReopen={hub.reopen} onArchive={hub.archive} onRetry={() => void hub.retryDetail()}
+                />
+              )}
+            </div>
           </div>
+        </section>
 
+        {/* CHAT BAR: under the canvas on desktop; stuck to the bottom of the screen on a phone. */}
+        <div className="sticky bottom-0 z-20 flex min-w-0 flex-col gap-2 pb-1 pt-2 max-xl:-mx-1 max-xl:px-1 xl:static xl:col-start-1 xl:row-start-2 xl:pt-0" style={{ background: "linear-gradient(to top, var(--bg-base) 75%, transparent)" }} data-testid="chat-bar">
           {form && (
             <DecidePanel client={client} kind={form} disabled={processing} onClose={() => setForm(null)} onRun={(label, action) => { void send(label, null, action); setForm(null); }} />
           )}
@@ -286,12 +279,11 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
 
           <Composer
             disabled={processing || closed}
-            placeholder={closed ? "This conversation is closed. Reopen it to continue." : needsInput ? "Answer here, or pick an option…" : "Ask the CEO anything…"}
+            placeholder={closed ? "This conversation is closed. Reopen it to continue." : needsInput ? "Answer here, or pick an option…" : "Ask the CEO agent anything…"}
             onSend={(t, files) => send(t, null, null, null, files)} fileStatus={(f) => fileStates[fileKey(f)]} fileInfo={(f) => fileInfos[fileKey(f)]}
             error={uploadError}
           />
-          </div>
-        </section>
+        </div>
       </div>
 
       {drawer && (
