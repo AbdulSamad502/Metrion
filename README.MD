@@ -76,23 +76,88 @@ PostgreSQL 16 + pgvector (RLS)   ·   Redis   ·   Ollama (local LLMs, dev)
 
 ---
 
-## Current status (as of 2026-10-14)
+## Where we are (as of 2026-10-14)
 
-Branch: `feat/ceo-first-cmo`.
+Active branch: `feat/ceo-first-cmo`. The platform is a working end-to-end prototype on a local stack: sign in, upload reports, get a profit view, and ask the CEO agent in chat. It is **not production-ready**; the launch blockers are listed at the end.
 
-| Area | State |
-|---|---|
-| Auth (Clerk JWT, onboarding, webhook sync, permission grid) | Built |
-| Deterministic engine, data-foundation ingestion | Built |
-| CFO agent (P&L, leaks, GST lookup, health bands, strategic narration) | Built (backend + dashboard); some sourcing items deferred, see specs |
-| Competitor Intelligence | Built (direct path + CEO chat actions) |
-| Product Intelligence | Built; PI research flow driven from CEO chat with approval |
-| Slim CMO | Built; read-only showcase dashboard, CEO → CMO delegation |
-| CEO orchestration | Foundation, classifier, composer, provenance gate, approval workflow, run recovery, attachments built; some playbooks and hardening (B6) still open. See [`docs/planning/ceo-build-status.md`](docs/planning/ceo-build-status.md) |
-| Frontend | Marketing site, dashboard shell, full-screen CEO Hub, agent dashboards. UI redesign ongoing |
-| WhatsApp, billing (Razorpay) | Specified, not built |
+### How the work progressed
 
-Partial or stubbed work is labelled as such in the docs. For the honest per-area detail, read `docs/planning/*-build-status.md` and the "Explicit open questions" section of each spec.
+1. **Foundation** — specs and decisions of record, the two-role Postgres setup with RLS, the deterministic engine (`calc-engine`), and the report-ingestion layer (`data-foundation`).
+2. **Auth and tenancy** — Clerk JWT verification, business-name onboarding, webhook sync, the permission grid, and RLS isolation tests.
+3. **Specialist agents** — CFO, Competitor Intelligence, Product Intelligence, then Slim CMO, each as its own package with its own migrations and tests.
+4. **CEO orchestration** — the single chat entry point that routes questions to specialists, with a provenance gate on every figure.
+5. **Hardening** — run recovery, request limits, idempotent resends, leg deadlines, and the approval workflow.
+6. **Frontend** — marketing site, dashboard shell, then the full-screen CEO Hub with draggable agents; a UI redesign is in progress.
+
+### What is built, by area
+
+**Platform**
+- **Auth and onboarding:** Clerk JWT (networkless verification), onboarding, webhook sync, role permissions.
+- **Isolation:** every tenant table has `tenant_id` with FORCE RLS; the app connects as a non-owner role (`metrion_app`, no `BYPASSRLS`). Cross-tenant tests are in `backend/tests/integration/`.
+- **Deterministic engine:** the money formulas, signed paise, `UNAVAILABLE` instead of silent zero, and `engine_result_ref` provenance.
+- **Ingestion:** Amazon, Flipkart and Meesho report files become canonical sales lines. The path from database rows to a real P&L is verified end to end.
+- **Operations:** request-size limits (413 before parsing), upload caps, ops endpoints (`/ops/live`, `/ready`, `/runs`), and sweeping of runs whose worker died.
+- **RAG foundation:** a pgvector schema and embedding code for tenant knowledge documents.
+
+**CFO agent**
+- P&L with cancellation/return/RTO overrides, leak detection, GST applicability lookup, cash reconciliation, financial health bands, period comparison, and strategic signal ranking with single-call narration.
+- Reviewed in a final-readiness audit that found no real defects (`docs/evaluation/cfo-final-readiness-report.md`).
+- **Deferred on purpose:** fee-schedule sourcing and the cash-reconciliation formula inputs, settlement persistence, and a full eval suite. These are not silently dropped; see the CFO spec.
+
+**Competitor Intelligence**
+- Track competitors, record price and availability with an evidence trail, upload screenshots with local vision extraction, price positioning, alerts, and a summary.
+- A timed-out or unreadable extraction falls back to manual entry and never invents a value.
+- **Known weakness:** local vision accuracy is low. Prompt changes were evaluated without a demonstrated gain (`docs/evaluation/ci-vision-eval-2026-10-11.md`).
+- `ci.research_now` from chat is intentionally not wired.
+
+**Product Intelligence**
+- Product discovery and ranking from Tavily and YouTube, review insights, supplier lookup via Google Places, embeddings, and printable reports.
+- The CEO runs the PI research flow from chat with case history and the supplier's published price.
+- A real run took about 10 minutes on local models, so a dedicated wait setting exists.
+
+**Slim CMO** (recommend-only)
+- Titles, descriptions, keywords and hashtags checked against marketplace format constraints.
+- Market trend reports built from shared `market-signals`, with monthly caps and a daily provider ceiling.
+- Photo intake (metadata-stripped) with local vision analysis.
+- A read-only showcase dashboard.
+- The CEO can delegate to it, asking for missing details first and then showing an exact plan card.
+- **Status:** image intake and vision (P6) is still marked unverified because the shared dev database holds leftover test rows. Generation informed by CI data (P11) is not started.
+
+**CEO agent**
+- Classifier, composer and provenance gate; 36 registered actions, with write-class actions structurally impossible to register.
+- Parallel specialist legs, playbooks, rolling summaries, a business-state cache, spreadsheet/PDF/image attachments, and compound requests.
+- **Approval workflow:** a metered or data-sending action produces an exact plan card (30-minute life), and only an explicit Approve runs it. Turned on with `CEO_APPROVAL_ENABLED`.
+- **Reliability:** idempotent resends via `clientRequestId`, per-conversation turn locking, run recovery after a crash, and leg deadlines.
+- **Still open:** model selection and pass bars for the evaluation harness (only `qwen3:8b` measured, and its measured safety rates are not good), two playbooks (competitor price impact and new product decision), trend indicators and a recommendations panel in the Hub, and manual end-to-end hardening (B6).
+
+**Frontend**
+- Marketing landing page and Clerk sign-in/sign-up/onboarding.
+- Dashboard with goal-based navigation, an overview with attention chips, and a freshness badge.
+- Full-screen **CEO Hub** (agent canvas, draggable agents, chat bar, conversation panel, quick actions, flow view).
+- Pages for CFO, Competitors, PI (with a printable report), CMO showcase, Agents, Notifications and Settings.
+- Money is only displayed, never calculated in the browser.
+- **Open:** the CFO and PI pages are very large single files, and most specialist pages have no frontend tests. The signed-in app has not been fully click-tested.
+
+### Not built yet
+
+- WhatsApp via a BSP (spec only)
+- Razorpay billing and entitlement enforcement (spec only; a cap that isn't seeded shows as `NO_CAP_CONFIGURED`)
+- Anomaly detection (statistical "Brain 2")
+- Redis-backed cross-worker events
+- Deployment layer (reverse proxy, hosting). Today the API runs as bare `uvicorn` for local development.
+- Trained ML models. V1 is statistical only, by decision.
+
+### Before launch (blockers)
+
+- Verified marketplace format constraints for the CMO.
+- Trend configuration values and per-tenant monthly caps must be set. A tenant with no cap is unlimited.
+- Evaluation pass bars and model choice for the CEO.
+- Cleanup of the shared dev database, so P6 can be re-verified.
+- Production reverse-proxy body limits, and a load-tested connection-pool size.
+- GST, fee-schedule and CA review of the figures.
+- A frontend CI job, which doesn't exist yet.
+
+The detail behind each line is in `docs/planning/*-build-status.md` and in each spec's "Explicit open questions".
 
 ---
 
