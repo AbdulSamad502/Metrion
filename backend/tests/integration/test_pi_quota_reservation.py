@@ -106,7 +106,7 @@ def test_eight_overlapping_http_requests_for_the_last_unit_run_exactly_one_disco
     class HeldTavily(_FakeTavilyClient):
         calls = 0
 
-        def search(self, query, *, include_images=False, max_results=10):
+        def search(self, query, *, include_images=False, max_results=10, **_):
             HeldTavily.calls += 1
             entered.set()
             assert release.wait(timeout=60), "the winner was never released"  # the winner holds the unit while the others compete

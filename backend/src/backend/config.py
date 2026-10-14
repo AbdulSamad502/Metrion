@@ -342,6 +342,13 @@ def ceo_leg_timeout_seconds() -> int | None:
     return _optional_positive_int("CEO_LEG_TIMEOUT_SECONDS")
 
 
+def ceo_pi_research_timeout_seconds() -> int | None:
+    """`CEO_PI_RESEARCH_TIMEOUT_SECONDS`: how long an APPROVED product-research plan waits for the research run before answering "still running" (the run itself keeps going).
+    A real run (30 candidates, local-model extraction and commentary) took about 10 minutes (live run 2026-10-14), far over a normal leg deadline, so this is separate from
+    `CEO_LEG_TIMEOUT_SECONDS`. NO default: unset -> the ordinary leg deadline applies, which will cut a real research run off. Not cached."""
+    return _optional_positive_int("CEO_PI_RESEARCH_TIMEOUT_SECONDS")
+
+
 def ceo_leg_abandon_seconds() -> int | None:
     """`CEO_LEG_ABANDON_SECONDS`: the HARD leg deadline. A leg that is still running this long after it started, although its turn already answered without it (the soft
     deadline `CEO_LEG_TIMEOUT_SECONDS` passed), is settled as timed out (`ceo/deadlines.py`). NO default: unset -> None -> a late leg is never settled by age and keeps running

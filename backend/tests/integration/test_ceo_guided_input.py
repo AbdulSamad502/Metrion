@@ -52,7 +52,7 @@ def test_a_chip_or_typed_chat_starts_a_conversation_about_inputs_not_a_form_and_
     assert set(labels[:2]) == {"Acme Copper", "Acme Steel"}  # real tracked competitors, never invented
     assert labels[-2:] == ["Other", "Cancel"] and sum(1 for o in res.choices["options"] if o["kind"] in ("RECOMMENDED", "ALTERNATIVE")) <= 3
     chip = orchestrator.run_turn(ctx, rt, start(ctx, rt), "New product", ui_action=UI("PLAYBOOK", "NEW_PRODUCT_DECISION"))
-    assert chip.status == "CLARIFIED" and chip.clarify_for == "sku" and chip.answer.startswith("(1 of 8)")
+    assert chip.status == "CLARIFIED" and chip.clarify_for == "sku" and chip.answer.startswith("(1 of 10)")
 
 
 def test_a_bad_answer_is_asked_again_with_the_reason_and_keeps_the_state(two_tenants, app_user, seed):  # noqa: F811
@@ -63,7 +63,7 @@ def test_a_bad_answer_is_asked_again_with_the_reason_and_keeps_the_state(two_ten
     inv = start(ctx, rt)
     orchestrator.run_turn(ctx, rt, inv, "New product", ui_action=UI("PLAYBOOK", "NEW_PRODUCT_DECISION"))
     r = orchestrator.run_turn(ctx, rt, inv, "SKU-1")  # a TYPED reply to the open question: it is the answer, no classifier
-    assert r.clarify_for == "quantity" and r.answer.startswith("(2 of 8)")
+    assert r.clarify_for == "quantity" and r.answer.startswith("(2 of 10)")
     bad = orchestrator.run_turn(ctx, rt, inv, "a lot")
     assert bad.clarify_for == "quantity" and "whole number above zero" in bad.answer
     assert bad.choices["pending"]["collected"] == {"sku": "SKU-1"}  # nothing was lost or guessed
@@ -165,7 +165,7 @@ def test_back_re_asks_the_previous_question_without_a_model_call_and_the_seller_
     assert second.clarify_for == "quantity" and second.choices["pending"]["collected"] == {"sku": "SKU-1"}
     assert [o["key"] for o in second.choices["options"]][-2:] == ["back", "cancel"]
     again = say(ctx, rt, inv, "", card=second.message_id, option="back")
-    assert again.clarify_for == "sku" and again.answer.startswith("(1 of 8)") and again.choices["pending"]["collected"] == {}  # the answer is dropped from the session, not guessed
+    assert again.clarify_for == "sku" and again.answer.startswith("(1 of 10)") and again.choices["pending"]["collected"] == {}  # the answer is dropped from the session, not guessed
     fixed = say(ctx, rt, inv, "SKU-2")
     assert fixed.clarify_for == "quantity" and fixed.choices["pending"]["collected"] == {"sku": "SKU-2"}
     assert calls == {}

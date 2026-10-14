@@ -95,7 +95,7 @@ def test_pi_results_show_names_and_plain_limits_only(two_tenants, app_user):
                                                                 {"field": "demand_signal", "reason": "Google Ads API access pending brand verification"}]})
     rt = runtime(Scripted({}), Grounded(), registry=ActionRegistry([base.get("pi.discover"), spec]))
     inv = start(ctx, rt)
-    res = run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "quick", "yes"])
+    res = run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "yes"])
     assert "Hypercushion 01" in res.answer and "Here is what Product Intelligence found for your niche." in res.answer
     for internal in ("candidate opportunity", "PA-API", "Google Ads", "Written by the specialist", "V1"):
         assert internal not in res.answer, internal
@@ -115,7 +115,7 @@ def test_the_seller_can_follow_up_on_a_numbered_idea_and_the_next_agent_works_on
     both = ActionRegistry([*pi_registry(calls).specs(), *cmo_registry(calls).specs()])
     rt = runtime(Scripted({}), Grounded(), registry=both)
     inv = start(ctx, rt)
-    found = run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "quick", "yes"])
+    found = run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "yes"])
     assert "Leather Formal Shoes" in found.answer and "write titles for #2" in found.answer  # how to continue is said
     q = orchestrator.run_turn(ctx, rt, inv, "write titles for #2")
     assert "Taking #2 as “Leather Formal Shoes”" in q.answer and q.choices["pending"]["collected"] == {"product_name": "Leather Formal Shoes"}

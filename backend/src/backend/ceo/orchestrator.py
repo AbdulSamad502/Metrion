@@ -525,7 +525,9 @@ def _run_admitted(
     routed_text = text  # what the router and classifier see: earlier results referred to by position ("#3") are replaced by their names (spec 6.35)
     if ui_action is None:
         try:
-            routed_text, ref_notes = references.expand(repo.list_findings(tenant, inv_id), text)
+            _findings = repo.list_findings(tenant, inv_id)
+            _batch = references.batch_rewrite(_findings, text)
+            routed_text, ref_notes = _batch if _batch is not None else references.expand(_findings, text)
             _ACKS.set([*_ACKS.get(), *ref_notes])
         except Exception:  # noqa: BLE001
             logger.exception("reference expansion failed")
@@ -699,7 +701,7 @@ def _run_admitted(
             except (ValueError, KeyError) as exc:
                 invalid_form = f"the research brief could not be saved ({exc})"
             else:
-                resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct={"niche_brief_id": str(brief), "depth": run_inputs["depth"]})
+                resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct={"niche_brief_id": str(brief), "depth": "SHALLOW"})
                 try:  # PI's own private memory of what the seller just confirmed: offered as a choice next time, never filled in silently
                     src = {"message_id": str(user_msg)}
                     for k, v in (("last_category", str(run_inputs["category_text"])), ("last_budget_paise", str(run_inputs["budget_paise"])), ("last_marketplaces", ", ".join(run_inputs["marketplaces"]))):
@@ -868,6 +870,10 @@ def _run_admitted(
             collector.add_gap(g)
         if route == "PLAYBOOK" and key in _FLOW_NEEDS:  # the PI idea / competitor link (spec 5.2, S2) is recorded, with its outcome, beside the others
             _record_flow_need(tenant, inv_id, user_msg, key, legs, "LANDED_COST_FOR_IDEA" in addons)
+            if key == "NEW_PRODUCT_DECISION" and "LANDED_COST_FOR_IDEA" in addons:
+                from backend.ceo import pi_research  # noqa: PLC0415 - pi_research imports this module (the chain calls its leg runner)
+
+                pi_research.attach_results_to_case(tenant, str((run_inputs or {}).get("sku") or ""), legs)  # the CEO, not PI, gives the saved research case the CFO's answer
         for k in leg_keys:
             if not any(l.action_key == k for l in legs):  # a leg that missed its deadline: named, never silently absent (E36, L9)
                 collector.add_gap(f"{_label(k)} is still running; its result will appear in this investigation's findings when it finishes.")
@@ -936,11 +942,14 @@ def _plan_turn(
     """Ends a turn that WOULD run an approval-required action: no leg is dispatched, nothing is metered or sent. Code freezes the legs and their validated slots into a
     stored plan (one plan row + its CREATED event + the PLAN message, in one transaction); the turn ends PLANNED. The seller approves it only with the explicit approve
     call bound to the plan id and hash (a typed yes is just text). A plan that cannot be built honestly is explained and nothing is created."""
-    if not all(_preflight(ctx, runtime, k, attached, now) for k in leg_keys):
+    then = PI_RESEARCH_THEN if key == "pi.discover" else ()  # follow-up steps of the same approval (ceo-pi-research-flow.md Q1a): checked now so the card never promises what cannot run
+    if not all(_preflight(ctx, runtime, k, attached, now) for k in (*leg_keys, *then)):
         return _finish(ctx, runtime, turn, clock, log, status="DENIED", route=route, route_key=key, answer=PLAN_NOT_AVAILABLE_TEXT, kind="ANSWER", composition=None,
                        anchor_status="DENIED", error_reason="not available for a plan", classifier_flags=flags)
     legs = [(k, _slots_for(k, resolved)) for k in leg_keys]
     details: list[str] = []
+    if key == "pi.discover":
+        details.append("After the run, the five best products also get a product-photo search by their public names (Tavily); photos are shown with their source and only the link is kept.")
     units: dict[str, int] = {}
     followup: dict[str, Any] | None = None
     compact: list[str] = []
@@ -965,7 +974,7 @@ def _plan_turn(
     try:
         with clock.span("planning"):
             built, message_id = approval.create_plan(ctx, runtime, investigation_id=inv_id, planned_turn_id=turn.turn_id, anchor_run_id=turn.anchor_run_id,  # type: ignore[arg-type]
-                                                     route=route, route_key=key, legs=legs, now=runtime.clock(), details=details, units=units, followup=followup, title=title, compact=compact)
+                                                     route=route, route_key=key, legs=legs, now=runtime.clock(), details=details, units=units, followup=followup, title=title, compact=compact, then=then)
     except approval.PlanNotBuildable as exc:
         return _finish(ctx, runtime, turn, clock, log, status="FAILED", route=route, route_key=key, answer=exc.text, kind="ANSWER", composition=None,
                        anchor_status="FAILED", error_reason=f"plan not buildable: {exc.code}", classifier_flags=flags)
@@ -974,6 +983,7 @@ def _plan_turn(
                    anchor_status="COMPLETE", classifier_flags=flags, message_id=message_id, plan_id=built.plan_id)
 
 
+PI_RESEARCH_THEN = ("pi.supplier_lookup",)  # what a product research approval also covers, after the run (decided by code from its result)
 PI_FINDING_TEXT = "Product Intelligence found product ideas for the niche you asked about. They come from public web sources and are not verified."
 
 

@@ -23,7 +23,7 @@ FRONTEND = Path(__file__).resolve().parents[3] / "frontend"
 SOURCE_DIRS = ("app", "components", "lib")
 
 _PREFIX_CONST = re.compile(r"""\bconst\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*string\s*)?=\s*["'`](/api/v1[^"'`]*)["'`]""")
-_LITERAL = re.compile(r"""(["'`])((?:\\.|(?!\1).)*?)\1""", re.DOTALL)
+_LITERAL = re.compile(r"""(["'`])((?:\\.|(?!\1)[^\\])*?)\1""", re.DOTALL)
 # A typed client whose helpers take a path relative to its `const BASE = "/api/v1/..."`, e.g. call<T>("/investigations") or post<T>(getToken, "/title-sets", ...).
 _RELATIVE_CALL = re.compile(r"""\b(?:call|post|get|put|patch|del)(?:<[^>()]*(?:\([^)]*\))?[^>()]*>)?\(\s*(?:getToken,\s*)?(["'`])(/[^"'`]*)\1""")
 _RUNTIME_VALUE = re.compile(r"\$\{[^}]*\}")

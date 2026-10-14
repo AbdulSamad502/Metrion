@@ -43,6 +43,7 @@ _PI_TABLES: tuple[str, ...] = (
     "supplier_lead",
     "product_review_insight",
     "product_candidate",
+    "pi_research_case",
     "pi_research_run",
     "niche_brief",
     "pi_tenant_config",

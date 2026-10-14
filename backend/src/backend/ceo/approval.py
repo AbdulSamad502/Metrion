@@ -40,6 +40,7 @@ from backend.repositories import accounting_cutover_repo, agent_run_repo, invest
 logger = logging.getLogger(__name__)
 
 PLAN_VERSION = 1
+THEN_SLOTS_MARKER = "CODE_FROM_EARLIER_RESULT"  # a follow-up step's slots are not frozen: code resolves them from the earlier result (ceo-pi-research-flow.md Q1a)
 PLAN_TTL_SECONDS = 1800  # C6 / Q-A9: a constant, stored in each plan's `expires_at`
 
 PLAN_MESSAGE_LEAD = "I have prepared a plan. Nothing runs until you press Approve on the card below; typing yes does not approve it."
@@ -286,7 +287,7 @@ def build_plan(
     ctx: AuthContext, runtime: CeoRuntime, *, investigation_id: UUID, route: str, route_key: str | None, legs: Sequence[tuple[str, Mapping[str, Any]]],
     data_basis: Sequence[Mapping[str, Any]] = (), prior_attempt: Mapping[str, Any] | None = None, now: datetime,
     details: Sequence[str] = (), units: Mapping[str, int] | None = None, followup: Mapping[str, Any] | None = None,
-    title: str | None = None, compact: Sequence[str] = (),
+    title: str | None = None, compact: Sequence[str] = (), then: Sequence[str] = (),
 ) -> BuiltPlan:
     """Freezes what a turn WOULD run. Raises `PlanNotBuildable` (nothing is created) when the plan cannot be built honestly: an unclassified action, slots the action
     refuses, a float, an integration that is not available, or the execution limits not configured (D9, fail closed)."""
@@ -323,6 +324,20 @@ def build_plan(
             required = fx.external.value == "SELLER_DATA_OUT" or fx.force_approval  # a forced-approval action's destination (the vision model) must be reachable, or no plan is made
             prior = integrations.get(label)
             integrations[label] = {"code": label, "status": integration_status(label), "required": required or bool(prior and prior["required"])}
+    frozen_then: list[dict[str, Any]] = []
+    for key in then:  # follow-up steps of the same approval (ceo-pi-research-flow.md Q1a): listed up front, run by code with slots resolved from the earlier result
+        spec = runtime.registry.get(key)
+        if spec.effects is None:
+            raise PlanNotBuildable("UNCLASSIFIED_ACTION", "That action is not classified for approval, so no plan was made and nothing was run.")
+        fx = spec.effects
+        frozen_then.append({
+            "action_key": key, "agent": spec.agent.value if spec.agent else None, "source": spec.source, "effect": spec.effect.value, "requires_approval": gate_leg(key).requires_approval,
+            "external": fx.external.value, "egress": list(fx.egress), "slots": {"resolved_by": THEN_SLOTS_MARKER}, "refs": {}, "meters": [{"meter_code": m, "units": 1} for m in fx.meters],
+            "destinations": list(fx.destinations), "model_egress": list(fx.model_egress),
+        })
+        for label in fx.destinations:  # not required: a missing provider key degrades that lookup (named in the result) rather than blocking the research
+            prior = integrations.get(label)
+            integrations[label] = {"code": label, "status": integration_status(label), "required": bool(prior and prior["required"])}
     down = [i["code"] for i in integrations.values() if i["required"] and i["status"] != "AVAILABLE"]
     if down:
         raise PlanNotBuildable("INTEGRATION_UNAVAILABLE", "This needs " + ", ".join(down) + ", which is not set up on this server (the operator has to configure it) or is not available right now, so no plan was made, nothing was searched or sent, and nothing was used up.")
@@ -335,8 +350,10 @@ def build_plan(
         assumptions.append("Only the data listed above leaves Metrion, and only to the services listed.")
     if any(l["action_key"] == "pi.discover" for l in frozen_legs):
         assumptions.append("After the research run finishes, the saved report is read back to show you the ideas; that read starts no new research.")
+    if frozen_then:
+        assumptions.append("Then, as part of this same approval and without asking again: " + "; ".join(f"run {_label(t['action_key'])} (uses " + ", ".join(f"{m['units']} x {m['meter_code']}" for m in t["meters"]) + (f"; sends public product names to {', '.join(t['destinations'])}" if t["destinations"] else "") + ")" for t in frozen_then) + ". Which products it covers is decided by code from the research result.")
     plan: dict[str, Any] = {
-        "plan_version": PLAN_VERSION, "route": route, "route_key": route_key, "legs": frozen_legs, "integrations": list(integrations.values()), "assumptions": assumptions,
+        "plan_version": PLAN_VERSION, "route": route, "route_key": route_key, "legs": frozen_legs, "then": frozen_then, "integrations": list(integrations.values()), "assumptions": assumptions,
         "data_basis": [dict(b) for b in data_basis], "details": [str(d) for d in details], "limits": {"max_legs": runtime.max_legs, "leg_timeout_seconds": runtime.leg_timeout_seconds},
         "prior_attempt": dict(prior_attempt) if prior_attempt else None,
     }
@@ -347,7 +364,7 @@ def build_plan(
     plan["summary_text"] = _summary(frozen_legs, assumptions, details)
     # The chat presentation: a short title and 3-5 short lines. The full text above (details, assumptions, frozen slots) is unchanged and is still what the hash covers; the card shows it behind "Details".
     plan["title"] = title or _generic_title(frozen_legs)
-    plan["compact_lines"] = [str(c) for c in compact] or _generic_compact(frozen_legs, plan["title"])
+    plan["compact_lines"] = [str(c) for c in compact] or _generic_compact([*frozen_legs, *frozen_then], plan["title"])
     plan = _norm(plan)
     created = now.astimezone(timezone.utc)
     expires = created + timedelta(seconds=PLAN_TTL_SECONDS)
@@ -368,7 +385,7 @@ def prior_attempt_for(tenant_id: UUID, investigation_id: UUID, leg_keys: Sequenc
 def create_plan(
     ctx: AuthContext, runtime: CeoRuntime, *, investigation_id: UUID, planned_turn_id: UUID, anchor_run_id: UUID, route: str, route_key: str | None,
     legs: Sequence[tuple[str, Mapping[str, Any]]], now: datetime, details: Sequence[str] = (), units: Mapping[str, int] | None = None,
-    followup: Mapping[str, Any] | None = None, title: str | None = None, compact: Sequence[str] = (),
+    followup: Mapping[str, Any] | None = None, title: str | None = None, compact: Sequence[str] = (), then: Sequence[str] = (),
 ) -> tuple[BuiltPlan, UUID]:
     """Build and store the plan for a turn that would run an approval-required action (6.1): one plan row, its CREATED event, the PLAN message, and any older open plan
     of the investigation SUPERSEDED, in one transaction. Returns the plan and the PLAN message id. Raises `PlanNotBuildable` with nothing written."""
@@ -377,7 +394,7 @@ def create_plan(
         raise PlanNotBuildable("ACCOUNTING_NOT_READY", "The usage accounting rule that keeps a failed run from costing you anything is not in effect yet, so no plan was made and nothing was run.")
     basis = data_basis_for(ctx.tenant_id, {k: s for k, s in legs}, investigation_id)
     built = build_plan(ctx, runtime, investigation_id=investigation_id, route=route, route_key=route_key, legs=legs, data_basis=basis, now=now,
-                       prior_attempt=prior_attempt_for(ctx.tenant_id, investigation_id, [k for k, _ in legs]), details=details, units=units, followup=followup, title=title, compact=compact)
+                       prior_attempt=prior_attempt_for(ctx.tenant_id, investigation_id, [k for k, _ in legs]), details=details, units=units, followup=followup, title=title, compact=compact, then=then)
     message_id = plan_repo.create(
         ctx.tenant_id, plan_id=built.plan_id, investigation_id=investigation_id, planned_turn_id=planned_turn_id, anchor_run_id=anchor_run_id, requested_by=ctx.app_user_id,
         plan=built.plan, plan_hash=built.plan_hash, created_at=built.created_at, expires_at=built.expires_at,
@@ -452,6 +469,7 @@ def verify_for_approval(ctx: AuthContext, runtime: CeoRuntime, investigation_id:
         raise _refuse(tenant, plan_id, user, ApprovalRefused(409, code, "NOT_AWAITING", status=row["status"]))
     plan = row["plan"]
     leg_keys = [l["action_key"] for l in plan.get("legs", [])]
+    leg_keys += [l["action_key"] for l in plan.get("then", [])]  # the follow-up steps are authorized, attached, entitled and counted exactly like the legs
     try:
         specs = tuple(runtime.registry.get(k) for k in leg_keys)
     except Exception:  # noqa: BLE001 - an action no longer in the closed catalog cannot run

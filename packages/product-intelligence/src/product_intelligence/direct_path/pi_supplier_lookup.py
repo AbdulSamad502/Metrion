@@ -30,11 +30,12 @@ from uuid import UUID
 
 from product_intelligence.repositories import product_candidate_repo, supplier_lead_repo
 from product_intelligence.sources.rate_limiter import throttle
+from product_intelligence.supplier.published_price import extract_published_unit_price
 from product_intelligence.sources.tavily_client import TavilyClient, TavilySearchResult, TavilyUnavailable
 from product_intelligence.supplier.google_places_client import PlacesClient, PlacesUnavailable
 
 _MAX_PLACES_MATCHES_PER_CANDIDATE = 5
-_MAX_TAVILY_LEADS_PER_CANDIDATE = 3
+_MAX_TAVILY_LEADS_PER_CANDIDATE = 4
 # Overfetch beyond the final lead cap so `_filter_and_rank_supplier_results` has enough raw
 # results to filter obvious non-suppliers out of and still leave up to
 # `_MAX_TAVILY_LEADS_PER_CANDIDATE` genuine leads.
@@ -54,7 +55,13 @@ _EDITORIAL_TITLE_PATTERN = re.compile(
 _SUPPLIER_SIGNAL_WORDS = (
     "manufacturer", "manufacturers", "wholesale", "wholesaler", "supplier", "suppliers",
     "exporter", "exporters", "factory", "distributor", "distributors", "oem",
+    "trader", "traders", "dealer", "dealers", "importer", "importers", "stockist", "bulk",
 )
+
+# B2B trade directories: a listing here is a seller's own supplier page by construction (a product page on IndiaMART/TradeIndia carries the seller's name, city and often a
+# price), so it counts as supplier evidence even when its title has no supplier word ("Cmf Buds-2 at 139 INR in Ahmedabad").
+_B2B_DIRECTORY_DOMAINS = frozenset({"indiamart.com", "tradeindia.com", "exportersindia.com", "made-in-china.com", "go4worldbusiness.com", "dir.indiamart.com"})
+_B2B_SEARCH_DOMAINS = frozenset({"indiamart.com", "tradeindia.com", "exportersindia.com"})  # the Indian bulk-buying directories searched directly
 
 # Well-known major consumer retail/brand storefront domains — a seller looking for a wholesale
 # contact almost never wants these. Not remotely exhaustive; see module docstring's honesty
@@ -164,7 +171,17 @@ def _looks_like_supplier(result: TavilySearchResult, *, candidate_title: str) ->
 
 def _has_supplier_signal(result: TavilySearchResult) -> bool:
     combined = f"{result.title or ''} {result.content or ''}".lower()
-    return any(word in combined for word in _SUPPLIER_SIGNAL_WORDS)
+    return any(re.search(rf"\b{re.escape(word)}\b", combined) for word in _SUPPLIER_SIGNAL_WORDS)
+
+
+def _name_reads_like_a_supplier(name: str | None) -> bool:
+    low = (name or "").lower()
+    return any(re.search(rf"\b{re.escape(w)}\b", low) for w in _SUPPLIER_SIGNAL_WORDS)
+
+
+def _is_b2b_directory(result: TavilySearchResult) -> bool:
+    domain = _domain(result.url)
+    return any(domain == d or domain.endswith("." + d) for d in _B2B_DIRECTORY_DOMAINS)
 
 
 def _filter_and_rank_supplier_results(
@@ -174,7 +191,11 @@ def _filter_and_rank_supplier_results(
     carrying an explicit supplier-signal word ("manufacturer", "wholesale", etc.) to the
     front — a stable sort, so relative order among equally-scored results is preserved."""
     plausible = [r for r in results if _looks_like_supplier(r, candidate_title=candidate_title)]
-    ranked = sorted(plausible, key=lambda r: not _has_supplier_signal(r))
+    # A lead must carry SUPPLIER evidence: an explicit supplier word (manufacturer, wholesaler, trader, distributor...) or a B2B trade-directory page. A result with neither
+    # (a brand's own product page, a review site, a news article, a retailer) is not a supplier lead; "no supplier lead found" is the honest outcome then. Found by the first
+    # live run (2026-10-14): Sony's own page, Mashable and B&H were persisted as leads for a Sony product.
+    evidenced = [r for r in plausible if _has_supplier_signal(r) or _is_b2b_directory(r)]
+    ranked = sorted(evidenced, key=lambda r: (not _is_b2b_directory(r), not _has_supplier_signal(r)))  # real bulk listings first, then explicit supplier pages
     return ranked[:max_results]
 
 
@@ -183,6 +204,10 @@ class SupplierLookupResult:
     candidate_id: UUID
     lead_ids: tuple[UUID, ...]
     degraded_reason: str | None
+
+
+def _directory_query(candidate_title: str) -> str:
+    return f"{candidate_title} wholesale price per piece supplier"
 
 
 def _supplier_query(candidate_title: str) -> str:
@@ -220,6 +245,9 @@ def lookup_suppliers_for_candidates(
             place_matches = []
             degraded_reason = f"Google Places unavailable: {exc}"
 
+        # A place whose name is not a trader / wholesaler / manufacturer (a brand store, an unrelated business sharing a word: "The Bose Store", "Apple Industries" in the live runs)
+        # is not a supplier lead; checked BEFORE the paid enrichment call so nothing is spent on it.
+        place_matches = [m for m in place_matches[:1] if _name_reads_like_a_supplier(m.display_name)]
         if place_matches:
             best_match = place_matches[0]
             try:
@@ -233,6 +261,7 @@ def lookup_suppliers_for_candidates(
             if details is not None:
                 contact = {"phone": details.phone, "website": details.website, "moq": None}
 
+        if place_matches:
             lead_id = supplier_lead_repo.insert_lead(
                 tenant_id,
                 run_id=run_id,
@@ -248,15 +277,23 @@ def lookup_suppliers_for_candidates(
             )
             lead_ids.append(lead_id)
 
-        try:
-            with throttle("tavily"):
-                raw_web_results = tavily.search(
-                    query, include_images=False, max_results=_MAX_TAVILY_RAW_RESULTS_PER_CANDIDATE
-                )
-        except TavilyUnavailable as exc:
-            raw_web_results = []
-            degraded_reason = "; ".join(p for p in (degraded_reason, f"Tavily supplier search unavailable: {exc}") if p)
+        raw_web_results: list[TavilySearchResult] = []
+        # Two searches: the B2B trade directories first (IndiaMART, TradeIndia, ExportersIndia list real bulk sellers with city and often a price: what a seller sourcing stock
+        # wants, asked for by the owner 2026-10-14), then the open web for manufacturer / wholesaler / distributor pages. Each degrades on its own.
+        for search_kwargs, label in (
+            ({"include_domains": sorted(_B2B_SEARCH_DOMAINS)}, "trade directory"), ({}, "web"),
+        ):
+            try:
+                with throttle("tavily"):
+                    raw_web_results += tavily.search(
+                        _directory_query(str(candidate.get("candidate_title", ""))) if search_kwargs else query,
+                        include_images=False, max_results=_MAX_TAVILY_RAW_RESULTS_PER_CANDIDATE, **search_kwargs,
+                    )
+            except TavilyUnavailable as exc:
+                degraded_reason = "; ".join(p for p in (degraded_reason, f"Tavily supplier {label} search unavailable: {exc}") if p)
 
+        seen_urls: set[str] = set()
+        raw_web_results = [r for r in raw_web_results if not (r.url in seen_urls or seen_urls.add(r.url))]  # the two searches may return the same page
         web_results = _filter_and_rank_supplier_results(
             raw_web_results,
             max_results=_MAX_TAVILY_LEADS_PER_CANDIDATE,
@@ -264,13 +301,14 @@ def lookup_suppliers_for_candidates(
         )
 
         for result in web_results:
+            published = extract_published_unit_price(f"{result.title} {result.content}", source_url=result.url, captured_at=now)
             lead_id = supplier_lead_repo.insert_lead(
                 tenant_id,
                 run_id=run_id,
                 candidate_id=candidate_id,
                 supplier_name=result.title,
                 source="TAVILY",
-                contact=None,
+                contact={"phone": None, "website": None, "moq": None, "published_price": published} if published else None,
                 locality=None,
                 distance_km=None,
                 category_match=None,

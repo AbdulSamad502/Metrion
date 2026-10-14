@@ -37,17 +37,22 @@ from backend.entitlement import resolve_niche_run_entitlement, resolve_pi_entitl
 from backend.repositories import agent_run_repo
 from backend.services import pi_usage
 from backend.services.pi_actions import (
+    CaseNotAvailable,
     archive_niche_brief,
     create_niche_brief_draft,
     get_niche_brief,
     list_niche_briefs,
+    list_research_history,
     load_report,
+    load_research_case,
     mark_niche_brief_draft,
     mark_niche_brief_ready,
     pi_report_to_dict,
     pi_run_result_to_dict,
+    pin_research,
     run_discovery,
     run_supplier_lookup,
+    top_five_for_report,
     supplier_lookup_result_to_dict,
     update_niche_brief_draft,
 )
@@ -363,4 +368,47 @@ def get_report(run_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_PI
         report = load_report(ctx.tenant_id, run_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from None
-    return pi_report_to_dict(report)
+    out = pi_report_to_dict(report)
+    out["topFive"] = top_five_for_report(ctx.tenant_id, run_id)  # the five shown to the seller, in rank order (the CEO numbers its follow-ups by them)
+    return out
+
+
+# --- Research history and saved reports (docs/specs/ceo-pi-research-flow.md): read-only for the dashboard, plus pin/unpin. Research is started ONLY through the CEO. ---
+
+
+@router.get("/research")
+def get_research_history(ctx: AuthContext = require_auth(permission=AGENT_PI)) -> dict[str, object]:
+    """The history rail: pinned reports first, then the newest unpinned (archived never). Persisted data only."""
+    assert ctx.tenant_id is not None
+    return {"items": list_research_history(ctx.tenant_id)}
+
+
+@router.get("/research/{run_id}")
+def get_research_case(run_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_PI)) -> dict[str, object]:
+    """One saved report: exactly the five seller-facing products with commentary, suppliers, recommendation and CFO references. 404 for anything this tenant
+    cannot see (unknown, another tenant's, archived, unfinished)."""
+    assert ctx.tenant_id is not None
+    try:
+        return load_research_case(ctx.tenant_id, run_id)
+    except CaseNotAvailable as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+
+
+@router.post("/research/{run_id}/pin")
+def post_pin_research(run_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_PI)) -> dict[str, object]:
+    assert ctx.tenant_id is not None
+    try:
+        pin_research(ctx.tenant_id, run_id, pinned=True)
+    except CaseNotAvailable as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return {"runId": str(run_id), "pinned": True}
+
+
+@router.post("/research/{run_id}/unpin")
+def post_unpin_research(run_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_PI)) -> dict[str, object]:
+    assert ctx.tenant_id is not None
+    try:
+        pin_research(ctx.tenant_id, run_id, pinned=False)
+    except CaseNotAvailable as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return {"runId": str(run_id), "pinned": False}

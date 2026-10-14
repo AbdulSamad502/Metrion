@@ -33,6 +33,8 @@ ALLOWED_SPECIALIST_IMPORTS: dict[str, tuple[str, ...]] = {
     # the ONE declared write (spec 6.35, owner-approved): the research brief a seller confirmed in chat, saved through a single tenant-scoped service
     # and (spec 6.36, owner-approved) the supplier quote / batch budget a seller confirmed on a confirm card, saved through the CFO's own write path in one service
     "orchestrator.py": ("backend.services.ceo_attachment_analysis", "backend.services.ceo_briefs", "backend.services.ceo_inputs"),  # the attached-spreadsheet analysis: pure code over the seller's own file, no specialist, no ledger, no model
+    "pi_research.py": ("backend.services.ceo_pi_research",),  # ceo-pi-research-flow.md: choosing the five products, finalising the case and reading it back, through one tenant-scoped service
+    "approval_run.py": ("backend.services.ceo_pi_research",),  # the same read, to write the five-product summary of an approved research plan
     "data_requests.py": ("backend.services.ceo_reads",),  # spec 6.37: reading an open data request and what is already stored, through that tenant-scoped seam
     "slot_resolvers.py": ("backend.services.ceo_reads",),  # resolving a named competitor is a tenant-scoped read through that seam
     # the GST lookup invocation: the single declared use of the CFO service function for GST (same precedent as derived_reads.py)

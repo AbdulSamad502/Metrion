@@ -384,58 +384,16 @@ def _run(tavily, cache=None):
     )
 
 
-def test_candidate_missing_an_image_gets_one_found_by_its_own_name(_patch_repos) -> None:
+def test_discovery_persists_no_image_and_makes_no_per_product_image_search(_patch_repos) -> None:
+    """2026-10-14: the ~30 discovered candidates carry NO image (not a niche image, not a thumbnail, not an unverified hotlink); a clear image is resolved only for
+    the final five (`discovery/top5_images.py`)."""
     tavily = _ImageByNameTavily(product_image=_PRODUCT_IMAGE)
     outcome = _run(tavily)
 
     assert outcome.status == "COMPLETE"
-    assert [r["image_url"] for r in _patch_repos] == ["https://img.example.com/acme.jpg"]
-    assert _patch_repos[0]["image_source_url"] == "https://img.example.com/acme.jpg"
-    # The generic niche image was never borrowed.
-    assert all(r["image_url"] != "https://img.example.com/niche.jpg" for r in _patch_repos)
-
-
-def test_candidate_stays_image_less_when_no_image_names_it(_patch_repos) -> None:
-    outcome = _run(_ImageByNameTavily(product_image=None))
-
-    assert outcome.status == "COMPLETE"
-    assert len(_patch_repos) == 1 and _patch_repos[0]["image_url"] is None
-
-
-def test_image_lookup_failure_does_not_degrade_the_run(_patch_repos) -> None:
-    outcome = _run(_ImageByNameTavily(product_image=_PRODUCT_IMAGE, raises_on_product_query=True))
-
-    assert outcome.status == "COMPLETE"
-    assert outcome.tavily_degraded is False
-    assert _patch_repos[0]["image_url"] is None
-
-
-def test_targeted_image_lookup_is_cached_and_bounded(_patch_repos) -> None:
-    tavily = _ImageByNameTavily(product_image=_PRODUCT_IMAGE)
-    cache = InProcessQueryCache()
-    _run(tavily, cache)
-    first_run_product_queries = [q for q in tavily.image_queries if "acme" in q.lower()]
-    _run(tavily, cache)
-    second_run_product_queries = [q for q in tavily.image_queries if "acme" in q.lower()]
-
-    assert len(first_run_product_queries) == 1
-    assert len(second_run_product_queries) == 1  # second run served from cache
-
-    many = [_tavily_result(url=f"https://a.com/{i}", title=f"Brand{i} Gadget Model{i}", content=f"brand{i} gadget model{i}") for i in range(25)]
-
-    class _Many(_FakeTavilyClient):
-        def __init__(self):
-            super().__init__(results=many)
-            self.name_queries = 0
-
-        def images_for(self, query, *, max_images=5):
-            if "gadget" in query.lower() and "model" in query.lower():
-                self.name_queries += 1
-            return []
-
-    many_client = _Many()
-    _run(many_client)
-    assert many_client.name_queries <= discovery_run._MAX_TARGETED_IMAGE_LOOKUPS
+    assert len(_patch_repos) == 1
+    assert _patch_repos[0]["image_url"] is None and _patch_repos[0]["image_source_url"] is None
+    assert not [q for q in tavily.image_queries if "acme" in q.lower()]  # no Tavily call is spent on per-candidate images during discovery
 
 
 def test_no_targeted_lookups_when_tavily_already_failed_this_run(_patch_repos) -> None:

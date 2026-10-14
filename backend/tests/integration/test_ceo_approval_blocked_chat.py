@@ -130,7 +130,7 @@ def test_pi_discover_the_confirmation_card_is_not_approval_nothing_is_saved_or_r
     ask = "ok now i want the top trending products to sell my nich is mens shoes"
     with refusal_off(monkeypatch):  # a conversation that reached the summary card before this rule
         res = orchestrator.run_turn(ctx, rt, inv, ask)
-        for answer in ("20,000", "Amazon", "skip", "quick"):
+        for answer in ("20,000", "Amazon", "skip"):
             res = orchestrator.run_turn(ctx, rt, inv, answer)
         assert "Shall I go ahead" in res.answer and calls == {} and pi_actions.list_niche_briefs(a) == []
     before = side_effects(a)

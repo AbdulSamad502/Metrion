@@ -25,7 +25,7 @@ CATEGORY = {
     "COMPETITOR_AND_PRODUCT_DATA": (
         "competitor_url", "competitor_snapshot", "competitor_snapshot_field", "competitor_evidence", "competitor_price_event", "competitor_listing_insight",
         "competitor_review_insight", "ci_candidate", "ci_candidate_relevance", "ci_capture_run", "ci_discovery_run", "ci_search_query", "ci_search_result",
-        "ci_digest_subscription", "ci_tenant_config", "niche_brief", "pi_research_run", "product_candidate", "product_embedding", "product_review_insight", "supplier_lead",
+        "ci_digest_subscription", "ci_tenant_config", "niche_brief", "pi_research_run", "pi_research_case", "product_candidate", "product_embedding", "product_review_insight", "supplier_lead",
         "pi_tenant_config", "seller_product_profile",
     ),
     "CREATIVE_AND_IMAGES": ("cmo_generation", "cmo_title_approval", "cmo_title_option", "cmo_trend_report", "cmo_niche_term", "product_image_analysis", "seller_image_asset", "cmo_result_usage_event"),

@@ -171,7 +171,7 @@ def test_the_idea_link_is_recorded_only_when_the_seller_named_a_pi_idea(two_tena
     both = ActionRegistry([*pi_registry(calls).specs(), *recording_registry(calls).specs()])
     rt = dataclasses.replace(runtime(Scripted({}), Grounded(), registry=both), max_candidate_prices=5)
     inv = start(ctx, rt)
-    run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "quick", "yes"])  # PI lists ideas
+    run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "yes"])  # PI lists ideas
     q = orchestrator.run_turn(ctx, rt, inv, "is #2 worth stocking?")
     assert q.choices["pending"]["key"] == "NEW_PRODUCT_DECISION" and q.choices["addons"] == ["LANDED_COST_FOR_IDEA"]
     q = orchestrator.run_turn(ctx, rt, inv, "200")
@@ -215,7 +215,7 @@ def test_the_pi_finding_is_recorded_once_and_is_labelled_not_verified(two_tenant
         ctx = ctx_for(a, user_id=app_user)
         rt = runtime(Scripted({}), Grounded(), registry=pc.registry(calls))
         inv = start(ctx, rt)
-        pc.run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "quick", "yes"])
+        pc.run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "yes"])
         visible = findings.list_visible(a, ["PI"])
         [row] = [r for r in visible.items if r["kind"] == "PRODUCT_IDEA"]
         assert row["trust"] == "AGENT_REPORTED" and "not verified" in row["text"] and not any(ch.isdigit() for ch in row["text"])

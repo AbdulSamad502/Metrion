@@ -18,18 +18,20 @@ free-tier quota; a fresh `InProcessQueryCache()` per call would defeat that enti
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 from product_intelligence.direct_path.pi_discover import PiRunResult, submit_pi_discover
+from product_intelligence.direct_path import pi_case
 from product_intelligence.direct_path.pi_report import PiReport, render_report
 from product_intelligence.direct_path.pi_supplier_lookup import SupplierLookupResult, lookup_suppliers_for_candidates
 from product_intelligence.discovery.discovery_run import DEFAULT_CANDIDATE_CAP
+from product_intelligence.discovery.top5_images import HttpImageVerifier, ImageVerifier, resolve_top5_images
 from product_intelligence.discovery.product_extraction import OllamaProductExtractionClient, ProductExtractionClient
 from product_intelligence.embedding.embed import EmbeddingClient, OllamaEmbeddingClient
-from product_intelligence.repositories import niche_brief_repo
+from product_intelligence.repositories import niche_brief_repo, pi_research_history_repo
 from product_intelligence.review_insight.text_extraction import OllamaTextInsightExtractor, TextInsightExtractor
 from product_intelligence.sources.cache import InProcessQueryCache, QueryCache
 from product_intelligence.sources.tavily_client import HttpTavilyClient, TavilyClient
@@ -67,6 +69,10 @@ def _text_extractor() -> TextInsightExtractor:
 
 def _product_extraction_client() -> ProductExtractionClient:
     return OllamaProductExtractionClient(host=ollama_host(), model=pi_product_extraction_model())
+
+
+def _image_verifier() -> ImageVerifier:
+    return HttpImageVerifier()
 
 
 def _embedding_client() -> EmbeddingClient:
@@ -251,3 +257,59 @@ def pi_report_to_dict(report: PiReport) -> dict[str, object]:
         "candidates": json_safe(report.candidates),
         "unavailable": json_safe(report.unavailable),
     }
+
+
+# --- Research cases, history and pinning (docs/specs/ceo-pi-research-flow.md). Reads and flag writes over persisted data only; nothing here fetches or computes a figure. ---
+CaseNotAvailable = pi_case.CaseNotAvailable
+
+
+def list_research_history(tenant_id: UUID) -> list[dict[str, Any]]:
+    return json_safe(pi_case.list_history(tenant_id))
+
+
+def load_research_case(tenant_id: UUID, run_id: UUID) -> dict[str, Any]:
+    """Raises `CaseNotAvailable` (looks identical for an unknown, another tenant's, archived or unfinished run)."""
+    return json_safe(pi_case.render_case(tenant_id, run_id))
+
+
+def pin_research(tenant_id: UUID, run_id: UUID, *, pinned: bool) -> None:
+    """Idempotent. Unpinning re-applies the tenant's history limit (the oldest unpinned report is archived, never deleted)."""
+    now = datetime.now(timezone.utc)
+    if not pi_research_history_repo.set_pinned(tenant_id, run_id, pinned=pinned, now=now):
+        raise CaseNotAvailable(f"no finished research report {run_id} for this tenant")
+    if not pinned:
+        pi_research_history_repo.archive_over_limit(tenant_id, limit=pi_research_history_repo.get_history_unpinned_limit(tenant_id), now=now)
+
+
+def select_research_top5(tenant_id: UUID, run_id: UUID, *, investigation_id: UUID | None = None) -> list[UUID]:
+    """Picks the five seller-facing products, then resolves a clear, verified product image for those five only (never a video thumbnail). The image step is
+    external (Tavily + the image host) but costs no metered unit and never fails the case: a product without a verified image simply has none."""
+    ids = pi_case.select_top5(tenant_id, run_id, investigation_id=investigation_id)
+    if ids:
+        resolve_top5_images(tenant_id, ids, tavily=_tavily_client(), verifier=_image_verifier())
+    return ids
+
+
+def finalize_research_case(tenant_id: UUID, run_id: UUID) -> dict[str, Any]:
+    return pi_case.finalize_case(tenant_id, run_id)
+
+
+def attach_cfo_figures(tenant_id: UUID, product_name: str, entries: list[dict[str, Any]]) -> UUID | None:
+    return pi_case.attach_cfo_figures(tenant_id, product_name, entries)
+
+
+def top_five_for_report(tenant_id: UUID, run_id: UUID) -> list[dict[str, Any]]:
+    """The seller-facing five in rank order, for the saved-report read the CEO numbers its follow-ups by ("#1" is rank 1)."""
+    try:
+        case = pi_case.render_case(tenant_id, run_id)
+    except CaseNotAvailable:
+        return []
+    return [{"rank": p["rank"], "candidateId": str(p["candidate"]["id"]), "title": p["candidate"]["candidate_title"]} for p in case["products"]]
+
+
+def research_budget_for_product(tenant_id: UUID, product_name: str) -> int | None:
+    return pi_case.research_budget_for_product(tenant_id, product_name)
+
+
+def suppliers_for_product(tenant_id: UUID, product_name: str) -> list[dict[str, Any]]:
+    return pi_case.suppliers_for_product(tenant_id, product_name)

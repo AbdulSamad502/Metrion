@@ -27,6 +27,7 @@ from backend.ceo.figure_format import format_paise, format_percent_number, forma
 
 logger = logging.getLogger(__name__)
 
+BATCH_PARTIAL_TEXT = "The most units your budget allows could not be worked out: for a product with no sales history it needs the supplier's minimum order quantity or delivery time, and the saved quote has neither"
 MAX_CANDIDATES_SHOWN = 10  # how many product ideas one answer lists (a display bound; the rest stay on the Product Intelligence page, said so)
 MAX_FIGURES = 12  # how many verified figures one answer carries; the rest stay on the findings (stated as a gap, never dropped silently)
 
@@ -161,6 +162,7 @@ LEG_LABELS: Mapping[str, str] = {
     "cfo.batch_size": "The batch size estimate",
     "pi.report": "The product research report",
     "pi.discover": "The product research",
+    "pi.supplier_lookup": "The supplier lookup for the five shortlisted products",
     "BS_COMPETITOR_SNAPSHOT": "The competitor prices",
     "BS_PI_REPORT_LATEST": "The product research status",
     "BS_CMO_WORKFLOW": "The listing content status",
@@ -257,7 +259,10 @@ class EvidenceCollector:
                 self._offer("cfo.preview", "See the free CFO preview")
             return
         if leg.status is LegStatus.PARTIAL:
-            self.add_gap(f"{label} returned a partial result.")
+            if leg.action_key == "cfo.batch_size":  # the usual cause, in plain words (live run 2026-10-14): a product never sold needs the supplier's minimum order or delivery time
+                self.add_gap(BATCH_PARTIAL_TEXT)
+            else:
+                self.add_gap(f"{label} returned a partial result.")
         snapshot = (len(self.facts), len(self.gaps), len(self.artefacts), len(self.attach), len(self.offers))
         try:
             self._leg_facts(leg)
@@ -348,6 +353,9 @@ class EvidenceCollector:
                     self.add_gap(f"The anomaly check ({method}) is not configured yet.")
         elif leg.action_key in ("cfo.gst_lookup", "service.gst_lookup"):
             self._gst_result(payload)
+        elif leg.action_key == "cfo.batch_size":
+            if leg.status in (LegStatus.COMPLETE, LegStatus.PARTIAL) and not payload.get("dataRequestId"):
+                self.add_fact("About \"Most units your budget allows\"", "this is the largest quantity your budget and the supplier's minimum order allow. It is a ceiling, not a recommendation to buy that many and not a sales forecast.", "SOURCE_DERIVED")
         elif leg.action_key == "pi.report":
             self._pi_candidates(payload)
         elif leg.action_key == "cmo.market_trends_preview":
@@ -367,6 +375,17 @@ class EvidenceCollector:
     def _pi_candidates(self, payload: Mapping[str, Any]) -> None:
         """Product ideas Product Intelligence found on the public web: their names, quoted and labelled. They are not figures, carry no sales data and are never
         verified here; the scores, sources and supplier leads stay on the Product Intelligence page."""
+        five = payload.get("topFive") or []
+        if five:  # a finished research case: the numbering the seller sees (#1..#5) is the rank, and only these five are described
+            names = [" ".join(str(t.get("title") or "").split())[:140] for t in five if t.get("title")]
+            self.artefacts.append((
+                WEB_ARTEFACT_TITLE, tuple(names),
+                "The five shortlisted products in rank order, from public web sources and not verified: this is not your sales data. The full saved report is on the Product Intelligence page.",
+            ))
+            for u in payload.get("unavailable") or []:
+                field = str(u.get("field") or "")
+                self.add_gap(_PI_LIMITS.get(field, "The research run was only partly complete, so some ideas may be missing." if field == "run_completeness" else "Some information was not available for these ideas."))
+            return
         rows = payload.get("candidates") or []
         names: list[str] = []
         for row in rows[:MAX_CANDIDATES_SHOWN]:

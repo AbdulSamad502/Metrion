@@ -125,6 +125,16 @@ def _quantity(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     return int(t) if re.fullmatch(r"\d{1,8}", t) and int(t) > 0 else Reject("Give the number of units as a whole number above zero, for example 200.")
 
 
+def _optional_whole(label: str) -> Callable[[str, Ctx, Mapping[str, Any]], Any]:
+    """A whole number above zero, or None when the seller skips it (a missing MOQ / lead time is absent, never zero)."""
+    def parse(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+        if raw.strip().casefold() in _SKIP_WORDS:
+            return None
+        t = raw.strip().replace(",", "")
+        return int(t) if re.fullmatch(r"\d{1,6}", t) and int(t) > 0 else Reject(f"Give {label} as a whole number above zero, or skip it.")
+    return parse
+
+
 def _competitor(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     found = slot_resolvers.resolve_competitor(ctx.tenant_id, raw)
     if isinstance(found, slot_resolvers.CompetitorMatch):
@@ -451,15 +461,6 @@ def _price_range(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     return {"min": values[0], "max": values[1]}
 
 
-def _depth(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
-    t = raw.strip().casefold()
-    if t.startswith(("quick", "shallow", "fast")):
-        return "SHALLOW"
-    if t.startswith(("complete", "deep", "full", "thorough")):
-        return "COMPLETE"
-    return Reject("Choose a quick scan or a complete research run.")
-
-
 _YES_WORDS = frozenset({"yes", "y", "yeah", "yep", "yup", "ok", "okay", "sure", "confirm", "confirmed", "proceed", "go", "run", "do", "save", "please", "ahead", "it", "now", "and"})
 _NO_WORDS = frozenset({"no", "not", "dont", "don't", "cancel", "stop", "wait", "never", "nope"})
 
@@ -477,8 +478,7 @@ def _pi_summary(ctx: Ctx, got: Mapping[str, Any]) -> str:
     where = ", ".join(str(m).title() for m in got.get("marketplaces", []))
     rng = got.get("price_range")
     span = f", selling between {format_paise(rng['min'])} and {format_paise(rng['max'])}" if rng else ""
-    depth = "a complete run" if got.get("depth") == "COMPLETE" else "a quick scan"
-    return (f"Here is what I will research: {got.get('category')} on {where}, with a budget of {format_paise(got.get('budget'))}{span}, as {depth}. "
+    return (f"Here is what I will research: {got.get('category')} on {where}, with a budget of {format_paise(got.get('budget'))}{span}. "
             "I will save this as your research brief and run Product Intelligence. Shall I go ahead?")
 
 
@@ -507,8 +507,7 @@ PI_DISCOVER: tuple[Field, ...] = (
     Field("marketplaces", lambda c, g: "Which marketplace will you sell on? You can name more than one.", _marketplaces,
           lambda c, g: (*_remembered("last_marketplaces", lambda v: v.title(), lambda v: v)(c, g), *_MARKETPLACE_OPTIONS(c, g))[:MAX_OPTIONS]),
     Field("price_range", lambda c, g: "Roughly what selling price range do you have in mind? For example 500 to 1,500. You can skip this.", _price_range, _SKIP("The search is not limited to a price range")),
-    Field("depth", lambda c, g: "How thorough should the research be?", _depth,
-          lambda c, g: (Option("Quick scan", "quick", "Faster and lighter; a good first look"), Option("Complete run", "complete", "Slower and uses more of your research allowance"))),
+    # No research-depth question: PI records quick/complete but both run the same research today (product-intelligence-agent.md D2), so asking would promise a difference that does not exist.
     Field("confirm", _pi_summary, _yes, lambda c, g: (Option("Yes, run it", "yes"),)),
 )
 
@@ -536,7 +535,8 @@ def _np_summary(ctx: Ctx, got: Mapping[str, Any]) -> str:
     parts: list[str] = []
     if "supplier_name" in got:
         ship = f", with {format_paise(got['order_shipping'])} shipping for the whole order" if got.get("order_shipping") else ""
-        parts.append(f"a supplier quote from {got['supplier_name']} at {format_paise(got['unit_cost'])} per unit{ship}")
+        extra = "".join(f", {label} {got[k]}" for k, label in (("moq", "a minimum order of"), ("lead_time_days", "a lead time in days of")) if got.get(k))
+        parts.append(f"a supplier quote from {got['supplier_name']} at {format_paise(got['unit_cost'])} per unit{ship}{extra}")
     if "budget" in got:
         parts.append(f"a batch budget of {format_paise(got['budget'])}")
     return (f"Here is what I will save as your own figures: {' and '.join(parts)}. Then I will run the numbers (landed cost, supplier ranking and batch size) for "
@@ -547,15 +547,71 @@ def _quote_applies(ctx: Ctx, got: Mapping[str, Any]) -> bool:
     return _needs_quote(ctx, got)
 
 
+def _product_leads(ctx: Ctx, got: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Supplier leads Product Intelligence found for the product being stocked (best evidenced first), or [] (a read that fails just offers nothing)."""
+    try:
+        return list(ceo_reads.pi_product_suppliers(ctx.tenant_id, str(got.get("sku") or "")))
+    except Exception:  # noqa: BLE001 - offering leads is a convenience; the question is still asked
+        return []
+
+
+def _supplier_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    """The suppliers Product Intelligence already found for this product, offered as choices (never filled in): the seller must pick one or type another."""
+    out: list[Option] = []
+    for lead in _product_leads(ctx, got):
+        name = " ".join(str(lead.get("supplier_name") or "").split())[:80]
+        if name and all(o.text != name for o in out):
+            where = f" ({str(lead['locality'])[:30]})" if lead.get("locality") else ""
+            out.append(Option(name[:55] + where, name, "Found by Product Intelligence: a web lead, not verified"))
+    return tuple(out[:3])
+
+
+def _unit_cost_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    """A price the chosen supplier PUBLISHES, offered as a choice with its source: it is the supplier's page, not a quote, so picking it is the seller's own decision."""
+    chosen = " ".join(str(got.get("supplier_name") or "").split()).casefold()
+    for lead in _product_leads(ctx, got):
+        price = lead.get("published_price")
+        if price and " ".join(str(lead.get("supplier_name") or "").split()).casefold() == chosen:
+            low = int(price["low_paise"])
+            return (Option(f"{_rupees(str(low))} per {price.get('unit') or 'unit'} (published by this supplier)", f"{low // 100}.{low % 100:02d}",
+                           "Published on the supplier's own page; not a quote. Pick it only if the supplier confirmed it"),)
+    return ()
+
+
+def _budget_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    """The budget the seller already stated in the research brief that found this product, offered as one choice (reused, never re-asked from scratch, never filled in silently)."""
+    try:
+        stated = ceo_reads.pi_research_budget(ctx.tenant_id, str(got.get("sku") or ""))
+    except Exception:  # noqa: BLE001 - a convenience only
+        return ()
+    if not stated:
+        return ()
+    low = int(stated)
+    return (Option(f"{_rupees(str(low))} (the budget you gave for this research)", f"{low // 100}.{low % 100:02d}", "Your own figure from the research brief"),)
+
+
+def _lead_time(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    """Lead time in days. It may be skipped only when the minimum order quantity was given: for a product never sold, the batch-size estimate needs one of the two (the stored quote
+    cannot be amended later, so it is asked now)."""
+    if raw.strip().casefold() in _SKIP_WORDS:
+        if got.get("moq") is None:
+            return Reject("I need either the minimum order quantity or the delivery lead time, or the units estimate cannot be worked out for a product you have never sold. Type the lead time in days (for example 21), or use Back to give the minimum order quantity.")
+        return None
+    return _optional_whole("the lead time in days")(raw, ctx, got)
+
+
 NEW_PRODUCT: tuple[Field, ...] = (
     Field("sku", lambda c, g: "Which SKU are you thinking of stocking? Type it the way you list it.", _text()),
     Field("quantity", lambda c, g: "How many units are you considering?", _quantity),
     Field("window", lambda c, g: "Which sales-history period should I look at?", _window, _window_choices),
-    Field("supplier_name", lambda c, g: "I have no supplier quote saved for this product. Which supplier is it from?", _text(80), applies=_quote_applies),
-    Field("unit_cost", lambda c, g: "What is that supplier's price per unit, in rupees?", _amount, applies=_quote_applies),
+    Field("supplier_name", lambda c, g: "I have no supplier quote saved for this product. Which supplier is it from? Pick one Product Intelligence found, or type the supplier's name.", _text(80), _supplier_options, applies=_quote_applies),
+    Field("unit_cost", lambda c, g: "What is that supplier's price per unit, in rupees? (Use the price they quoted you.)", _amount, _unit_cost_options, applies=_quote_applies),
     Field("order_shipping", lambda c, g: "What is the shipping for the whole order, in rupees? Skip it if the quote does not state it.", _optional_amount,
           _SKIP("Not stated; margins that need it stay unavailable"), applies=_quote_applies),
-    Field("budget", lambda c, g: "What is your budget for this batch, in rupees? I will fit the quantity to it.", _amount, applies=lambda c, g: _needs_budget(c, g)),
+    Field("moq", lambda c, g: "What is the supplier's minimum order quantity, in units? Skip it if the quote does not state it. (The batch-size estimate needs this or the lead time for a product you have never sold.)",
+          _optional_whole("the minimum order quantity"), _SKIP("Not stated"), applies=_quote_applies),
+    Field("lead_time_days", lambda c, g: "How many days does the supplier take to deliver? You can skip this only if you gave the minimum order quantity.", _lead_time, _SKIP("Not stated"), applies=_quote_applies),
+    Field("budget", lambda c, g: "What is your budget for this batch, in rupees? I will fit the quantity to it.", _amount, _budget_options, applies=lambda c, g: _needs_budget(c, g)),
     Field("confirm", _np_summary, _yes, lambda c, g: (Option("Yes, save and run", "yes"),), applies=lambda c, g: _needs_quote(c, g) or _needs_budget(c, g)),
 )
 
@@ -585,6 +641,8 @@ DR_QUOTE: tuple[Field, ...] = (
     Field("supplier_name", lambda c, g: f"I need a supplier quote for {g.get('sku')}. Which supplier is it from?", _text(80)),
     Field("unit_cost", lambda c, g: "What is that supplier's price per unit, in rupees?", _amount),
     Field("order_shipping", lambda c, g: "What is the shipping for the whole order, in rupees? Skip it if the quote does not state it.", _optional_amount, _SKIP("Not stated; margins that need it stay unavailable")),
+    Field("moq", lambda c, g: "What is the supplier's minimum order quantity, in units? Skip it if the quote does not state it.", _optional_whole("the minimum order quantity"), _SKIP("Not stated")),
+    Field("lead_time_days", lambda c, g: "How many days does the supplier take to deliver? Skip it if the quote does not state it.", _optional_whole("the lead time in days"), _SKIP("Not stated")),
     Field("confirm", _dr_summary(lambda g: f"a supplier quote from {g['supplier_name']} at {_money(g['unit_cost'])} per unit for {g['sku']}"), _yes, _DR_CONFIRM_OPTIONS),
 )
 DR_BUDGET: tuple[Field, ...] = (
@@ -866,11 +924,14 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
         quote: dict[str, Any] = {"supplier_name": c["supplier_name"], "unit_cost_paise": c["unit_cost"], "sku": c["sku"]}
         if c.get("order_shipping") is not None:
             quote["shipping_paise"] = c["order_shipping"]
+        for key in ("moq", "lead_time_days"):
+            if c.get(key) is not None:
+                quote[key] = c[key]
         return {"save": {"quote": quote}, "sku": c["sku"]}
     if playbook == "pi.discover":
         rng = c.get("price_range")
         return {
-            "category_text": c["category"], "budget_paise": c["budget"], "marketplaces": c["marketplaces"], "depth": c["depth"],
+            "category_text": c["category"], "budget_paise": c["budget"], "marketplaces": c["marketplaces"], "depth": "SHALLOW",
             **({"target_price_min_paise": rng["min"], "target_price_max_paise": rng["max"]} if rng else {}),
         }
     if playbook in CMO_SESSIONS:
@@ -894,6 +955,9 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
                 quote: dict[str, Any] = {"supplier_name": c["supplier_name"], "unit_cost_paise": c["unit_cost"], "sku": c["sku"]}
                 if c.get("order_shipping") is not None:
                     quote["shipping_paise"] = c["order_shipping"]
+                for key in ("moq", "lead_time_days"):
+                    if c.get(key) is not None:
+                        quote[key] = c[key]
                 save["quote"] = quote
             if "budget" in c:
                 save["budget_paise"] = c["budget"]

@@ -152,9 +152,9 @@ _NOT_A_PRODUCT = frozenset({"this", "that", "it", "these", "those", "them", "thi
 
 
 def _product_text(raw: str | None) -> str | None:
-    """A product named in the message, or None when it is a pronoun, a number or a rate (then the CEO asks which product instead of guessing)."""
+    """A product named in the message, or None when it is a pronoun, a bare number or a rate (then the CEO asks which product instead of guessing). A name that merely CONTAINS digits is a product (a model number such as "Pegasus 41")."""
     v = " ".join((raw or "").split()).strip(" .,'\"")
-    if not v or v.casefold() in _NOT_A_PRODUCT or re.search(r"\d|%", v) or len(v.split()) > 8 or v.split()[0].casefold() in _REQUEST_WORDS:
+    if not v or v.casefold() in _NOT_A_PRODUCT or "%" in v or not re.search(r"[^\W\d_]", v) or len(v.split()) > 8 or v.split()[0].casefold() in _REQUEST_WORDS:
         return None
     return v
 

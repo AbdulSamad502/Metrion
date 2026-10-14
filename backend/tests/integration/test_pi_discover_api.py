@@ -65,7 +65,7 @@ class _FakeTavilyClient:
     def __init__(self, raises: bool = False) -> None:
         self._raises = raises
 
-    def search(self, query, *, include_images=False, max_results=10):
+    def search(self, query, *, include_images=False, max_results=10, **_):
         if self._raises:
             raise TavilyUnavailable("simulated Tavily outage")
         return [
@@ -410,16 +410,14 @@ class _NoVideosYoutube:
         return []
 
 
-def test_candidate_image_found_by_searching_the_product_by_name_reaches_the_api(app_client, fake_clerk, tenant, monkeypatch):
+def test_discovery_persists_no_candidate_image_even_when_one_exists_for_the_product(app_client, fake_clerk, tenant, monkeypatch):
+    """2026-10-14: images are resolved only for the final five, after selection; the discovered candidates never carry one."""
     headers = _register_owner(fake_clerk, tenant)
     body = _run_discovery(app_client, headers, tenant, monkeypatch, _ImageSourceTavily(product_image=True))
 
     candidates = app_client.get(f"/api/v1/pi/report/{body['runId']}", headers=headers).json()["candidates"]
-    images = {c["candidate"]["image_url"] for c in candidates}
-    # The product-specific image is persisted and returned; the generic niche image (which does not
-    # name the product) is NOT borrowed for it.
-    assert images == {"https://img.example.com/product-specific.jpg"}
-    assert candidates[0]["candidate"]["image_source_url"] == "https://img.example.com/product-specific.jpg"
+    assert len(candidates) >= 1
+    assert all(c["candidate"]["image_url"] is None and c["candidate"]["image_source_url"] is None for c in candidates)
 
 
 def test_candidate_without_a_matching_image_stays_valid_and_image_less(app_client, fake_clerk, tenant, monkeypatch):

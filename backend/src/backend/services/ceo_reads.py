@@ -25,7 +25,7 @@ from cfo.repositories import agent_data_request_repo
 from backend.services import cfo_actions, pi_actions
 
 __all__ = [
-    "CiHandoffSnapshot", "CiUnavailable", "competitor_handoff", "list_active_competitors", "latest_pi_run", "recent_cmo_generations", "recent_cmo_content",
+    "pi_product_suppliers", "CiHandoffSnapshot", "CiUnavailable", "competitor_handoff", "list_active_competitors", "latest_pi_run", "recent_cmo_generations", "recent_cmo_content",
     "confirmed_niche_terms", "StoredCogs", "stored_cogs", "SalesHistory", "sales_history", "stored_quotes", "stored_budget", "fee_reference_options",
 ]
 
@@ -175,3 +175,14 @@ def fee_reference_options(tenant_id: UUID, *, as_of: date) -> list[dict[str, str
     """The (marketplace, category, fee type) triples a margin can actually be priced for on `as_of` (persisted fee references only): a form offers these and
     nothing else, so a typed category can never silently fail to match."""
     return config_repo.fee_reference_options(tenant_id, as_of_date=as_of)
+
+
+def pi_research_budget(tenant_id: UUID, product_name: str) -> int | None:
+    """The budget the seller stated in the research that produced this product (paise), so the CEO can offer it back when it asks for a batch budget."""
+    return pi_actions.research_budget_for_product(tenant_id, product_name)
+
+
+def pi_product_suppliers(tenant_id: UUID, product_name: str) -> list[dict[str, Any]]:
+    """Supplier leads Product Intelligence found for one of the five products of the newest saved research (matched by name), so the CEO can OFFER them when it asks for a quote.
+    Tenant-scoped, read-only; an unknown product gives []."""
+    return pi_actions.suppliers_for_product(tenant_id, product_name)

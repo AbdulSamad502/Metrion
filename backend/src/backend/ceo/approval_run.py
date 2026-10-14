@@ -22,13 +22,14 @@ OUTCOME_UNKNOWN). Until then a hard crash leaves the same non-terminal rows a no
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 from backend import config
-from backend.ceo import approval, cmo_delegation, input_session, orchestrator
+from backend.ceo import approval, cmo_delegation, input_session, orchestrator, pi_research
 from backend.ceo.approval import ApprovalRefused
 from backend.ceo.billing import unit_decision
 from backend.ceo.composer import template_only
@@ -41,6 +42,7 @@ from backend.ceo.runtime import CeoRuntime, EventLog, EventSink, StageClock
 from backend.ceo.turn_lock import TurnInProgress, investigation_turn_lock
 from backend.auth.context import AuthContext
 from backend.repositories import investigation_plan_repo as plan_repo, investigation_repo as repo
+from backend.services import ceo_pi_research
 
 logger = logging.getLogger(__name__)
 
@@ -203,20 +205,32 @@ def _run_frozen(ctx: AuthContext, runtime: CeoRuntime, plan_id: UUID, plan: dict
     route, key = str(plan["route"]), plan.get("route_key")
     leg_keys = [str(l["action_key"]) for l in plan["legs"]]
     frozen = {str(l["action_key"]): l["slots"] for l in plan["legs"]}
-    grant = ApprovalGrant(plan_id, tenant, frozenset(leg_keys))
+    then_keys = [str(l["action_key"]) for l in plan.get("then", [])]  # follow-up steps listed on the card and covered by this one approval
+    grant = ApprovalGrant(plan_id, tenant, frozenset([*leg_keys, *then_keys]))
     required = set(leg_keys)  # every leg of the approved plan is what the seller approved: any of them failing is a failed execution
     now = runtime.clock()
     attached = repo.attached_agents(tenant, turn.investigation_id)
     log.emit("PLAN_VALIDATED", route=route, routeKey=key)
-    legs, entries, refused_required = orchestrator._execute(ctx, runtime, turn, ResolvedSlots(tenant_id=tenant, today=now.date()), leg_keys, required, (), attached, now, clock, log, frozen, grant)
+    wait_runtime = runtime
+    if then_keys and "pi.discover" in leg_keys:  # a real research run takes minutes: it gets its own, longer wait (config.ceo_pi_research_timeout_seconds), never shorter than the ordinary one
+        longer = config.ceo_pi_research_timeout_seconds()
+        if longer is not None and runtime.leg_timeout_seconds is not None and longer > runtime.leg_timeout_seconds:
+            wait_runtime = dataclasses.replace(runtime, leg_timeout_seconds=longer)
+    legs, entries, refused_required = orchestrator._execute(ctx, wait_runtime, turn, ResolvedSlots(tenant_id=tenant, today=now.date()), leg_keys, required, (), attached, now, clock, log, frozen, grant)
     if key == cmo_delegation.IMAGE_ACTION:  # the photo reading: its result is NOT a deliverable but the start of the confirmation questions
         return _photo_reading_result(ctx, runtime, plan, legs, refused_required, turn, clock, log)
-    if "pi.discover" in leg_keys:  # the run's candidates are read back from what it saved (a read; it starts no new research)
+    chain_gaps: list[str] = []
+    chain_run: UUID | None = None
+    if "pi.discover" in leg_keys and then_keys:  # CEO-driven research: top five, supplier lookup for those five, the final case, then the saved report is read back
+        legs, chain_gaps, chain_run = pi_research.run_followups(ctx, runtime, turn, now, legs, attached, clock, log, grant, then_keys)
+    elif "pi.discover" in leg_keys:  # the run's candidates are read back from what it saved (a read; it starts no new research)
         legs = orchestrator._with_pi_report(runtime, turn, tenant, now, legs, attached, clock, log)
         orchestrator._record_pi_finding(tenant, ctx.app_user_id, legs)
     collector = EvidenceCollector(tenant)
     disclaimers: list[tuple[str, str]] = []
     for leg in legs:
+        if chain_run is not None and leg.action_key == "pi.report":
+            continue  # the other discovered candidates are internal: only the five final products are described (by `pi_research.summary_text`)
         collector.add_leg(leg)
         if leg.action_key in GST_ROUTE_KEYS and leg.payload and (leg.payload.get("result") or {}).get("disclaimer"):
             disclaimers.append(("GST_LOOKUP", str(leg.payload["result"]["disclaimer"])))
@@ -248,6 +262,10 @@ def _run_frozen(ctx: AuthContext, runtime: CeoRuntime, plan_id: UUID, plan: dict
                else cmo_delegation.heading_for(key) if delegated else "Here is what was produced for the plan you approved.")
     comp = template_only(table, heading=heading)
     answer = comp.text + ("\n\n" + cmo_delegation.result_footer(legs) if delegated else "")
+    if chain_run is not None:
+        case = ceo_pi_research.load_case(tenant, chain_run)
+        if case is not None:  # the seller reads the five-product summary, written by code from the saved case; the "View Detailed Research" link comes from the pi.report finding
+            answer = pi_research.summary_text(case, chain_gaps)
     return orchestrator._finish(ctx, runtime, turn, clock, log, status="DELIVERED", route=route, route_key=key, answer=answer, kind="ANSWER", composition=comp,
                                 anchor_status=turn.derive_status(),
                                 billing=unit_decision(status="DELIVERED", route=route, planned_leg_keys=leg_keys, required_keys=required, legs=turn.legs))
