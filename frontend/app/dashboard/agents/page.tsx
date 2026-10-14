@@ -22,7 +22,7 @@ function Agents() {
   const { agents, error, reload } = useAgentRoster();
   const ci = useCiSummary();
   return (
-    <div className="mt-content mt-stack">
+    <div className="mt-content mt-stack mt-pure-black">
       {error ? (
         <ErrorNotice message={error} onRetry={reload} />
       ) : !agents ? (

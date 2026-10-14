@@ -229,7 +229,9 @@ export function groupFindings(findings: FindingRow[], messages: CeoMessage[], tu
 export function findingLink(f: Pick<FindingRow, "source" | "action_key" | "status" | "report_ref">): { href: string; label: string } | null {
   if (f.status === "DENIED" || f.status === "FAILED" || f.status === "UNAVAILABLE") return null;
   const run = f.report_ref?.runId;
-  if (f.source === "PI") return { href: run ? `/dashboard/pi?run=${encodeURIComponent(run)}#discover` : "/dashboard/pi", label: "View the full research report" };
+  // ONE "View Detailed Research" button per research answer, on the saved-report finding only. The run and supplier-lookup findings of the same turn carry no link of their own
+  // (they used to add a second, generic button).
+  if (f.source === "PI") return f.action_key === "pi.report" ? { href: run ? `/dashboard/pi?run=${encodeURIComponent(run)}` : "/dashboard/pi", label: "View Detailed Research" } : null;
   if (f.source === "CFO") return { href: "/dashboard/cfo", label: "Open the full finance analysis" };
   if (f.source === "CI") return { href: "/dashboard/competitors", label: "Open the competitor details" };
   if (f.source === "CMO") return { href: "/dashboard/cmo", label: "Open the written content" };

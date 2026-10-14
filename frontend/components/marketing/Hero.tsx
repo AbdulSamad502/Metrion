@@ -40,12 +40,6 @@ function TrustIcon({ icon }: { icon: string }) {
 export function Hero() {
   return (
     <section id="home" className="relative overflow-hidden px-6 pt-10 pb-16 sm:px-10 sm:pt-14">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[720px]"
-        style={{ background: "radial-gradient(ellipse 900px 480px at 38% 25%, var(--accent-fill-subtle), transparent)" }}
-      />
-
       <div className="relative mx-auto grid max-w-[1440px] grid-cols-1 items-center gap-12 xl:grid-cols-[0.92fr_1.18fr] xl:gap-4">
         <div className="relative z-10 text-center xl:text-left">
           <div

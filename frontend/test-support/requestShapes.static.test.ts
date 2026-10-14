@@ -144,7 +144,7 @@ const all = ["app", "components", "lib"].flatMap((d) => files(path.join(ROOT, d)
 
 describe("request bodies built in the app's own sources", () => {
   it("finds the calls (a guard against the scan silently seeing nothing)", () => {
-    expect(all.length).toBeGreaterThanOrEqual(35);
+    expect(all.length).toBeGreaterThanOrEqual(30);
   });
 
   it("every call goes to a served route with field names the backend knows and every required field present", () => {

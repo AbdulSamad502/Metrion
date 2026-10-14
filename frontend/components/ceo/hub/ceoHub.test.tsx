@@ -478,14 +478,17 @@ describe("quick actions", () => {
 });
 
 describe("turning an agent on", () => {
-  it("a locked agent offers nothing to click, and no agent has a remove, detach or connect control on the canvas", async () => {
+  it("a locked agent offers nothing to click; attached agents can be removed and removed ones reconnected", async () => {
     const id = fake.seed({ id: "inv-1", agents: { CI: true, CFO: false, PI: false, CMO: true } });
     fake.availability.PI = { status: "NOT_ENTITLED", chatActions: 0 };
     mount();
     await openInvestigation(id);
     expect(screen.getByTestId("agent-node-PI").tagName).toBe("DIV"); // locked: nothing to click, never offered
     expect(screen.queryByTestId("wire-CFO")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^(Remove|Detach|Connect)/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("remove-PI")).not.toBeInTheDocument(); // locked: no x and no +
+    expect(screen.queryByTestId("attach-PI")).not.toBeInTheDocument();
+    expect(screen.getByTestId("remove-CI")).toBeInTheDocument();
+    expect(screen.getByTestId("attach-CFO")).toBeInTheDocument(); // detached from this conversation: a + brings it back
   });
 });
 

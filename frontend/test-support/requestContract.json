@@ -278,6 +278,14 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/pi/research": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/pi/research/{run_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/ping": {
    "query": [],
    "requiredQuery": []
@@ -698,6 +706,14 @@
    "requiredQuery": []
   },
   "POST /api/v1/pi/niche-briefs/{brief_id}/mark-ready": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/pi/research/{run_id}/pin": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/pi/research/{run_id}/unpin": {
    "query": [],
    "requiredQuery": []
   },

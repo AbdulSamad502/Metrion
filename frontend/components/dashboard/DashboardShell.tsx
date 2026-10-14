@@ -37,19 +37,29 @@ function ShellPage({ title, subtitle, context, actions, children }: ShellProps) 
   useEffect(() => {
     document.title = `${title} · Metrion`;
   }, [title]);
+  // The CEO Hub is a full-screen workspace: no page header (the page name stays available to screen readers) and no page padding.
+  const fullBleed = pathname.startsWith("/dashboard/ceo-hub");
   return (
     <>
-      <Topbar
-        title={title}
-        subtitle={subtitle}
-        eyebrow={eyebrow}
-        attentionCount={notifications.attentionCount}
-        onOpenMenu={() => frame?.openMenu()}
-        context={context}
-        actions={actions}
-        showCeoShortcut={!pathname.startsWith("/dashboard/ceo-hub")}
-      />
-      <main id="main" tabIndex={-1} className="flex-1 overflow-y-auto px-4 py-6 outline-none sm:px-8 sm:py-8">
+      {fullBleed ? (
+        <h1 className="sr-only">{title}</h1>
+      ) : (
+        <Topbar
+          title={title}
+          subtitle={subtitle}
+          eyebrow={eyebrow}
+          attentionCount={notifications.attentionCount}
+          onOpenMenu={() => frame?.openMenu()}
+          context={context}
+          actions={actions}
+          showCeoShortcut
+        />
+      )}
+      <main
+        id="main"
+        tabIndex={-1}
+        className={`min-h-0 flex-1 overflow-y-auto outline-none ${fullBleed ? "p-3 sm:p-4 xl:overflow-hidden" : "px-4 py-6 sm:px-8 sm:py-8"}`}
+      >
         {children}
       </main>
     </>

@@ -656,6 +656,31 @@
     "turn_id": null
    }
   ],
+  "plans?": [
+   {
+    "createdAt": null,
+    "decisionReason?": null,
+    "executionTurnId": null,
+    "expiresAt": null,
+    "id": null,
+    "plan": {
+     "compact_lines?": null,
+     "details?": null,
+     "legs?": [
+      {
+       "action_key": null,
+       "meters?": null
+      }
+     ],
+     "summary_text?": null,
+     "title?": null
+    },
+    "planHash": null,
+    "plannedTurnId": null,
+    "status": null,
+    "viewerIsRequester": null
+   }
+  ],
   "turns": [
    {
     "ceo_message_id": null,

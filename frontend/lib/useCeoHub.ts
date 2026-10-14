@@ -22,6 +22,8 @@ export type TurnProgress = {
   stage: string | null;
   /** registry keys of the specialist actions running right now (from the live LEG_STARTED / LEG_FINISHED events); drives the agent strip only */
   working: string[];
+  /** registry keys the CEO has routed this turn to (from CLASSIFIED / PLAN_VALIDATED / STATE_READ), kept until the turn ends so the agent stays lit while its answer is read and written up */
+  called?: string[];
 };
 
 export type HealthState = { status: "loading" | "ready" | "error"; entries: HealthEntry[] };
@@ -282,6 +284,8 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
             const label = stageLabel(e.kind);
             if (label) setTurn((t) => (t.phase === "processing" ? { ...t, stage: label } : t));
             const action = typeof e.data?.action === "string" ? e.data.action : null;
+            const routed = e.kind === "CLASSIFIED" || e.kind === "PLAN_VALIDATED" ? e.data?.routeKey : e.kind === "STATE_READ" ? e.data?.entry : null;
+            if (typeof routed === "string" && routed) setTurn((t) => (t.phase === "processing" && !(t.called ?? []).includes(routed) ? { ...t, called: [...(t.called ?? []), routed] } : t));
             if (action && e.kind === "LEG_STARTED") setTurn((t) => (t.phase === "processing" ? { ...t, working: [...t.working, action] } : t));
             if (action && e.kind === "LEG_FINISHED") setTurn((t) => ({ ...t, working: t.working.filter((a) => a !== action) }));
             if (e.kind === "LEG_FINISHED" || e.kind === "STATE_READ") void client.getFindings(id).then(onFindings, () => undefined);

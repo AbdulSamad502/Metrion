@@ -8,7 +8,7 @@ import { CeoHub } from "@/components/ceo/hub/CeoHubWorkspace";
 export default function CeoHubPage() {
   return (
     <DashboardShell {...PAGE_COPY["ceo-hub"]}>
-      <div className="mt-content">
+      <div className="h-full w-full">
         <Suspense fallback={null}>
           <CeoHub />
         </Suspense>

@@ -15,6 +15,7 @@ import { Welcome } from "@/components/ceo/hub/Welcome";
 import { MemoryPanel } from "@/components/ceo/hub/MemoryPanel";
 import { SharedFindingsPanel } from "@/components/ceo/hub/SharedFindingsPanel";
 import { RecentDecisions } from "@/components/ceo/hub/RecentDecisions";
+import { useFrame } from "@/components/dashboard/ShellFrame";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { Icon } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -46,6 +47,7 @@ const workLabel = (action: string) => `Working · ${ACTION_WORDS[action.split(".
  * synthesises and safety-gates. */
 export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = null }: { client: CeoClient; feedFactory?: FeedFactory; pollMs?: number; initialForm?: DecideKind | null }) {
   const hub = useCeoHub(client, feedFactory, pollMs);
+  const frame = useFrame();
   const [drawer, setDrawer] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
   useModalFocus(drawer, drawerRef, () => setDrawer(false)); // a real modal: focus in, Tab contained, Escape closes, focus back to the opener
@@ -72,6 +74,11 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   for (const a of hub.turn.working) {
     const code = agentOf(a);
     if (code) workingByAgent[code] = workLabel(a);
+  }
+  // An agent the CEO has routed this turn to is lit from the moment it is chosen, not only while a specialist leg runs (a saved-result read has no leg).
+  for (const a of hub.turn.called ?? []) {
+    const code = agentOf(a);
+    if (code && !workingByAgent[code]) workingByAgent[code] = "Working…";
   }
 
   /** Typing with no conversation open starts one: nobody should have to find a "new" button before asking. */
@@ -161,7 +168,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   );
 
   return (
-    <div className="flex flex-col gap-3" data-testid="ceo-hub">
+    <div className="flex flex-col gap-3 xl:h-full" data-testid="ceo-hub">
       {/* The conversation list could never be loaded (nothing is shown from earlier): the backend is unreachable or refused. Said once, here, with a retry, instead of a screen that looks like a normal empty start. When an earlier list is on screen, the existing "could not refresh" notice covers it instead (no second message). */}
       {hub.list.status === "error" && hub.list.items.length === 0 && (
         <div data-testid="hub-unavailable"><ErrorNotice message={`Your conversations could not be loaded. ${hub.list.error ?? ""}`.trim()} onRetry={hub.refreshList} /></div>
@@ -169,11 +176,16 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
 
       {/* One grid, in reading order on every screen size: canvas, conversation, chat bar. On a phone that is the stack (the chat bar sticks to the bottom); from xl the
           canvas and chat bar share the centre column and the conversation is the right-hand panel. */}
-      <div className={`grid grid-cols-1 gap-3 xl:h-[calc(100dvh-150px)] xl:min-h-[560px] xl:grid-rows-[minmax(0,1fr)_auto] ${collapsed ? "xl:grid-cols-[minmax(0,1fr)_64px]" : "xl:grid-cols-[minmax(0,1fr)_minmax(440px,38%)]"}`}>
-        {/* CENTRE: the CEO and its specialists on the galaxy canvas. */}
+      <div className={`grid grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:grid-rows-[minmax(0,1fr)_auto] ${collapsed ? "xl:grid-cols-[minmax(0,1fr)_64px]" : "xl:grid-cols-[minmax(0,1fr)_minmax(580px,54%)]"}`}>
+        {/* LEFT: the CEO and its specialists on the galaxy canvas, taking all the space the conversation panel leaves. */}
         <div className="flex min-h-0 min-w-0 flex-col gap-2.5 xl:col-start-1 xl:row-start-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
+              {frame && (
+                <button type="button" onClick={frame.openMenu} aria-label="Open navigation" title="Open navigation" data-testid="hub-menu-button" className="mt-btn mt-focus flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
+                  <Icon name="menu" size={16} />
+                </button>
+              )}
               <button type="button" onClick={() => setDrawer(true)} aria-label="Conversations and business overview" data-testid="open-drawer" className="mt-btn mt-focus flex min-h-[40px] items-center gap-1.5 rounded-lg px-2.5 py-1.5 t-meta font-bold" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
                 <Icon name="menu" size={14} /> Conversations
               </button>
@@ -182,9 +194,6 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
                 {data ? `Investigation · ${new Date(data.investigation.created_at).toLocaleDateString()}` : "Remove a specialist to stop it being used here; a new conversation starts with all of them."}
               </span>
             </div>
-            <button type="button" data-testid="new-investigation" disabled={processing || empty} onClick={() => hub.select(null)} title={empty ? "You are already on a new investigation: type below to start it." : "Start a new investigation"} className="mt-btn mt-focus flex min-h-[40px] items-center gap-2 rounded-lg px-3 py-1.5 t-body-sm font-medium" style={{ border: "1px solid var(--border-default)", background: "var(--hub-card-bg)", color: "var(--text-2)", opacity: processing || empty ? 0.55 : 1 }}>
-              <Icon name="plus" size={14} /> New Investigation
-            </button>
           </div>
           <section
             className="mt-galaxy flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl p-3 sm:p-5"
@@ -196,9 +205,9 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
           </section>
         </div>
 
-        {/* RIGHT: the conversation panel. Messages scroll; the activity / results (health, findings, memory, what is running) is its second tab. */}
+        {/* RIGHT: the conversation panel, full height down to the chat bar. Messages scroll; the activity / results (health, findings, memory, what is running) is its second tab. */}
         <section
-          className="mt-galaxy flex min-h-[420px] min-w-0 flex-col gap-3 rounded-2xl p-3 max-xl:max-h-[78dvh] xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:min-h-0"
+          className="mt-galaxy flex min-h-[420px] min-w-0 flex-col gap-3 rounded-2xl p-3 max-xl:max-h-[78dvh] xl:col-start-2 xl:row-start-1 xl:min-h-0"
           style={{ border: "1px solid var(--border-default)" }}
           aria-label="CEO conversation" data-testid="chat-column"
         >
@@ -210,6 +219,9 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
               <h2 className="m-0 t-body font-semibold" style={{ color: "var(--text-1)" }}>Conversation</h2>
               <div className="truncate t-meta" style={{ color: needsInput ? "var(--warning)" : "var(--text-5)" }} data-testid="chat-status">{ceoStatus}</div>
             </div>
+            <button type="button" data-testid="new-investigation" disabled={processing || empty} onClick={() => hub.select(null)} title={empty ? "You are already on a new investigation: type below to start it." : "Start a new investigation"} className={`mt-btn mt-focus flex min-h-[36px] flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 t-body-sm font-semibold ${collapsed ? "xl:hidden" : ""}`} style={{ background: "var(--accent)", color: "var(--accent-on-fill)", opacity: processing || empty ? 0.5 : 1 }}>
+              <Icon name="plus" size={14} strokeWidth={2} /> New Investigation
+            </button>
             <button type="button" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed} aria-label={collapsed ? "Expand conversation panel" : "Collapse conversation panel"} data-testid="collapse-conversation" className="mt-btn mt-focus hidden h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg xl:flex" style={{ color: "var(--text-3)" }}>
               <span style={{ display: "inline-flex", transform: collapsed ? undefined : "rotate(180deg)" }}><Icon name="collapse" size={16} /></span>
             </button>
@@ -243,8 +255,8 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
           </div>
         </section>
 
-        {/* CHAT BAR: under the canvas on desktop; stuck to the bottom of the screen on a phone. */}
-        <div className="sticky bottom-0 z-20 flex min-w-0 flex-col gap-2 pb-1 pt-2 max-xl:-mx-1 max-xl:px-1 xl:static xl:col-start-1 xl:row-start-2 xl:pt-0" style={{ background: "linear-gradient(to top, var(--bg-base) 75%, transparent)" }} data-testid="chat-bar">
+        {/* CHAT BAR: the full width of the screen under both panels on desktop; stuck to the bottom of the screen on a phone. */}
+        <div className="sticky bottom-0 z-20 flex min-w-0 flex-col gap-2 pb-1 pt-2 max-xl:-mx-1 max-xl:px-1 xl:static xl:col-span-2 xl:col-start-1 xl:row-start-2 xl:pt-0" style={{ background: "linear-gradient(to top, var(--bg-base) 75%, transparent)" }} data-testid="chat-bar">
           {form && (
             <DecidePanel client={client} kind={form} disabled={processing} onClose={() => setForm(null)} onRun={(label, action) => { void send(label, null, action); setForm(null); }} />
           )}

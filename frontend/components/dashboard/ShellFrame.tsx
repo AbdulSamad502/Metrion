@@ -33,6 +33,8 @@ function OwnFrame({ children }: { children: ReactNode }) {
   // The drawer is open for ONE page: a navigation closes it without an effect (it used to close only because the whole frame remounted).
   const [drawerOpenAt, setDrawerOpenAt] = useState<string | null>(null);
   const mobileOpen = drawerOpenAt === pathname;
+  // The CEO Hub is a full-screen workspace: the navigation is closed by default there (an overlay opened from the menu button in the hub's own header), at every width.
+  const focusMode = pathname.startsWith("/dashboard/ceo-hub");
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   useSurfaceSheen(surfaceRef, Boolean(session) && !error); // the surface div only exists once the session has loaded
 
@@ -98,13 +100,14 @@ function OwnFrame({ children }: { children: ReactNode }) {
             userName={displayName}
             roleLabel={roleLabel}
             attentionCount={notifications.attentionCount}
-            collapsed={collapsed}
+            collapsed={collapsed && !focusMode}
             onToggleCollapsed={toggleCollapsed}
             mobileOpen={mobileOpen}
             onCloseMobile={() => setDrawerOpenAt(null)}
+            overlay={focusMode}
           />
           {/* A visible edge handle for sliding the sidebar in and out (the same toggle as the Collapse button at the bottom of the sidebar). */}
-          <button
+          {!focusMode && <button
             type="button"
             onClick={toggleCollapsed}
             aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
@@ -116,7 +119,7 @@ function OwnFrame({ children }: { children: ReactNode }) {
             <span style={{ display: "inline-flex", transform: collapsed ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}>
               <Icon name="collapse" size={14} />
             </span>
-          </button>
+          </button>}
           <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
         </div>
       </FrameContext.Provider>

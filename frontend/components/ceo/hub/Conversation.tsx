@@ -7,6 +7,7 @@ import { Icon } from "@/components/ui/Icon";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DecisionCard } from "@/components/ceo/hub/DecisionCard";
 import { PlanCard } from "@/components/ceo/hub/PlanCard";
+import { RichText } from "@/components/ceo/hub/RichText";
 import { Welcome } from "@/components/ceo/hub/Welcome";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState, Spinner } from "@/components/ui/LoadingState";
@@ -208,7 +209,7 @@ function Thread({
   }, [messages.length]);
   if (messages.length === 0) return <Welcome agents={agents} onAsk={onAsk} onAction={onSuggest} onOpenForm={onOpenForm} />;
   return (
-    <ol tabIndex={0} className="mt-focus m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto rounded-lg p-0 pr-1" aria-label="Conversation" aria-live="polite">
+    <ol tabIndex={0} className="mt-focus m-0 flex min-h-0 flex-1 list-none flex-col gap-4 overflow-y-auto rounded-lg p-0 pr-1" aria-label="Conversation" aria-live="polite">
       {messages.map((m) => (
         <li key={m.id}>
           <Bubble message={m} turnById={turnById} findings={findings} />
@@ -306,9 +307,9 @@ function KeyInsights({ items }: { items: { key: string; text: string; register?:
 
 function Avatar({ mine }: { mine: boolean }) {
   return mine ? (
-    <span aria-hidden className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full" style={{ background: "var(--fill-hover)", border: "1px solid var(--border-default)", color: "var(--text-3)" }}><Icon name="customers" size={17} /></span>
+    <span aria-hidden className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full" style={{ background: "var(--fill-hover)", border: "1px solid var(--border-default)", color: "var(--text-3)" }}><Icon name="customers" size={17} /></span>
   ) : (
-    <span aria-hidden className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full" style={{ background: "var(--hub-card-bg)", border: "1px solid var(--accent-border-strong)", boxShadow: "0 0 10px var(--hub-glow-soft)" }}>
+    <span aria-hidden className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full" style={{ background: "var(--hub-card-bg)", border: "1px solid var(--accent-border-strong)", boxShadow: "0 0 10px var(--hub-glow-soft)" }}>
       <Image src="/metrion-mark.png" alt="" width={22} height={14} />
     </span>
   );
@@ -328,22 +329,25 @@ function Bubble({ message, turnById, findings }: { message: CeoMessage; turnById
   return (
     <div
       data-testid={mine ? "message-user" : "message-ceo"}
-      className="mt-hub-card flex gap-3 px-3.5 py-3"
-      style={{
-        borderColor: v.tone === "clarify" ? "var(--warning-border)" : "var(--border-subtle)",
-        opacity: message.pending ? 0.7 : 1,
-      }}
+      className={`flex items-start gap-2.5 ${mine ? "flex-row-reverse" : ""}`}
+      style={{ opacity: message.pending ? 0.7 : 1 }}
     >
       <Avatar mine={mine} />
-      <div className="min-w-0 flex-1">
+      <div
+        className={`min-w-0 rounded-2xl px-4 py-3 ${mine ? "max-w-[85%] rounded-tr-md" : "flex-1 rounded-tl-md"}`}
+        style={{
+          background: mine ? "var(--accent-fill-default)" : "rgba(255,255,255,0.035)",
+          border: `1px solid ${v.tone === "clarify" ? "var(--warning-border)" : mine ? "var(--accent-border-default)" : "var(--border-subtle)"}`,
+        }}
+      >
         <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="t-body-sm font-semibold" style={{ color: "var(--text-1)" }}>{mine ? "You" : "CEO Agent"}</span>
+          <span className="t-meta font-semibold" style={{ color: mine ? "var(--accent)" : "var(--text-2)" }}>{mine ? "You" : "CEO Agent"}</span>
           {v.badge && <StatusBadge tone={v.tone === "clarify" ? "warning" : "neutral"}>{v.badge}</StatusBadge>}
           <time className="ml-auto t-meta" dateTime={message.created_at} style={{ color: "var(--text-6)" }}>{message.pending ? "Sending…" : message.failed ? "Not sent" : timeOf(message.created_at)}</time>
         </div>
         {/* the backend's gated text, shown verbatim: line breaks kept, nothing re-formatted or re-computed here */}
-        <div className="whitespace-pre-wrap break-words t-body-sm" style={{ color: "var(--text-3)", lineHeight: 1.6 }}>
-          {message.content}
+        <div className={`${mine ? "whitespace-pre-wrap " : ""}break-words t-body`} style={{ color: mine ? "var(--text-1)" : "var(--text-3)", lineHeight: 1.65 }}>
+          {mine ? message.content : <RichText text={message.content} />}
         </div>
         {v.footnote && (
           <div className="mt-2 t-meta" style={{ color: "var(--text-6)" }}>

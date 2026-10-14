@@ -81,11 +81,6 @@ export function AgentFlow() {
 
   return (
     <section id="agents" ref={sectionReveal} className="mt-reveal relative mx-auto mt-24 max-w-[1000px] px-6">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute top-0 left-1/2 h-[520px] w-[900px] -translate-x-1/2 -translate-y-[10%]"
-        style={{ background: "radial-gradient(ellipse 450px 300px at 50% 40%, rgba(62,207,116,0.1), transparent 70%)" }}
-      />
 
       <div className="relative mx-auto max-w-[640px] text-center">
         <div className="font-mono text-[12px] tracking-[0.05em]" style={{ color: "var(--text-7)" }}>

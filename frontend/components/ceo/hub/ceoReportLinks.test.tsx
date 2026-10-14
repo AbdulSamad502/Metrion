@@ -20,7 +20,7 @@ const msg = (over: Partial<CeoMessage> & Pick<CeoMessage, "role" | "content">): 
 
 describe("the link to the full analysis", () => {
   it("opens the exact research run for Product Intelligence and the agent's page for the others, and never for a refused finding", () => {
-    expect(findingLink({ source: "PI", action_key: "pi.report", status: "COMPLETE", report_ref: { runId: RUN } })).toEqual({ href: `/dashboard/pi?run=${RUN}#discover`, label: "View the full research report" });
+    expect(findingLink({ source: "PI", action_key: "pi.report", status: "COMPLETE", report_ref: { runId: RUN } })).toEqual({ href: `/dashboard/pi?run=${RUN}`, label: "View Detailed Research" });
     expect(findingLink({ source: "PI", action_key: "pi.report", status: "COMPLETE", report_ref: null })?.href).toBe("/dashboard/pi");
     expect(findingLink({ source: "CFO", action_key: "cfo.financial_health", status: "PARTIAL", report_ref: null })?.href).toBe("/dashboard/cfo");
     expect(findingLink({ source: "CI", action_key: "x", status: "COMPLETE", report_ref: null })?.href).toBe("/dashboard/competitors");
@@ -40,7 +40,7 @@ describe("the link to the full analysis", () => {
     await u.click(await screen.findByTestId(`investigation-${id}`));
     const bar = await screen.findByTestId("report-buttons");
     const link = within(bar).getByTestId("report-button");
-    expect(link).toHaveTextContent("View the full research report");
-    expect(link).toHaveAttribute("href", `/dashboard/pi?run=${RUN}#discover`);
+    expect(link).toHaveTextContent("View Detailed Research");
+    expect(link).toHaveAttribute("href", `/dashboard/pi?run=${RUN}`);
   });
 });

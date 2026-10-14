@@ -20,6 +20,7 @@ export function Sidebar({
   onToggleCollapsed,
   mobileOpen,
   onCloseMobile,
+  overlay = false,
 }: {
   userName: string;
   roleLabel: string;
@@ -28,6 +29,8 @@ export function Sidebar({
   onToggleCollapsed: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
+  /** Behave as the slide-in drawer at every width (the CEO Hub keeps the navigation closed until it is asked for). */
+  overlay?: boolean;
 }) {
   const { signOut } = useClerk();
   const pathname = usePathname();
@@ -116,7 +119,7 @@ export function Sidebar({
   return (
     <>
       <div
-        className="mt-scrim fixed inset-0 z-[65] lg:hidden"
+        className={`mt-scrim fixed inset-0 z-[65] ${overlay ? "" : "lg:hidden"}`}
         style={{
           opacity: mobileOpen ? 1 : 0,
           pointerEvents: mobileOpen ? "auto" : "none",
@@ -128,8 +131,8 @@ export function Sidebar({
       <aside
         ref={asideRef}
         aria-label="Primary"
-        className={`mt-sidebar fixed inset-y-0 left-0 z-[70] flex h-screen w-[264px] flex-shrink-0 flex-col transition-[transform,width] duration-200 lg:static lg:z-auto lg:translate-x-0 ${
-          mobileOpen ? "translate-x-0" : "invisible -translate-x-full lg:visible" // off-screen and out of the tab order until opened
+        className={`mt-sidebar fixed inset-y-0 left-0 z-[70] flex h-screen w-[264px] flex-shrink-0 flex-col transition-[transform,width] duration-200 ${overlay ? "" : "lg:static lg:z-auto lg:translate-x-0"} ${
+          mobileOpen ? "translate-x-0" : `invisible -translate-x-full ${overlay ? "" : "lg:visible"}` // off-screen and out of the tab order until opened
         } ${collapsed ? "lg:w-[76px]" : "lg:w-60"}`}
       >
         <div className={`flex items-center gap-2.5 px-5 pb-4 pt-5 ${collapsed ? "lg:justify-center lg:px-0" : ""}`}>
