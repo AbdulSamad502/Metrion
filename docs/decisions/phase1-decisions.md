@@ -182,5 +182,56 @@ Q29 and Q30 are now **written into `docs/specs/deterministic-engine.md`** (§5.8
 **Spec-versus-code discrepancies found:** see engine §5.8.1, §5.10.1, §5.17 and §9.2 (no total-profit term exists; `allocate_account_level_expense_pool` hard-codes `NET_REVENUE` with no caller and no `UNITS`/`ORDERS` weight builders; period P&L composition and pool summation live outside `packages/calc-engine`; `is_trial` exists but no read path filters it; spec §9 omits columns the schema has; no storage/packaging/logistics term in §5.8; no advertising adapter or ASIN→SKU mapping).
 ---
 
+## G1 approvals — 2026-10-16
+
+Documentation only; nothing implemented. Full tables with the section references: `docs/planning/expense-tracker/10-g1-approval-table.md` §C.
+
+### Engine items 1–10 (the "PROPOSED" list above): approved as recommended
+
+| # | Item | Decision | Section |
+|---|---|---|---|
+| 1 | Total profit | **Option A approved:** total profit includes all business overhead (allocated and unallocated) | engine §5.8.1 |
+| 2 | Storage term | **Approved:** add a `StorageCosts` term. **No separate packaging or logistics pools** — those costs enter through the ledger | engine §5.17 |
+| 3 | Allocation basis granularity | **Approved:** per pool | engine §5.10.1 |
+| 4 | UNITS / ORDERS definitions | **Approved:** `UNITS` is net of returns; `ORDERS` is distinct orders per SKU | engine §5.10.1 |
+| 5 | Reason codes and details | **Approved:** `ORDERS_UNAVAILABLE`, `BASIS_DATA_UNAVAILABLE`; details `PERIOD_MISMATCH`, `SCOPE_MISMATCH` | engine §5.10.1 |
+| 6 | Signed-amount and cost-class mappings | **Approved as written** in engine §5.17 (ledger cost positive, refund/credit negative; cost-class to engine term mapping). The review-state vocabulary is decided below (Q6) | engine §5.17 |
+| 7 | `is_trial` read-layer exclusion | **Approved:** a repository parameter (`include_trial`) that **defaults to excluded**, **plus a test that fails if any read path lacks it** | engine §9.2 |
+| 8 | Trial version name | **Approved:** `<CODE>.v<N>-trial` | engine §9.2 |
+| 9 | Ledger watermark | **Approved:** in `input_refs` | engine §9.2 |
+| 10 | Metric codes | **Approved as proposed** | engine §9.3 |
+
+### Further decisions
+
+| Ref | Item | Decision |
+|---|---|---|
+| Q6 | Review states | **Decided:** `draft`, `pending_review`, `confirmed`, `voided`. A correction is a **new linked entry**, never an edit of the old one. This supersedes the earlier proposal in spec §13 Q6 (`needs_review`, `confirmed`, `rejected`) and the spec wording "imported rows `needs_review`" (read as `pending_review`); the frozen spec is not edited |
+| Q31 | Refund of an amortized expense | **Decided:** it reduces the remaining schedule **from the refund date forward**; past months are **not** restated. *Whether amortization itself is approved as a feature, and its `AMORTIZATION_INVALID` handling, were not stated: still PROPOSED* |
+| Q32 | Per-order / per-unit templates | **Decided:** SKU- or channel-scoped templates attach per order or unit as **direct costs**; business-wide templates become a **business-level pool**; **no automatic spreading**. *Whole-feature approval and `NO_ORDERS_IN_PERIOD` were not stated: still PROPOSED* |
+| Q33 | Multi-SKU assignment | **Approved:** bases `EQUAL` and `EXPLICIT_SHARES`, **seller-chosen only**; extends Q29; manual entries stay **flagged manual** |
+| Q34 | Ledger CSV export | **Decided:** generated **on demand, not stored**; permission **follows the existing financial read permission**; retention goes to **legal/CA**. *Field list not separately confirmed: still PROPOSED as written* |
+| Q22 | Vendor text validation (register X8) | **Decided:** reject vendor text containing a **currency symbol** or an **amount-like number** (such as `1,200.50`); **allow short numerals** (e.g. "3M"); **show an edit prompt** |
+| X9 | Entitlement check | **Decided:** reuse the existing CFO entitlement gate |
+| X10 | Recurring entries | **Decided:** materialized recurring entries start as `pending_review` |
+| X1 | Legacy tracker | **Decided:** keep the legacy `PUT/GET /cfo/expenses` path until cut-over |
+| X3 | `agent_run` for expense writes | **Decided:** one `agent_run` row per expense write |
+| X2 | Write-validation bounds | **Decided process:** engineering proposes bounds from the legacy validation; **no numbers are invented**. Open until that proposal is made |
+
+### Left open
+
+Q19 and Q34 retention (legal/CA); G4 (retention and storage); G5 (tax wording); Q15 release date (placeholder until the first production deploy after G7 passes producing `is_trial=false` results). Unchanged: Q1 countersign (below), Q29/Q30 as already decided.
+
+### Erratum — 2026-10-16
+
+The frozen spec (`docs/specs/expense-tracker.md`, header "Prerequisites and related specs") says `calculator.md` is "on branch `feat/pnl-calculator-integration`, not merged here". **That is no longer true:** `calculator.md` and the calculator work are merged on the combined branch `feat/pnl-calculator-and-expense-tracker` (merge commit `e26984e`). The frozen spec is not edited; this entry corrects it.
+
+### Q1 — countersign (EXP-01…EXP-08)
+
+Countersigned by product owner on [date]; spec frozen at e91136a; approval table at 9858fc7
+
+Name: ____________________    Date: ____________________
+
+---
+
 ## Items deliberately left open (not approved)
 Default category list; review-status values and transitions; duplicate thresholds; settlement-overlap wording; CSV template; retention period and storage; multi-organization details beyond EXP-03; recurring materialisation; legacy-row compatibility (X1); GST/ITC/TCS wording (CA); the concrete formula release date (defined by event); raw-CSV retention (legal/CA, Q19). See `docs/planning/expense-tracker/02-decision-register.md` and spec §13.

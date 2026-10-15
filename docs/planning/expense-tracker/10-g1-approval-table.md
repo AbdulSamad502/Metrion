@@ -70,3 +70,46 @@ Generated 2026-10-16 by a mechanical grep (`open` case-insensitive, `TBD`, `plac
 | 12 | Per-order / per-unit templates (Q32): count definitions, `NO_ORDERS_IN_PERIOD`, business-wide template as pool vs per-order attachment | §5.18.2 |
 | 13 | Multi-SKU assignment (Q33): split bases incl. `EQUAL` and `EXPLICIT_SHARES`; extends Q29 beyond one tagged SKU | §5.18.3 |
 | 14 | Ledger CSV export (Q34): field list, export permission, retention | §5.18.4 |
+
+## C. G1 approvals recorded 2026-10-16 (supersedes the "Needs your approval" column above)
+
+*Section A's "Needs your approval" column is historical. Frozen spec at `e91136a` and this table as first committed at `9858fc7` are not edited; this section records what was then decided.*
+
+### C.1 Engine items 1–10 (approved as recommended)
+
+| # | Item | Decision | Section |
+|---|---|---|---|
+| 1 | Total profit | **Option A approved:** total profit includes all business overhead (allocated and unallocated) | engine §5.8.1 |
+| 2 | Storage term | **Approved:** add a `StorageCosts` term. **No separate packaging or logistics pools** — those costs enter through the ledger | engine §5.17 |
+| 3 | Allocation basis granularity | **Approved:** per pool | engine §5.10.1 |
+| 4 | UNITS / ORDERS definitions | **Approved:** `UNITS` is net of returns; `ORDERS` is distinct orders per SKU | engine §5.10.1 |
+| 5 | Reason codes and details | **Approved:** `ORDERS_UNAVAILABLE`, `BASIS_DATA_UNAVAILABLE`; details `PERIOD_MISMATCH`, `SCOPE_MISMATCH` | engine §5.10.1 |
+| 6 | Signed-amount and cost-class mappings | **Approved as written** in engine §5.17 (ledger cost positive, refund/credit negative; cost-class to engine term mapping). The review-state vocabulary is decided below (Q6) | engine §5.17 |
+| 7 | `is_trial` read-layer exclusion | **Approved:** a repository parameter (`include_trial`) that **defaults to excluded**, **plus a test that fails if any read path lacks it** | engine §9.2 |
+| 8 | Trial version name | **Approved:** `<CODE>.v<N>-trial` | engine §9.2 |
+| 9 | Ledger watermark | **Approved:** in `input_refs` | engine §9.2 |
+| 10 | Metric codes | **Approved as proposed** | engine §9.3 |
+
+### C.2 Further decisions
+
+| Ref | Item | Decision |
+|---|---|---|
+| Q6 | Review states | **Decided:** `draft`, `pending_review`, `confirmed`, `voided`. A correction is a **new linked entry**, never an edit of the old one. This supersedes the earlier proposal in spec §13 Q6 (`needs_review`, `confirmed`, `rejected`) and the spec wording "imported rows `needs_review`" (read as `pending_review`); the frozen spec is not edited |
+| Q31 | Refund of an amortized expense | **Decided:** it reduces the remaining schedule **from the refund date forward**; past months are **not** restated. *Whether amortization itself is approved as a feature, and its `AMORTIZATION_INVALID` handling, were not stated: still PROPOSED* |
+| Q32 | Per-order / per-unit templates | **Decided:** SKU- or channel-scoped templates attach per order or unit as **direct costs**; business-wide templates become a **business-level pool**; **no automatic spreading**. *Whole-feature approval and `NO_ORDERS_IN_PERIOD` were not stated: still PROPOSED* |
+| Q33 | Multi-SKU assignment | **Approved:** bases `EQUAL` and `EXPLICIT_SHARES`, **seller-chosen only**; extends Q29; manual entries stay **flagged manual** |
+| Q34 | Ledger CSV export | **Decided:** generated **on demand, not stored**; permission **follows the existing financial read permission**; retention goes to **legal/CA**. *Field list not separately confirmed: still PROPOSED as written* |
+| Q22 | Vendor text validation (register X8) | **Decided:** reject vendor text containing a **currency symbol** or an **amount-like number** (such as `1,200.50`); **allow short numerals** (e.g. "3M"); **show an edit prompt** |
+| X9 | Entitlement check | **Decided:** reuse the existing CFO entitlement gate |
+| X10 | Recurring entries | **Decided:** materialized recurring entries start as `pending_review` |
+| X1 | Legacy tracker | **Decided:** keep the legacy `PUT/GET /cfo/expenses` path until cut-over |
+| X3 | `agent_run` for expense writes | **Decided:** one `agent_run` row per expense write |
+| X2 | Write-validation bounds | **Decided process:** engineering proposes bounds from the legacy validation; **no numbers are invented**. Open until that proposal is made |
+
+### C.3 Left open
+
+Q19 and Q34 retention (legal/CA); G4 (retention and storage); G5 (tax wording); Q15 release date (placeholder until the first production deploy after G7 passes producing `is_trial=false` results). Unchanged: Q1 countersign (below), Q29/Q30 as already decided.
+
+### C.4 Still PROPOSED after this round
+
+Engine items 11, 12 and 14 as whole features (amortization, per-order/per-unit templates, ledger CSV export) and their codes and field list; the engine spec text still carries the PROPOSED labels until it is updated to match section C.1 (not done in this documentation round).
