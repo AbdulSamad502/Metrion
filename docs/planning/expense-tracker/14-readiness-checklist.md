@@ -62,3 +62,24 @@ Verified results are in `11-engine-step-notes.md` (calc-engine unit 485 passed; 
 - Seven `packages/cfo` unit tests also need `LLM_OPERATOR_CONTROLLED_HOSTS=localhost:11434`.
 - The full backend integration suite took about 47 minutes on the scratch database; run vitest and the suite apart.
 - All work stays on the combined branch; nothing is pushed, merged to `main` or deployed without a separate instruction.
+
+## 7. Keyword reconciliation — `PROPOSED`, `TBD`, "open" in `docs/specs` and `docs/decisions` (2026-10-16)
+Mechanical grep (`PROPOSED`, `TBD`, whole-word `open`, case-insensitive for `open`) over `docs/specs/*.md` and `docs/decisions/*.md`. Files with hits of `PROPOSED` or `TBD`: `expense-tracker.md` (17 lines), `phase1-decisions.md` (10), `billing-and-pricing.md` (2 `TBD`). Whole-word "open" hits exist in many specs as their own "open questions" sections; only the expense-related files are reconciled line by line.
+
+| File / lines | Hit | Register entry |
+|---|---|---|
+| `expense-tracker.md` 4, 16, 19, 59, 238, 303, 341 | legend, section titles, "open question" wording | structural, no decision |
+| `expense-tracker.md` 33, 290 | categories "open" / "(Proposed)" | D4, Q5 → `13-step3-proposals.md` §1 (PROPOSED) |
+| `expense-tracker.md` 60, 264 | "Still open" lists, carried assumptions | register D4–D8, D10, D12, D13, X1–X3, X6, X7, Q24; errata E1, E8, E9, E10 |
+| `expense-tracker.md` 64, 246 | `needs_review` / Q6 proposed states | D5, Q6 → **decided** (draft, pending_review, confirmed, voided); errata E1 |
+| `expense-tracker.md` 78, 91, 92, 94, 95, 100, 106, 108, 110, 116, 122 | `[PROPOSED]` section tags (data model, feed, versioned results, overlap, duplicates, advertising, edits/voids, CSV) | D1, D2, D6, D7, D8, D10; engine items approved (errata E3); D6/D7/D8/D10 still NOT DECIDED |
+| `expense-tracker.md` 119, 123, 259 | `[OPEN: CA]`, `[OPEN: owner]` template columns, Q19 | Q11/X6/X7 (CA), Q9/D10, Q19/D12 (legal/CA) |
+| `expense-tracker.md` 143, 169, 176 | vendor pattern, entitlement, `agent_run` | Q22/X8 **decided** (E5), X9 **decided** (E6), X3 **decided** (E7); also errata |
+| `expense-tracker.md` 150, 243, 253 | draft expiry "proposed 30 minutes", Q3, Q13 "proposed: no" | D3 (expiry; assumption Q24, still open), D3, D2 |
+| `expense-tracker.md` 186, 269–273 | engine items and Q30–Q34 marked PROPOSED | **decided**: Round 6 (items 1–10, Q33), Round 7 (Q31, Q32, Q34), Round 8 (TP tests, MS1–MS7); errata E3, E4 |
+| `expense-tracker.md` 314 | "30-day rule" open gate | D12, Q10 (legal/CA) |
+| `phase1-decisions.md` 22, 134, 144, 159–161, 189, 202, 209–212, 218, 220, 246–258, 266, 270 | headings and quoted text about open/PROPOSED items | each line is the record of the item it names (Q19 open; X2 open until the engineering proposal; Round 6/7/8 approvals; errata E3–E9, E13); lines 209–212 now say "superseded by Round 7" |
+| `billing-and-pricing.md` 120, 121, 254, 274–282 | `TBD` plan numbers and its own open questions | **no expense-tracker register entry**: these belong to the billing spec's own questions (Q1, Q3, V5), unrelated to the Expense Tracker |
+| other specs (`ceo-agent-orchestration.md`, `cfo-agent.md`, …) | "open" in their own open-question sections | unrelated to the expense register; the lines edited for the Expense Tracker (E30/T36, §6.7 caveat, §14.9, auth §5.2, D7) carry no `PROPOSED`/`TBD` |
+
+**Hits with no register entry:** only the two `billing-and-pricing.md` `TBD` rows (a different feature's open numbers). Every expense-related hit maps to a register entry, a decision, or an errata item.

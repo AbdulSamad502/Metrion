@@ -156,7 +156,7 @@ All of the above is documentation only. Nothing was implemented, committed, push
 
 ---
 
-## Engine-spec items written 2026-10-16 (G2 prerequisites) — PROPOSED, awaiting product owner approval
+## Engine-spec items written 2026-10-16 (G2 prerequisites) — were PROPOSED; approved in Round 6 (items 1–10), Round 7 (Q31, Q32, Q34) and Round 8 (see below)
 
 Q29 and Q30 are now **written into `docs/specs/deterministic-engine.md`** (§5.8.1, §5.10.1, §5.17, §9.2, §9.3, §9.4, test rows TP1–TP9). The owner decisions themselves (Q29 SKU-level rule; engine owns the total-profit formula; `is_trial` boolean excluded from seller reads) are unchanged. The following written details are **PROPOSED and not approved**:
 
@@ -206,10 +206,10 @@ Documentation only; nothing implemented. Full tables with the section references
 | Ref | Item | Decision |
 |---|---|---|
 | Q6 | Review states | **Decided:** `draft`, `pending_review`, `confirmed`, `voided`. A correction is a **new linked entry**, never an edit of the old one. This supersedes the earlier proposal in spec §13 Q6 (`needs_review`, `confirmed`, `rejected`) and the spec wording "imported rows `needs_review`" (read as `pending_review`); the frozen spec is not edited |
-| Q31 | Refund of an amortized expense | **Decided:** it reduces the remaining schedule **from the refund date forward**; past months are **not** restated. *Whether amortization itself is approved as a feature, and its `AMORTIZATION_INVALID` handling, were not stated: still PROPOSED* |
-| Q32 | Per-order / per-unit templates | **Decided:** SKU- or channel-scoped templates attach per order or unit as **direct costs**; business-wide templates become a **business-level pool**; **no automatic spreading**. *Whole-feature approval and `NO_ORDERS_IN_PERIOD` were not stated: still PROPOSED* |
+| Q31 | Refund of an amortized expense | **Decided:** it reduces the remaining schedule **from the refund date forward**; past months are **not** restated. *Superseded: approved outright in Round 7 (2026-10-16), including `AMORTIZATION_INVALID`* |
+| Q32 | Per-order / per-unit templates | **Decided:** SKU- or channel-scoped templates attach per order or unit as **direct costs**; business-wide templates become a **business-level pool**; **no automatic spreading**. *Superseded: approved outright in Round 7 (2026-10-16), including `NO_ORDERS_IN_PERIOD` = unavailable, not zero* |
 | Q33 | Multi-SKU assignment | **Approved:** bases `EQUAL` and `EXPLICIT_SHARES`, **seller-chosen only**; extends Q29; manual entries stay **flagged manual** |
-| Q34 | Ledger CSV export | **Decided:** generated **on demand, not stored**; permission **follows the existing financial read permission**; retention goes to **legal/CA**. *Field list not separately confirmed: still PROPOSED as written* |
+| Q34 | Ledger CSV export | **Decided:** generated **on demand, not stored**; permission **follows the existing financial read permission**; retention goes to **legal/CA**. *Superseded: approved outright in Round 7 (2026-10-16); fields = all ledger fields including treatment, review state, void status and source reference* |
 | Q22 | Vendor text validation (register X8) | **Decided:** reject vendor text containing a **currency symbol** or an **amount-like number** (such as `1,200.50`); **allow short numerals** (e.g. "3M"); **show an edit prompt** |
 | X9 | Entitlement check | **Decided:** reuse the existing CFO entitlement gate |
 | X10 | Recurring entries | **Decided:** materialized recurring entries start as `pending_review` |
