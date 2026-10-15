@@ -402,6 +402,7 @@ TotalProfit          = ContributionProfit − UnallocatedAdvertising − Unalloc
 | TP7 | Rounding / conservation | Pool of an odd paise amount over 3 SKUs | Largest-remainder split sums exactly to the pool; `TotalProfit` unchanged |
 | TP8 | Refund in the pool | Cost row plus a negative refund row in the same period (§5.17) | Pool is the net; allocation and `TotalProfit` use the net; a refund dated in a later period does not change the earlier period |
 | TP9 | Negative or zero weights | One SKU has zero/negative net revenue | Excluded from the `NET_REVENUE` weights, still conserved; `TotalProfit` unchanged |
+| TP10 | Reconciliation | For each period and channel scope, `EXPENSE_TOTAL` equals the P&L expense lines plus the unallocated lines, with missing, zero, unallocated and allocated values distinct (`expense-tracker.md` AC17, F7) |
 
 ### 5.9 Tax treatment (D4, D5, D6)
 
@@ -990,6 +991,59 @@ ledger_feed(tenant (from verified context, never client-supplied), period, chann
 **Unallocated and absent.** Unallocated advertising, storage and overhead are reported as their own lines (`UnallocatedAdvertising`, `UnallocatedStorage`, `UnallocatedOverhead`) with reason codes; they are never zero-filled and never treated as absent. "Absent" (the CONFIRMED `AdvertisingCosts = 0` rule, §5.8) applies only when **no** `expense.advertising` record covers the scope; a record that exists but is unallocated is not absent.
 
 **Cost-class mapping (open).** The ledger's `cost_class` maps to engine terms: advertising → `AdvertisingCosts`; overhead → the overhead lines above; seller-attributed direct costs → `OtherAttributedCosts`. *Discrepancy:* §5.8 has **no** packaging, storage or logistics term, and the registry (§7.2.1) lists `expense.packaging`, `expense.storage`, `expense.logistics`, but `compute_period_pnl` sums only `expense.advertising` and `expense.other`. Q14/Q27 give storage its own unallocated line, so a storage term is needed in the formula version that takes effect at the release date. ***PROPOSED, awaiting product owner approval.** Option 1 (recommended): add explicit `StorageCosts` (allocated/SKU-level part) beside `AdvertisingCosts`; packaging and logistics pools keep their current status (not in the period P&L) until the owner decides. Option 2: route storage into `OtherAttributedCosts`.* **Decision needed**, including whether packaging and logistics pools should enter the period P&L at all.
+
+### 5.18 Proposed extensions to the expense feed (G2-adjacent; added 2026-10-16)
+
+*Status: none of §5.18 is approved. Every item below is **PROPOSED, awaiting product owner approval.** Nothing is built. They extend §5.17; where an item uses an allocation it reuses §5.10/§5.10.1 unchanged (largest remainder, explicit seller selection, the same reason codes), and the §5.8.1 invariant (changing how cost is spread never changes `TotalProfit`) must hold for each.*
+
+**Interaction summary.**
+
+| Item | Touches the Q29 SKU-level rule? | Interacts with allocation? |
+|---|---|---|
+| 5.18.1 Amortization | Yes, only if a manual SKU tag is present: each month's share inherits it (flagged manual) | Yes: each month's share enters that period's pool and is allocated under the pool's selected basis |
+| 5.18.2 Per-order / per-unit templates | No (not campaign/ASIN spend); a SKU-scoped template is direct attribution by its own scope | Only for a business-wide template: it becomes a pool and follows the pool's basis |
+| 5.18.3 Multi-SKU assignment | **Extends Q29**, which covers a single seller tag on the form; multiple tags need approval | Yes: it is an explicit, seller-chosen restricted allocation using the same engine arithmetic |
+| 5.18.4 Ledger CSV export | No | No |
+
+#### 5.18.1 Amortization (**PROPOSED, awaiting product owner approval.**)
+
+*Purpose.* Spread an expense over a stated number of months (annual software, registration fees). The engine computes the monthly shares; the browser and the LLM never do.
+
+- **Data.** On the ledger record: `amortization_months` (integer ≥ 1) and `amortization_start` (a calendar month; default the month of `effective_date`). The amount is the record's signed `amount_paise`.
+- **Rule.** `A = amount_paise`, `N = amortization_months`. Month *i* (1…N) receives `floor(A / N)` paise, and the `A mod N` leftover paise go to the first months, one each (deterministic largest-remainder; shares sum exactly to `A`). A period receives the sum of the shares of the calendar months that fall inside it. *Periods that are not whole calendar months are out of scope (the ledger spec assumes calendar-month periods); **PROPOSED, awaiting product owner approval.***
+- **Reporting.** The remaining unamortized balance is shown as its own value. Already-reported periods keep their original shares and formula version (EXP-02); editing or voiding the schedule affects only periods not yet reported, and anything else is an explicit restatement.
+- **Missing or zero inputs.** `N` missing, zero, negative or non-integer, or no start month → the record is **not** amortized, is **not** counted in any period and goes to the review queue with reason `AMORTIZATION_INVALID` (PROPOSED code); it is never counted whole and never as zero. `A = 0` → shares of 0, shown as 0. A period before `amortization_start` or after the last month gets no share from this record (not applicable, not "zero spend"). `N = 1` equals an ordinary record.
+- **Refunds.** A refund of an amortized expense is a separate negative record belonging to its own date's period (Q24); whether it also stops or reduces the remaining schedule is **open**.
+- **Tests (PROPOSED).** AM1 ₹12,000 over 12 → ₹1,000 × 12; AM2 ₹1,000.01 over 12 → shares differ by at most 1 paisa and sum exactly; AM3 `N = 1` equals the plain record; AM4 `N` missing/0/-1/2.5 → review queue, `AMORTIZATION_INVALID`, not counted, not zero; AM5 period before the start and after the end receive nothing; AM6 void mid-schedule leaves reported months unchanged; AM7 refund in a later month leaves earlier months unchanged; AM8 each month's share feeds the pool and `TotalProfit` is identical across allocation methods (§5.8.1); AM9 manual SKU tag carries to each share flagged manual (Q29).
+
+#### 5.18.2 Per-order and per-unit cost templates (**PROPOSED, awaiting product owner approval.**)
+
+*Purpose.* A rate × a count, where the count is the engine's own count for the period. The LLM never supplies a count or a rate.
+
+- **Data.** `rate_paise` (integer ≥ 0), `per` ∈ `ORDER | UNIT`, optional scope (channel, or SKU), `effective_from`/`effective_to`, `cost_class`. Rate changes are new versions of the template (no in-place edit of past periods).
+- **Rule.** `amount = rate_paise × count`, an exact integer product (no rounding). `count` = the engine's count for the same period and scope with the §5.10.1 definitions: `ORDER` = distinct recognised, non-cancelled order ids; `UNIT` = net units kept. Percentage rates are not proposed.
+- **Missing or zero inputs.** If any in-scope sales line lacks the field needed for the count (order id, quantity) the amount is `UNAVAILABLE` with reason `ORDERS_UNAVAILABLE` / `UNITS_UNAVAILABLE`, never computed from a partial count and never zero. If sales data exists and the true count is 0, the amount is a real ₹0 and the display shows "0 orders × rate". If there are no sales lines at all in scope, the result is `NO_ORDERS_IN_PERIOD` (PROPOSED code) — not applicable, not zero spend. A rate of 0 is allowed and shown as such. A template with no rate is invalid and goes to the review queue.
+- **Scope and allocation.** SKU-scoped or channel-scoped templates are attributed directly by their scope. A business-wide template produces a business-level pool and follows the pool's selected allocation basis, or stays unallocated (***PROPOSED, awaiting product owner approval.**; alternative: business-wide templates attach to each order automatically, which makes them SKU-level by construction*).
+- **Tests (PROPOSED).** PT1 ₹5 × 200 orders = ₹1,000 exactly; PT2 missing quantity on one line → `UNAVAILABLE`, not partial; PT3 zero true count → ₹0 shown with the count; PT4 no sales lines → `NO_ORDERS_IN_PERIOD`; PT5 rate change mid-month uses the version effective for each order date; PT6 the count equals the count used by the `ORDERS`/`UNITS` allocation basis for the same period; PT7 a model-supplied count is ignored (no input exists for it); PT8 `TotalProfit` invariant across allocation methods.
+
+#### 5.18.3 Multi-SKU assignment (**PROPOSED, awaiting product owner approval.**)
+
+*Purpose.* One expense assigned to several SKUs with a seller-chosen split; whatever is not assigned stays visible.
+
+- **Data.** A set of SKUs (each must map to the seller's catalog) and an explicit split basis chosen by the seller from: `NET_REVENUE`, `UNITS`, `ORDERS` (§5.10.1, restricted to the assigned SKUs), `EQUAL`, or `EXPLICIT_SHARES` (basis points per SKU summing to ≤ 10,000). *The set of bases is **PROPOSED, awaiting product owner approval.***
+- **Rule.** Largest-remainder split of the record's amount across the assigned SKUs under the basis; for `EXPLICIT_SHARES`, shares of the amount per basis point with the remainder to the largest fractional parts. The unassigned remainder (explicit shares below 10,000 bp, or SKUs without usable basis data) **stays visible** as an unallocated business-level line with its reason; conservation: assigned + unassigned = amount.
+- **Missing or zero inputs.** No basis chosen → nothing assigned, whole amount unassigned (`BASIS_NOT_SELECTED`). Basis data missing or a zero denominator for the assigned SKUs → unassigned with the §5.10.1 reason code. An unmapped SKU → that SKU gets no share and goes to the review queue (Q29 behaviour). Shares summing above 10,000 bp → invalid, rejected at entry. A single SKU assignment is the Q29 manual tag.
+- **Q29.** Assigned shares are SKU-level but **flagged manual**. Q29 as decided covers one tagged SKU on the form; assigning several SKUs extends it and needs approval.
+- **Tests (PROPOSED).** MS1 equal split of an odd paise amount over 3 SKUs sums exactly; MS2 explicit shares summing to 7,000 bp leave 30% visibly unassigned; MS3 basis `UNITS` with one SKU lacking quantity → that SKU's part unassigned with `UNITS_UNAVAILABLE`, not zero; MS4 zero denominator → fully unassigned; MS5 unmapped SKU → review queue; MS6 `TotalProfit` unchanged by the assignment (§5.8.1); MS7 shares above 10,000 bp rejected.
+
+#### 5.18.4 Ledger CSV export for the seller's accountant (**PROPOSED, awaiting product owner approval.**)
+
+*Purpose.* Let the seller hand the ledger to an accountant. Read-only; no new arithmetic.
+
+- **Data.** One row per ledger record state with all fields: `expense_id`, `effective_date`, `vendor`, `category`, `cost_class`, `treatment`, `review_status`, `void_status` (and void reason), `payment_status`, `paid_amount_paise`, signed `amount_paise`, GST basis/amount and the informational ITC flag, `channel_scope`, `sku`, `description`, `source_reference` (import row key, settlement reference or "manual"), `recorded_at`, `actor`. An option exports the full event history instead of the latest state.
+- **Rules.** Voided and rejected records are included with their status, never silently dropped. Amounts are integer paise (no float); any rupee-formatted column is formatting of the same integer. Unknown values are exported blank, never `0`. No totals row unless it comes from the engine with an `engine_result_ref`. Cells beginning with `=`, `+`, `-`, `@` are escaped against spreadsheet formula injection. Tenant-scoped by RLS (no client-supplied tenant). The export reads the ledger, not `metric_result`, so `is_trial` (§9.2) does not apply; trial results never appear in it.
+- **Permission and retention.** *Which permission may export, and whether an exported file is retained or logged, are open (**PROPOSED, awaiting product owner approval.**); retention is with legal/CA (Q19).*
+- **Tests (PROPOSED).** EX1 every field present, header order stable; EX2 voided and rejected rows present with status; EX3 amounts equal the ledger paise exactly (round trip); EX4 blank, not `0`, for unknown values; EX5 formula-injection cells escaped; EX6 cross-tenant export impossible; EX7 export of an empty ledger returns the header only.
 
 ## 6. Grain and periods
 

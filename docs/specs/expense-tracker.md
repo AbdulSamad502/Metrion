@@ -69,6 +69,10 @@ Full register: `docs/planning/expense-tracker/02-decision-register.md`. Owner de
 
 ---
 
+### 4.1 Positioning note (non-normative)
+
+The tracker's goal is that every expense shows where it landed in profit, including "unallocated". The product may flag possible overlap with settlement costs for seller review but must not claim automatic verification. This note adds no requirement.
+
 ## 5. Data model [PROPOSED — conceptual, not a migration]
 
 ### 5.1 Ledger (EXP-01)
@@ -177,7 +181,7 @@ Expense dated in a closed (already reported) period; edit changing category or p
 | Gate | Must be true before |
 |---|---|
 | **G1 Design approval** | Any implementation. Owner countersigns EXP-01…08; remaining amendments in Appendix B approved or deferred; X1 decided; release date defined by event (Q15; concrete date recorded when known); `legal-safeguards.md`/`improvement-roadmap.md` located or their citations struck (Appendix C). |
-| **G2 Financial integrity** | Any seller sees a ledger-derived margin: engine tests; reconciliation worked example per cost class; **the allocation regression suite A1–A10 passes (launch requirement, EXP-06)**; historical-result policy demonstrated (old result preserved, version label shown, explicit restatement produces a linked labelled result). The allocation suite and engine work must also cover account-level advertising and storage (Q14, Q27). **Feed sign-mapping test (Q21):** the feed maps the ledger sign (cost positive, refund/credit negative) to the engine's representation correctly in both directions (ledger → engine and engine result → ledger display), including a refund in a later period (Q24). F3 covers the unallocated advertising/storage lines (Q27); the pricing/alert caveat and what-if checks are B.11 follow-ups in the consumer specs. **Prerequisites (Q29, Q30; not G1):** the engine spec carries the Q29 SKU-level rule, the total-profit formula and the trial formula version name — written 2026-10-16 as engine §5.8.1/§5.10.1/§5.17/§9.2, **PROPOSED items awaiting product owner approval**; G2 cannot pass until they are approved. **Invariant test F5:** changing the allocation method never changes total profit. **Launch condition for the ledger feed (decided 2026-10-15):** the pricing, alert and what-if consumer specs must carry the unallocated-spend caveats **before release** (Appendix B.11). |
+| **G2 Financial integrity** | Any seller sees a ledger-derived margin: engine tests; reconciliation worked example per cost class; **the allocation regression suite A1–A10 passes (launch requirement, EXP-06)**; historical-result policy demonstrated (old result preserved, version label shown, explicit restatement produces a linked labelled result). The allocation suite and engine work must also cover account-level advertising and storage (Q14, Q27). **Feed sign-mapping test (Q21):** the feed maps the ledger sign (cost positive, refund/credit negative) to the engine's representation correctly in both directions (ledger → engine and engine result → ledger display), including a refund in a later period (Q24). F3 covers the unallocated advertising/storage lines (Q27); the pricing/alert caveat and what-if checks are B.11 follow-ups in the consumer specs. **Prerequisites (Q29, Q30; not G1):** the engine spec carries the Q29 SKU-level rule, the total-profit formula and the trial formula version name — written 2026-10-16 as engine §5.8.1/§5.10.1/§5.17/§9.2, **PROPOSED items awaiting product owner approval**; G2 cannot pass until they are approved. **Reconciliation criterion AC17 / test F7 (engine TP10).** **Invariant test F5:** changing the allocation method never changes total profit. **Launch condition for the ledger feed (decided 2026-10-15):** the pricing, alert and what-if consumer specs must carry the unallocated-spend caveats **before release** (Appendix B.11). |
 | **G3 Security** | Any write route is enabled: S-series and idempotency tests on scratch Postgres; every-route 401/403 tests include the routes; two-tenant isolation green; **documented `financials.adjust` limitation visible to owners granting it**. |
 | **G4 Retention and storage** | Any receipt reference/upload or retention statement: legal/CA decision; storage design; the "30-day rule" located or retired. |
 | **G5 Tax wording** | Any GST/ITC field is displayed (ledger), or TCS (cash/settlement view only; the ledger has no TCS field): CA review; TCS shown only where the channel actually supplies it (Q26). |
@@ -204,6 +208,7 @@ Expense dated in a closed (already reported) period; edit changing category or p
 | AC14 | A seller-facing release note describing the contribution-profit change exists before the release date. |
 | AC15 | Changing the allocation method (basis, or allocated vs unallocated) does not change total profit (Q30). |
 | AC16 | A manual entry is never SKU-level unless the seller tagged a SKU, and then it stays flagged manual; an unmapped ASIN/SKU identifier lands in the review queue and counts as business-level until resolved (Q29). |
+| AC17 | **Reconciliation (G2).** For every period and channel scope, the dashboard expense total equals the P&L expense lines plus the unallocated lines; a missing (not entered), an explicit zero, an unallocated and an allocated value are kept distinct and never merged. |
 
 ## 12. Test scenarios
 Full matrix: `docs/planning/expense-tracker/04-test-and-risk-matrix.md`. **Allocation regression suite (A-series) — launch requirement (EXP-06, G2):**
@@ -225,6 +230,7 @@ Full matrix: `docs/planning/expense-tracker/04-test-and-risk-matrix.md`. **Alloc
 | F4 | Release note | The seller-facing release note for the contribution-profit change exists and is reviewed before the release date (AC14; document review, not automated) |
 | F5 | Total-profit invariant | The same inputs under every allocation method (and none) give identical total profit (AC15; G2) |
 | F6 | SKU-level rule | Validated import with explicit mapped ASIN ⇒ SKU-level; campaign spend without ASIN ⇒ business-level; manual ⇒ business-level (tagged ⇒ SKU-level, flagged manual); unmapped identifier ⇒ review queue, business-level (AC16) |
+| F7 | Reconciliation | For each period and channel scope in a fixture covering missing, explicit zero, unallocated and allocated values: dashboard total = P&L expense lines + unallocated lines, and each of the four states appears separately (AC17; G2; engine TP10) |
 Also: historical-result tests (no automatic restatement on formula release; version label on every result; explicit restatement links and labels); permission tests (partner without `financials.adjust` 403; no `expenses.write` key exists); draft tests (only vendor/category/date pre-filled; amount-like vendor rejected; description and amount never extracted; draft idempotency/expiry/cross-org); ST-01 tests (Appendix D).
 
 ## 13. Explicit open questions
@@ -259,6 +265,10 @@ Also: historical-result tests (no automatic restatement on formula release; vers
 | Q28 | **DECIDED 2026-10-15.** G7 results use a distinct trial formula version with `is_trial=true`, are never shown in seller history and never serve as a restatement baseline. Release date = first production deploy after G7 passes producing `is_trial=false` results. AC12 added | closed |
 | Q29 | **DECIDED 2026-10-15.** A campaign/ASIN spend record is **SKU-level only if** (a) it comes from a **validated import or integration**, (b) the source data carries an **explicit ASIN or SKU identifier**, and (c) that identifier **maps to a SKU in the seller's catalog**. Campaign-level spend **without an ASIN breakdown stays business-level**. **Manual entries are never SKU-level by default**; a seller may tag a SKU on the form and the entry **stays flagged manual**. **Unmapped identifiers go to a review queue and count as business-level until resolved.** Prerequisite for G2, not G1 | closed |
 | Q30 | **DECIDED 2026-10-15.** The **engine spec owns the total-profit formula**; this spec states only the invariant that **changing the allocation method never changes total profit** (tested under G2, F5). `is_trial` is a **boolean on the result record**, **excluded from every seller-facing read at the read layer**; the **name of the trial formula version is an engine-spec decision**. Q29 and Q30 are **prerequisites for G2, not G1**. *Written into the engine spec 2026-10-16 (§5.8.1, §5.10.1, §5.17, §9.2); the written details are PROPOSED, awaiting product owner approval.* | closed |
+| Q31 | **PROPOSED, awaiting product owner approval:** amortization of an expense over a stated number of months, computed by the engine (engine §5.18.1) | owner |
+| Q32 | **PROPOSED, awaiting product owner approval:** per-order and per-unit cost templates, rate × the engine's own count (engine §5.18.2) | owner |
+| Q33 | **PROPOSED, awaiting product owner approval:** multi-SKU assignment with a seller-chosen split basis; extends the single-SKU tag of Q29 (engine §5.18.3) | owner |
+| Q34 | **PROPOSED, awaiting product owner approval:** ledger CSV export for the seller's accountant, all fields (engine §5.18.4); export permission and retention open | owner/legal |
 | Q26 | TCS: `TCS_COLLECTED` is a real settlement field for Flipkart only; availability for other channels is unverified, so G5/§6.10 must not assume it | CA/eng |
 
 ---
