@@ -365,7 +365,7 @@ UnallocatedOverhead  = BusinessOverhead − AllocatedOverhead         (shown, wi
 
 ### 5.8.1 Total profit and the allocation invariant (G2 prerequisite, Q30; amended 2026-10-15)
 
-*Status: the owner decided that the engine spec owns the total-profit formula (Q30) and that total profit includes the unallocated lines (Q27). The formula below (Option A) is **APPROVED (Round 6, 7c46d9d)**; the test list at the end of this section is still **PROPOSED** (part of the G2 test plan). Nothing here is built.*
+*Status: the owner decided that the engine spec owns the total-profit formula (Q30) and that total profit includes the unallocated lines (Q27). The formula below (Option A) is **APPROVED (Round 6, 7c46d9d)**; the test list TP1–TP10 at the end of this section is **APPROVED (Round 8, 2026-10-16)**. Nothing here is built.*
 
 **What exists today (verified against code and spec).** The engine defines exactly one profit figure: `ContributionProfit` (§5.8; `packages/calc-engine/src/calc_engine/formulas/contribution_profit.py::contribution_profit`, seeded as `CONTRIBUTION_PROFIT.v1` in `definitions/seed_definitions.py`). There is **no** total-profit, net-profit or operating-profit term in this spec or in `packages/calc-engine`. The only "after overhead" figure in code is the Profit Calculator's **hypothetical** `operating_profit = contribution − operating_expenses` (`packages/calc-engine/src/calc_engine/formulas/pnl_scenario/calculate.py::make_view`, lines 43–55, introduced by commits 48eeeb1, a5ad4ea, a2dc9f8); it is a non-persisted estimate (calculator.md N-AC6), not an `engine_result_ref`. In the period P&L (`backend/src/backend/services/cfo_actions.py::compute_period_pnl`, via `packages/cfo/src/cfo/pnl/inputs.py::resolve_expense_pool_total`) the **whole** `expense.advertising` pool and the **whole** `expense.other` pool are summed and subtracted inside `ContributionProfit`; so today every seller-entered pool already reduces the one profit figure and nothing is "unallocated". The amended text above (EXP-06, Q14, Q27) changes that from the release date.
 
@@ -389,7 +389,7 @@ TotalProfit          = ContributionProfit − UnallocatedAdvertising − Unalloc
 
 **Invariant (stated by the owner; formula-independent).** Changing the allocation method — selecting, changing or removing a basis for any pool, or switching a pool between allocated and unallocated — moves cost between the `Allocated_*` and `Unallocated_*` lines and between SKUs, and **never changes `TotalProfit`**. `ContributionProfit`, `FullyAllocatedProfit` and the per-line shares may change; `TotalProfit` may not. Under Option A this holds by §5.10 conservation, because `TotalProfit` depends only on `Pool_p`. Allocation never changes a pool's size.
 
-**Tests (PROPOSED; G2 — the test list is not covered by the Round 6 approvals).** Each test runs the same inputs under several allocation configurations and asserts the stated `TotalProfit`, plus conservation per pool and per-line reason codes.
+**Tests (APPROVED (Round 8, 2026-10-16); G2).** Each test runs the same inputs under several allocation configurations and asserts the stated `TotalProfit`, plus conservation per pool and per-line reason codes.
 
 | # | Case | Setup | Expected |
 |---|---|---|---|
@@ -970,7 +970,7 @@ Neither spec restates the other: **product/display rules there, arithmetic here.
 
 ### 5.17 The expense-ledger feed (G2 prerequisite; amended 2026-10-15)
 
-*Status: the append-only ledger, the treatments and the signed-amount decision (Q21) are owner decisions (EXP-01, EXP-06, Q21, Q24). The signed-amount mapping, the cost-class mapping, the `StorageCosts` term and the review-state vocabulary are **APPROVED (Round 6, 7c46d9d)**; the function name remains **PROPOSED**. Not built. Ledger schema and rules: `expense-tracker.md` §5.*
+*Status: the append-only ledger, the treatments and the signed-amount decision (Q21) are owner decisions (EXP-01, EXP-06, Q21, Q24). The signed-amount mapping, the cost-class mapping, the `StorageCosts` term and the review-state vocabulary are **APPROVED (Round 6, 7c46d9d)**; the function name `ledger_feed` is a **non-binding suggestion; the implementer chooses**. Not built. Ledger schema and rules: `expense-tracker.md` §5.*
 
 **Boundary.** Everything below — row selection, aggregation, any SQL that selects or aggregates ledger rows, sign mapping, allocation — lives **inside `packages/calc-engine`**. Nothing outside it (an API route, `backend`, `packages/cfo`, the browser, an LLM) selects, sums, signs or allocates ledger amounts; callers pass identifiers and receive `metric_result` rows. *Discrepancy:* today the period P&L composition lives in `backend/src/backend/services/cfo_actions.py` and the pool summation in `packages/cfo/src/cfo/pnl/inputs.py::resolve_expense_pool_total` (which delegates the addition to `calc_engine` `sum_paise`) and takes caller-supplied adjustment lists; the feed replaces that input with an engine-owned read, which is a code change, not made here.
 
@@ -994,7 +994,7 @@ ledger_feed(tenant (from verified context, never client-supplied), period, chann
 
 ### 5.18 Extensions to the expense feed (G2-adjacent; added 2026-10-16)
 
-*Status: 5.18.1 (amortization), 5.18.2 (per-order/per-unit templates) and 5.18.4 (ledger CSV export) are **APPROVED (Round 7, 2026-10-16)** (build priority unchanged: kickoff Step 5). 5.18.3 (multi-SKU assignment) bases and seller-chosen assignment are **APPROVED (Round 6, 7c46d9d)**; its remaining mechanics and tests are **PROPOSED**. Nothing is built. They extend §5.17; where an item uses an allocation it reuses §5.10/§5.10.1 unchanged (largest remainder, explicit seller selection, the same reason codes), and the §5.8.1 invariant (changing how cost is spread never changes `TotalProfit`) must hold for each.*
+*Status: 5.18.1 (amortization), 5.18.2 (per-order/per-unit templates) and 5.18.4 (ledger CSV export) are **APPROVED (Round 7, 2026-10-16)** (build priority unchanged: kickoff Step 5). 5.18.3 (multi-SKU assignment) is **APPROVED (Round 8, 2026-10-16)**: the Q33 bases and seller-chosen assignment were approved in Round 6 (7c46d9d), and its mechanics and tests MS1–MS7 in Round 8. Nothing is built. They extend §5.17; where an item uses an allocation it reuses §5.10/§5.10.1 unchanged (largest remainder, explicit seller selection, the same reason codes), and the §5.8.1 invariant (changing how cost is spread never changes `TotalProfit`) must hold for each.*
 
 **Interaction summary.**
 
@@ -1026,7 +1026,7 @@ ledger_feed(tenant (from verified context, never client-supplied), period, chann
 - **Scope and allocation.** SKU-scoped or channel-scoped templates attach per order or unit as **direct costs** (APPROVED (Round 6, 7c46d9d), Q32). A business-wide template becomes a **business-level pool** and follows the pool's selected allocation basis, or stays unallocated; there is **no automatic spreading** (APPROVED (Round 6, 7c46d9d)).
 - **Tests (APPROVED (Round 7, 2026-10-16)).** PT1 ₹5 × 200 orders = ₹1,000 exactly; PT2 missing quantity on one line → `UNAVAILABLE`, not partial; PT3 zero true count → ₹0 shown with the count; PT4 no sales lines → `NO_ORDERS_IN_PERIOD`, amount unavailable and not zero; PT5 rate change mid-month uses the version effective for each order date; PT6 the count equals the count used by the `ORDERS`/`UNITS` allocation basis for the same period; PT7 a model-supplied count is ignored (no input exists for it); PT8 `TotalProfit` invariant across allocation methods.
 
-#### 5.18.3 Multi-SKU assignment (bases and seller-chosen assignment **APPROVED (Round 6, 7c46d9d)**; remaining mechanics and tests **PROPOSED**)
+#### 5.18.3 Multi-SKU assignment (**APPROVED (Round 8, 2026-10-16)**; bases and seller-chosen assignment first approved in Round 6, 7c46d9d)
 
 *Purpose.* One expense assigned to several SKUs with a seller-chosen split; whatever is not assigned stays visible.
 
@@ -1034,7 +1034,7 @@ ledger_feed(tenant (from verified context, never client-supplied), period, chann
 - **Rule.** Largest-remainder split of the record's amount across the assigned SKUs under the basis; for `EXPLICIT_SHARES`, shares of the amount per basis point with the remainder to the largest fractional parts. The unassigned remainder (explicit shares below 10,000 bp, or SKUs without usable basis data) **stays visible** as an unallocated business-level line with its reason; conservation: assigned + unassigned = amount.
 - **Missing or zero inputs.** No basis chosen → nothing assigned, whole amount unassigned (`BASIS_NOT_SELECTED`). Basis data missing or a zero denominator for the assigned SKUs → unassigned with the §5.10.1 reason code. An unmapped SKU → that SKU gets no share and goes to the review queue (Q29 behaviour). Shares summing above 10,000 bp → invalid, rejected at entry. A single SKU assignment is the Q29 manual tag.
 - **Q29.** Assigned shares are SKU-level but **flagged manual**. Q29 as decided covers one tagged SKU on the form; assigning several SKUs extends it (APPROVED (Round 6, 7c46d9d), Q33); manual entries stay flagged manual.
-- **Tests (PROPOSED).** MS1 equal split of an odd paise amount over 3 SKUs sums exactly; MS2 explicit shares summing to 7,000 bp leave 30% visibly unassigned; MS3 basis `UNITS` with one SKU lacking quantity → that SKU's part unassigned with `UNITS_UNAVAILABLE`, not zero; MS4 zero denominator → fully unassigned; MS5 unmapped SKU → review queue; MS6 `TotalProfit` unchanged by the assignment (§5.8.1); MS7 shares above 10,000 bp rejected.
+- **Tests (APPROVED (Round 8, 2026-10-16)).** MS1 equal split of an odd paise amount over 3 SKUs sums exactly; MS2 explicit shares summing to 7,000 bp leave 30% visibly unassigned; MS3 basis `UNITS` with one SKU lacking quantity → that SKU's part unassigned with `UNITS_UNAVAILABLE`, not zero; MS4 zero denominator → fully unassigned; MS5 unmapped SKU → review queue; MS6 `TotalProfit` unchanged by the assignment (§5.8.1); MS7 shares above 10,000 bp rejected.
 
 #### 5.18.4 Ledger CSV export for the seller's accountant (**APPROVED (Round 7, 2026-10-16)**)
 

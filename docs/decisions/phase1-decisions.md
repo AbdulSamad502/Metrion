@@ -261,5 +261,11 @@ The earlier erratum dated 2026-10-16 (calculator.md merged) is E2 above.
 
 ---
 
+## Round 8 approvals — 2026-10-16
+
+Documentation only. The engine **TP1–TP10 test list** and **§5.18.3 multi-SKU mechanics and tests MS1–MS7** (with the Q33 bases) are approved and labelled `APPROVED (Round 8, 2026-10-16)` in the engine spec. The §5.17 function name is a non-binding suggestion; the implementer chooses. Nothing in the engine spec remains PROPOSED.
+
+---
+
 ## Items deliberately left open (not approved)
 Default category list; review-status values and transitions; duplicate thresholds; settlement-overlap wording; CSV template; retention period and storage; multi-organization details beyond EXP-03; recurring materialisation; legacy-row compatibility (X1); GST/ITC/TCS wording (CA); the concrete formula release date (defined by event); raw-CSV retention (legal/CA, Q19). See `docs/planning/expense-tracker/02-decision-register.md` and spec §13.
