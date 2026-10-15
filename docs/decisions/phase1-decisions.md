@@ -1,0 +1,160 @@
+# Metrion — Phase 1 Decision Record (Expense Tracker decisions)
+
+**Created:** 2026-10-15 (this file did not exist before; no earlier decision is migrated or re-dated here). **Revised:** 2026-10-15 (final reconciliation: EXP-03 narrowed, EXP-05 reversed, EXP-02 clarified, EXP-08 and ST-01 added).
+**Scope today:** the Expense Tracker decisions approved by the product owner on 2026-10-15. Earlier Phase 1 decisions of record are **not** in this file; they remain where they were made: `docs/planning/phase-1-readiness-review.md`, the "Confirmed decisions" tables of each spec in `docs/specs/`, and the owner decisions logged in `ceo-agent-orchestration.md` (C-series, Q-series).
+**ID convention:** `EXP-nn`, in order. "Register D*" cross-references `docs/planning/expense-tracker/02-decision-register.md`.
+**Status vocabulary:** `APPROVED (product)` = the owner decided the product behaviour; implementation details stay proposals until the canonical spec records them. `SUPERSEDED` = replaced by a later owner decision. `BLOCKED` = an authoritative approved decision conflicts and the item cannot proceed. **Nothing is currently BLOCKED.**
+**Evidence tags:** [F] verified in the repository at base commit `91bebf4` · [U] not verifiable.
+**Source of approval:** owner instructions in this session, 2026-10-15 (no signed record exists in the repository; the owner should countersign this file).
+
+---
+
+## EXP-01 — Financial adjustment contract (Register D1) — APPROVED (product)
+
+**Decision.**
+1. Validated expenses go into a **dedicated, append-only expense ledger**.
+2. They reach Brain 1 through an **explicit integration contract** (a feed that reads validated ledger records and returns pool totals, named gaps and flags; Brain 1 stays the only place money is summed or allocated).
+3. Three treatments: `incremental` (eligible to affect the applicable financial result) · `already_in_settlement` (retained for reconciliation; excluded from additional expense counting) · `informational` (retained for reference; excluded from profit).
+4. **`replaces_input` is dropped**; not to be re-added without new owner approval **and** a demonstrated source-of-truth use case. [F] COGS is `cogs_per_unit` (per-unit, effective-dated, weighted average: `deterministic-engine.md` §5.6, §7.2.1); advertising has no second source (`AdvertisingCosts` is seller-entered, §5.8); the only replacement mechanism that exists is superseding the same target+field (`calc_engine.repositories.manual_adjustment_repo.insert_adjustment`).
+5. **Source references, settlement overlap, duplicate detection, unresolved conflicts** (spec §5.2, §6.4, §6.5): overlap and duplicate status are explicit fields; a record with `candidate`/`unresolved`/`probable_duplicate` status **never silently counts and never silently drops**; it sits in the review queue with the amount it would add, is excluded from figures labelled "confirmed", and is resolved by a person's recorded action.
+
+**Rationale.** [F] `manual_adjustment` cannot hold date, vendor, source reference, payment/review status, treatment or an idempotency key; cannot edit across target/field; cannot delete (no `WITHDRAWN` writer); and saved expenses do not reach the period P&L (`compute_period_pnl` takes caller-supplied `advertising_adjustment_values` / `other_adjustment_values`: `backend/src/backend/services/cfo_actions.py:355-356, 453-454`; `api/v1/cfo.py` P&L request models).
+**Affected components (future work, not done).** Ledger migration with RLS/grants; Brain 1 feed; `compute_period_pnl` input path; expense API and UI; the legacy `PUT/GET /cfo/expenses` route and its undated `ACCOUNT/"default"` rows (open decision X1).
+**Risks.** Two sources of manual input during transition; migration of undated legacy rows; double counting between ledger and legacy rows.
+**Required review steps.** Architect review; reconciliation worked example per cost class; security review of the new RLS/grants; test matrix F/R/S series on scratch Postgres.
+**Reversal.** Recorded as EXP-07. **Spec amendment applied 2026-10-15:** `cfo-agent.md` "Removed by design".
+
+---
+
+## EXP-02 — Versioned results and historical-result policy (Register D2) — APPROVED (product)
+
+**Decision.** Financial results are **versioned**. A result records its inputs, formula version, configuration version, reporting period and as-of timestamp, and previous results are never silently overwritten.
+
+**Historical-result policy (explicit clarification, 2026-10-15).**
+1. **Do not automatically restate** previously reported periods when a new formula is released.
+2. **Preserve** old results with their original formula version, configuration version and inputs.
+3. **Use the new formula version from the approved release date forward.** The release date is the **first production deploy after G7 passes producing `is_trial=false` results** (decided 2026-10-15, spec Q15/Q28) and stays the placeholder **`<RELEASE_DATE: placeholder — product owner to set>`** until then.
+4. **Label the formula version on every result.**
+5. If recalculation of a past period is requested later, a **separate, explicit workflow** produces a **linked, clearly labelled restated result** without overwriting the original. That workflow is not designed here.
+
+**Verified current schema (do not assume more).** [F] `metric_result` (`packages/calc-engine/migrations/versions/20260917_0001_engine_tables.py` lines 57–79; `…0006_metric_result_value_fraction.py`): `id, tenant_id, metric_code, grain, target_ref, period, value_paise, recognition_state, confidence, calculation_basis, formula_definition_id, formula_version, config_version, canonical_data_version, manual_adjustment_set jsonb, as_of_date, input_refs jsonb, exclusions jsonb, is_trial, is_available, unavailable_reason, computed_at`, plus value-fraction columns; writers `metric_result_repo.save/save_many` only insert.
+- **Already present:** formula version, config version, canonical-data version, the manual adjustments used, `as_of_date`, `computed_at`, `period`, free-form `input_refs`/`exclusions`.
+- **Not present (a future migration must add them; none is assumed):** a link from a later result to an earlier one; a reported/restated marker and reason; an expense-ledger input version (`manual_adjustment_set` lists adjustment ids only).
+- **Immutability is by convention, not grant** per the earlier audit (`docs/planning/stages-3-4-5-report-2026-10-12.md`); the grants on `metric_result` were **not** re-verified here [U].
+**Affected (future).** `metric_result` migration and repo; every P&L/allocation compute path (version label); CFO UI. **Risks.** Results before/after the release date are not directly comparable without the label; sellers' existing `expense.other` rows currently reduce Contribution Profit (spec Q16). **Review steps.** Result-linkage schema; version-label UX; reproducibility test; revoke `UPDATE/DELETE` on `metric_result` for the app role in the migration.
+**Conflicts.** None found.
+
+---
+
+## EXP-03 — CFO chat flow (Register D3) — APPROVED (product); reconcilable, NOT BLOCKED
+
+**Decision.**
+- **No direct chat writes** to financial records.
+- The CFO/CEO may prepare a **draft expense proposal that pre-fills ONLY these non-monetary fields: `vendor`, `category`, `date`.**
+- The seller **types the description and the amount on the Expense Tracker form** and explicitly confirms there. `amount`, `gst_amount`, `paid_amount`, `description`, `treatment`, `review_status`, `sku`, `channel_scope` are never extracted or pre-filled.
+- The LLM cannot authorize, commit or calculate the authoritative monetary result, and cannot produce a monetary form input.
+- Server-minted draft id, tenant/user binding, expiry, single-use confirmation, retry protection; authorization and organization membership re-validated at confirmation.
+- **Rationale (owner):** a free-text description can carry money, which would break "money is never typed into chat" and "form inputs are never produced by any model".
+
+**Verification against the authoritative rules** (`docs/specs/ceo-agent-orchestration.md`, `backend/src/backend/ceo/`):
+| Rule | Verified text | Reconciled? |
+|---|---|---|
+| **C21** (line 34) / AC23 (1032) | "No write-class action is in the V1 registry. Every action that creates a manual financial input, edits seller books, uploads files or writes a marketplace is excluded" | **Yes.** A draft is none of those; the form submission is the write, a direct surface. Precedent: CEO may *propose* a goal as a `DRAFT` that becomes `ACTIVE` only on explicit confirmation by a member holding `agent.ceo` and `financials.adjust` (§6.20 lifecycle, line 620). |
+| **§6.33 (lines 843–845)** | typed chat may start a playbook "only by opening the form (money is never typed into chat)"; `action.inputs` "is never produced by the classifier or any model" | **Yes, narrowly.** The `action.inputs` sentence concerns the two playbooks; the expense draft is not an `action.inputs` object. The model produces only text slots (§6.3 rule 3, already allowed), limited here to vendor, category, date; money and description are excluded, honouring "money is never typed into chat and never inferred" (line 444). The owner's broader wording ("form inputs are never produced by any model") is **not** a spec sentence; it is honoured by the field restriction. |
+| **§6.11 future-write rule** (line 407) | a future CEO-initiated write needs "its own spec: an explicit confirm step, a re-check of every permission including `financials.adjust`, and its own acceptance criteria" | **Yes, unchanged.** The write requires `financials.adjust` (EXP-05). The canonical spec §7–§8 is that spec. |
+| **E30 / T36** (983, 1101) | record-an-expense via chat is declined | **Amended 2026-10-15** (narrow). |
+| **`FORBIDDEN_ACTION_KEYS`** (`ceo/registry.py`) | includes `cfo.enter_expense`, `cfo.expense_budget_set` | **No change needed**; the draft uses a different, non-write key. Code not modified. |
+| **Registry effect classes** (§6.11) | READ · COMPUTE_PERSIST · GENERATE_METERED · RECORD_CHOICE; "WRITE is not a permitted value in V1" | **Follow-up amendment** (approved 2026-10-15 as spec text, applied to `ceo-agent-orchestration.md` §6.11; code unchanged): a persisted draft fits none exactly; add a draft effect class and key (e.g. `cfo.expense_draft`) under its own acceptance criteria. |
+| **Classifier** (`ceo/classifier.py`: OUT_OF_SCOPE lists "recording expenses") | prompt text | **Code follow-up**; until built, code and tests still decline (spec amended, code not: flagged). |
+| **AC21** (no numeric literal in composer output) | line 280 | **Constraint:** the draft card's date and digits are rendered by the UI, not stated by the composer. |
+
+**"Q2 expense-confirmation flow."** [U] Not found anywhere in the repository (`docs/specs/*.md`, `docs/planning/*.md`). **Owner clarified 2026-10-15: it came from a decisions document drafted in chat and has no repo source.** It is recorded that way and is not represented as an approved repository decision. The only related decided item is Q33 (2026-10-10, "Saving a form's inputs uses `financials.adjust` (no new key)"), which this design is consistent with.
+**Approval workflow.** `ceo-approval-workflow.md` (designed, unimplemented) is **not required** for a form-confirmed draft.
+**Affected (future).** Draft table and routes; extraction schema and LLM evals; registry/effects/classifier; form pre-fill.
+**Required review steps.** Follow-up amendments approved 2026-10-15 as spec text only (Q2) and applied to `ceo-agent-orchestration.md` §6.11/§6.33; the CEO code and tests stay unchanged until implementation is approved; G6 remains the gate; evals; idempotency, expiry, cross-org and replay tests.
+
+---
+
+## EXP-04 — IndiaMART classification (Register D14) — APPROVED (product)
+
+**Decision.** IndiaMART is **removed from the supported sales-channel list**; it is **supplier discovery**, not an integrated sales channel. Manual expense tagging to "IndiaMART" is allowed as a free label ("manually tagged, not synced"). Supported integrations remain only those with validated data flows (Amazon, Flipkart, Meesho).
+**Evidence.** [F] `docs/specs/product-intelligence-agent.md` C5/C6 and `supplier_lead.source` (`INDIAMART_LOOKUP`, "schema-only, not implemented"; `packages/product-intelligence/migrations/versions/20260929_0001_pi_tables.py`); `docs/planning/phase-1-readiness-review.md` line 40; no IndiaMART adapter in `data_foundation/adapters/`.
+**Conflicts.** None. **Review steps.** A selling-channel adapter would need a new owner decision and repository evidence.
+
+---
+
+## EXP-05 — Permission scope (Register D11) — APPROVED (product); supersedes the earlier `expenses.write` version
+
+**Decision.** **No new permission key in V1.0.** **`financials.adjust` governs every ledger write** (create, edit, void, review change, CSV-import confirmation, draft confirmation), consistent with the approved no-new-key decision (`ceo-agent-orchestration.md` Q33, 2026-10-10: "Saving a form's inputs uses `financials.adjust` (no new key)"; line ~446; `cfo-agent.md` §8 rule 4 and E19).
+- OWNER holds it implicitly; PARTNER is denied by default and only by explicit OWNER grant [F] (`auth.md` §5.2, D4; `backend/src/backend/auth/permissions.py::has_permission`).
+- Reads follow existing behaviour: `agent.cfo`; no financial-read key exists [F] (`api/v1/cfo.py::get_expenses`).
+- Server-side authorization with active-organization/tenant validation at the moment of every write.
+- **`expenses.write` is NOT introduced.** The earlier recommendation and the earlier version of this decision are **SUPERSEDED**. Revisit only when a partner-permission grant surface exists or a new approved authorization decision is made. [F] No surface for granting keys to partners was found in `backend/src`.
+
+**Known limitation (documented).** [F] `auth.md` §5.2: `financials.adjust` covers "every field in the `deterministic-engine.md` §7.2.1 field registry, without exception" (COGS, discount-bearer, settlement receipts, supplier quotes, budgets, expense pools). A partner granted it to enter expenses can therefore also change **COGS and the other margin-moving inputs**. This replaces the earlier "partner with `expenses.write` can change margin inputs" risk.
+**Conflicts.** None with approved decisions. One wording clarification was recommended and then approved and applied on 2026-10-15 (Q4): `auth.md` §5.2 says "every field in the registry"; the ledger is not a registry field, so the row should add "and records of the expense ledger" (spec Appendix B.1).
+**Required tests.** Partner without `financials.adjust` ⇒ 403 on every ledger write; no `expenses.write` key exists in `ALL_KEYS`.
+
+---
+
+## EXP-06 — Allocation default and engine change (Register D9) — APPROVED (product)
+
+**Decision.** Business-level overhead is the default. **No silent allocation** by revenue share or units. Allocation only after the seller **explicitly selects** a supported basis and the data is valid; otherwise the amount stays unallocated and the reason is explained. The deterministic engine performs all allocation.
+**Amendments applied 2026-10-15 (documentation only; engine code untouched):** `docs/specs/deterministic-engine.md` **D7** (row and decisions summary), **§5.8** (table rows; new amendment block: business overhead outside Contribution Profit, separate `FullyAllocatedProfit` and `UnallocatedOverhead`, new formula version from the release date) and **§5.10** (no default basis; reason codes; conservation); test T14 aligned.
+**Verified nuance.** [F] The revenue-share default was a spec decision (D7) and a hard-coded `AllocationBasis.NET_REVENUE` in `calc_engine.formulas.expense_pools.allocate_account_level_expense_pool`, which has **no production caller** (tests only: `test_expense_pools.py`, `test_scenarios.py`); the period P&L sums whole pools (`cfo.pnl.inputs.resolve_expense_pool_total`) and §5.8 subtracts `AdvertisingCosts` and `OtherAllocatedCosts` in full. **This is a deliberate engine behaviour change, not only a spec edit**: basis required; an allocation outcome with reason codes (`BASIS_NOT_SELECTED`, `NO_REVENUE_FOR_PERIOD`, `ZERO_DENOMINATOR`, `UNITS_UNAVAILABLE`, `INVALID_BASIS`); business overhead moved out of Contribution Profit.
+**Launch requirement.** The A1–A10 regression suite in `docs/specs/expense-tracker.md` §12 (no allocation by default; explicit revenue-share and unit allocation; missing/invalid data; zero denominators; rounding/conservation; reconciliation; tenant isolation and authorization; behaviour when the basis changes under the historical-result policy) must pass before any ledger-derived margin is shown (gate G2). None has been run.
+**Decided 2026-10-15.** Account-level **advertising and storage** pools **are covered** (Q14). Release date: first production deploy after G7 passes producing `is_trial=false` results (Q15/Q28), placeholder until then. Existing `expense.other` rows stay untouched under their original formula version, no migration (Q16).
+**Conflicts.** D7 was an approved decision of record; it is amended here at the owner's instruction.
+
+---
+
+## EXP-07 — Reversal of "removed by design" (part of Register D1) — APPROVED (product)
+
+**Decision.** The `cfo-agent.md` "Removed by design" decision is reversed **for expenses only**; `cash_event` (`settlement.receipt`) and `supplier_quote` (`supplier.quote`) stay `manual_adjustment` field types.
+**Evidence.** [F] `docs/specs/cfo-agent.md` line 113 (original text: earlier drafts' `expense_entry`, `cash_event`, `supplier_quote` tables "duplicated `manual_adjustment` and fragmented the guarantee that manual input never overwrites source data").
+**Rationale.** See EXP-01. The protected guarantee is kept by append-only grants, FORCE RLS and the feed contract.
+**Affected components.** Expense ledger, feed, `compute_period_pnl` inputs, `deterministic-engine.md` §5.8/§5.10, legacy `/cfo/expenses`.
+**Risks / migration.** As EXP-01; legacy rows compatibility (X1).
+**Amendment applied 2026-10-15:** `cfo-agent.md` "Removed by design" paragraph and the expense row of its table.
+
+---
+
+## EXP-08 — Currency — APPROVED (product)
+
+**Decision.** **INR in integer paise only.** No general `currency` field unless the engine is expanded by a separately approved decision. [F] All engine money is signed `BIGINT` paise (CLAUDE.md; `calc_engine.types.Paise`); no currency column exists anywhere in the money shapes. The earlier drafts' `currency` field is dropped.
+
+---
+
+## ST-01 — Show "Not entered" for absent advertising spend — APPROVED as a SEPARATE task
+
+Not an Expense Tracker feature and not to be bundled with the ledger. Display only: the engine's documented rule that absent `expense.advertising` resolves to zero (`deterministic-engine.md` §5.8 "Absent `expense.advertising` — CONFIRMED") is **unchanged**. Verified locations, smallest future change and regression tests: `docs/specs/expense-tracker.md` Appendix D. No code was changed.
+
+---
+
+## Owner decisions on open questions — 2026-10-15
+
+| Spec Q | Decision | Effect |
+|---|---|---|
+| Q2 | EXP-03 follow-up amendments (registry key and effect class, §6.33 sentence, classifier route) approved **as spec text only**. The "Q2 expense-confirmation flow" came from a decisions document drafted in chat; no repo source. | Applied to `ceo-agent-orchestration.md` §6.11/§6.33. CEO code and tests unchanged until implementation is approved; G6 remains the gate |
+| Q4 | `financials.adjust` covers ledger writes (clarification) | Applied to `auth.md` §5.2 and R1; no key change |
+| Q14 | Yes: EXP-06 covers account-level advertising and storage pools | Engine D7, §5.8 rows and T14 text updated; engine code unchanged |
+| Q15 | Release date = first production deploy after G7 passes producing `is_trial=false` results (refined by Q28) | Placeholder `<RELEASE_DATE: placeholder — product owner to set>` until then |
+| Q16 | Existing `expense.other` rows untouched under their original formula version; no migration; new entries use the ledger from the release date | Spec §6.13 rule 7 |
+| Q18 | Only ST-01 (display) approved; no engine change | Formula rule unchanged |
+| Q19 | Remains with legal/CA review | Open |
+| Q20 | Draft creation requires `financials.adjust` | Spec §7; no new key |
+| Q21 | Signed ledger amount: cost positive; refund/credit note negative, referencing the original. Consistent with the locked signed-paise rule (a ledger-local convention; the engine spec does not state a cost sign) | Spec §5.1; G2 test of the feed sign mapping in both directions |
+| Q25 | EXP-01…EXP-08 supersede readiness-review 2.8, 6.6 and 2A.13 for the **expense input part only**; OP1 stays locked (confirmed) | Marked in `phase-1-readiness-review.md` |
+| Q24 | A refund or credit note belongs to the period of its own date, linked to the original expense; the original period is not restated | Spec §5.1 |
+| Q27 | Spend not attributable to a SKU stays business-level by default; validated campaign/ASIN spend stays SKU-level. Unallocated ad and storage spend is its own labelled line beside contribution profit; total profit includes it. Pricing recommendations and loss-making-SKU alerts carry an "unallocated spend excluded" caveat; what-if uses the fully loaded figure; seller-facing release note | Spec §6.13 rule 9, AC13, AC14; engine §5.8 amendment; consumer specs not edited (B.11); validation rule decided (Q29) |
+| Q28 | G7 results use a distinct trial formula version, `is_trial=true`; never in seller history; never a restatement baseline | Spec §6.13 rule 10, AC12 |
+| Q29 | A campaign/ASIN spend record is **SKU-level only if** (a) it comes from a **validated import or integration**, (b) the source data carries an **explicit ASIN or SKU identifier**, and (c) that identifier **maps to a SKU in the seller's catalog**. Campaign-level spend **without an ASIN breakdown stays business-level**. **Manual entries are never SKU-level by default**; a seller may tag a SKU on the form and the entry **stays flagged manual**. **Unmapped identifiers go to a review queue and count as business-level until resolved.** | Spec §6.13 rule 9, AC16, F6; prerequisite for G2, not G1 |
+| Q30 | The **engine spec owns the total-profit formula**; this spec states only the invariant that **changing the allocation method never changes total profit** (tested under G2, F5). `is_trial` is a **boolean on the result record**, **excluded from every seller-facing read at the read layer**; the **name of the trial formula version is an engine-spec decision**. Q29 and Q30 are **prerequisites for G2, not G1**. | Spec §6.13 rule 11, AC15, F5; engine spec to define the formula and the trial version name |
+| Launch condition | Launch condition for the ledger feed (decided 2026-10-15): the pricing, alert and what-if consumer specs must carry the unallocated-spend caveats before release (Appendix B.11). | Spec G2, §6.13 rule 12, Appendix B.11 |
+
+All of the above is documentation only. Nothing was implemented, committed, pushed or deployed.
+
+---
+
+## Items deliberately left open (not approved)
+Default category list; review-status values and transitions; duplicate thresholds; settlement-overlap wording; CSV template; retention period and storage; multi-organization details beyond EXP-03; recurring materialisation; legacy-row compatibility (X1); GST/ITC/TCS wording (CA); the concrete formula release date (defined by event); raw-CSV retention (legal/CA, Q19). See `docs/planning/expense-tracker/02-decision-register.md` and spec §13.
