@@ -267,5 +267,35 @@ Documentation only. The engine **TP1–TP10 test list** and **§5.18.3 multi-SKU
 
 ---
 
+## Round 9 decisions — 2026-10-16
+
+Recorded before the Step 3–5 build. The build is authorised up to the gates; nothing here sets the release date (Q15) or passes a gate.
+
+| # | Item | Decision | Reference |
+|---|---|---|---|
+| R9-1 | Dashboard route | Route `/dashboard/cfo/expenses` (proposal N1), linked from the CFO page; the sidebar is unchanged; no new top-level product or agent | `12-dashboard-inspection.md` §2 |
+| R9-2 | Session and auth | No change to the session response or auth. The server enforces `financials.adjust`; the UI shows write controls and handles 403 gracefully | `12` §6 |
+| R9-3 | Design system | "Cyber-Luxe" does not exist in the repo; reuse the existing design system and components documented in `docs/design/` and the codebase; invent no new one | `12` §3 |
+| R9-4 | Categories (Q5) | Option A of `13-step3-proposals.md` §1: default cost class per category, overridable on the record. "Direct product costs" is omitted (COGS stays `cogs_per_unit`); Storage is added. Legacy rows stay untouched and are shown read-only, no migration (Q16) | `13` §1 |
+| R9-5 | X2 bounds | The implementer proposes conservative string, row and amount limits, derived from existing code where it exists, recorded in `15-build-notes.md` for owner review (not approved until reviewed) | `13` §2 |
+| R9-6 | Ledger migration owner | `packages/calc-engine`, following the `manual_adjustment` and `reconciliation_*` precedent and the app-role grants pattern | `13` §3 |
+| R9-7 | "True Margin" | Contribution margin is the headline, with total profit beside it | `13` §4 |
+| R9-8 | `UNITS` with a missing returned quantity | Unavailable, not zero | `11-engine-step-notes.md` note 1 |
+| R9-9 | Sign convention | The ledger stores signed amounts as approved; the feed maps them to the engine's positive cost magnitudes (implemented and tested). `data-foundation.md` §1.1 describes ingested deductions, not engine inputs | `11` note 12 |
+| R9-10 | G6 (draft-from-chat) | Not passed. The draft-from-chat slice is not built and registry, effects and classifier code are not edited | spec §10 G6 |
+
+### Errata added in Round 9 (the decision record takes precedence over the frozen spec)
+| # | Topic | Where the frozen spec / documents say otherwise | Later decision |
+|---|---|---|---|
+| E14 | Categories (Q5) | Frozen spec §13 Q5 / P4 "contents open" | Closed by R9-4 (Option A; Storage added; no "Direct product costs") |
+| E15 | `data-foundation.md` §1.1 sign wording | §1.1: "Signed from the seller's perspective. Revenue positive, deductions negative" | That sentence describes **ingested** line components, not engine inputs; the engine takes positive cost magnitudes and the ledger maps its signed amounts to them (R9-9). `data-foundation.md` is not edited |
+| E16 | Navigation | Frozen spec describes the dashboard without a route; `09-implementation-kickoff.md` and `12-dashboard-inspection.md` list N1–N3 as PROPOSED | N1 approved (R9-1) |
+| E17 | Permission awareness in the UI | `12-dashboard-inspection.md` §6 proposes exposing the permission set | Not adopted; no session change (R9-2) |
+| E18 | Migration owner | `13-step3-proposals.md` §3 lists options A–D | Option A, calc-engine (R9-6) |
+| E19 | "True Margin" | `13` §4 options A–C | Option A (R9-7) |
+| E20 | `UNITS` and missing returns | `11-engine-step-notes.md` note 1 asks for confirmation | Confirmed (R9-8) |
+
+---
+
 ## Items deliberately left open (not approved)
 Default category list; review-status values and transitions; duplicate thresholds; settlement-overlap wording; CSV template; retention period and storage; multi-organization details beyond EXP-03; recurring materialisation; legacy-row compatibility (X1); GST/ITC/TCS wording (CA); the concrete formula release date (defined by event); raw-CSV retention (legal/CA, Q19). See `docs/planning/expense-tracker/02-decision-register.md` and spec §13.
