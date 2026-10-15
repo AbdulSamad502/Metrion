@@ -70,6 +70,29 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/expense-ledger": {
+   "query": [
+    "category",
+    "channel_scope",
+    "cost_class",
+    "date_from",
+    "date_to",
+    "include_voided",
+    "limit",
+    "offset",
+    "payment_status",
+    "review_state"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/expense-ledger/categories": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/expense-ledger/{expense_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/expenses": {
    "query": [
     "category",
@@ -308,6 +331,48 @@
   "POST /api/v1/cfo/cash-reconciliation": {
    "body": {
     "$ref": "#/components/schemas/CashReconciliationHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger": {
+   "body": {
+    "$ref": "#/components/schemas/CreateRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/{expense_id}/correct": {
+   "body": {
+    "$ref": "#/components/schemas/CorrectRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/{expense_id}/payment": {
+   "body": {
+    "$ref": "#/components/schemas/PaymentRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/{expense_id}/refund": {
+   "body": {
+    "$ref": "#/components/schemas/RefundRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/{expense_id}/review": {
+   "body": {
+    "$ref": "#/components/schemas/ReviewRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/{expense_id}/void": {
+   "body": {
+    "$ref": "#/components/schemas/VoidRequest"
    },
    "query": [],
    "requiredQuery": []
@@ -1303,6 +1368,125 @@
    "title": "ConfirmHintBody",
    "type": "object"
   },
+  "CorrectRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "amount_paise": {
+     "title": "Amount Paise",
+     "type": "integer"
+    },
+    "category": {
+     "title": "Category",
+     "type": "string"
+    },
+    "channel_scope": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Channel Scope"
+    },
+    "cost_class": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Cost Class"
+    },
+    "description": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Description"
+    },
+    "effective_date": {
+     "format": "date",
+     "title": "Effective Date",
+     "type": "string"
+    },
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Reason"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "treatment": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Treatment"
+    },
+    "vendor": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Vendor"
+    }
+   },
+   "required": [
+    "effective_date",
+    "category",
+    "amount_paise"
+   ],
+   "title": "CorrectRequest",
+   "type": "object"
+  },
   "CostEntryHttpRequest": {
    "description": "One `cogs_per_unit` weighted-average-cost data point (\u00a77.2.1) \u2014 `CostEntry`'s own shape.",
    "properties": {
@@ -1461,6 +1645,123 @@
     }
    },
    "title": "CreateNicheBriefRequest",
+   "type": "object"
+  },
+  "CreateRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "amount_paise": {
+     "title": "Amount Paise",
+     "type": "integer"
+    },
+    "category": {
+     "title": "Category",
+     "type": "string"
+    },
+    "channel_scope": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Channel Scope"
+    },
+    "cost_class": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Cost Class"
+    },
+    "description": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Description"
+    },
+    "effective_date": {
+     "format": "date",
+     "title": "Effective Date",
+     "type": "string"
+    },
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "state": {
+     "default": "confirmed",
+     "enum": [
+      "draft",
+      "pending_review",
+      "confirmed"
+     ],
+     "title": "State",
+     "type": "string"
+    },
+    "treatment": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Treatment"
+    },
+    "vendor": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Vendor"
+    }
+   },
+   "required": [
+    "effective_date",
+    "category",
+    "amount_paise"
+   ],
+   "title": "CreateRequest",
    "type": "object"
   },
   "DecisionKind": {
@@ -2533,6 +2834,52 @@
    "title": "NicheDecisionBody",
    "type": "object"
   },
+  "PaymentRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    },
+    "paid_amount_paise": {
+     "anyOf": [
+      {
+       "maximum": 9999999999999.0,
+       "minimum": 0.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Paid Amount Paise"
+    },
+    "status": {
+     "enum": [
+      "unpaid",
+      "partially_paid",
+      "paid",
+      "unknown"
+     ],
+     "title": "Status",
+     "type": "string"
+    }
+   },
+   "required": [
+    "status"
+   ],
+   "title": "PaymentRequest",
+   "type": "object"
+  },
   "PeriodComparisonHttpRequest": {
    "description": "Two already-persisted `metric_result` ids for the SAME `metric_code` \u2014 e.g. this\nperiod's `CONTRIBUTION_PROFIT` vs. last period's. Never accepts raw figures; the whole\npoint of this route (cfo-agent.md \u00a77.4.4's \"once built\" rule, twinkly-mapping-canyon.md\nCP A3) is to compare two figures the engine has ALREADY computed and persisted.",
    "properties": {
@@ -3414,6 +3761,51 @@
    "title": "RecoveryIn",
    "type": "object"
   },
+  "RefundRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "amount_paise": {
+     "title": "Amount Paise",
+     "type": "integer"
+    },
+    "description": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Description"
+    },
+    "effective_date": {
+     "format": "date",
+     "title": "Effective Date",
+     "type": "string"
+    },
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    }
+   },
+   "required": [
+    "effective_date",
+    "amount_paise"
+   ],
+   "title": "RefundRequest",
+   "type": "object"
+  },
   "RequestPriceScenarioRequest": {
    "properties": {
     "competitor_url_id": {
@@ -3513,6 +3905,38 @@
     "resolution_note"
    ],
    "title": "ResolveBody",
+   "type": "object"
+  },
+  "ReviewRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    },
+    "state": {
+     "enum": [
+      "draft",
+      "pending_review",
+      "confirmed"
+     ],
+     "title": "State",
+     "type": "string"
+    }
+   },
+   "required": [
+    "state"
+   ],
+   "title": "ReviewRequest",
    "type": "object"
   },
   "ReviewResearchRequest": {
@@ -4366,6 +4790,35 @@
     }
    },
    "title": "UpdateSellerProductRequest",
+   "type": "object"
+  },
+  "VoidRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    },
+    "reason": {
+     "maxLength": 500,
+     "minLength": 1,
+     "title": "Reason",
+     "type": "string"
+    }
+   },
+   "required": [
+    "reason"
+   ],
+   "title": "VoidRequest",
    "type": "object"
   }
  }

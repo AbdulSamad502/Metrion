@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.v1 import ceo, ceo_hub, cfo, ci, cmo, onboarding, ops, pi, ping, session
+from backend.api.v1 import ceo, ceo_hub, cfo, ci, cmo, expense_ledger, onboarding, ops, pi, ping, session
 from backend.config import (
     api_max_body_bytes,
     api_docs_enabled,
@@ -171,6 +171,7 @@ def create_app() -> FastAPI:
     app.include_router(clerk_webhooks.router)
     app.include_router(ci.router)
     app.include_router(cfo.router)
+    app.include_router(expense_ledger.router)
     app.include_router(pi.router)
     app.include_router(cmo.router)
     app.include_router(ceo_hub.router)
