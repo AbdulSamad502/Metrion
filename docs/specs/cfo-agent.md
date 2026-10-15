@@ -268,6 +268,8 @@ Statistical only: z-score, period-over-period delta, percentile thresholds over 
 4. Every recommendation states its assumptions: COGS basis, fee reference version, GST treatment, and what was unavailable.
 5. Recommend-only (C7). No marketplace write, ever.
 
+**Q27 caveat, required before release of the ledger feed** (approved 2026-10-15, `docs/decisions/phase1-decisions.md`; engine `deterministic-engine.md` §5.8.1; `expense-tracker.md` §6.13 rule 9, AC13, B.11). Pricing recommendations (the margin curve and every price scenario) and loss-making-SKU alerts that CFO produces or feeds must state that **unallocated advertising and storage spend is excluded from SKU contribution**. Wherever CFO shows contribution profit or margin (the period P&L, the pricing curve, the strategic briefing, the Financial Health Band), unallocated advertising, storage and overhead appear as **their own labelled lines beside contribution profit**, and **total profit includes them**. A **seller-facing release note** is required when the contribution-profit definition changes (the new formula version takes effect at the release date). This paragraph changes no formula and no behaviour; it records what must be true before the ledger feed is released.
+
 ### 6.8 Registered direct execution paths (B4)
 
 Per the `auth.md` §5.2 guardrail, every direct path is enumerated here, names one action and one key, and accepts no free-form input. **There is no generic "invoke CFO" endpoint.**

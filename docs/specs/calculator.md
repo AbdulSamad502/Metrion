@@ -249,3 +249,7 @@ Acceptance (additive): **B-AC1** slices tile 0..10000 and end in the profit slic
 |---|---|---|
 | Q8 | Should the in-app calculator pre-fill from the tenant's own data (for example COGS from a `supplier.quote`)? Not done: it would blur "hypothetical" with "recorded". | Future workflow |
 | Q9 | Should a per-user rate limit apply to `/pnl-scenario`? Entitlement gating exists; the endpoint is cheap but unmetered. | `entitlement.md` |
+
+### 14.9 Q27 caveat, required before release of the ledger feed
+
+Approved 2026-10-15 (`docs/decisions/phase1-decisions.md`; engine `deterministic-engine.md` §5.8.1; `expense-tracker.md` §6.13 rule 9, AC13, B.11). When the what-if is seeded from the seller's actual figures it uses the **fully loaded** figure (engine total profit, which includes unallocated advertising, storage and overhead), not contribution profit alone; a result that excludes unallocated spend must say so. A **seller-facing release note** is required when the contribution-profit definition changes. This subsection changes no formula, no request or response shape and no behaviour of the calculator described above.
