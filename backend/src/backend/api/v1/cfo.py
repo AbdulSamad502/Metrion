@@ -973,6 +973,18 @@ def _period_pnl_metric_result_to_dict(result: Any) -> dict[str, object]:
     return base
 
 
+def _period_pnl_advertising_fields(outcome: Any) -> dict[str, object]:
+    """ST-01 (display only): `advertisingEntered` is False when the caller supplied no advertising entry
+    for this calculation (the figure still resolves to a zero term in the engine, unchanged);
+    `advertisingCostsPaise` is the total the engine used, or None when not entered. Rows saved in
+    the legacy expense tracker are not read by this route, so "not entered" means "not entered
+    in this calculation"."""
+    return {
+        "advertisingEntered": outcome.advertising_entered,
+        "advertisingCostsPaise": outcome.advertising_costs_paise,
+    }
+
+
 @router.post("/pnl")
 def post_period_pnl(
     body: PeriodPnlHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)
@@ -1025,6 +1037,7 @@ def post_period_pnl(
         "returnRatePct": _period_pnl_metric_result_to_dict(outcome.return_rate_pct),
         "marketplaceFeeFlags": list(outcome.marketplace_fee_flags),
         "dataRequestId": str(outcome.data_request_id) if outcome.data_request_id is not None else None,
+        **_period_pnl_advertising_fields(outcome),
     }
 
 
@@ -1102,6 +1115,7 @@ def post_period_pnl_for_tenant(
                 "dataRequestId": (
                     str(outcome.pnl.data_request_id) if outcome.pnl.data_request_id is not None else None
                 ),
+                **_period_pnl_advertising_fields(outcome.pnl),
             }
         ),
         "assembledLineCount": outcome.assembled_line_count,

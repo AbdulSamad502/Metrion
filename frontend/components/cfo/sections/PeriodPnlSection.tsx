@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Section } from "@/components/ui/Section";
 import { apiFetch, type PeriodPnlResponse } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
-import { CfoMetricResultRow, ComponentRowsEditor, EditableComponentRow, ErrorText, Field, SelectInput, SubmitButton, TextInput, componentRowsToPayload, toPaise } from "@/components/cfo/primitives";
+import { CfoMetricResultRow, ComponentRowsEditor, EditableComponentRow, ErrorText, Field, SelectInput, SubmitButton, TextInput, componentRowsToPayload, rupees, toPaise } from "@/components/cfo/primitives";
 
 // --- 2. Period P&L (POST /cfo/pnl) --------------------------------------------------
 
@@ -125,6 +125,9 @@ export function PeriodPnlSection({ getToken }: { getToken: () => Promise<string 
             <CfoMetricResultRow label="Contribution Margin %" result={result.marginPct} />
             <CfoMetricResultRow label="Fee Ratio %" result={result.feeRatioPct} />
             <CfoMetricResultRow label="Return Rate %" result={result.returnRatePct} />
+            <div className="t-body-sm" data-testid="pnl-advertising" style={{ color: "var(--text-6)" }}>
+              {result.advertisingEntered ? `Advertising: ${rupees(result.advertisingCostsPaise)}` : "Advertising: Not entered in this calculation"}
+            </div>
             {result.marketplaceFeeFlags.length > 0 && (
               <div className="t-body-sm" style={{ color: "var(--negative)" }}>
                 Duplicate-fee-candidate warnings: {result.marketplaceFeeFlags.join(", ")}
