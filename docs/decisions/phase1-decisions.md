@@ -233,5 +233,33 @@ Name: ____________________    Date: ____________________
 
 ---
 
+## Round 7 approvals — 2026-10-16
+
+Documentation only; nothing implemented. **Q31** amortization (including `AMORTIZATION_INVALID` to the review queue), **Q32** per-order/per-unit templates (including `NO_ORDERS_IN_PERIOD`, meaning the amount is unavailable, not zero) and **Q34** ledger CSV export (fields = all ledger fields including treatment, review status, void status and source reference; retention stays with legal/CA) are approved outright. Approval does not change build priority: they stay in kickoff Step 5. The engine spec marks Round 6 items `APPROVED (Round 6, 7c46d9d)` and these three `APPROVED (Round 7, 2026-10-16)`.
+
+## Errata to the frozen spec (`docs/specs/expense-tracker.md` at `e91136a`)
+
+**This decision record takes precedence over the frozen spec wherever they differ.** The frozen spec is not edited. Differences found as of 2026-10-16:
+
+| # | Topic | Where the frozen spec says otherwise | Later decision (takes precedence) |
+|---|---|---|---|
+| E1 | Review states (Q6/D5) | §6.12 CSV ("imported rows `needs_review`"); §3 assumption [A]; §13 Q6 ("proposed `needs_review`, `confirmed`, `rejected`") and Q24 ("imported rows `needs_review`") | States are `draft`, `pending_review`, `confirmed`, `voided`; a correction is a new linked entry. `needs_review` reads as `pending_review`; `rejected` no longer exists (use `voided` or a linked correction) |
+| E2 | calculator.md merged | Header "Prerequisites and related specs": `calculator.md` "on branch `feat/pnl-calculator-integration`, not merged here" | Merged on `feat/pnl-calculator-and-expense-tracker` (merge commit `e26984e`) |
+| E3 | Engine items now approved | §10 G2 row ("PROPOSED items awaiting product owner approval"), §13 Q30 row, and the Appendix B.3 "remaining engine work" | Engine items 1–10 approved in Round 6 (`7c46d9d`); the engine spec carries the approvals. Still PROPOSED: TP1–TP10 tests, the §5.17 function name, §5.18.3 mechanics and tests |
+| E4 | Q31–Q34 no longer PROPOSED | §13 Q31, Q32, Q33, Q34 ("PROPOSED, awaiting product owner approval") | Q33 bases approved in Round 6; Q31, Q32, Q34 approved outright in Round 7 (2026-10-16). Build priority unchanged (kickoff Step 5). Q34 export retention stays with legal/CA |
+| E5 | Vendor text validation (Q22/X8) | §7.1 `vendor` row ("proposed validation"), §7/§12 "amount-like vendor rejected", §13 Q22 ("exact pattern and false-positive handling") | Reject vendor text containing a currency symbol or an amount-like number such as `1,200.50`; short numerals allowed; show an edit prompt |
+| E6 | Entitlement check (X9) | §8 ("`agent.cfo` and the CFO entitlement, as in `put_expense` [PROPOSED]") | Reuse the existing CFO entitlement gate (decided) |
+| E7 | `agent_run` for expense writes (X3/Q12) | §8 item 8 "[OPEN: X3]" and §13 Q12 | One `agent_run` row per expense write (decided) |
+| E8 | Legacy tracker (X1/Q7) | §10 G1 row ("X1 decided") and §13 Q7 ("extend, migrate or retire") | Keep the legacy `PUT/GET /cfo/expenses` path until cut-over (decided); cut-over mechanics remain open |
+| E9 | Write-validation bounds (X2) | §2 "Still open" list and §13 Q23 (X2) | Engineering proposes bounds from the legacy validation; no numbers are invented. Open until that proposal exists |
+| E10 | Recurring entries (X10) | §13 Q24 ("recurring-expense materialisation") | Materialized recurring entries start as `pending_review` (decided) |
+| E11 | Storage, packaging, logistics pools | §6.2 cost classes ("direct (packaging, inward freight ...)") and the engine registry fields `expense.packaging|storage|logistics` | A `StorageCosts` term is added; there are no separate packaging or logistics pools — those costs enter through the ledger (Round 6) |
+| E12 | ST-01 wording and shape | Appendix D, §1 ST-01 row, §6.6 and AC5 ("Not entered"; one additive field `advertising_entered`) | Implemented on branch `fix/expense-adv-not-entered` (`44a39c0`, not merged into the combined branch) as "Advertising: Not entered in this calculation" with two additive fields, `advertisingEntered` and `advertisingCostsPaise`. Reason: rows saved through `PUT /cfo/expenses` are not read by the period P&L |
+| E13 | Planning documents | `09-implementation-kickoff.md` (ST-01 label "Not entered"; Step 3 prerequisites list Q6/X1/X2/X3/X9 as open) and `10-g1-approval-table.md` §A "Needs your approval" column | Superseded by this record where they differ; §C/§D of `10-g1-approval-table.md` hold the current statuses |
+
+The earlier erratum dated 2026-10-16 (calculator.md merged) is E2 above.
+
+---
+
 ## Items deliberately left open (not approved)
 Default category list; review-status values and transitions; duplicate thresholds; settlement-overlap wording; CSV template; retention period and storage; multi-organization details beyond EXP-03; recurring materialisation; legacy-row compatibility (X1); GST/ITC/TCS wording (CA); the concrete formula release date (defined by event); raw-CSV retention (legal/CA, Q19). See `docs/planning/expense-tracker/02-decision-register.md` and spec §13.
