@@ -98,7 +98,7 @@ These are **my recommendations**, not settled decisions. Each is listed again in
 | D4 | Profit basis | **Tax-exclusive throughout** — revenue ex-GST, fees ex-GST | Output GST is collected on the government's behalf, not earned. Fee GST is usually creditable. |
 | D5 | Fee GST treatment | Separate line: *"GST on fees (potentially creditable)"*, with a toggle to treat it as a cost | Respects §1.3 — we show it without ruling on ITC eligibility. |
 | D6 | TCS / TDS | **Cash-flow items, not P&L items.** Excluded from Contribution Profit | They are prepaid taxes recoverable against the seller's liability, not costs. Sellers routinely misread these as losses. |
-| D7 | Account-level cost allocation | By **net revenue share**, configurable; result always `DERIVED` | Revenue share is the least-wrong default for ads and storage. |
+| D7 | Account-level cost allocation | **Amended 2026-10-15 (EXP-06, `docs/decisions/phase1-decisions.md`).** Business-level overhead is **unallocated by default**. It is allocated only when the seller explicitly selects a supported basis (`NET_REVENUE`, `UNITS` or `ORDERS`) and the data for that basis is valid for the same period and channel scope; otherwise the amount stays unallocated and the reason is stated. Result always `DERIVED` and names its basis. *Previously: by net revenue share, configurable.* *Decided 2026-10-15 (owner, Q14): account-level advertising and storage pools are covered by this amendment — unallocated unless a basis is explicitly selected. Consequence: such spend no longer reduces SKU-level contribution by default; it is reported as unallocated with the reason. Not yet built.* | The earlier rationale ("revenue share is the least-wrong default for ads and storage") described a default the seller never chose; silently allocating business overhead hides it from contribution margin and invents an attribution. Effective for calculations from the approved release date (placeholder, owner to set); results before it keep their original formula version and are not restated. |
 | D8 | Rounding | Integer paise, half-up; allocations reconciled by **largest-remainder** | Components must sum exactly to their stated total. |
 
 ---
@@ -278,9 +278,9 @@ Marketplace-funded discounts appear in no term (R2).
 | `COGS` | Seller cost master, weighted average, effective-dated (D3) | `MANUAL` |
 | `MarketplaceFees` | `Σ[FEE where side = settlement, else invoice]`, tax-exclusive | `PROVISIONAL` |
 | `ShippingLogistics` | `Σ[LOGISTICS_FEE, SHIPPING_CHARGE(seller-borne)]` | `PROVISIONAL` |
-| `AdvertisingCosts` | Seller-entered; allocated if account-level (D7) | `MANUAL` / `DERIVED` |
+| `AdvertisingCosts` | Seller-entered; account-level allocation per D7 as amended (covered, Q14) | `MANUAL` / `DERIVED` |
 | `ReturnRTOLosses` | §5.7 | `DERIVED` |
-| `OtherAllocatedCosts` | Seller-entered; allocated (D7) | `MANUAL` / `DERIVED` |
+| `OtherAllocatedCosts` | Seller-entered costs attributed directly to a scope. **Business-level overhead is not part of this term from the release date** (see amendment below) | `MANUAL` / `DERIVED` |
 
 **Absent `expense.advertising` — CONFIRMED (Category E).** Unlike `COGS` (a cost every sold
 unit definitely incurred, whether or not its value is known — absence is `UNAVAILABLE`),
@@ -354,6 +354,15 @@ ContributionMargin% = ContributionProfit / NetRealizedRevenue × 100
 
 Undefined — never zero — when `NetRealizedRevenue = 0`.
 
+**Amendment 2026-10-15 (EXP-06) — contribution margin versus fully allocated profitability.** Business-level overhead (rent, salaries, software, utilities and similar) is **not** a term of `ContributionProfit`. It is reported separately:
+
+```
+FullyAllocatedProfit = ContributionProfit − AllocatedOverhead        (shown with its allocation basis)
+UnallocatedOverhead  = BusinessOverhead − AllocatedOverhead         (shown, with the reason it was not allocated)
+```
+
+`AllocatedOverhead` is non-zero only for overhead the seller has explicitly chosen to allocate on a valid basis (§5.10). Changing overhead never changes `ContributionProfit`. **Account-level advertising and storage (owner decision Q14, 2026-10-15) follow the same pattern:** the part allocated on an explicitly selected basis enters the scoped `AdvertisingCosts`/storage terms; the rest is reported as unallocated, with the reason, and is never zero-filled. An account-level adjustment that exists but is unallocated is **not "absent"** for the `AdvertisingCosts = 0` rule below. **Decided 2026-10-15 (owner, Q27).** Advertising or storage spend that cannot be attributed to a SKU stays **business-level** by default; spend from validated campaign/ASIN records stays **SKU-level**. The unallocated amount is reported as its own labelled lines, `UnallocatedAdvertising` and `UnallocatedStorage`, **beside** `ContributionProfit` (which includes only the allocated or SKU-level portion). **Total profit includes the unallocated lines** (owner). *Decided 2026-10-15 (Q30): this spec owns the total-profit formula and its relation to `FullyAllocatedProfit` and the overhead lines above; it is **not yet written here**. Required invariant (stated in `expense-tracker.md`): changing the allocation method never changes total profit.* Each line is labelled and carries its reason. Pricing recommendations and loss-making-SKU alerts must carry a caveat that unallocated spend is excluded; the what-if feature uses the fully loaded figure. *SKU-level rule (Q29, decided 2026-10-15):* a campaign/ASIN spend record is SKU-level only if it comes from a validated import or integration, carries an explicit ASIN or SKU identifier in the source data, and that identifier maps to a SKU in the seller's catalog; campaign-level spend without an ASIN breakdown stays business-level; manual entries are never SKU-level by default (a seller-tagged SKU stays flagged manual); unmapped identifiers go to a review queue and count as business-level until resolved. Not yet built. *Trial results (Q28):* G7 validation uses a distinct trial formula version with `is_trial=true`; such results never appear in seller history or seller-visible reports and never serve as a restatement baseline. (`is_trial` is a boolean on the result record (`metric_result`) and is excluded from every seller-facing read at the read layer — Q30, decided 2026-10-15. The **name of the trial formula version is an engine-spec decision, not yet made**.) This changes the formula and therefore takes a **new formula version**, effective from the approved release date (placeholder, owner to set). Results calculated before that date keep their original formula version, configuration version and inputs and are **not restated**; the formula version is shown on every result (EXP-02). A later recalculation of a past period is a separate, explicit restatement producing a linked, labelled result, never an overwrite. *Current code still implements the previous behaviour until this amendment is built; no engine code was changed when it was written.*
+
 ### 5.9 Tax treatment (D4, D5, D6)
 
 **Excluded from Contribution Profit:**
@@ -380,10 +389,12 @@ TCS and TDS appear in cash-flow and settlement reconciliation views only, where 
 allocated_cost(line) = pool_amount × ( NetRealizedRevenue(line) / Σ NetRealizedRevenue(pool_scope) )
 ```
 
-- Allocation basis is configurable: `NET_REVENUE` (default) · `UNITS` · `ORDERS`.
+- **Amended 2026-10-15 (EXP-06).** There is **no default basis**: allocation happens only when the seller has explicitly selected `NET_REVENUE`, `UNITS` or `ORDERS` and the data for that basis is valid for the same period and channel scope.
+- If no basis is selected, or the data is absent, invalid or unusable (including a zero denominator), the amount stays **unallocated** and the result carries a reason (`BASIS_NOT_SELECTED`, `NO_REVENUE_FOR_PERIOD`, `ZERO_DENOMINATOR`, `UNITS_UNAVAILABLE`, `INVALID_BASIS`). It is never zero-filled and never distributed silently.
+- Conservation: allocated + unallocated always equals the pool.
 - Every allocated figure is `DERIVED` and names its basis on display.
 - Remainders are distributed by **largest remainder** so allocations sum exactly to the pool (D8).
-- Lines with zero or negative net revenue are excluded from a `NET_REVENUE` basis and reported as unallocated.
+- Lines with zero or negative net revenue are excluded from a `NET_REVENUE` basis and reported as unallocated, with the reason.
 
 ### 5.11 Rounding (D8)
 
@@ -1545,7 +1556,7 @@ The engine is accepted when all hold.
 | T11 | Cancellation after dispatch | Revenue reversed; forward logistics retained (E15) |
 | T12 | SKU with no COGS record | Contribution Profit `UNAVAILABLE`; Net Revenue still reported (E9, AC8) |
 | T13 | SKU cost changed mid-period | Each line uses weighted average at its `document_date` (E11) |
-| T14 | Account-level ad spend ₹10,000 across 3 SKUs | Allocated by net revenue share; parts sum exactly to ₹10,000 (AC7) |
+| T14 | Account-level ad spend ₹10,000 across 3 SKUs, seller has **explicitly selected** `NET_REVENUE` | Allocated by net revenue share; parts sum exactly to ₹10,000 (AC7). *Amended 2026-10-15 (EXP-06): with no basis selected the amount stays unallocated with reason `BASIS_NOT_SELECTED`; account-level advertising is covered (owner decision Q14, 2026-10-15).* |
 | T15 | Ad spend with zero net revenue in scope | Reported unallocated, not dropped (E19) |
 | T16 | Interstate row charging CGST+SGST | Quarantined by `V-TAX-001`; excluded; disclosed (AC11) |
 | T17 | Amazon `Platform Fee` = `Marketplace Fee` = ₹50 | Counted once; both disclosed; flagged `V-FEE-002` (E12) |
@@ -1586,7 +1597,7 @@ The engine is accepted when all hold.
 | D4 | Profit basis | Tax-exclusive throughout. |
 | D5 | GST on fees | Separate "potentially creditable" line, with a toggle for sellers who cannot claim ITC. |
 | D6 | TCS / TDS | Excluded from Contribution Profit; shown in cash-flow views only. |
-| D7 | Allocation basis | Net revenue share by default; configurable. |
+| D7 | Allocation basis | **Amended 2026-10-15 (EXP-06):** no default; business-level overhead unallocated unless the seller selects a basis; see §5.10. *(Previously: net revenue share by default; configurable.)* |
 | D8 | Rounding | Integer paise, half-up, largest-remainder reconciliation. |
 
 ### Matters needing your attention

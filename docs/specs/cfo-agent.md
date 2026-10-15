@@ -110,11 +110,13 @@ cash_view (                               -- DERIVED read model. Not a store, no
 
 **Provenance grain.** `engine_result_ref` identifies **one computed figure**, not one row. A view exposing several computed figures carries one reference per figure; AC1b is satisfied per figure, never per row.
 
-**Removed by design.** Earlier drafts defined `expense_entry`, `cash_event` and `supplier_quote` as CFO-owned tables. They duplicated `manual_adjustment` and fragmented the guarantee that manual input never overwrites source data. All three are now `manual_adjustment` field types:
+**Removed by design — amended 2026-10-15 for expenses (EXP-01, EXP-07; `docs/decisions/phase1-decisions.md`).** Earlier drafts defined `expense_entry`, `cash_event` and `supplier_quote` as CFO-owned tables. They duplicated `manual_adjustment` and fragmented the guarantee that manual input never overwrites source data. `cash_event` and `supplier_quote` **remain** `manual_adjustment` field types. **The decision is reversed for expenses only:** `expense_entry` is reinstated as a dedicated **append-only expense ledger**, specified in `docs/specs/expense-tracker.md` and read by Brain 1 through an explicit contract (treatments `incremental`, `already_in_settlement`, `informational`).
+
+*Rationale.* `manual_adjustment` cannot hold a date, vendor, source reference, payment or review status or treatment; cannot edit across target and field; cannot delete; has no idempotency key; and its expense pools do not reach the period P&L. *Affected components.* The expense ledger and its feed, `compute_period_pnl` inputs, `deterministic-engine.md` §5.8/§5.10, the legacy `PUT/GET /cfo/expenses` route. *Guarantee kept.* Manual input still never overwrites source data: the ledger is append-only (no app-role UPDATE/DELETE), tenant-isolated with FORCE RLS, and feeds the engine only through the feed. Writes still require `financials.adjust` (no new permission key). Until the ledger cut-over (legacy compatibility is an open decision), the `expense.<category>` rows below remain the stored form.
 
 | Seller input | Stored as |
 |---|---|
-| Advertising spend, packaging, storage, logistics, other pools | `manual_adjustment` field `expense.<category>` (engine §7.2.1) |
+| Advertising spend, packaging, storage, logistics, other pools | `manual_adjustment` field `expense.<category>` (engine §7.2.1) — legacy form until the expense-ledger cut-over (`expense-tracker.md`) |
 | Settlement receipt correction where a report is missing or disputed | `manual_adjustment` field `settlement.receipt` (engine §7.2.1) |
 | Supplier quote (cost, MOQ, lead time, shipping, terms, reliability) | `manual_adjustment` field `supplier.quote` (engine §7.2.1) |
 | COGS, discount bearer, RTO outcome, cancellation flag, fee-GST toggle | `manual_adjustment` (engine §7.2.1, unchanged) |
