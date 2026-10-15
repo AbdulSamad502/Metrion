@@ -29,6 +29,60 @@ class MintedMetric:
     target_ref: str
 
 
+class _Minter:
+    def __init__(self, feed: LedgerFeedResult, ingestion_run_ids: Sequence[UUID | str], adapter_versions: Sequence[str],
+                 active_adjustment_ids: Sequence[UUID | str], computed_at: datetime, as_of_date: date | None) -> None:
+        self.feed = feed
+        self.cdv = derive_canonical_data_version(ingestion_run_ids, adapter_versions, active_adjustment_ids)
+        self.adjustments = tuple(str(a) for a in active_adjustment_ids)
+        self.computed_at = computed_at
+        self.as_of_date = as_of_date
+        self.out: list[MintedMetric] = []
+
+    def add(self, code: str, value: Paise | Unavailable, *, basis: str, target: str = TENANT_TARGET, exclusions: tuple[dict, ...] = ()) -> None:
+        ok = not isinstance(value, Unavailable)
+        self.out.append(
+            MintedMetric(
+                result=MetricResult(
+                    id=uuid4(), metric_code=code, value_paise=value.value if ok else None,
+                    recognition_state=RecognitionState.RECOGNISED if ok else RecognitionState.UNAVAILABLE,
+                    confidence="DERIVED", calculation_basis=basis, formula_version=INACTIVE_FORMULA_VERSIONS[code],
+                    canonical_data_version=self.cdv, as_of_date=self.as_of_date, input_refs=(self.feed.watermark,), exclusions=exclusions,
+                    computed_at=self.computed_at, is_available=ok, manual_adjustment_set=self.adjustments,
+                    unavailable_reason=None if ok else value.reason,
+                ),
+                grain="TENANT_PERIOD", target_ref=target,
+            )
+        )
+
+
+def _feed_part(m: _Minter) -> None:
+    feed = m.feed
+    m.add("EXPENSE_TOTAL", feed.expense_total, basis="Σ counted ledger rows (confirmed, incremental), signed (engine spec §5.17)")
+    for category, amount in feed.by_category.items():
+        m.add("EXPENSE_BY_CATEGORY", amount, basis="Σ counted ledger rows per category (§5.17)", target=category)
+    for cls, amount in feed.by_cost_class.items():
+        m.add("EXPENSE_BY_COST_CLASS", amount, basis="Σ counted ledger rows per cost class (§5.17)", target=cls)
+    m.add("EXPENSE_RECURRING_TOTAL", feed.recurring_total, basis="Σ counted recurring ledger rows (§5.17)")
+    m.add("EXPENSE_REVIEW_QUEUE_AMOUNT", feed.review_queue_amount, basis="amounts awaiting review, not counted in any pool (§5.17)")
+    m.add("EXPENSE_INCLUDING_UNRESOLVED", feed.including_unresolved, basis="counted rows plus the review queue (§5.17)")
+
+
+def mint_ledger_feed_metrics(
+    feed: LedgerFeedResult,
+    *,
+    ingestion_run_ids: Sequence[UUID | str],
+    adapter_versions: Sequence[str],
+    active_adjustment_ids: Sequence[UUID | str],
+    computed_at: datetime,
+    as_of_date: date | None,
+) -> list[MintedMetric]:
+    """Only the ledger-feed aggregates (no profit statement needed): `EXPENSE_TOTAL`, per category, per cost class, recurring, review queue, including unresolved."""
+    m = _Minter(feed, ingestion_run_ids, adapter_versions, active_adjustment_ids, computed_at, as_of_date)
+    _feed_part(m)
+    return m.out
+
+
 def mint_expense_metrics(
     feed: LedgerFeedResult,
     statement: ProfitStatement,
@@ -39,37 +93,12 @@ def mint_expense_metrics(
     computed_at: datetime,
     as_of_date: date | None,
 ) -> list[MintedMetric]:
-    cdv = derive_canonical_data_version(ingestion_run_ids, adapter_versions, active_adjustment_ids)
-    adjustments = tuple(str(a) for a in active_adjustment_ids)
-    out: list[MintedMetric] = []
-
-    def add(code: str, value: Paise | Unavailable, *, basis: str, target: str = TENANT_TARGET, exclusions: tuple[dict, ...] = ()) -> None:
-        ok = not isinstance(value, Unavailable)
-        out.append(
-            MintedMetric(
-                result=MetricResult(
-                    id=uuid4(), metric_code=code, value_paise=value.value if ok else None,
-                    recognition_state=RecognitionState.RECOGNISED if ok else RecognitionState.UNAVAILABLE,
-                    confidence="DERIVED", calculation_basis=basis, formula_version=INACTIVE_FORMULA_VERSIONS[code],
-                    canonical_data_version=cdv, as_of_date=as_of_date, input_refs=(feed.watermark,), exclusions=exclusions,
-                    computed_at=computed_at, is_available=ok, manual_adjustment_set=adjustments,
-                    unavailable_reason=None if ok else value.reason,
-                ),
-                grain="TENANT_PERIOD", target_ref=target,
-            )
-        )
+    m = _Minter(feed, ingestion_run_ids, adapter_versions, active_adjustment_ids, computed_at, as_of_date)
+    _feed_part(m)
+    add = m.add
 
     def reason(line: str, why: str | None, detail: str | None = None) -> tuple[dict, ...]:
         return ({"line": line, "reason": why, "detail": detail},) if why else ()
-
-    add("EXPENSE_TOTAL", feed.expense_total, basis="Σ counted ledger rows (confirmed, incremental), signed (engine spec §5.17)")
-    for category, amount in feed.by_category.items():
-        add("EXPENSE_BY_CATEGORY", amount, basis="Σ counted ledger rows per category (§5.17)", target=category)
-    for cls, amount in feed.by_cost_class.items():
-        add("EXPENSE_BY_COST_CLASS", amount, basis="Σ counted ledger rows per cost class (§5.17)", target=cls)
-    add("EXPENSE_RECURRING_TOTAL", feed.recurring_total, basis="Σ counted recurring ledger rows (§5.17)")
-    add("EXPENSE_REVIEW_QUEUE_AMOUNT", feed.review_queue_amount, basis="amounts awaiting review, not counted in any pool (§5.17)")
-    add("EXPENSE_INCLUDING_UNRESOLVED", feed.including_unresolved, basis="counted rows plus the review queue (§5.17)")
 
     add("UNALLOCATED_ADVERTISING", statement.unallocated_advertising, basis="advertising pool not allocated (§5.8.1)",
         exclusions=reason("UNALLOCATED_ADVERTISING", statement.advertising_reason))
@@ -82,4 +111,4 @@ def mint_expense_metrics(
     add("CONTRIBUTION_PROFIT", statement.contribution_profit, basis="ContributionProfit.v2: no overhead term; includes StorageCosts (§5.8, §5.8.1)")
     add("FULLY_ALLOCATED_PROFIT", statement.fully_allocated_profit, basis="ContributionProfit − AllocatedOverhead (§5.8.1)")
     add("TOTAL_PROFIT", statement.total_profit, basis="Total profit, Option A: includes all pools, allocated and unallocated (§5.8.1)")
-    return out
+    return m.out

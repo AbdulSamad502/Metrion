@@ -342,6 +342,13 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cfo/expense-ledger/summary": {
+   "body": {
+    "$ref": "#/components/schemas/SummaryRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/expense-ledger/{expense_id}/correct": {
    "body": {
     "$ref": "#/components/schemas/CorrectRequest"
@@ -4135,6 +4142,39 @@
     "as_of_date"
    ],
    "title": "StrategicBriefingHttpRequest",
+   "type": "object"
+  },
+  "SummaryRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "as_of_date": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "As Of Date"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    }
+   },
+   "required": [
+    "period_start",
+    "period_end"
+   ],
+   "title": "SummaryRequest",
    "type": "object"
   },
   "SupplierLookupRequest": {

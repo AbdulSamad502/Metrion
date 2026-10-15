@@ -18,7 +18,10 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
+from calc_engine.api.expense_metrics import mint_ledger_feed_metrics
+from calc_engine.formulas.ledger_feed import ledger_feed
 from calc_engine.repositories import expense_ledger_repo as ledger
+from calc_engine.repositories import metric_result_repo
 from calc_engine.repositories.expense_ledger_repo import NewRecord
 
 from backend.api.v1.cfo import _require_cfo_entitlement
@@ -261,6 +264,76 @@ def list_expenses(
         payment_status=payment_status, channel_scope=channel_scope, include_voided=include_voided, limit=limit, offset=offset,
     )
     return {"records": [_record(r) for r in rows], "total": total, "limit": limit, "offset": offset}
+
+
+class SummaryRequest(_Strict):
+    period_start: date
+    period_end: date
+    as_of_date: date | None = None
+
+    @model_validator(mode="after")
+    def _period(self) -> "SummaryRequest":
+        if self.period_end < self.period_start:
+            raise ValueError("period_end is before period_start")
+        return self
+
+
+SUMMARY_CONFIG_VERSION = "EXPENSE_LEDGER_FEED.v1"
+_CLASS_ORDER = ("ADVERTISING", "STORAGE", "OVERHEAD", "DIRECT")
+
+
+@router.post("/summary")
+def post_summary(body: SummaryRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """Dashboard totals for a period, produced by the engine's ledger feed (`calc_engine.formulas.ledger_feed`) and stamped as `EXPENSE_*` metric results: every
+    figure here carries the `engineResultRef` of the stored result, and nothing in this handler adds or compares an amount (AC17). Only confirmed, non-voided,
+    `incremental` rows count; `pending_review` rows appear in the review queue and the "including unresolved" figure; a cost class with no row is "not entered",
+    never zero. The release-gated profit lines (unallocated, total profit) are NOT produced here."""
+    assert ctx.tenant_id is not None
+    tenant = ctx.tenant_id
+    _require_cfo_entitlement(tenant, direct_action_code=READ_CODE)
+    now = datetime.now(timezone.utc)
+    events = ledger.feed_events(tenant, period_start=body.period_start, period_end=body.period_end)
+    catalog = {sku: sku for sku in ledger.known_skus(tenant)}
+    feed = ledger_feed(events, period_start=body.period_start, period_end=body.period_end, channel_scope=None, catalog=catalog)
+    minted = mint_ledger_feed_metrics(
+        feed, ingestion_run_ids=[], adapter_versions=[], active_adjustment_ids=[], computed_at=now, as_of_date=body.as_of_date or now.date()
+    )
+    period = f"{body.period_start.isoformat()}/{body.period_end.isoformat()}"
+    metric_result_repo.save_many(
+        tenant,
+        [(m.result, {"grain": m.grain, "target_ref": str(tenant) if m.target_ref == "tenant" else m.target_ref, "period": period,
+                     "config_version": SUMMARY_CONFIG_VERSION}) for m in minted],
+    )
+    by_code: dict[str, list[Any]] = {}
+    for m in minted:
+        by_code.setdefault(m.result.metric_code, []).append(m)
+
+    def one(code: str) -> Any:
+        return by_code[code][0].result
+
+    def fig(result: Any, key: str = "paise") -> dict[str, object]:
+        return {key: result.value_paise, "engineResultRef": str(result.id), "asOfDate": _iso(result.as_of_date)}
+
+    return {
+        "periodStart": body.period_start.isoformat(),
+        "periodEnd": body.period_end.isoformat(),
+        "asOfDate": _iso(body.as_of_date or now.date()),
+        "watermark": feed.watermark,
+        "expenseTotal": fig(one("EXPENSE_TOTAL")),
+        "includingUnresolved": fig(one("EXPENSE_INCLUDING_UNRESOLVED")),
+        "recurringTotal": fig(one("EXPENSE_RECURRING_TOTAL")),
+        "reviewQueue": {
+            **fig(one("EXPENSE_REVIEW_QUEUE_AMOUNT"), "amountPaise"),
+            "items": [{"expenseId": i.expense_id, "reason": i.reason, "amountPaise": i.amount.value} for i in feed.review_queue],
+        },
+        "byCostClass": [{"costClass": m.target_ref, **fig(m.result)} for m in sorted(by_code.get("EXPENSE_BY_COST_CLASS", []), key=lambda x: _CLASS_ORDER.index(x.target_ref))],
+        "byCategory": [
+            {"category": m.target_ref, "label": rules.CATEGORIES[m.target_ref].label if m.target_ref in rules.CATEGORIES else m.target_ref, **fig(m.result)}
+            for m in sorted(by_code.get("EXPENSE_BY_CATEGORY", []), key=lambda x: x.target_ref)
+        ],
+        "notEntered": [c for c in _CLASS_ORDER if not feed.pools[c].entered],
+        "gaps": list(feed.gaps),
+    }
 
 
 @router.get("/{expense_id}")

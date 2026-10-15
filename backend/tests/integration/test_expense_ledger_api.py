@@ -15,6 +15,7 @@ from sqlalchemy import text
 from tests.integration.test_cfo_pnl import (  # noqa: F401  (fixtures and helpers)
     _register_owner,
     _register_partner_with_permissions,
+    _clean_metric_result_table,
     _seed_zero_cap,
     app_client,
     fake_clerk,
@@ -199,3 +200,66 @@ def test_the_legacy_expense_routes_still_work_unchanged(app_client, owner):
     listed = app_client.get("/api/v1/cfo/expenses", headers=owner).json()
     assert listed["totalPaise"] == 500
     assert app_client.get(BASE, headers=owner).json()["total"] == 0           # the two stores are separate; no migration (Q16)
+
+
+# --- summary: every dashboard total comes from the engine feed, with an engine_result_ref (AC17) -----------------------------------------------------
+
+
+def _summary(app_client, headers, start="2026-09-01", end="2026-09-30"):
+    r = app_client.post(f"{BASE}/summary", json={"period_start": start, "period_end": end, "as_of_date": end}, headers=headers)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _seed_month(app_client, owner):
+    rent = post(app_client, owner).json()["expenseId"]                                            # 125,000 overhead, 2026-09-10, confirmed
+    post(app_client, owner, category="advertising", amount_paise=50_000, effective_date="2026-09-12", vendor="Ads Co")
+    post(app_client, owner, category="software", amount_paise=20_000, effective_date="2026-09-15", state="pending_review")
+    post(app_client, owner, category="storage", amount_paise=0, effective_date="2026-09-16")      # an explicit zero
+    voided = post(app_client, owner, amount_paise=9_999, effective_date="2026-09-20").json()["expenseId"]
+    app_client.post(f"{BASE}/{voided}/void", json={"reason": "duplicate"}, headers=owner)
+    post(app_client, owner, category="taxes", amount_paise=7_000, effective_date="2026-09-22")     # informational: never subtracted
+    app_client.post(f"{BASE}/{rent}/refund", json={"effective_date": "2026-10-03", "amount_paise": -40_000}, headers=owner)
+    return rent
+
+
+def test_summary_totals_are_the_engines_and_each_cites_a_stored_result(app_client, owner, two_tenants):
+    from calc_engine.repositories import metric_result_repo
+
+    a, _ = two_tenants
+    _seed_month(app_client, owner)
+    s = _summary(app_client, owner)
+    assert s["expenseTotal"]["paise"] == 175_000                      # 125,000 + 50,000 + 0 (voided, pending and informational rows are not counted)
+    assert {c["costClass"]: c["paise"] for c in s["byCostClass"]} == {"OVERHEAD": 125_000, "ADVERTISING": 50_000, "STORAGE": 0}
+    assert s["reviewQueue"]["amountPaise"] == 20_000 and s["includingUnresolved"]["paise"] == 195_000
+    assert s["notEntered"] == ["DIRECT"]                              # advertising, storage and overhead entered (storage as a real zero); direct costs missing
+    assert any(i["reason"] == "PENDING_REVIEW" for i in s["reviewQueue"]["items"])
+    figures = [s["expenseTotal"], s["includingUnresolved"], s["recurringTotal"], s["reviewQueue"], *s["byCostClass"], *s["byCategory"]]
+    for f in figures:
+        row = metric_result_repo.get(a, uuid.UUID(f["engineResultRef"]))
+        assert row is not None and row["is_trial"] is False and row["formula_version"].endswith(".v1")
+        assert row["value_paise"] == f.get("paise", f.get("amountPaise"))
+    assert s["watermark"].startswith("ledger:")
+
+
+def test_summary_puts_a_refund_in_the_period_of_its_own_date_and_keeps_a_net_credit(app_client, owner):
+    _seed_month(app_client, owner)
+    sep, octo = _summary(app_client, owner), _summary(app_client, owner, "2026-10-01", "2026-10-31")
+    assert sep["expenseTotal"]["paise"] == 175_000                    # September is unchanged by the October refund
+    assert octo["expenseTotal"]["paise"] == -40_000                   # a net credit, not floored at zero
+    assert sep["watermark"] != octo["watermark"]
+
+
+def test_summary_is_repeatable_and_empty_periods_are_not_zero_filled(app_client, owner):
+    _seed_month(app_client, owner)
+    assert _summary(app_client, owner)["expenseTotal"]["paise"] == _summary(app_client, owner)["expenseTotal"]["paise"]
+    empty = _summary(app_client, owner, "2025-01-01", "2025-01-31")
+    assert empty["notEntered"] == ["ADVERTISING", "STORAGE", "OVERHEAD", "DIRECT"] and empty["byCostClass"] == [] and empty["byCategory"] == []
+
+
+def test_summary_is_tenant_scoped_and_validates_its_period(app_client, owner, other_owner):
+    _seed_month(app_client, owner)
+    assert _summary(app_client, other_owner)["expenseTotal"]["paise"] == 0
+    r = app_client.post(f"{BASE}/summary", json={"period_start": "2026-09-30", "period_end": "2026-09-01"}, headers=owner)
+    assert r.status_code == 422
+    assert app_client.post(f"{BASE}/summary", json={"period_start": "2026-09-01", "period_end": "2026-09-30", "tenant_id": str(uuid.uuid4())}, headers=owner).status_code == 422

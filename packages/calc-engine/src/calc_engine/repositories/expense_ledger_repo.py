@@ -17,7 +17,9 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
+from calc_engine.formulas.ledger_feed import LedgerEvent
 from calc_engine.repositories.tenant_context import tenant_scope
+from calc_engine.types import Paise
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,3 +196,30 @@ def list_records(
             {**params, "limit": limit, "offset": offset},
         ).fetchall()
     return [dict(r._mapping) for r in rows], int(total)
+
+
+def feed_events(tenant_id: UUID, *, period_start: date, period_end: date) -> list[LedgerEvent]:
+    """The records dated in the window as `LedgerEvent`s for the engine feed: one per record, `seq` = its latest review event, `review_status` = its current
+    review state. Selection and every sum stay in `formulas/ledger_feed.py`; nothing is added up here."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(_CURRENT + " AND e.effective_date >= :a AND e.effective_date <= :b ORDER BY e.id"),
+            {"tenant": str(tenant_id), "a": period_start, "b": period_end},
+        ).fetchall()
+    return [
+        LedgerEvent(
+            expense_id=str(r.id), seq=int(r.review_seq), effective_date=r.effective_date, category=r.category, cost_class=r.cost_class, treatment=r.treatment,
+            review_status=r.review_state, amount=Paise(int(r.amount_paise)), channel_scope=r.channel_scope, origin=r.origin,
+            source_validated=bool(r.source_validated), identifier=r.identifier, sku_tag=r.sku if r.origin == "MANUAL" else None,
+            linked_expense_id=str(r.corrects_expense_id or r.refund_of_expense_id) if (r.corrects_expense_id or r.refund_of_expense_id) else None,
+            recurring=bool(r.recurring),
+        )
+        for r in rows
+    ]
+
+
+def known_skus(tenant_id: UUID) -> set[str]:
+    """The seller's catalog for the Q29 SKU-level rule: the distinct SKUs on the tenant's ingested sales lines (the only catalog the data model has)."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(text("SELECT DISTINCT sku FROM sales_line WHERE tenant_id = :tenant AND sku IS NOT NULL"), {"tenant": str(tenant_id)}).fetchall()
+    return {str(r[0]) for r in rows}
