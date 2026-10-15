@@ -382,6 +382,10 @@ export type PeriodPnlResponse = {
   returnRatePct: PeriodPnlMetricResult;
   marketplaceFeeFlags: string[];
   dataRequestId: string | null;
+  /** ST-01, display only: false when no advertising entry was supplied for THIS calculation (the engine still uses a zero term). */
+  advertisingEntered: boolean;
+  /** The advertising total the engine used (paise); null when not entered. */
+  advertisingCostsPaise: number | null;
 };
 
 export type GstPeriodSummaryResponse = { results: MetricResult[]; disclaimer: string };

@@ -371,6 +371,12 @@ class PeriodPnlOutcome:
     return_rate_pct: MetricResult
     marketplace_fee_flags: tuple[dict[str, object], ...]
     data_request_id: UUID | None  # set only when COGS or ReturnRTOLosses came back UNAVAILABLE (E2)
+    # ST-01 (display only; docs/specs/expense-tracker.md Appendix D): whether the caller supplied any
+    # advertising entry for THIS calculation, and the total the engine used. An empty list still
+    # resolves to a zero term (engine §5.8, unchanged); these two fields only let the screen say
+    # "not entered" instead of implying an entered 0.00. They never feed any figure.
+    advertising_entered: bool = False
+    advertising_costs_paise: int | None = None
 
 
 def compute_period_pnl(tenant_id: UUID, request: PeriodPnlRequest) -> PeriodPnlOutcome:
@@ -451,6 +457,7 @@ def compute_period_pnl(tenant_id: UUID, request: PeriodPnlRequest) -> PeriodPnlO
 
     shipping_logistics = pnl_inputs.resolve_shipping_logistics(request.lines)
     advertising_costs = pnl_inputs.resolve_expense_pool_total(request.advertising_adjustment_values)
+    advertising_entered = len(request.advertising_adjustment_values) > 0
     other_allocated_costs = pnl_inputs.resolve_expense_pool_total(request.other_adjustment_values)
     return_rto_losses = pnl_inputs.resolve_return_rto_losses(
         request.lines,
@@ -545,6 +552,8 @@ def compute_period_pnl(tenant_id: UUID, request: PeriodPnlRequest) -> PeriodPnlO
         return_rate_pct=return_rate_pct_result,
         marketplace_fee_flags=fee_flags,
         data_request_id=data_request_id,
+        advertising_entered=advertising_entered,
+        advertising_costs_paise=advertising_costs.value if advertising_entered else None,
     )
 
 

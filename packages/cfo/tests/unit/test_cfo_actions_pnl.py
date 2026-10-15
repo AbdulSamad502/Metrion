@@ -265,3 +265,50 @@ def test_tcs_tds_never_appear_in_contribution_profit_inputs() -> None:
     cfo_actions_source = inspect.getsource(cfo_actions_module)
     for forbidden in ("TCS", "TDS"):
         assert forbidden not in cfo_actions_source
+
+
+# --- ST-01: display-only "was advertising entered?" (docs/specs/expense-tracker.md Appendix D) ---
+# The two additive outcome fields must never change any figure: ContributionProfit is
+# numerically identical whether advertising was absent, an explicit zero, or (for the non-zero
+# case) reduced by exactly the entered amount.
+
+
+def _adv_request(advertising: list[dict[str, object]]) -> PeriodPnlRequest:
+    line = _line(components=(_component(kind="FEE", code="COMMISSION", amount_paise=50_00),))
+    sku = "SKU-1"
+    request = _base_request(
+        lines=[line],
+        sku_by_line={str(line.sales_line_id): sku},
+        cost_history_by_sku={sku: [CostEntry(amount_paise=Paise(100_00), effective_from=date(2026, 1, 1))]},
+    )
+    return _replace_adv(request, advertising)
+
+
+def _replace_adv(request: PeriodPnlRequest, advertising: list[dict[str, object]]) -> PeriodPnlRequest:
+    import dataclasses
+
+    return dataclasses.replace(request, advertising_adjustment_values=advertising)
+
+
+def test_absent_advertising_is_reported_as_not_entered_and_value_is_unchanged() -> None:
+    outcome = compute_period_pnl(uuid4(), _replace_adv(_adv_request([]), []))
+    assert outcome.advertising_entered is False
+    assert outcome.advertising_costs_paise is None
+    assert outcome.contribution_profit.is_available
+
+
+def test_explicit_zero_advertising_is_entered_and_contribution_profit_is_identical() -> None:
+    absent = compute_period_pnl(uuid4(), _replace_adv(_adv_request([]), []))
+    zero = compute_period_pnl(uuid4(), _replace_adv(_adv_request([]), [{"amount_paise": 0}]))
+    assert zero.advertising_entered is True
+    assert zero.advertising_costs_paise == 0
+    assert zero.contribution_profit.value_paise == absent.contribution_profit.value_paise
+    assert zero.margin_pct.value_fraction == absent.margin_pct.value_fraction
+
+
+def test_nonzero_advertising_is_entered_and_reduces_contribution_profit_by_exactly_the_amount() -> None:
+    absent = compute_period_pnl(uuid4(), _replace_adv(_adv_request([]), []))
+    entered = compute_period_pnl(uuid4(), _replace_adv(_adv_request([]), [{"amount_paise": 4_500}, {"amount_paise": 500}]))
+    assert entered.advertising_entered is True
+    assert entered.advertising_costs_paise == 5_000
+    assert absent.contribution_profit.value_paise - entered.contribution_profit.value_paise == 5_000

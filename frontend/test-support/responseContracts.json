@@ -373,6 +373,8 @@
   "dataRequestId": null
  },
  "POST /api/v1/cfo/pnl": {
+  "advertisingCostsPaise": null,
+  "advertisingEntered": null,
   "contributionProfit": {
    "asOfDate": null,
    "calculationBasis": null,

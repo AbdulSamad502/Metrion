@@ -261,3 +261,35 @@ def test_pnl_route_denies_403_when_agent_cfo_permission_absent(app_client, fake_
 
     resp = app_client.post("/api/v1/cfo/pnl", json=_pnl_body(), headers=headers)
     assert resp.status_code == 403, resp.text
+
+
+# --- ST-01: display-only "was advertising entered in this calculation?" --------------------------------------------------------------------------
+# Additive response fields; ContributionProfit must be numerically identical whether advertising is absent or an explicit zero, and reduced by exactly the
+# entered amount otherwise. The legacy expense tracker (PUT /cfo/expenses) rows are NOT read by this route, which is why the UI says "in this calculation".
+
+
+def _pnl_with_advertising(app_client, headers, advertising):
+    body = _pnl_body()
+    body["advertising_adjustment_values"] = advertising
+    resp = app_client.post("/api/v1/cfo/pnl", json=body, headers=headers)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_pnl_route_reports_advertising_entered_without_changing_contribution_profit(app_client, fake_clerk, two_tenants):
+    tenant_a, _ = two_tenants
+    headers = _register_owner(fake_clerk, tenant_a)
+
+    absent = _pnl_with_advertising(app_client, headers, [])
+    zero = _pnl_with_advertising(app_client, headers, [{"amount_paise": 0}])
+    entered = _pnl_with_advertising(app_client, headers, [{"amount_paise": 4_500}])
+
+    assert absent["advertisingEntered"] is False
+    assert absent["advertisingCostsPaise"] is None
+    assert zero["advertisingEntered"] is True
+    assert zero["advertisingCostsPaise"] == 0
+    assert entered["advertisingEntered"] is True
+    assert entered["advertisingCostsPaise"] == 4_500
+
+    assert zero["contributionProfit"]["valuePaise"] == absent["contributionProfit"]["valuePaise"]
+    assert absent["contributionProfit"]["valuePaise"] - entered["contributionProfit"]["valuePaise"] == 4_500
