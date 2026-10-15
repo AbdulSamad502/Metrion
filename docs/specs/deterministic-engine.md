@@ -361,7 +361,47 @@ FullyAllocatedProfit = ContributionProfit − AllocatedOverhead        (shown wi
 UnallocatedOverhead  = BusinessOverhead − AllocatedOverhead         (shown, with the reason it was not allocated)
 ```
 
-`AllocatedOverhead` is non-zero only for overhead the seller has explicitly chosen to allocate on a valid basis (§5.10). Changing overhead never changes `ContributionProfit`. **Account-level advertising and storage (owner decision Q14, 2026-10-15) follow the same pattern:** the part allocated on an explicitly selected basis enters the scoped `AdvertisingCosts`/storage terms; the rest is reported as unallocated, with the reason, and is never zero-filled. An account-level adjustment that exists but is unallocated is **not "absent"** for the `AdvertisingCosts = 0` rule below. **Decided 2026-10-15 (owner, Q27).** Advertising or storage spend that cannot be attributed to a SKU stays **business-level** by default; spend from validated campaign/ASIN records stays **SKU-level**. The unallocated amount is reported as its own labelled lines, `UnallocatedAdvertising` and `UnallocatedStorage`, **beside** `ContributionProfit` (which includes only the allocated or SKU-level portion). **Total profit includes the unallocated lines** (owner). *Decided 2026-10-15 (Q30): this spec owns the total-profit formula and its relation to `FullyAllocatedProfit` and the overhead lines above; it is **not yet written here**. Required invariant (stated in `expense-tracker.md`): changing the allocation method never changes total profit.* Each line is labelled and carries its reason. Pricing recommendations and loss-making-SKU alerts must carry a caveat that unallocated spend is excluded; the what-if feature uses the fully loaded figure. *SKU-level rule (Q29, decided 2026-10-15):* a campaign/ASIN spend record is SKU-level only if it comes from a validated import or integration, carries an explicit ASIN or SKU identifier in the source data, and that identifier maps to a SKU in the seller's catalog; campaign-level spend without an ASIN breakdown stays business-level; manual entries are never SKU-level by default (a seller-tagged SKU stays flagged manual); unmapped identifiers go to a review queue and count as business-level until resolved. Not yet built. *Trial results (Q28):* G7 validation uses a distinct trial formula version with `is_trial=true`; such results never appear in seller history or seller-visible reports and never serve as a restatement baseline. (`is_trial` is a boolean on the result record (`metric_result`) and is excluded from every seller-facing read at the read layer — Q30, decided 2026-10-15. The **name of the trial formula version is an engine-spec decision, not yet made**.) This changes the formula and therefore takes a **new formula version**, effective from the approved release date (placeholder, owner to set). Results calculated before that date keep their original formula version, configuration version and inputs and are **not restated**; the formula version is shown on every result (EXP-02). A later recalculation of a past period is a separate, explicit restatement producing a linked, labelled result, never an overwrite. *Current code still implements the previous behaviour until this amendment is built; no engine code was changed when it was written.*
+`AllocatedOverhead` is non-zero only for overhead the seller has explicitly chosen to allocate on a valid basis (§5.10). Changing overhead never changes `ContributionProfit`. **Account-level advertising and storage (owner decision Q14, 2026-10-15) follow the same pattern:** the part allocated on an explicitly selected basis enters the scoped `AdvertisingCosts`/storage terms; the rest is reported as unallocated, with the reason, and is never zero-filled. An account-level adjustment that exists but is unallocated is **not "absent"** for the `AdvertisingCosts = 0` rule below. **Decided 2026-10-15 (owner, Q27).** Advertising or storage spend that cannot be attributed to a SKU stays **business-level** by default; spend from validated campaign/ASIN records stays **SKU-level**. The unallocated amount is reported as its own labelled lines, `UnallocatedAdvertising` and `UnallocatedStorage`, **beside** `ContributionProfit` (which includes only the allocated or SKU-level portion). **Total profit includes the unallocated lines** (owner). *Decided 2026-10-15 (Q30): this spec owns the total-profit formula. It is now written in §5.8.1 as a **PROPOSED** formula awaiting product owner approval. Required invariant (stated in `expense-tracker.md`): changing the allocation method never changes total profit.* Each line is labelled and carries its reason. Pricing recommendations and loss-making-SKU alerts must carry a caveat that unallocated spend is excluded; the what-if feature uses the fully loaded figure. *SKU-level rule (Q29, decided 2026-10-15):* a campaign/ASIN spend record is SKU-level only if it comes from a validated import or integration, carries an explicit ASIN or SKU identifier in the source data, and that identifier maps to a SKU in the seller's catalog; campaign-level spend without an ASIN breakdown stays business-level; manual entries are never SKU-level by default (a seller-tagged SKU stays flagged manual); unmapped identifiers go to a review queue and count as business-level until resolved. Not yet built. *Trial results (Q28):* G7 validation uses a distinct trial formula version with `is_trial=true`; such results never appear in seller history or seller-visible reports and never serve as a restatement baseline. (`is_trial` is a boolean on the result record (`metric_result`) and is excluded from every seller-facing read at the read layer — Q30, decided 2026-10-15; mechanism and the trial version name are written in §9.2 as **PROPOSED** items awaiting product owner approval.) This changes the formula and therefore takes a **new formula version**, effective from the approved release date (placeholder, owner to set). Results calculated before that date keep their original formula version, configuration version and inputs and are **not restated**; the formula version is shown on every result (EXP-02). A later recalculation of a past period is a separate, explicit restatement producing a linked, labelled result, never an overwrite. *Current code still implements the previous behaviour until this amendment is built; no engine code was changed when it was written.*
+
+### 5.8.1 Total profit and the allocation invariant (G2 prerequisite, Q30; amended 2026-10-15)
+
+*Status: the owner decided that the engine spec owns the total-profit formula (Q30) and that total profit includes the unallocated lines (Q27). The formula below is **PROPOSED, awaiting product owner approval.** Nothing here is built.*
+
+**What exists today (verified against code and spec).** The engine defines exactly one profit figure: `ContributionProfit` (§5.8; `packages/calc-engine/src/calc_engine/formulas/contribution_profit.py::contribution_profit`, seeded as `CONTRIBUTION_PROFIT.v1` in `definitions/seed_definitions.py`). There is **no** total-profit, net-profit or operating-profit term in this spec or in `packages/calc-engine`. The only "after overhead" figure in code is the Profit Calculator's **hypothetical** `operating_profit = contribution − operating_expenses` (`packages/calc-engine/src/calc_engine/formulas/pnl_scenario/calculate.py::make_view`, lines 43–55, introduced by commits 48eeeb1, a5ad4ea, a2dc9f8); it is a non-persisted estimate (calculator.md N-AC6), not an `engine_result_ref`. In the period P&L (`backend/src/backend/services/cfo_actions.py::compute_period_pnl`, via `packages/cfo/src/cfo/pnl/inputs.py::resolve_expense_pool_total`) the **whole** `expense.advertising` pool and the **whole** `expense.other` pool are summed and subtracted inside `ContributionProfit`; so today every seller-entered pool already reduces the one profit figure and nothing is "unallocated". The amended text above (EXP-06, Q14, Q27) changes that from the release date.
+
+**Definitions (PROPOSED).** For a period and channel scope, let each business-level pool `p ∈ {Advertising, Storage, Overhead}` have total `Pool_p` (Σ of ledger rows selected by §5.17, signed, refunds netted). By the §5.10 conservation rule `Pool_p = Allocated_p + Unallocated_p`. Then:
+
+```
+ContributionProfit   = NetRealizedRevenue − COGS − MarketplaceFees − ShippingLogistics
+                       − ReturnRTOLosses − OtherAttributedCosts
+                       − AdvertisingSKU − AllocatedAdvertising − AllocatedStorage          (as amended; see §5.8)
+FullyAllocatedProfit = ContributionProfit − AllocatedOverhead                              (unchanged from the 2026-10-15 amendment)
+TotalProfit          = ContributionProfit − UnallocatedAdvertising − UnallocatedStorage
+                       − AllocatedOverhead − UnallocatedOverhead
+                     = FullyAllocatedProfit − UnallocatedAdvertising − UnallocatedStorage − UnallocatedOverhead
+                     = NetRealizedRevenue − COGS − MarketplaceFees − ShippingLogistics − ReturnRTOLosses
+                       − OtherAttributedCosts − AdvertisingTotal − StorageTotal − OverheadTotal
+```
+
+`AdvertisingTotal = AdvertisingSKU + AllocatedAdvertising + UnallocatedAdvertising` (likewise storage and overhead). `TotalProfit` is `UNAVAILABLE` whenever `ContributionProfit` is (E9: missing COGS or unclassified RTO), never computed as if the missing term were zero. The what-if "fully loaded" figure (Q27) **is** `TotalProfit`; consumers read it, they do not recompute it.
+
+*Option A (recommended): TotalProfit includes all business overhead (allocated and unallocated).* It matches "fully loaded", is independent of every allocation choice, and keeps `FullyAllocatedProfit` as the "after the overhead the seller chose to allocate" view. *Option B: TotalProfit includes only the unallocated advertising and storage lines and leaves overhead out.* It keeps overhead entirely outside profit, but then "total" is not the seller's bottom line and a what-if built on it would omit rent and salaries. **Decision needed: A or B.**
+
+**Invariant (stated by the owner; formula-independent).** Changing the allocation method — selecting, changing or removing a basis for any pool, or switching a pool between allocated and unallocated — moves cost between the `Allocated_*` and `Unallocated_*` lines and between SKUs, and **never changes `TotalProfit`**. `ContributionProfit`, `FullyAllocatedProfit` and the per-line shares may change; `TotalProfit` may not. Under Option A this holds by §5.10 conservation, because `TotalProfit` depends only on `Pool_p`. Allocation never changes a pool's size.
+
+**Tests (PROPOSED; G2).** Each test runs the same inputs under several allocation configurations and asserts the stated `TotalProfit`, plus conservation per pool and per-line reason codes.
+
+| # | Case | Setup | Expected |
+|---|---|---|---|
+| TP1 | Zero denominator | Overhead pool ₹10,000; `NET_REVENUE` selected; period has sales lines but Σ eligible net revenue = 0, and a second period has no sales lines at all | Pool stays unallocated with `ZERO_DENOMINATOR` / `NO_REVENUE_FOR_PERIOD`; no zero-fill; `UnallocatedOverhead = ₹10,000`; `TotalProfit` equals the value with no basis selected |
+| TP2 | Mixed methods | Pool A allocated by `NET_REVENUE`, pool B by `UNITS` (basis is per pool, §5.10.1); same total pool | `TotalProfit` equals the all-unallocated case and equals each single-method case |
+| TP3 | Period mismatch | Basis data (units) is for a different period than the pool, or channel scope differs | Pool unallocated, reason `INVALID_BASIS` with detail `PERIOD_MISMATCH` (PROPOSED code); `TotalProfit` unchanged |
+| TP4 | Missing sales | No sales lines in scope; and separately, units missing on some lines | All affected pools unallocated (`NO_REVENUE_FOR_PERIOD` / `UNITS_UNAVAILABLE`); `TotalProfit` still includes the full pools (a loss, not `UNAVAILABLE`, when COGS is not required because there are no sold units); margin `UNDEFINED` per E8 |
+| TP5 | All bases | Same data under `NET_REVENUE`, `UNITS`, `ORDERS`, and none | `TotalProfit` identical in all four |
+| TP6 | Unavailable propagation | COGS missing for one sold SKU | `ContributionProfit` and `TotalProfit` both `UNAVAILABLE`; unallocated lines still reported |
+| TP7 | Rounding / conservation | Pool of an odd paise amount over 3 SKUs | Largest-remainder split sums exactly to the pool; `TotalProfit` unchanged |
+| TP8 | Refund in the pool | Cost row plus a negative refund row in the same period (§5.17) | Pool is the net; allocation and `TotalProfit` use the net; a refund dated in a later period does not change the earlier period |
+| TP9 | Negative or zero weights | One SKU has zero/negative net revenue | Excluded from the `NET_REVENUE` weights, still conserved; `TotalProfit` unchanged |
 
 ### 5.9 Tax treatment (D4, D5, D6)
 
@@ -395,6 +435,37 @@ allocated_cost(line) = pool_amount × ( NetRealizedRevenue(line) / Σ NetRealize
 - Every allocated figure is `DERIVED` and names its basis on display.
 - Remainders are distributed by **largest remainder** so allocations sum exactly to the pool (D8).
 - Lines with zero or negative net revenue are excluded from a `NET_REVENUE` basis and reported as unallocated, with the reason.
+
+### 5.10.1 Allocation bases `NET_REVENUE`, `UNITS`, `ORDERS` and the SKU-level rule (G2 prerequisite; amended 2026-10-15)
+
+*Status: explicit seller selection (EXP-06) and the Q29 SKU-level rule are owner decisions. The weight definitions, reason-code additions and per-pool granularity below are **PROPOSED, awaiting product owner approval.***
+
+**What exists today.** `AllocationBasis` already declares `NET_REVENUE`, `UNITS`, `ORDERS` (`packages/calc-engine/src/calc_engine/formulas/allocation.py`), and `allocate_pool` is basis-agnostic (weights are caller-prepared; largest-remainder split). But `allocate_account_level_expense_pool` (`formulas/expense_pools.py`) **hard-codes `NET_REVENUE` and defaults to it**, there is **no** weight builder for `UNITS` or `ORDERS`, and the function has **no production caller**. This section specifies what those builders and the selection must do.
+
+**Explicit selection is the only way allocation happens.** A pool is allocated only when the seller has selected a basis for it. The selection is a seller setting stamped with `config_version`; changing it takes effect from then on and never rewrites a reported result (EXP-02). It is stored per pool (per `cost_class` and scope) — *granularity per pool is **PROPOSED, awaiting product owner approval.** (alternative: one basis for the whole account, which makes "mixed methods" impossible)*. Without a selection: `BASIS_NOT_SELECTED`, the pool stays unallocated.
+
+| Basis | Weight per target | Data required (same period and channel scope as the pool) | Unusable when |
+|---|---|---|---|
+| `NET_REVENUE` | `NetRealizedRevenue(target)` (§5.5) | NRR available for every in-scope target | no sales lines in scope → `NO_REVENUE_FOR_PERIOD`; Σ eligible weights ≤ 0 → `ZERO_DENOMINATOR`; any in-scope NRR `UNAVAILABLE` → pool unallocated, `BASIS_DATA_UNAVAILABLE` (PROPOSED code) |
+| `UNITS` | Net units kept = units sold − units returned/RTO'd (*net vs gross units is **PROPOSED, awaiting product owner approval.** Recommended: net, to mirror `NET_REVENUE`*) | a quantity on **every** in-scope sales line | any in-scope line without a quantity → `UNITS_UNAVAILABLE` (never counted as 0); Σ ≤ 0 → `ZERO_DENOMINATOR` |
+| `ORDERS` | Distinct order ids with at least one recognised, non-cancelled line for the target (an order containing two SKUs counts once for each — ***PROPOSED, awaiting product owner approval.***) | order id on every in-scope line | any in-scope line without an order id → `ORDERS_UNAVAILABLE` (PROPOSED code); Σ = 0 → `ZERO_DENOMINATOR` |
+
+- **Scope.** Weights use only the pool's own period and channel scope. Weights from another period or scope make the basis unusable (`INVALID_BASIS`, detail `PERIOD_MISMATCH` / `SCOPE_MISMATCH`, PROPOSED). A business-wide pool queried for a single channel is allocated across its targets only if a basis is selected; otherwise it is reported as unallocated business-level, not spread silently.
+- **Zero or missing denominator** never yields zero-filled or silently distributed amounts: the pool (or the affected part) is reported as unallocated with the reason. A target that is individually excluded (zero/negative weight) is reported with its reason, and conservation (`allocated + unallocated = pool`) holds.
+- **Rounding.** `largest_remainder_allocate` on exact `Fraction` weights; ties broken by stable target order (D8, AC1).
+- **Confidence.** Every allocated figure is `DERIVED` and names its basis (§5.10).
+- **Reason codes.** Existing: `BASIS_NOT_SELECTED`, `NO_REVENUE_FOR_PERIOD`, `ZERO_DENOMINATOR`, `UNITS_UNAVAILABLE`, `INVALID_BASIS`. PROPOSED additions: `ORDERS_UNAVAILABLE`, `BASIS_DATA_UNAVAILABLE`, and `detail` values `PERIOD_MISMATCH`, `SCOPE_MISMATCH`.
+
+**SKU-level rule for advertising and storage (Q29, decided 2026-10-15).** A campaign/ASIN spend record is SKU-level only if (a) it comes from a **validated import or integration**, (b) the source data carries an **explicit ASIN or SKU identifier**, and (c) that identifier **maps to a SKU in the seller's catalog**. Otherwise it is **business-level**:
+
+| Record | Level | Notes |
+|---|---|---|
+| Validated import, explicit identifier, mapped to a catalog SKU | `SKU` | `confidence` follows the source (not above `PROVISIONAL` in V1, §9) |
+| Campaign-level spend without an ASIN breakdown | `BUSINESS` | stays business-level; allocated only under a selected basis |
+| Manual entry | `BUSINESS` by default | the seller may tag a SKU on the form; the entry then counts as SKU-level but **stays flagged manual** (`MANUAL`) |
+| Identifier present but unmapped to the catalog | `BUSINESS`, queued | goes to the review queue and counts as business-level until resolved |
+
+**Discrepancies for this rule (verified).** (1) `report_category` has an `ADVERTISING` value (`data-foundation.md` schema, line ~65), but no advertising-report adapter or ASIN-to-SKU mapping is specified or built in this tree, so today **no** record can satisfy (a)–(c): all advertising is business-level until such an adapter exists. (2) `resolve_expense_pool_total` (`packages/cfo/src/cfo/pnl/inputs.py`) treats `expense.advertising` adjustments at `SKU`, `PERIOD` and `ACCOUNT` target types the same way, summing everything, so the SKU/business distinction is not represented in the period P&L.
 
 ### 5.11 Rounding (D8)
 
@@ -895,6 +966,30 @@ Neither spec restates the other: **product/display rules there, arithmetic here.
 **Tests required (build-time, deterministic):** boundary equality for both comparators; signed gap for both units; `UNAVAILABLE` and `NOT_YET_MEASURABLE` paths; `CONFIG_MISSING` tolerance path; no-float guard; unit-mismatch rejection; provenance fields present.
 
 **Status:** specified; **not built** (the goal registry is V1-later). Reopening the eligible metric set needs a spec amendment, not an ad-hoc addition.
+
+### 5.17 The expense-ledger feed (G2 prerequisite; amended 2026-10-15)
+
+*Status: the append-only ledger, the treatments and the signed-amount decision (Q21) are owner decisions (EXP-01, EXP-06, Q21, Q24). The function name, the selection details marked below and the code-level mapping are **PROPOSED, awaiting product owner approval.** Not built. Ledger schema and rules: `expense-tracker.md` §5.*
+
+**Boundary.** Everything below — row selection, aggregation, any SQL that selects or aggregates ledger rows, sign mapping, allocation — lives **inside `packages/calc-engine`**. Nothing outside it (an API route, `backend`, `packages/cfo`, the browser, an LLM) selects, sums, signs or allocates ledger amounts; callers pass identifiers and receive `metric_result` rows. *Discrepancy:* today the period P&L composition lives in `backend/src/backend/services/cfo_actions.py` and the pool summation in `packages/cfo/src/cfo/pnl/inputs.py::resolve_expense_pool_total` (which delegates the addition to `calc_engine` `sum_paise`) and takes caller-supplied adjustment lists; the feed replaces that input with an engine-owned read, which is a code change, not made here.
+
+```
+ledger_feed(tenant (from verified context, never client-supplied), period, channel_scope, as_of_date)
+  -> LedgerFeedResult(
+       pools_by_cost_class: Paise per (period, scope, cost_class),   -- signed, refunds netted
+       unallocated: lines with reason codes (§5.10, §5.10.1),
+       gaps: named gaps (e.g. "advertising: not entered"),
+       overlap_flags, review_queue (unmapped / needs_review amounts),
+       ledger_watermark)
+```
+
+**Row selection.** (1) `tenant_id` from the verified tenant context under `FORCE` RLS (a missing context fails closed). (2) **Latest state per `expense_id`** from the append-only event log; voided records are excluded. (3) **Period:** the row's `effective_date` falls in `[period_start, period_end]`. **A refund or credit note belongs to the period of its own date** (Q24), is linked to the original `expense_id`, and never changes the original period's result; the earlier period's already-reported results are not restated (EXP-02). (4) **Channel scope:** channel-specific rows enter only their own channel's scope; business-wide rows enter the business scope and reach a channel only through a selected allocation basis (§5.10.1). (5) **Review state:** only `confirmed` rows count — *vocabulary pending ledger Q6; **PROPOSED, awaiting product owner approval.***. (6) **Treatment:** `incremental` rows count; `already_in_settlement` and `informational` rows are **excluded** from every sum (they are returned in counts/reconciliation lists, never added). `replaces_input` does not exist (EXP-01).
+
+**Signed amounts, both directions (Q21, **PROPOSED, awaiting product owner approval.** for the code mapping).** The ledger stores `amount_paise` signed: a cost is **positive**, a refund or credit note **negative**. In the engine every cost term is a **non-negative magnitude that the formula subtracts** (`contribution_profit.py`; terms are never stored as negative costs), so: *ledger → engine:* `Pool_p = Σ signed amounts of the selected rows` (a refund reduces the pool; identity on the paise value, no float). If the net is negative (refunds exceed costs) the pool is a **net credit**, carried as a negative cost term and **never floored at zero** (E7 pattern). *Engine → ledger/display:* a cost term `T > 0` is displayed as a cost, `T < 0` as a net credit, and the stored ledger sign is unchanged. A G2 round-trip test asserts both directions, including a refund dated in a later period (`expense-tracker.md` F1). *Discrepancy:* this spec states money is "signed BIGINT paise, seller perspective" (§4) but never states the sign of a cost term; the mapping above is a derivation from the formula, not a quoted rule — hence PROPOSED.
+
+**Unallocated and absent.** Unallocated advertising, storage and overhead are reported as their own lines (`UnallocatedAdvertising`, `UnallocatedStorage`, `UnallocatedOverhead`) with reason codes; they are never zero-filled and never treated as absent. "Absent" (the CONFIRMED `AdvertisingCosts = 0` rule, §5.8) applies only when **no** `expense.advertising` record covers the scope; a record that exists but is unallocated is not absent.
+
+**Cost-class mapping (open).** The ledger's `cost_class` maps to engine terms: advertising → `AdvertisingCosts`; overhead → the overhead lines above; seller-attributed direct costs → `OtherAttributedCosts`. *Discrepancy:* §5.8 has **no** packaging, storage or logistics term, and the registry (§7.2.1) lists `expense.packaging`, `expense.storage`, `expense.logistics`, but `compute_period_pnl` sums only `expense.advertising` and `expense.other`. Q14/Q27 give storage its own unallocated line, so a storage term is needed in the formula version that takes effect at the release date. ***PROPOSED, awaiting product owner approval.** Option 1 (recommended): add explicit `StorageCosts` (allocated/SKU-level part) beside `AdvertisingCosts`; packaging and logistics pools keep their current status (not in the period P&L) until the owner decides. Option 2: route storage into `OtherAttributedCosts`.* **Decision needed**, including whether packaging and logistics pools should enter the period P&L at all.
 
 ## 6. Grain and periods
 
@@ -1450,6 +1545,50 @@ competitor_estimate (                -- §5.13 output provenance; NOT a metric_r
 **Rule.** A consumer displaying a financial figure cites an `engine_result_ref`. A consumer displaying any estimate cites the `estimate_ref` from the specific table its interface produced, and states which table. No `estimate_ref` ever substitutes for an `engine_result_ref`, and §5.13 rule 5 stands for every table in the family — estimates are never written to `metric_result`.
 
 ---
+
+### 9.2 Result metadata for the expense tracker (G2 prerequisite; amended 2026-10-15)
+
+*Status: `is_trial` as a boolean excluded from seller-facing reads, and trial results never serving as a restatement baseline, are owner decisions (Q28, Q30). The trial version name, the read-layer mechanism and the ledger-watermark field are **PROPOSED, awaiting product owner approval.***
+
+**Spec versus code.** The §9 field list above omits columns that the schema and repository already have: `manual_adjustment_set`, `as_of_date`, `canonical_data_version`, `is_trial`, `is_available`, `unavailable_reason` (migration `20260917_0001_engine_tables.py`, lines ~58–85; `repositories/metric_result_repo.py`). `is_trial boolean not null default false` already exists and `save(..., is_trial=False)` accepts it, but **no read path filters on it**: `_GET_SQL` (by id), `list_by_metric_code`, and `backend/src/backend/repositories/shared_finding_repo.py::resolve_engine_results` all return trial rows. Q30's read-layer exclusion is therefore not true today.
+
+1. **`is_trial`** is a boolean on the result record (`metric_result.is_trial`, default `false`). Results of the G7 validation run are written with `is_trial = true`.
+2. **Excluded from every seller-facing read at the read layer.** *Mechanism **PROPOSED, awaiting product owner approval.**:* every repository read that can reach a seller, a consumer or an agent (get-by-id, list-by-metric, period comparison, history, exports, shared-finding citation resolution, the CEO/CFO reads) takes `include_trial: bool = False` and applies `AND is_trial = false`; only an internal validation context may pass `True`. A database view (`metric_result_seller`, `WHERE NOT is_trial`) as the only relation the seller-path role can read is the stronger alternative. Recommended: repository parameter now, view when a migration is approved. Citing a trial `engine_result_ref` in a seller-facing figure is rejected.
+3. **Trial formula version name **PROPOSED, awaiting product owner approval.**.** Current convention: `<METRIC_CODE>.v<N>` (e.g. `CONTRIBUTION_PROFIT.v1`, `compute_metric.py`). *Recommended:* `<METRIC_CODE>.v<N>-trial` with the same `N` as the production version it validates, e.g. `CONTRIBUTION_PROFIT.v2-trial` and `TOTAL_PROFIT.v1-trial`. The name only makes a trial result recognisable on sight; **`is_trial` is the sole authority for filtering**, never string matching. Alternative: a separate numbering such as `v2-rc1`, `v2-rc2` for successive validation runs (more traceable, more names to manage).
+4. **Never a restatement baseline.** A restatement (EXP-02) is a separate, linked, labelled result whose baseline must be an `is_trial = false` result. A trial result id can never be the target of a restatement link, a period comparison, a "previous result" lookup or a regression baseline. (`metric_result` currently has no restatement link; this rule applies when one is added.)
+5. **Release date.** The formula release date (Q15/Q28) is the first production deploy after G7 passes with results produced as `is_trial = false`.
+6. **Ledger input version **PROPOSED, awaiting product owner approval.**.** `metric_result` has no ledger-input version. *Recommended:* record the ledger watermark in `input_refs` (no schema change); *alternative:* a `ledger_watermark` column (needs a migration, not made here).
+
+### 9.3 Metric codes for the expense dashboard aggregates (**PROPOSED, awaiting product owner approval.**)
+
+Each aggregate is a `metric_result` row, stamped like every other (`formula_version`, `config_version`, `as_of_date`, `canonical_data_version`, `manual_adjustment_set` where applicable, ledger watermark per §9.2 item 6) and citable by `engine_result_ref`. Grain follows the existing use (`TENANT_PERIOD` in `compute_period_pnl`; `target_ref` carries the category or SKU where noted). *Note:* the migration comment lists grains `LINE | ORDER | SKU | MARKETPLACE | ACCOUNT` while code writes `TENANT_PERIOD`; the grain vocabulary should be reconciled when these are built.
+
+| `metric_code` | Meaning | `target_ref` | Formula version (initial) |
+|---|---|---|---|
+| `EXPENSE_TOTAL` | Σ counted ledger rows for the period and scope | tenant | `EXPENSE_TOTAL.v1` |
+| `EXPENSE_BY_CATEGORY` | Σ per ledger category | category | `EXPENSE_BY_CATEGORY.v1` |
+| `EXPENSE_BY_COST_CLASS` | Σ per cost class (advertising, storage, overhead, direct) | cost class | `EXPENSE_BY_COST_CLASS.v1` |
+| `EXPENSE_RECURRING_TOTAL` | Σ recurring commitments in the period | tenant | `EXPENSE_RECURRING_TOTAL.v1` |
+| `EXPENSE_REVIEW_QUEUE_AMOUNT` | Amount awaiting review (unmapped identifiers, `needs_review`) | tenant | `EXPENSE_REVIEW_QUEUE_AMOUNT.v1` |
+| `EXPENSE_INCLUDING_UNRESOLVED` | The "including unresolved" view: counted rows plus the review queue | tenant | `EXPENSE_INCLUDING_UNRESOLVED.v1` |
+| `UNALLOCATED_ADVERTISING` / `UNALLOCATED_STORAGE` / `UNALLOCATED_OVERHEAD` | The §5.8/§5.8.1 unallocated lines, with reason codes in `exclusions` | tenant | `<CODE>.v1` |
+| `ALLOCATED_OVERHEAD` | §5.8 amendment | tenant | `ALLOCATED_OVERHEAD.v1` |
+| `FULLY_ALLOCATED_PROFIT` | §5.8 amendment | tenant | `FULLY_ALLOCATED_PROFIT.v1` |
+| `TOTAL_PROFIT` | §5.8.1 | tenant | `TOTAL_PROFIT.v1` |
+
+`CONTRIBUTION_PROFIT` moves to its next formula version at the release date (`CONTRIBUTION_PROFIT.v2`, effective from the placeholder release date); `.v1` results are never mutated or restated (EXP-02).
+
+### 9.4 Consumers that still need their own edits (not edited here)
+
+| Spec | Needs |
+|---|---|
+| `cfo-agent.md` | Period P&L reads the feed instead of caller-supplied pool lists; shows the unallocated lines, `TotalProfit` and the formula-version label; legacy `expense.<category>` rows stay under their original version (Q16) |
+| `product-intelligence-agent.md` and the pricing/recommendation surfaces (`slim-cmo-agent.md` where it recommends prices) | Carry the "unallocated spend is excluded" caveat (launch condition) |
+| `anomaly-detection.md` | Loss-making-SKU alerts carry the same caveat |
+| `calculator.md` | What-if uses the fully loaded figure (`TotalProfit`) when seeded from actual figures; resolve the per-order ad/opex spreading versus the explicit-basis rule |
+| `data-foundation.md` | Advertising-report adapter and ASIN→SKU mapping (needed for any SKU-level spend, §5.10.1); any ledger tables |
+| `ceo-agent-orchestration.md` | Citation checks must reject trial results (§9.2) |
+| `auth.md` | Read-layer role boundary if the `metric_result_seller` view is chosen |
 
 ## 10. Edge cases
 

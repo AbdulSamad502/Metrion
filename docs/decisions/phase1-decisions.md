@@ -156,5 +156,27 @@ All of the above is documentation only. Nothing was implemented, committed, push
 
 ---
 
+## Engine-spec items written 2026-10-16 (G2 prerequisites) — PROPOSED, awaiting product owner approval
+
+Q29 and Q30 are now **written into `docs/specs/deterministic-engine.md`** (§5.8.1, §5.10.1, §5.17, §9.2, §9.3, §9.4, test rows TP1–TP9). The owner decisions themselves (Q29 SKU-level rule; engine owns the total-profit formula; `is_trial` boolean excluded from seller reads) are unchanged. The following written details are **PROPOSED and not approved**:
+
+| # | Item | Recommendation | Section |
+|---|---|---|---|
+| 1 | Total-profit formula: Option A (includes all overhead) or B (unallocated advertising/storage only) | A | §5.8.1 |
+| 2 | Storage term: add `StorageCosts` (Option 1) or route into `OtherAttributedCosts` (Option 2); whether packaging/logistics pools enter the period P&L | Option 1; packaging/logistics unchanged until decided | §5.17 |
+| 3 | Allocation basis granularity: per pool (recommended) or one per account | per pool | §5.10.1 |
+| 4 | `UNITS` weight: net of returns/RTO (recommended) or gross; `ORDERS` weight: distinct orders per SKU | net; per SKU | §5.10.1 |
+| 5 | New reason codes `ORDERS_UNAVAILABLE`, `BASIS_DATA_UNAVAILABLE`; details `PERIOD_MISMATCH`, `SCOPE_MISMATCH` | adopt | §5.10.1 |
+| 6 | Code mapping of signed amounts (ledger sign ↔ engine cost term); cost-class → term mapping; review-state vocabulary dependency (ledger Q6) | as written | §5.17 |
+| 7 | Read-layer mechanism for `is_trial`: repository parameter (recommended now) or database view | parameter now, view with a migration | §9.2 |
+| 8 | Trial formula version name: `<CODE>.v<N>-trial` (recommended) or `v<N>-rc<k>` | `-trial` suffix | §9.2 |
+| 9 | Ledger watermark in `input_refs` (recommended) or a new column | `input_refs` | §9.2 |
+| 10 | Metric codes for the expense dashboard aggregates and the profit lines | as listed | §9.3 |
+
+**Consumer specs that still need edits (not edited):** `cfo-agent.md`, `product-intelligence-agent.md` / pricing surfaces, `anomaly-detection.md`, `calculator.md`, `data-foundation.md`, `ceo-agent-orchestration.md` (trial citations), `auth.md` (only if the read-layer view is chosen) — see engine §9.4.
+
+**Spec-versus-code discrepancies found:** see engine §5.8.1, §5.10.1, §5.17 and §9.2 (no total-profit term exists; `allocate_account_level_expense_pool` hard-codes `NET_REVENUE` with no caller and no `UNITS`/`ORDERS` weight builders; period P&L composition and pool summation live outside `packages/calc-engine`; `is_trial` exists but no read path filters it; spec §9 omits columns the schema has; no storage/packaging/logistics term in §5.8; no advertising adapter or ASIN→SKU mapping).
+---
+
 ## Items deliberately left open (not approved)
 Default category list; review-status values and transitions; duplicate thresholds; settlement-overlap wording; CSV template; retention period and storage; multi-organization details beyond EXP-03; recurring materialisation; legacy-row compatibility (X1); GST/ITC/TCS wording (CA); the concrete formula release date (defined by event); raw-CSV retention (legal/CA, Q19). See `docs/planning/expense-tracker/02-decision-register.md` and spec §13.
