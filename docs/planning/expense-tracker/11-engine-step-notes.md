@@ -37,6 +37,8 @@ Pure engine functions in `packages/calc-engine` and the read-layer fixes only, b
 10. **The feed does not allocate.** Choosing allocation targets and weights from canonical data (and which basis is stored per pool) is the caller's job (Step 4); `ledger_feed`, `allocate_with_basis` and `compute_profit_statement` compose as shown in `test_ledger_feed.py::test_f7...`.
 11. **Channel scope.** Business-wide rows queried for a single channel are reported as `business_wide_out_of_scope`, never spread.
 
+12. **Sign convention wording.** `data-foundation.md` §1.1 states "Signed from the seller's perspective. Revenue positive, deductions negative", while the engine's formulas and fixtures use positive cost magnitudes that are subtracted (e.g. a 50.00 `COMMISSION` fee component with `ContributionProfit = NRR − … − Fees`). The approved ledger mapping (cost positive, refund negative → pool, `ledger_feed.py`) follows the code. The engine spec's own note that it "never states how a cost term is signed" was incomplete: `data-foundation.md` §1.1 does, in a way the code does not follow for fee components. Owner/engineering to confirm which is authoritative before the feed is wired to the P&L.
+
 ## Results (2026-10-16, scratch Postgres on :5544, never the dev database)
 Commits: A `b772a7b` · B `ce933f6` · C `7ece7ac` · D `a3c4ee0` · E `86d5923`.
 

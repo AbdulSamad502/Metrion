@@ -6,6 +6,7 @@ Written 2026-10-16. **Nothing here is approved or started.** Build order, branch
 
 - **Base:** `feat/pnl-calculator-and-expense-tracker` (the combined branch). Backup branches `feat/pnl-calculator-integration` and `spec/expense-tracker` stay untouched.
 - **Status 2026-10-16:** ST-01 (Step 1) is **merged** into the combined branch (merge commit `4e5274b`); the branch `fix/expense-adv-not-entered` no longer exists. Step 2 (engine) is being done directly on the combined branch by instruction, without a separate branch.
+- **All work stays on the combined branch `feat/pnl-calculator-and-expense-tracker`** (owner instruction, 2026-10-16): no per-step branches are created; the "one branch per step" default below is superseded.
 - **One branch per step** (the default below; superseded for Step 2 as noted above), each cut from the combined branch (or from the previous step's branch once that step is merged back into the combined branch), named `type/short-description` per `CLAUDE.md`: `fix/expense-adv-not-entered` (ST-01), `feat/expense-engine-feed`, `feat/expense-ledger-form`, `feat/expense-recurring`, then `feat/expense-csv-import` and `feat/expense-chat-draft`.
 - Nothing is committed to `main`; no push or deploy without a separate instruction.
 
@@ -47,6 +48,8 @@ G1 design approval (owner countersign of EXP-01…08, Q1, open register items) �
 - **Not in this step:** the CEO/CFO/PI/anomaly/calculator caveat edits (separate spec edits, required before release).
 
 ## Step 3 — Ledger tables, manual entry/edit form, payment and review status, controlled categories, void instead of delete
+
+*Step 3 inputs (2026-10-16):* the dashboard inspection and navigation proposal are in `12-dashboard-inspection.md` (a dedicated route under the CFO navigation; the navigation pattern is PROPOSED); the PROPOSED options for categories, X2 bounds, ledger migration ownership and the "True Margin" term are in `13-step3-proposals.md`; `14-readiness-checklist.md` lists what is done and what each gate still needs. Nothing in 12 or 13 is approved. All Step 3 work stays on the combined branch.
 
 - **Prerequisites:** Step 2's feed contract settled (the table shape must serve it); G1; open items decided: category list and category→cost-class mapping (Q5), review-status values (Q6/D5), legacy tracker compatibility (X1/Q7), `agent_run` for expense writes (X3/Q12), write-validation bounds (X2), entitlement check (X9). **Where the migration lives is a decision:** precedent is calc-engine-owned tables (`manual_adjustment`, `reconciliation_*` in `packages/calc-engine/migrations/versions/`) rather than backend migrations; the app-role grants/revokes need the pattern of `backend/migrations/versions/20261012_0018_app_role_least_privilege.py`. Recommended: calc-engine-owned, because the feed reads the ledger.
 - **Files likely affected:**
