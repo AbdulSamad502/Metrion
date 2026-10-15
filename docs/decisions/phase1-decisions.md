@@ -172,6 +172,10 @@ Q29 and Q30 are now **written into `docs/specs/deterministic-engine.md`** (§5.8
 | 8 | Trial formula version name: `<CODE>.v<N>-trial` (recommended) or `v<N>-rc<k>` | `-trial` suffix | §9.2 |
 | 9 | Ledger watermark in `input_refs` (recommended) or a new column | `input_refs` | §9.2 |
 | 10 | Metric codes for the expense dashboard aggregates and the profit lines | as listed | §9.3 |
+| 11 | Amortization of an expense over N months (Q31) | as written, awaiting approval | §5.18.1 |
+| 12 | Per-order / per-unit cost templates (Q32) | as written, awaiting approval | §5.18.2 |
+| 13 | Multi-SKU assignment with a seller-chosen split; extends Q29 (Q33) | as written, awaiting approval | §5.18.3 |
+| 14 | Ledger CSV export for the accountant (Q34) | as written, awaiting approval | §5.18.4 |
 
 **Consumer specs that still need edits (not edited):** `cfo-agent.md`, `product-intelligence-agent.md` / pricing surfaces, `anomaly-detection.md`, `calculator.md`, `data-foundation.md`, `ceo-agent-orchestration.md` (trial citations), `auth.md` (only if the read-layer view is chosen) — see engine §9.4.
 

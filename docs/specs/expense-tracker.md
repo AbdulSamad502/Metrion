@@ -2,6 +2,8 @@
 
 > **Status: DRAFT v4 — canonical, consolidated. NOT APPROVED FOR IMPLEMENTATION.**
 > The product decisions in §1 were approved by the owner on 2026-10-15 and are recorded in `docs/decisions/phase1-decisions.md` (EXP-01…EXP-08, ST-01). Everything else in this file is a proposal, a deferral, a gate or an open question, and is labelled as such. **No code, migration, endpoint or permission change may start until §10 gate G1 is met.**
+> **Frozen for G1 review at commit `e91136a`** (2026-10-16). No normative change to this file after that commit except this header block; later edits go to the register, decisions record or a new revision.
+> **Q1 countersign (EXP-01…EXP-08):** ______________________  (owner name, date)
 
 **Authority.** This file is the single canonical Expense Tracker spec. It replaces the root `expense-tracker.md` ("DRAFT v2", now archived at `docs/planning/expense-tracker/archive/expense-tracker.md`) and the earlier parallel drafts; their unique content is reconciled in Appendix A.
 **Prerequisites and related specs.** `deterministic-engine.md` (D7, §5.8, §5.10 amended 2026-10-15) · `cfo-agent.md` ("Removed by design" amended 2026-10-15) · `auth.md` · `data-foundation.md` · `ceo-agent-orchestration.md` (C21, §6.11, §6.33, Q33; E30/T36 amended 2026-10-15) · `ceo-approval-workflow.md` · `product-intelligence-agent.md` (IndiaMART) · `calculator.md` (hypothetical estimates stay separate; on branch `feat/pnl-calculator-integration`, not merged here).
