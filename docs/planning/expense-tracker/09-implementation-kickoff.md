@@ -5,7 +5,8 @@ Written 2026-10-16. **Nothing here is approved or started.** Build order, branch
 ## Branching
 
 - **Base:** `feat/pnl-calculator-and-expense-tracker` (the combined branch). Backup branches `feat/pnl-calculator-integration` and `spec/expense-tracker` stay untouched.
-- **One branch per step**, each cut from the combined branch (or from the previous step's branch once that step is merged back into the combined branch), named `type/short-description` per `CLAUDE.md`: `fix/expense-adv-not-entered` (ST-01), `feat/expense-engine-feed`, `feat/expense-ledger-form`, `feat/expense-recurring`, then `feat/expense-csv-import` and `feat/expense-chat-draft`.
+- **Status 2026-10-16:** ST-01 (Step 1) is **merged** into the combined branch (merge commit `4e5274b`); the branch `fix/expense-adv-not-entered` no longer exists. Step 2 (engine) is being done directly on the combined branch by instruction, without a separate branch.
+- **One branch per step** (the default below; superseded for Step 2 as noted above), each cut from the combined branch (or from the previous step's branch once that step is merged back into the combined branch), named `type/short-description` per `CLAUDE.md`: `fix/expense-adv-not-entered` (ST-01), `feat/expense-engine-feed`, `feat/expense-ledger-form`, `feat/expense-recurring`, then `feat/expense-csv-import` and `feat/expense-chat-draft`.
 - Nothing is committed to `main`; no push or deploy without a separate instruction.
 
 ## Gates in one line each (from the spec §10)
@@ -20,7 +21,7 @@ G1 design approval (owner countersign of EXP-01…08, Q1, open register items) �
 
 *Separate small task (EXP/ST-01 approved as separate). Display only; no formula change.*
 
-- **Prerequisites:** none beyond the approved ST-01 (spec Appendix D). Does not need G1 and does not touch the ledger. Own branch, `fix/expense-adv-not-entered`.
+- **Done:** merged (`4e5274b`), implemented as `44a39c0`. **Prerequisites (historical):** none beyond the approved ST-01 (spec Appendix D). Does not need G1 and does not touch the ledger.
 - **Files likely affected:**
   - `backend/src/backend/services/cfo_actions.py` — `compute_period_pnl` (add additive `advertising_entered`), `PeriodPnlOutcome`.
   - `backend/src/backend/api/v1/cfo.py` — the `_period_pnl_*_to_dict` mappers and `post_period_pnl` response.
@@ -77,3 +78,7 @@ G1 design approval (owner countersign of EXP-01…08, Q1, open register items) �
 2. The open register items needed by Step 3 (X1, X2, X3, categories, review states) decided, or explicitly deferred.
 3. The consumer-spec caveat edits scheduled (they block release of the ledger feed, not the engine build).
 4. A scratch Postgres for the integration tests (the live dev database must not be used).
+
+## Test environment note
+
+Seven `packages/cfo` unit tests (`test_permissions.py::test_put_expense_*` and `test_cfo_actions_strategic_briefing.py`) need the **scratch-DB environment** (`eval "$(bash backend/scripts/scratch_db.sh env)"`, port 5544) **and** `LLM_OPERATOR_CONTROLLED_HOSTS=localhost:11434`. Without them they fail with `DATABASE_URL_APP is not set` and `LlmEndpointNotVerified`; with them the `packages/cfo` unit suite passes (300 passed, 3 skipped on 2026-10-16).
