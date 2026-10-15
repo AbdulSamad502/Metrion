@@ -393,6 +393,13 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cfo/pnl-scenario": {
+   "body": {
+    "$ref": "#/components/schemas/PnlScenarioHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/preview": {
    "body": {
     "$ref": "#/components/schemas/PreviewHttpRequest"
@@ -893,6 +900,31 @@
    "title": "AttributePair",
    "type": "object"
   },
+  "BandIn": {
+   "additionalProperties": false,
+   "properties": {
+    "amount": {
+     "title": "Amount",
+     "type": "string"
+    },
+    "up_to": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Up To"
+    }
+   },
+   "required": [
+    "amount"
+   ],
+   "title": "BandIn",
+   "type": "object"
+  },
   "BatchSizeHttpRequest": {
    "description": "One SKU, one chosen `supplier.quote`, one `batch.budget` target, plus already-assembled\nsales history (cfo-agent.md \u00a76.12, `twinkly-mapping-canyon.md` CP B3b). `lines` reuses\n`GstPeriodSummaryLineRequest`'s shape (the same already-assembled-`CanonicalLine` request\nfield convention `POST /cfo/gst/period-summary` already established) \u2014 an empty `lines`\nlist is this route's own way of expressing \"no sales history for this SKU\", exactly \u00a76.12's\nown \"never sold\" case, never a request-validation error.",
    "properties": {
@@ -969,6 +1001,35 @@
     "as_of_date"
    ],
    "title": "BatchSizeHttpRequest",
+   "type": "object"
+  },
+  "BpsEntry": {
+   "additionalProperties": false,
+   "description": "Basis points, 0..10000.",
+   "properties": {
+    "state": {
+     "default": "empty",
+     "enum": [
+      "empty",
+      "na",
+      "set"
+     ],
+     "title": "State",
+     "type": "string"
+    },
+    "value": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Value"
+    }
+   },
+   "title": "BpsEntry",
    "type": "object"
   },
   "BusinessOnboardingRequest": {
@@ -1260,6 +1321,34 @@
     "effective_from"
    ],
    "title": "CostEntryHttpRequest",
+   "type": "object"
+  },
+  "CountEntry": {
+   "additionalProperties": false,
+   "properties": {
+    "state": {
+     "default": "empty",
+     "enum": [
+      "empty",
+      "na",
+      "set"
+     ],
+     "title": "State",
+     "type": "string"
+    },
+    "value": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Value"
+    }
+   },
+   "title": "CountEntry",
    "type": "object"
   },
   "CreateCompetitorUrlRequest": {
@@ -1659,6 +1748,120 @@
     "value"
    ],
    "title": "EnterExpenseRequest",
+   "type": "object"
+  },
+  "FeeAmountIn": {
+   "additionalProperties": false,
+   "properties": {
+    "amount": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Amount"
+    },
+    "bands": {
+     "anyOf": [
+      {
+       "items": {
+        "$ref": "#/components/schemas/BandIn"
+       },
+       "maxItems": 12,
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Bands"
+    },
+    "kind": {
+     "enum": [
+      "single",
+      "tiers"
+     ],
+     "title": "Kind",
+     "type": "string"
+    },
+    "mode": {
+     "anyOf": [
+      {
+       "enum": [
+        "whole",
+        "marginal"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Mode"
+    }
+   },
+   "required": [
+    "kind"
+   ],
+   "title": "FeeAmountIn",
+   "type": "object"
+  },
+  "FeeEntryIn": {
+   "additionalProperties": false,
+   "properties": {
+    "state": {
+     "default": "empty",
+     "enum": [
+      "empty",
+      "na",
+      "set"
+     ],
+     "title": "State",
+     "type": "string"
+    },
+    "value": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/FeeAmountIn"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "title": "FeeEntryIn",
+   "type": "object"
+  },
+  "FeeIn": {
+   "additionalProperties": false,
+   "properties": {
+    "amount": {
+     "$ref": "#/components/schemas/FeeEntryIn"
+    },
+    "basis": {
+     "anyOf": [
+      {
+       "enum": [
+        "price_incl_gst",
+        "price_excl_gst"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Basis"
+    },
+    "refund_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    }
+   },
+   "title": "FeeIn",
    "type": "object"
   },
   "FinancialHealthHttpRequest": {
@@ -2246,6 +2449,35 @@
    "title": "Marketplace",
    "type": "string"
   },
+  "MoneyEntry": {
+   "additionalProperties": false,
+   "description": "Paise.",
+   "properties": {
+    "state": {
+     "default": "empty",
+     "enum": [
+      "empty",
+      "na",
+      "set"
+     ],
+     "title": "State",
+     "type": "string"
+    },
+    "value": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Value"
+    }
+   },
+   "title": "MoneyEntry",
+   "type": "object"
+  },
   "NicheConfirmBody": {
    "additionalProperties": false,
    "properties": {
@@ -2711,6 +2943,117 @@
    "title": "PeriodPnlLineRequest",
    "type": "object"
   },
+  "PnlScenarioHttpRequest": {
+   "additionalProperties": false,
+   "description": "No `tenant_id` field exists: the tenant is the session's, and `extra=\"forbid\"` rejects any client attempt to supply one.",
+   "properties": {
+    "ad_revenue": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "ad_spend": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "amazon_fulfilment": {
+     "default": "easy_ship",
+     "enum": [
+      "easy_ship",
+      "seller_flex",
+      "fba",
+      "self_ship"
+     ],
+     "title": "Amazon Fulfilment",
+     "type": "string"
+    },
+    "fees": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/FeeIn"
+     },
+     "maxProperties": 12,
+     "title": "Fees",
+     "type": "object"
+    },
+    "gst_rate_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "gst_status": {
+     "default": "registered_itc",
+     "enum": [
+      "registered_itc",
+      "registered_no_itc",
+      "unregistered"
+     ],
+     "title": "Gst Status",
+     "type": "string"
+    },
+    "marketplace": {
+     "enum": [
+      "amazon",
+      "flipkart",
+      "meesho"
+     ],
+     "title": "Marketplace",
+     "type": "string"
+    },
+    "mode": {
+     "default": "detailed",
+     "enum": [
+      "quick",
+      "detailed"
+     ],
+     "title": "Mode",
+     "type": "string"
+    },
+    "monthly_orders": {
+     "$ref": "#/components/schemas/CountEntry"
+    },
+    "operating_expenses": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "packaging_cost": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "product_cost": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "purchase_gst_rate_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "return_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "return_recovery": {
+     "$ref": "#/components/schemas/RecoveryIn"
+    },
+    "rto_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "rto_recovery": {
+     "$ref": "#/components/schemas/RecoveryIn"
+    },
+    "salvage_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "selling_price": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "services_gst_rate_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "targets": {
+     "items": {
+      "$ref": "#/components/schemas/TargetIn"
+     },
+     "maxItems": 4,
+     "title": "Targets",
+     "type": "array"
+    }
+   },
+   "required": [
+    "marketplace"
+   ],
+   "title": "PnlScenarioHttpRequest",
+   "type": "object"
+  },
   "PreviewHttpRequest": {
    "description": "A marketplace and period range for the free-tier gated preview (D7, cfo-agent.md\n\u00a76.9/\u00a76.8 `cfo.preview`) \u2014 mirrors `ReconcileHttpRequest` exactly, since this route calls\nthe same real reconciliation `POST /cfo/reconcile` does; the preview differs only in what\nit reveals, never in what it computes.",
    "properties": {
@@ -3056,6 +3399,19 @@
     "as_of_date"
    ],
    "title": "ReconcileHttpRequest",
+   "type": "object"
+  },
+  "RecoveryIn": {
+   "additionalProperties": false,
+   "properties": {
+    "damaged_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "sellable_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    }
+   },
+   "title": "RecoveryIn",
    "type": "object"
   },
   "RequestPriceScenarioRequest": {
@@ -3449,6 +3805,39 @@
     "quantity"
    ],
    "title": "SupplierRankingHttpRequest",
+   "type": "object"
+  },
+  "TargetIn": {
+   "additionalProperties": false,
+   "properties": {
+    "basis": {
+     "default": "contribution",
+     "enum": [
+      "contribution",
+      "operating"
+     ],
+     "title": "Basis",
+     "type": "string"
+    },
+    "bps": {
+     "default": "0",
+     "pattern": "^(0|[1-9][0-9]{0,3})$",
+     "title": "Bps",
+     "type": "string"
+    },
+    "kind": {
+     "enum": [
+      "breakeven",
+      "margin"
+     ],
+     "title": "Kind",
+     "type": "string"
+    }
+   },
+   "required": [
+    "kind"
+   ],
+   "title": "TargetIn",
    "type": "object"
   },
   "TitleSetsBody": {

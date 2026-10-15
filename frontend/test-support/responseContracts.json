@@ -431,6 +431,164 @@
    "valuePaise": null
   }
  },
+ "POST /api/v1/cfo/pnl-scenario": {
+  "assumptions": [
+   {
+    "code": null,
+    "label": null
+   }
+  ],
+  "breakdown~": {
+   "chartUnavailableReason": null,
+   "lines": [
+    {
+     "amount": null,
+     "group": null,
+     "id": null,
+     "label": null,
+     "shareBps": null
+    }
+   ],
+   "profitShareBps": null,
+   "segments~": [
+    {
+     "amount": null,
+     "endBps": null,
+     "group": null,
+     "id": null,
+     "label": null,
+     "shareBps": null,
+     "startBps": null
+    }
+   ],
+   "topCosts": [
+    {
+     "amount": null,
+     "group": null,
+     "id": null,
+     "label": null,
+     "shareBps": null
+    }
+   ]
+  },
+  "estimateRef": null,
+  "formulaVersion": null,
+  "isExample": null,
+  "issues": [
+   {
+    "code": null,
+    "field": null,
+    "message": null,
+    "severity": null
+   }
+  ],
+  "kind": null,
+  "metrics~": {
+   "acosBps": null,
+   "breakEvenRoasBps": null,
+   "contributionMarginBps": null,
+   "effectiveFeeBps": null,
+   "gstRecoveredMonthly": null,
+   "gstRecoveredPerKept": null,
+   "maxCac": null,
+   "operatingMarginBps": null,
+   "roasBps": null,
+   "tacosBps": null
+  },
+  "missingCosts": null,
+  "monthly~": {
+   "contribution": null,
+   "lines": [
+    {
+     "amount": null,
+     "group": null,
+     "id": null,
+     "label": null
+    }
+   ],
+   "operatingExpenses": null,
+   "operatingProfit": null,
+   "revenue": null
+  },
+  "noKeptOrders": null,
+  "orders~": {
+   "kept": {
+    "den": null,
+    "exact": null,
+    "num": null,
+    "text": null
+   },
+   "placed": {
+    "den": null,
+    "exact": null,
+    "num": null,
+    "text": null
+   },
+   "returned": {
+    "den": null,
+    "exact": null,
+    "num": null,
+    "text": null
+   },
+   "rto": {
+    "den": null,
+    "exact": null,
+    "num": null,
+    "text": null
+   }
+  },
+  "perKept~": {
+   "contribution": null,
+   "lines": [
+    {
+     "amount": null,
+     "group": null,
+     "id": null,
+     "label": null
+    }
+   ],
+   "operatingExpenses": null,
+   "operatingProfit": null,
+   "revenue": null
+  },
+  "perPlaced~": {
+   "contribution": null,
+   "lines": [
+    {
+     "amount": null,
+     "group": null,
+     "id": null,
+     "label": null
+    }
+   ],
+   "operatingExpenses": null,
+   "operatingProfit": null,
+   "revenue": null
+  },
+  "persisted": null,
+  "scopeNote": null,
+  "solutions": [
+   {
+    "excludesMissingCosts": null,
+    "outcome": null,
+    "price": null,
+    "ranges": [
+     {
+      "from": null,
+      "to": null
+     }
+    ],
+    "reason": null,
+    "target": {
+     "basis": null,
+     "bps": null,
+     "kind": null
+    }
+   }
+  ],
+  "status": null,
+  "verification": null
+ },
  "GET /api/v1/ceo/findings": {
   "hidden": [
    {

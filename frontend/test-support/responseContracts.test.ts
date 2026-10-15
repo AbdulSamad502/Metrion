@@ -33,6 +33,7 @@ const CONTRACTS: { route: string; file: string; type: string; wrap?: string }[] 
   { route: "PUT /api/v1/cfo/expenses/budget", file: "lib/api.ts", type: "ManualAdjustmentIdResponse" },
   { route: "POST /api/v1/cfo/pricing", file: "lib/api.ts", type: "PricingCurveResponse" },
   { route: "POST /api/v1/cfo/pnl", file: "lib/api.ts", type: "PeriodPnlResponse" },
+  { route: "POST /api/v1/cfo/pnl-scenario", file: "lib/pnlScenario.ts", type: "PnlScenarioResponse" },
   { route: "GET /api/v1/ceo/findings", file: "lib/ceo.ts", type: "SharedFindingsList" },
   { route: "GET /api/v1/ceo/memory", file: "lib/ceo.ts", type: "MemoryItem", wrap: "items" },
   { route: "GET /api/v1/ceo/state/health", file: "lib/ceo.ts", type: "HealthEntry", wrap: "entries" },
