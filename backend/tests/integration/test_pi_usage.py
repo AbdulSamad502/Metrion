@@ -170,14 +170,14 @@ class _Places:
         self.found = found
 
     def search_place_ids(self, query, *, max_results=10):
-        return [PlaceIdResult(place_id="pl1", display_name="Acme", retrieved_at=T0)] if self.found else []
+        return [PlaceIdResult(place_id="pl1", display_name="Acme Traders", retrieved_at=T0)] if self.found else []
 
     def enrich_place(self, place_id):
-        return PlaceDetails(place_id=place_id, display_name="Acme", phone=None, website=None, formatted_address=None, retrieved_at=T0)
+        return PlaceDetails(place_id=place_id, display_name="Acme Traders", phone=None, website=None, formatted_address=None, retrieved_at=T0)
 
 
 class _NoWebTavily(_FakeTavilyClient):
-    def search(self, query, *, include_images=False, max_results=10):
+    def search(self, query, *, include_images=False, max_results=10, topic=None, days=None, country=None, include_domains=None):
         return []
 
 
