@@ -793,21 +793,7 @@
   },
   "messages": [
    {
-    "choices~?": {
-     "kind": null,
-     "options": [
-      {
-       "form?": null,
-       "key": null,
-       "kind": null,
-       "label": null,
-       "reason": null,
-       "skip?": null
-      }
-     ],
-     "slot": null,
-     "version": null
-    },
+    "choices?": null,
     "content": null,
     "created_at": null,
     "failed?": null,
