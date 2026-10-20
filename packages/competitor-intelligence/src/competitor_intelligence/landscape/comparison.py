@@ -23,6 +23,7 @@ stronger, disallowed claim.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 from uuid import UUID
@@ -66,7 +67,7 @@ class CompetitorComparison:
     differentiation_opportunities: tuple[ComparisonEntry, ...]
 
 
-def _theme_set(themes: object) -> frozenset[str] | None:
+def _theme_set(themes: Iterable[object] | None) -> frozenset[str] | None:
     """`competitor_listing_insight.keyword_themes` / `.feature_categories` are jsonb; be
     liberal about the container shape (list or already a set-like) but never silently treat
     a missing value as an empty, comparable set — that would fabricate a gap/strength from

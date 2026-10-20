@@ -12,7 +12,7 @@ Every function takes `tenant_id` first and receives its connection only via `ten
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -70,7 +70,7 @@ def create_candidate(
                 "tier": tier,
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def set_identity_resolution(tenant_id: UUID, candidate_id: UUID, resolution: IdentityResolution, *, tier: str) -> None:

@@ -391,7 +391,7 @@ def submit_manual_correction(
     )
 
 
-def _row_to_draft_fields(row: dict) -> SnapshotDraft:
+def _row_to_draft_fields(row: dict[str, Any]) -> SnapshotDraft:
     """Adapts a DB row from latest_comparable_snapshot() into the subset of SnapshotDraft
     fields compute_price_delta() actually reads."""
     return SnapshotDraft(

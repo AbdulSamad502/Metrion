@@ -4,7 +4,7 @@ for the snapshots it derives from."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -53,7 +53,7 @@ def insert_event(
                 "alert_eligible": delta.alert_eligible,
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def list_events(tenant_id: UUID, competitor_url_id: UUID, *, limit: int = 50) -> list[dict[str, Any]]:

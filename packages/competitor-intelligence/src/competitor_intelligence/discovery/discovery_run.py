@@ -44,6 +44,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import cast
 from uuid import UUID
 
 from competitor_intelligence.capture.allowlist import marketplace_for_host
@@ -569,8 +570,8 @@ def _outcome_from_row(run: dict[str, object]) -> DiscoveryRunOutcome:
     return DiscoveryRunOutcome(
         discovery_run_id=UUID(str(run["id"])),
         status=str(run["status"]),
-        raw_candidate_count=int(run["raw_candidate_count"] or 0),  # type: ignore[arg-type]
-        analyzed_candidate_count=int(run["analyzed_candidate_count"] or 0),  # type: ignore[arg-type]
+        raw_candidate_count=int(cast(int, run["raw_candidate_count"]) or 0),
+        analyzed_candidate_count=int(cast(int, run["analyzed_candidate_count"]) or 0),
         recommended_candidate_ids=(),
         uncertain_candidate_ids=(),
         partial_reason=run["partial_reason"] if isinstance(run["partial_reason"], (str, type(None))) else None,

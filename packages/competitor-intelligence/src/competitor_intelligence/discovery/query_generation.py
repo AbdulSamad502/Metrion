@@ -211,8 +211,8 @@ def generate_queries(seller_product: SellerProduct) -> QueryGenerationResult:
 
     if seller_product.keywords:
         for keyword in seller_product.keywords:
-            if _clean(keyword):
-                candidates.append((QueryKind.KEYWORD_TERM, _clean(keyword)))
+            if cleaned := _clean(keyword):
+                candidates.append((QueryKind.KEYWORD_TERM, cleaned))
 
     sent: list[GeneratedQuery] = []
     dropped: list[DroppedQuery] = []

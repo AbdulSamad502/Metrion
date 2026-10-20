@@ -40,3 +40,8 @@ python_version = "3.12"
 strict = true
 mypy_path = "src"
 files = ["src"]
+
+# data-foundation ships no py.typed marker (a sibling package in this monorepo, not a third-party stub gap); only its import is exempted, strict stays on for this package.
+[[tool.mypy.overrides]]
+module = "data_foundation.*"
+follow_untyped_imports = true

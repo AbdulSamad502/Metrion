@@ -4,7 +4,7 @@ written when an alert is raised inside the tenant's window and released when the
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -18,7 +18,7 @@ def insert(tenant_id: UUID, *, finding_id: UUID, hold_until: datetime) -> UUID:
             text("INSERT INTO ci_held_alert (tenant_id, finding_id, hold_until) VALUES (:tenant_id, :finding_id, :hold_until) RETURNING id"),
             {"tenant_id": str(tenant_id), "finding_id": str(finding_id), "hold_until": hold_until},
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def list_due(tenant_id: UUID, *, now: datetime) -> list[dict[str, Any]]:
