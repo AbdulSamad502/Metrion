@@ -591,6 +591,124 @@
   "status": null,
   "verification": null
  },
+ "GET /api/v1/cfo/expense-ledger/categories": {
+  "categories": [
+   {
+    "costClass": null,
+    "id": null,
+    "label": null,
+    "treatment": null
+   }
+  ],
+  "channelTags": null,
+  "costClasses": null,
+  "limits": {
+   "amountMaxPaise": null,
+   "descriptionMax": null,
+   "pageSizeDefault": null,
+   "pageSizeMax": null,
+   "reasonMax": null,
+   "vendorMax": null
+  },
+  "paymentStatuses": null,
+  "reviewStates": null,
+  "treatments": null
+ },
+ "GET /api/v1/cfo/expense-ledger": {
+  "limit": null,
+  "offset": null,
+  "records": [
+   {
+    "amountPaise": null,
+    "category": null,
+    "categoryLabel": null,
+    "channelScope": null,
+    "correctsExpenseId": null,
+    "costClass": null,
+    "createdAt": null,
+    "description": null,
+    "effectiveDate": null,
+    "history?": [
+     {
+      "createdAt": null,
+      "kind": null,
+      "paidAmountPaise": null,
+      "paymentStatus": null,
+      "reason": null,
+      "reviewState": null,
+      "seq": null
+     }
+    ],
+    "id": null,
+    "identifier": null,
+    "origin": null,
+    "paidAmountPaise": null,
+    "paymentStatus": null,
+    "recurring": null,
+    "refundOfExpenseId": null,
+    "reviewReason": null,
+    "reviewState": null,
+    "sku": null,
+    "sourceReference": null,
+    "sourceValidated": null,
+    "treatment": null,
+    "vendor": null
+   }
+  ],
+  "total": null
+ },
+ "POST /api/v1/cfo/expense-ledger/summary": {
+  "asOfDate": null,
+  "byCategory": [
+   {
+    "asOfDate": null,
+    "category": null,
+    "engineResultRef": null,
+    "label": null,
+    "paise": null
+   }
+  ],
+  "byCostClass": [
+   {
+    "asOfDate": null,
+    "costClass": null,
+    "engineResultRef": null,
+    "paise": null
+   }
+  ],
+  "expenseTotal": {
+   "asOfDate": null,
+   "engineResultRef": null,
+   "paise": null
+  },
+  "gaps": null,
+  "includingUnresolved": {
+   "asOfDate": null,
+   "engineResultRef": null,
+   "paise": null
+  },
+  "notEntered": null,
+  "periodEnd": null,
+  "periodStart": null,
+  "recurringTotal": {
+   "asOfDate": null,
+   "engineResultRef": null,
+   "paise": null
+  },
+  "reviewQueue": {
+   "amountPaise": null,
+   "asOfDate": null,
+   "engineResultRef": null,
+   "items": [
+    {
+     "amountPaise": null,
+     "expenseId": null,
+     "reason": null
+    }
+   ]
+  },
+  "watermark": null
+ },
  "GET /api/v1/ceo/findings": {
   "hidden": [
    {

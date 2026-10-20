@@ -1379,8 +1379,16 @@
    "additionalProperties": false,
    "properties": {
     "amount_paise": {
-     "title": "Amount Paise",
-     "type": "integer"
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      }
+     ],
+     "title": "Amount Paise"
     },
     "category": {
      "title": "Category",
@@ -1658,8 +1666,16 @@
    "additionalProperties": false,
    "properties": {
     "amount_paise": {
-     "title": "Amount Paise",
-     "type": "integer"
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      }
+     ],
+     "title": "Amount Paise"
     },
     "category": {
      "title": "Category",
@@ -2860,9 +2876,11 @@
     "paid_amount_paise": {
      "anyOf": [
       {
-       "maximum": 9999999999999.0,
-       "minimum": 0.0,
        "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
       },
       {
        "type": "null"
@@ -3772,8 +3790,16 @@
    "additionalProperties": false,
    "properties": {
     "amount_paise": {
-     "title": "Amount Paise",
-     "type": "integer"
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      }
+     ],
+     "title": "Amount Paise"
     },
     "description": {
      "anyOf": [

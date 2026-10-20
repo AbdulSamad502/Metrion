@@ -80,7 +80,7 @@ def vendor_error(vendor: str) -> str | None:
     if len(vendor) > VENDOR_MAX:
         return f"Vendor is too long (at most {VENDOR_MAX} characters)."
     if _CURRENCY.search(vendor) or _GROUPED_OR_DECIMAL.search(vendor) or _LONG_DIGITS.search(vendor):
-        return "The vendor looks like it contains an amount. Enter the vendor's name only; the amount goes in the amount field."
+        return "The vendor looks like an amount. Enter the vendor's name only; amounts go in the amount field."
     return None
 
 

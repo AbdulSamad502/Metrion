@@ -1,6 +1,7 @@
 "use client";
 
 import { PAGE_COPY } from "@/lib/navigation";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { ImportHistory } from "@/components/cfo/ImportHistory";
@@ -83,6 +84,9 @@ function CfoWorkspace() {
     <div className="mt-content flex flex-col gap-7">
       <div className="flex flex-col gap-3">
         <Tabs tabs={tabs} active={tab} onChange={setTab} label="CFO workspace" idPrefix="cfo" />
+        <Link href="/dashboard/cfo/expenses" className="t-body-sm font-semibold mt-focus w-fit" style={{ color: "var(--accent)" }}>
+          Open the Expense Tracker →
+        </Link>
         <p className="t-body" style={{ color: "var(--text-5)" }}>
           {CFO_TAB_BLURBS[tab as (typeof CFO_TABS)[number]["id"]]}
         </p>

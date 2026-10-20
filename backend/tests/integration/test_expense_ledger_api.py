@@ -145,11 +145,14 @@ def test_a_refund_is_a_negative_linked_record_in_its_own_period(app_client, owne
     d = app_client.get(f"{BASE}/{r.json()['expenseId']}", headers=owner).json()
     assert d["refundOfExpenseId"] == eid and d["amountPaise"] == -40_000 and d["effectiveDate"] == "2026-10-03"
     assert app_client.post(f"{BASE}/{eid}/refund", json={"effective_date": "2026-10-03", "amount_paise": 40_000}, headers=owner).status_code == 422
+    assert app_client.post(f"{BASE}/{eid}/refund", json={"effective_date": "2026-10-04", "amount_paise": "-100"}, headers=owner).status_code == 201   # a digit string is accepted
+    assert app_client.post(f"{BASE}/{eid}/refund", json={"effective_date": "2026-10-04", "amount_paise": "-0"}, headers=owner).status_code == 422
 
 
 @pytest.mark.parametrize("patch,status", [
     ({"vendor": "Acme ₹500"}, 422), ({"vendor": "paid 1,200.50 to Acme"}, 422), ({"vendor": "3M"}, 201),   # Q22
-    ({"amount_paise": 1.5}, 422), ({"amount_paise": "100"}, 422), ({"amount_paise": 10_000_000_000_000}, 422), ({"amount_paise": -5}, 422),
+    ({"amount_paise": 1.5}, 422), ({"amount_paise": "100"}, 201), ({"amount_paise": "1e3"}, 422), ({"amount_paise": "12.5"}, 422), ({"amount_paise": "-5"}, 422),
+    ({"amount_paise": ""}, 422), ({"amount_paise": True}, 422), ({"amount_paise": "9999999999999"}, 201), ({"amount_paise": "10000000000000"}, 422), ({"amount_paise": 10_000_000_000_000}, 422), ({"amount_paise": -5}, 422),
     ({"amount_paise": 0}, 201), ({"category": "direct_product_costs"}, 422), ({"category": "nonsense"}, 422), ({"cost_class": "COGS"}, 422),
     ({"treatment": "replaces_input"}, 422), ({"channel_scope": "EBAY"}, 422), ({"effective_date": "not-a-date"}, 422),
     ({"description": "x" * 501}, 422), ({"tenant_id": str(uuid.uuid4())}, 422), ({"state": "voided"}, 422),

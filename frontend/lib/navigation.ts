@@ -26,6 +26,7 @@ export const PAGE_COPY = {
   competitors: { title: "Competitors", subtitle: "Track competitor prices, add your own evidence, and see what changed" },
   "pnl-calculator": { title: "Profit Calculator", subtitle: "Try prices, costs and fees before you commit. A what-if from the numbers you type, never your verified results" },
   cfo: { title: "Profit & Finance", subtitle: "Profit, cash, GST and where money leaks, calculated from the reports you upload" },
+  "cfo-expenses": { title: "Expense Tracker", subtitle: "Every expense, where it landed in your profit, and what still needs your review" },
   cmo: { title: "Listings & Marketing", subtitle: "Titles, listing copy, catalog answers and market research, for you to copy and never published for you" },
   agents: { title: "Agents", subtitle: "The specialists behind Metrion: what each one does and whether it is available to you" },
   settings: { title: "Settings", subtitle: "Your account, business and notification preferences" },

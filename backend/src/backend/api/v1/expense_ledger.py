@@ -12,11 +12,11 @@ review-state event with a reason. The legacy `PUT/GET /cfo/expenses` is untouche
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StringConstraints, field_validator, model_validator
 
 from calc_engine.api.expense_metrics import mint_ledger_feed_metrics
 from calc_engine.formulas.ledger_feed import ledger_feed
@@ -37,6 +37,18 @@ READ_CODE = "cfo.expense_ledger.read"
 TRIGGER_REF = "cfo.expense_ledger"
 
 
+_DIGITS = r"^(0|-?[1-9][0-9]{0,15})$"
+
+# Money may cross the wire as an integer or as an integer STRING of digits (the Profit Calculator convention: a browser number cannot hold a large paise amount and
+# the browser never parses money). The OpenAPI schema says so (integer or a digit string), a float, a bool, an exponent or a decimal string is refused, and the
+# validators below turn an accepted string into the integer the rules and the ledger use.
+Paise = StrictInt | Annotated[str, StringConstraints(pattern=_DIGITS)]
+
+
+def _to_int(value: Any) -> Any:
+    return int(value) if isinstance(value, str) else value
+
+
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -49,7 +61,7 @@ def _check(message: str | None) -> None:
 class _Content(_Strict):
     effective_date: date
     category: str
-    amount_paise: StrictInt
+    amount_paise: Paise
     vendor: str | None = Field(default=None, max_length=rules.VENDOR_MAX)
     description: str | None = Field(default=None, max_length=rules.DESCRIPTION_MAX)
     cost_class: str | None = None
@@ -57,6 +69,11 @@ class _Content(_Strict):
     channel_scope: str | None = None
     sku: str | None = Field(default=None, max_length=rules.SKU_MAX)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=rules.IDEMPOTENCY_KEY_MAX)
+
+    @field_validator("amount_paise", mode="after")
+    @classmethod
+    def _amount_int(cls, v: Any) -> Any:
+        return _to_int(v)
 
     @field_validator("category")
     @classmethod
@@ -110,9 +127,14 @@ class CorrectRequest(_Content):
 
 class RefundRequest(_Strict):
     effective_date: date
-    amount_paise: StrictInt
+    amount_paise: Paise
     description: str | None = Field(default=None, max_length=rules.DESCRIPTION_MAX)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=rules.IDEMPOTENCY_KEY_MAX)
+
+    @field_validator("amount_paise", mode="after")
+    @classmethod
+    def _amount_int(cls, v: Any) -> Any:
+        return _to_int(v)
 
     @model_validator(mode="after")
     def _amount(self) -> "RefundRequest":
@@ -133,8 +155,16 @@ class ReviewRequest(_Strict):
 
 class PaymentRequest(_Strict):
     status: Literal["unpaid", "partially_paid", "paid", "unknown"]
-    paid_amount_paise: StrictInt | None = Field(default=None, ge=0, le=rules.AMOUNT_MAX_PAISE)
+    paid_amount_paise: Paise | None = None
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=rules.IDEMPOTENCY_KEY_MAX)
+
+    @field_validator("paid_amount_paise", mode="after")
+    @classmethod
+    def _paid(cls, v: Any) -> Any:
+        v = _to_int(v)
+        if v is not None and not 0 <= v <= rules.AMOUNT_MAX_PAISE:
+            raise ValueError("paid amount must be between 0 and the amount limit")
+        return v
 
 
 def _iso(value: Any) -> str | None:
