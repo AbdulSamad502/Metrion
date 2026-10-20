@@ -58,7 +58,7 @@ Use a merge, not a rebase: both branches may be shared, and a merge never rewrit
 
 1. `git status` lists the unmerged files. Fix each by hand, keeping both sides' intent (e.g. a router list gets both routers).
 2. **Generated files are not hand-merged.** Take either side, then regenerate:
-   - `frontend/test-support/requestContract.json`: `python backend/scripts/export_request_contract.py` (needs the backend env vars below).
+   - `frontend/test-support/requestContract.json`: `python backend/scripts/export_request_contract.py` with the backend env vars set (see `docs/ci-v3-local-testing.md`). **The output depends on the Pydantic version**: the committed file is reproduced exactly by Pydantic 2.12.x; 2.14 drops the Decimal `pattern` entries. Run `pip install "pydantic==2.12.5"` in your venv first, and check `git diff` shows only intended changes.
    - `frontend/test-support/responseContracts.json`: from `frontend/`, `UPDATE_CONTRACTS=1 npx vitest run test-support/responseContracts.test.ts`.
 3. `git diff --name-only --diff-filter=U` must be empty and `grep -rn '<<<<<<<' .` must find nothing before you commit.
 
