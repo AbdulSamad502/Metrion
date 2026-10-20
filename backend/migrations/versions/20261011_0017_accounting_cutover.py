@@ -52,11 +52,17 @@ def _refuse_if_rows_exist() -> None:
     many downgrades in one transaction, and a leftover empty setting would make every later RLS cast fail."""
     from sqlalchemy import text
 
-    with op.get_bind().engine.connect() as probe:
-        for (tenant_id,) in probe.execute(text("SELECT id FROM tenant")).all():
-            probe.execute(text("SELECT set_config('app.current_tenant_id', :t, false)"), {"t": str(tenant_id)})
-            if probe.execute(text("SELECT 1 FROM investigation_turn WHERE safety_result ? 'billing' LIMIT 1")).first() is not None:
+    # Probe on the migration's own connection inside a savepoint that is ALWAYS rolled back (the transaction-local tenant setting never survives it). A second connection
+    # would block on locks that later downgrades of the same `downgrade base` transaction already hold.
+    conn = op.get_bind()
+    probe = conn.begin_nested()
+    try:
+        for (tenant_id,) in conn.execute(text("SELECT id FROM tenant")).all():
+            conn.execute(text("SELECT set_config('app.current_tenant_id', :t, true)"), {"t": str(tenant_id)})
+            if conn.execute(text("SELECT 1 FROM investigation_turn WHERE safety_result ? 'billing' LIMIT 1")).first() is not None:
                 raise RuntimeError("cannot downgrade 20261011_0017: investigation_turn rows carry stored billing decisions")
+    finally:
+        probe.rollback()
 
 
 def downgrade() -> None:
