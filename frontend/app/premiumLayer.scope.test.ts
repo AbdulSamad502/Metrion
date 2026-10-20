@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(join(process.cwd(), "app", "globals.css"), "utf8");
 const MARK = "PREMIUM APP LAYER";
 const layerStart = css.lastIndexOf("/*", css.indexOf(MARK)); // the layer begins at its header comment
-const layer = css.slice(layerStart).replace(/\/\*[\s\S]*?\*\//g, "");
+const layerEnd = css.indexOf("END PREMIUM APP LAYER"); // the CEO Hub canvas rules that follow are scoped by their own classes
+const layer = css.slice(layerStart, layerEnd).replace(/\/\*[\s\S]*?\*\//g, "");
 
 /** Every rule prelude in the layer (at-rule names and keyframe steps excluded), split into its comma-separated selectors. */
 function selectors(text: string): string[] {

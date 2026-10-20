@@ -65,12 +65,12 @@ cd backend; ..\.venv-ci\Scripts\python.exe -m uvicorn backend.main:app --reload 
 cd frontend; npm run dev
 ```
 
-## Known blockers / caveats
+## Known caveats
 
-- `alembic downgrade base` for **backend** self-deadlocks at `20261012_0019` (its downgrade opens a second connection that reads `tenant` while the migration transaction holds a lock on it). `upgrade head` is fine. Pre-existing, unrelated to CI V3; not changed here.
-- Frontend failures that are not CI-V3 related (see the test report): `premiumLayer.scope`, `noClientMath` (PickCard `Number(`), `responseContracts`, plus timeouts when the machine is under load.
-- `npm run lint` prints 5 warnings, 0 errors.
-- Stopping the scratch DB: `docker stop ci-v3-pg`; remove with `docker rm -f ci-v3-pg` (it holds no data you need).
+- Backend integration tests are very slow against a scratch database (roughly a minute per test in this setup because of per-test tenant cleanup), so run the files you changed rather than the whole suite.
+- lembic downgrade base for the backend refuses to run while the database holds approval, billing or PLANNED-turn rows (a deliberate guard). Use an empty scratch database for the round trip.
+- Stopping the scratch DB: `docker stop ci-v3-pg`; remove with `docker rm -f ci-v3-pg` (it holds nothing you need).
+- See `docs/git-workflow.md` for branches and updates.
 
 ## Manual testing checklist (CI V3)
 

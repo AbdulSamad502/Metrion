@@ -19,7 +19,7 @@ export function PickCard({ card, disabled, onSend }: { card: PickCardData; disab
   const numberOf = (i: PickCardData["items"][number]) => String(i.n ?? i.key);
   const text = (template: string) =>
     template
-      .replace("{numbers}", chosen.map(numberOf).sort((a, b) => Number(a) - Number(b)).join(", "))
+      .replace("{numbers}", chosen.map(numberOf).sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0)).join(", "))
       .replace("{labels}", chosen.map((i) => i.label).join(" and "));
   const can = (a: PickCardData["actions"][number]) => !disabled && (a.noPick ? true : chosen.length > 0 && (a.exactly ? chosen.length === a.exactly : true));
 
