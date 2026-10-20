@@ -49,8 +49,9 @@ class PositionGap:
     reference: PositionReference
     reference_price_paise: Paise
     gap_paise: Paise
-    gap_pct: Fraction
+    gap_pct: Fraction  # (seller - reference) / REFERENCE * 100
     confidence: Confidence
+    gap_pct_of_seller: Fraction | None = None  # (seller - reference) / SELLER * 100: the competitor is X% below your price
 
 
 def _average_paise(values: Sequence[Paise]) -> Paise:
@@ -104,6 +105,7 @@ def compute_position_gaps(
                 gap_paise=seller_price_paise - reference_price,
                 gap_pct=_gap_pct(seller_price_paise, reference_price),
                 confidence=combined_confidence,
+                gap_pct_of_seller=(Fraction(seller_price_paise.value - reference_price.value, seller_price_paise.value) * 100) if seller_price_paise.value > 0 else None,
             )
         )
     return tuple(gaps)

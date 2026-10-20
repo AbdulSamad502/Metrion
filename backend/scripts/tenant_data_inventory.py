@@ -26,11 +26,11 @@ CATEGORY = {
         "competitor_url", "competitor_snapshot", "competitor_snapshot_field", "competitor_evidence", "competitor_price_event", "competitor_listing_insight",
         "competitor_review_insight", "ci_candidate", "ci_candidate_relevance", "ci_capture_run", "ci_discovery_run", "ci_search_query", "ci_search_result",
         "ci_digest_subscription", "ci_tenant_config", "niche_brief", "pi_research_run", "pi_research_case", "product_candidate", "product_embedding", "product_review_insight", "supplier_lead",
-        "pi_tenant_config", "seller_product_profile",
+        "pi_tenant_config", "seller_product_profile", "ci_finding", "ci_event", "ci_info_request", "ci_alert_state", "ci_held_alert",
     ),
     "CREATIVE_AND_IMAGES": ("cmo_generation", "cmo_title_approval", "cmo_title_option", "cmo_trend_report", "cmo_niche_term", "product_image_analysis", "seller_image_asset", "cmo_result_usage_event"),
     "KNOWLEDGE_BASE": ("rag_source", "rag_chunk", "rag_chunk_embedding", "rag_index_event", "rag_retrieval_log", "rag_usage_daily"),
-    "ACCOUNT": ("membership", "whatsapp_binding", "whatsapp_message", "whatsapp_alert_subscription", "whatsapp_pending_action"),
+    "ACCOUNT": ("business_profile", "membership", "whatsapp_binding", "whatsapp_message", "whatsapp_alert_subscription", "whatsapp_pending_action"),
 }
 CONFIG_OR_OTHER = ("anomaly_detection_config", "financial_health_config", "reconciliation_tolerance_config", "severity_config", "discount_bearer_config", "entitlement_cap_config",
                    "capability_entitlement_rule", "metered_event_meter_map", "cmo_platform_config")

@@ -35,7 +35,16 @@ DELEGATED_ACTIONS: frozenset[str] = frozenset(input_session.CMO_SESSIONS)  # the
 IMAGE_TYPES: frozenset[str] = frozenset({"PNG", "JPEG", "WEBP"})  # attachment types (detected from content) the CMO reads as a product photo
 IMAGE_ACTION = "cmo.analyze_attachment"  # the CEO -> CMO photo hand-off (by reference); always its own small plan card
 IMAGE_FOLLOWUPS: frozenset[str] = DELEGATED_ACTIONS - {"cmo.market_trends"}  # the generation actions that can start from an attached product photo
+CI_INFORMED: frozenset[str] = DELEGATED_ACTIONS - {"cmo.market_trends"}  # the writing actions that may be informed by the seller's saved competitor listing themes (CEO-brokered)
+CI_USED_LINE = (
+    "Informed by themes from {n} of your tracked competitors' saved listings (derived words only, no competitor text, no prices). "
+    "Metrion writes original text from your own product facts and checks it is not a copy or close rewrite of any competitor's wording, and makes no search-volume, ranking or sales claim."
+)
 STATE_VERSION = 1
+
+
+def ci_unused_line(note: str | None) -> str:
+    return (note or "Competitor listing themes were not used.") + " This is written independently from your own product facts."
 
 CONFIG_INVALID_TEXT = (
     "One of the settings that limits how many questions I may ask for a marketing task is not valid, so I have not started or continued it. Nothing was asked, run, sent or "
@@ -413,6 +422,8 @@ def compact_lines(key: str, slots: Mapping[str, Any], preview: Mapping[str, Any]
             lines.append("Model: not configured yet, so a run would be refused and nothing used up.")
         n = len(slots["marketplaces"]) if key == "cmo.generate_title_sets" and isinstance(slots.get("marketplaces"), list) and slots["marketplaces"] else 1
         lines.append(f"Cost: {n} CMO units, only for results that complete." if n != 1 else "Cost: 1 CMO unit, only if it completes.")
+    if slots.get("ci_insight_ids"):
+        lines.append(f"Uses themes from {len(slots['ci_insight_ids'])} tracked competitor listing(s); original wording only, no copying.")
     lines.append(f"Valid for {ttl_minutes} minutes.")
     return lines
 

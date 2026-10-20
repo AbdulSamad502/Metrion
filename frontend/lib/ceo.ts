@@ -35,6 +35,21 @@ export type ClarificationCard = { version: number; kind: string; slot: string; o
 /** The seller answering a card: the card's message id and the chosen option key (null = the free-text "Other", sent as the message text). */
 export type ClarificationReply = { id: string; option: string | null };
 
+/** The CEO's pick card (backend: ci_conversation.pick_card): check boxes or radio buttons plus action buttons that send templated text. */
+export type PickCard = {
+  version: number;
+  kind: "PICK";
+  title: string;
+  subtitle: string;
+  mode: "multi" | "single";
+  maxPick: number;
+  selectAll: boolean;
+  items: { key: string; n?: number; label: string; marketplace?: string | null; url?: string | null; note?: string | null }[];
+  actions: { id: string; label: string; template: string; exactly?: number; noPick?: boolean }[];
+};
+
+export const isPickCard = (c: unknown): c is PickCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "PICK" && Array.isArray((c as { items?: unknown }).items);
+
 export type CeoMessage = {
   id: string;
   role: "USER" | "CEO" | "SYSTEM";
@@ -43,7 +58,7 @@ export type CeoMessage = {
   turn_id: string | null;
   created_at: string;
   /** Only a CEO CLARIFICATION message that has real candidates to offer. */
-  choices?: ClarificationCard | null;
+  choices?: ClarificationCard | PickCard | null;
   /** Client-only: a message the seller just sent that the server has not echoed back yet. */
   pending?: boolean;
   /** The send failed and the thread could not be refreshed, so the server's copy is unknown: shown as not sent, never as still sending. */
@@ -254,7 +269,7 @@ export function createCeoClient(getToken: GetToken) {
       form.append("file", file);
       return apiFetchForm<UploadedAttachment>(`${BASE}/investigations/${id}/attachments`, await getToken(), form);
     },
-    postTurn: (id: string, message: string, period?: ExplicitPeriod | null, action?: UiAction | null, clarification?: ClarificationReply | null, attachmentIds?: string[], clientRequestId?: string | null) =>
+    postTurn: (id: string, message: string, period?: ExplicitPeriod | null, action?: UiAction | null, clarification?: ClarificationReply | null, attachmentIds?: string[], clientRequestId?: string | null, ciFindingId?: string | null) =>
       call<TurnResponse>(
         `/investigations/${id}/turns`,
         json("POST", {
@@ -263,6 +278,7 @@ export function createCeoClient(getToken: GetToken) {
           ...(action ? { action: { kind: action.kind, key: action.key ?? null, slots: action.slots ?? {}, ...(action.inputs ? { inputs: action.inputs } : {}) } } : {}),
           ...(clarification ? { clarification: { id: clarification.id, option: clarification.option } } : {}),
           ...(attachmentIds && attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
+          ...(ciFindingId ? { ciFindingId } : {}), // the CI dashboard's Ask CEO: an id only; the server re-reads the stored finding for this tenant (CI spec C46)
           ...(clientRequestId ? { clientRequestId } : {}), // one logical submission = one id: the server answers a retry with the stored outcome instead of running it again
         }),
       ),

@@ -9,8 +9,9 @@ Rules (owner decisions, 2026-10-10):
 * An action needs approval iff it is metered, OR it sends seller-specific confidential data to a third party (`SELLER_DATA_OUT`).
 * Ordinary GST public-page lookups (`PUBLIC_FETCH`) and calls to an OPERATOR-CONTROLLED model endpoint (`MODEL`) do not independently require
   approval. Whether an endpoint is operator-controlled is decided by `config.llm_endpoint_trust` (R7); an unverified endpoint is refused outright.
-* `ci.discover_competitors` is internal only while its composition root is `MockSearchProvider` (a guard test pins that; wiring a real provider
-  must change its row here in the same change).
+* `ci.discover_competitors` sends the seller's own product search terms (title, category, attributes, keywords, after the §6.11 privacy filter) to Tavily,
+  so it is `SELLER_DATA_OUT` and therefore approval-gated (CI spec C34, 2026-10-18). A guard test pins that the composition root selects a provider
+  through `services.ci_search`; changing that or the payload must change this row in the same change.
 * Classification is by ACTUAL data flow, evidenced in docs/planning/ceo-approval-s0-findings.md §D / §J. A payload change (e.g. adding a SKU to a
   PI query) must reclassify: `tests/integration/test_pi_payload_pins.py` fails if the payloads change.
 
@@ -92,8 +93,23 @@ ACTION_EFFECTS: Mapping[str, ActionEffects] = {
     "pi.report": _NONE,
     # ---- CI ----
     "ci.request_price_scenario": _NONE,
-    "ci.discover_competitors": _NONE,  # MockSearchProvider today; pinned (tests/unit/test_ceo_effects.py)
+    # Query text = the seller's own product title/category/attributes/keywords (§6.11-filtered: never SKU ids, costs or tenant identifiers). Not metered here:
+    # Q19/D12 leave the CI run-unit meter to the entitlement spec, and no meter is invented. Approval-gated because the text leaves Metrion.
+    "ci.discover_competitors": ActionEffects(external=External.SELLER_DATA_OUT, egress=("SELLER_PRODUCT_SEARCH_TERMS",), destinations=("Tavily",)),
     "ci.research_now": _NONE,  # not wired; must be reclassified (external fetch) when it is
+    # CI conversational surface (spec 6.21.3). The screenshot goes (by reference, read from the seller's own conversation) to Metrion's operator-controlled vision model; the
+    # model endpoint is verified before the image is read. The seller attached it on purpose, so no extra plan card: MODEL does not independently require approval (rules above).
+    "ci.evidence_intake": ActionEffects(external=External.MODEL, destinations=("Metrion vision model",), model_egress=("COMPETITOR_SCREENSHOT",)),
+    "ci.confirm_field": _NONE,
+    "ci.competitor_add": _NONE,
+    "ci.competitor_remove": _NONE,
+    "ci.competitor_approve": _NONE,
+    "ci.competitor_reject": _NONE,
+    "ci.monitor_competitors": _NONE,  # re-reads stored evidence only; no outbound call of any kind (CI spec C40)
+    "ci.review_findings": _NONE,
+    "ci.alert_settings_set": _NONE,  # writes only the seller's own alert preferences (column-level grant); nothing leaves Metrion
+    "ci.explain_finding": _NONE,  # a tenant-scoped read of one stored finding and its evidence
+    "ci.review_intake": ActionEffects(external=External.MODEL, destinations=("Metrion vision model",), model_egress=("COMPETITOR_REVIEWS_SCREENSHOT",)),
     # ---- CMO ----
     "cmo.generate_title_sets": _cmo_metered("cmo.generate_title_sets"),
     "cmo.generate_listing_copy": _cmo_metered("cmo.generate_listing_copy"),

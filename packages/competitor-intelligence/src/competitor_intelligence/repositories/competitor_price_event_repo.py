@@ -84,13 +84,35 @@ def list_recent_for_tenant(tenant_id: UUID, *, since: datetime) -> list[dict[str
         rows = conn.execute(
             text(
                 """
-                SELECT id, competitor_url_id, from_snapshot_id, to_snapshot_id, delta_paise, delta_pct,
-                       direction, availability_change, threshold_breached, alert_eligible, created_at
-                FROM competitor_price_event
-                WHERE tenant_id = :tenant_id AND created_at >= :since
-                ORDER BY created_at DESC
+                SELECT e.id, e.competitor_url_id, e.from_snapshot_id, e.to_snapshot_id, e.delta_paise, e.delta_pct,
+                       e.direction, e.availability_change, e.threshold_breached, e.alert_eligible, e.created_at
+                FROM competitor_price_event e
+                WHERE e.tenant_id = :tenant_id AND e.created_at >= :since
+                  AND e.alert_suppressed_reason IS NULL  -- not a deduplicated or stale-at-delivery alert (C42)
+                  AND NOT EXISTS (  -- held for quiet hours and not yet delivered: not shown until the window ends
+                    SELECT 1 FROM ci_held_alert h
+                    WHERE h.tenant_id = e.tenant_id AND h.finding_id = e.id AND h.delivered_at IS NULL)
+                ORDER BY e.created_at DESC
                 """
             ),
             {"tenant_id": str(tenant_id), "since": since},
         ).mappings()
         return [dict(r) for r in rows]
+
+
+def set_suppressed(tenant_id: UUID, event_id: UUID, reason: str) -> None:
+    """C42: the observation stays; it is just not shown as an alert (`DEDUP`, `STALE_AT_DELIVERY`)."""
+    with tenant_scope(tenant_id) as conn:
+        conn.execute(
+            text("UPDATE competitor_price_event SET alert_suppressed_reason = :reason WHERE tenant_id = :tenant_id AND id = :id"),
+            {"reason": reason, "tenant_id": str(tenant_id), "id": str(event_id)},
+        )
+
+
+def get_event(tenant_id: UUID, event_id: UUID) -> dict[str, Any] | None:
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text("SELECT * FROM competitor_price_event WHERE tenant_id = :tenant_id AND id = :id"),
+            {"tenant_id": str(tenant_id), "id": str(event_id)},
+        ).mappings().first()
+        return dict(row) if row else None

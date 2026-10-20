@@ -581,7 +581,7 @@ def latest_attachments(tenant_id: UUID, investigation_id: UUID, limit: int = 1) 
     """The most recently stored attachment(s) of THIS investigation in THIS tenant, newest first, without their bytes (attachment continuity across turns)."""
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(
-            text("SELECT id, filename, detected_type, byte_size, extraction_status, extraction_note, extracted_text, created_at FROM investigation_attachment "
+            text("SELECT id, filename, detected_type, byte_size, sha256, extraction_status, extraction_note, extracted_text, created_at FROM investigation_attachment "
                  "WHERE investigation_id = :inv ORDER BY created_at DESC LIMIT :n"),
             {"inv": str(investigation_id), "n": limit},
         )

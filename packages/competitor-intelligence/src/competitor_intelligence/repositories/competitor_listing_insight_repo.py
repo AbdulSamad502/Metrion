@@ -81,6 +81,52 @@ def get_by_snapshot(tenant_id: UUID, snapshot_id: UUID) -> dict[str, Any] | None
         return dict(row) if row else None
 
 
+def list_recent_with_text(tenant_id: UUID, *, limit: int = 5) -> list[dict[str, Any]]:
+    """The newest COMPLETE listing insight of each ACTIVE tracked competitor (most recent first), with the saved snapshot's own title/description/bullets and the competitor's
+    label. A read for the CEO to broker to Slim CMO: the text is for the originality comparison only and is never shown to a model."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT * FROM (
+                  SELECT DISTINCT ON (s.competitor_url_id)
+                         li.id, li.keyword_themes, li.feature_categories, li.benefit_term_patterns, li.differentiation_opportunities,
+                         li.insight_state, li.derived_at, s.title, s.description, s.bullets, u.label
+                  FROM competitor_listing_insight li
+                  JOIN competitor_snapshot s ON s.id = li.snapshot_id AND s.tenant_id = li.tenant_id
+                  JOIN competitor_url u ON u.id = s.competitor_url_id AND u.tenant_id = li.tenant_id
+                  WHERE li.tenant_id = :tenant_id AND u.status = 'ACTIVE'
+                  ORDER BY s.competitor_url_id, li.derived_at DESC
+                ) latest
+                ORDER BY derived_at DESC LIMIT :limit
+                """
+            ),
+            {"tenant_id": str(tenant_id), "limit": limit},
+        ).mappings().all()
+        return [dict(r) for r in rows]
+
+
+def get_by_ids(tenant_id: UUID, ids: list[UUID]) -> list[dict[str, Any]]:
+    """The tenant's own insight rows with those ids (a foreign or unknown id is simply absent), with the saved snapshot text for the originality comparison."""
+    if not ids:
+        return []
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT li.id, li.keyword_themes, li.feature_categories, li.benefit_term_patterns, li.differentiation_opportunities,
+                       li.insight_state, li.derived_at, s.title, s.description, s.bullets, u.label
+                FROM competitor_listing_insight li
+                LEFT JOIN competitor_snapshot s ON s.id = li.snapshot_id AND s.tenant_id = li.tenant_id
+                LEFT JOIN competitor_url u ON u.id = s.competitor_url_id AND u.tenant_id = li.tenant_id
+                WHERE li.tenant_id = :tenant_id AND li.id = ANY(CAST(:ids AS uuid[]))
+                """
+            ),
+            {"tenant_id": str(tenant_id), "ids": [str(i) for i in ids]},
+        ).mappings().all()
+        return [dict(r) for r in rows]
+
+
 def keyword_themes_for_category(
     tenant_id: UUID, *, observed_category: str, exclude_competitor_url_id: UUID
 ) -> list[frozenset[str]]:

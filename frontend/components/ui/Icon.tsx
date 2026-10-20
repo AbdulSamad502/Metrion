@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
  * navigation, plus the few utility glyphs the dashboard needs. `currentColor` so a parent's
  * text color (active / hover / locked) drives the icon. Decorative by default (aria-hidden);
  * pass `label` when an icon stands alone. */
-export type IconName = "overview" | "ceo" | "products" | "competitors" | "orders" | "customers" | "finance" | "marketing" | "reports" | "agents" | "cart" | "settings" | "notifications" | "lock" | "check" | "plus" | "arrow" | "chevron" | "close" | "menu" | "collapse" | "logout" | "dot" | "alert";
+export type IconName = "overview" | "ceo" | "products" | "competitors" | "orders" | "customers" | "finance" | "marketing" | "reports" | "agents" | "cart" | "settings" | "notifications" | "lock" | "check" | "plus" | "arrow" | "chevron" | "close" | "menu" | "collapse" | "logout" | "dot" | "alert" | "trash";
 
 const PATHS: Record<IconName, ReactNode> = {
   overview: <><rect x="2" y="2" width="7" height="7" rx="1.5" /><rect x="11" y="2" width="7" height="7" rx="1.5" /><rect x="2" y="11" width="7" height="7" rx="1.5" /><rect x="11" y="11" width="7" height="7" rx="1.5" /></>,
@@ -30,6 +30,7 @@ const PATHS: Record<IconName, ReactNode> = {
   collapse: <><path d="M12 5 L7 10 L12 15" /></>,
   logout: <><path d="M8 3H5a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 0 5 17h3" /><path d="M13 14l4-4-4-4" /><path d="M17 10H7.5" /></>,
   dot: <><circle cx="10" cy="10" r="3" fill="currentColor" stroke="none" /></>,
+  trash: <><path d="M4 6 H16" /><path d="M8 6 V4 H12 V6" /><path d="M5.5 6 L6.3 16.5 H13.7 L14.5 6" /><line x1="8.5" y1="9" x2="8.5" y2="14" /><line x1="11.5" y1="9" x2="11.5" y2="14" /></>,
   alert: <><circle cx="10" cy="10" r="8" /><line x1="10" y1="6" x2="10" y2="10.6" /><circle cx="10" cy="13.6" r="0.9" fill="currentColor" stroke="none" /></>,
 };
 

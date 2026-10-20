@@ -90,7 +90,10 @@ BRIEFING_RULES: tuple[Rule, ...] = (
 )
 
 # Ordered: the first match wins. Each pattern needs a clear verb or noun for the work, not just a keyword anywhere.
-RULES: tuple[Rule, ...] = BRIEFING_RULES + STATE_RULES + (
+_PRICE_DECISION = _rx(
+    r"\b(?:should i|can i|could i|what if i|what happens if i|if i|is it worth|do i need to|how (?:can|do) i|what should i do)\b[^.?!]*\b(?:reduce|lower|cut|drop|decrease|raise|increase|match|beat|undercut|reprice|change|conquer|compete)\b[^.?!]*\b(?:price|prices|pricing)\b"
+    r"|\b(?:conquer|beat|win against|compete with)\b[^.?!]*\b(?:competitors?|rivals?)\b[^.?!]*\b(?:price|pricing)\b|\bwhat should i do\b[^.?!]*\bpricing\b")
+RULES: tuple[Rule, ...] = (Rule("COMPETITOR_PRICE_IMPACT", "CI", _PRICE_DECISION, kind="PLAYBOOK"),) + BRIEFING_RULES + STATE_RULES + (
     Rule("cmo.generate_description", "CMO", _rx(rf"(?=.*\b{_DESC}\b)(?=.*\bgst\b)(?=.*\b(?:with|along|also|and|plus|together)\b)"), "ACTION", ("GST_RATE_FOR_PRODUCT",)),
     # Description AND bullets together: the listing copy pack already writes both (plus keywords) as ONE artefact, one approval, one CMO unit.
     Rule("cmo.generate_listing_copy", "CMO", _rx(rf"^(?!.*\bgst\b)(?!\s*(?:tell me about|explain|what|how|why|were|are|is|do|does|did)\b)(?=.*\b{_BULLETS}\b)(?=.*\b{_DESC}\b)(?=.*\b{_WRITE}\b|.*\b(?:and|together|also|with|plus)\b)")),
@@ -99,6 +102,13 @@ RULES: tuple[Rule, ...] = BRIEFING_RULES + STATE_RULES + (
     Rule("COMPETITOR_PRICE_IMPACT", "CI", _rx(r"(?=.*\bmargin\b)(?:.*\b(?:at|match|matched|matching|beat|undercut)\b.*\bprice\b|.*\b(?:is|are|dropped|cut|lowered)\b.*\b(?:at|to)\s*(?:₹|rs\.?)?\s*\d)"), "PLAYBOOK"),
     # A price scenario for ONE competitor (the saved list of competitor prices is a state read, matched earlier and excluded when the word "scenario" is used).
     Rule("ci.request_price_scenario", "CI", _rx(r"\bprice scenarios?\b|\bscenarios?\b.*\bprices?\b|\bprices?\b.*\bscenarios?\b|\bprice positioning\b")),
+    Rule("ci.request_price_scenario", "CI", _rx(r"^(?=.*(?:₹|\brs\.?\s*\d|\binr\b))(?=.*\bcompare\b)(?=.*\b(?:with|against|versus|vs\.?)\b)(?=.*\bprice\b)(?!.*\b(?:margin|profitable)\b).*$")),
+    Rule("ci.request_price_scenario", "CI", _rx(r"\b(?:compare|compared|versus|vs\.?|against)\b.*(?:₹|\brs\.?\s*\d|\binr\b).*\b(?:competitors?|rivals?)\b|\b(?:competitors?|rivals?)\b.*\b(?:cheaper|pricier)\b.*(?:₹|\brs\.?\s*\d)|(?:₹|\brs\.?\s*\d).*\bhow much (?:cheaper|pricier|more|less)\b.*\b(?:competitors?|rivals?)\b")),
+    # CI (CI spec 6.21.3). The seller talks to the CEO only: finding, re-checking and dropping competitors are fixed actions chosen by plain rules, never by a model guess.
+    Rule("ci.competitor_remove", "CI", _rx(r"\b(?:remove|untrack|stop tracking|stop following|delete|drop)\b.*\bcompetitors?\b|\bstop tracking\b|\buntrack\b")),
+    Rule("ci.monitor_competitors", "CI", _rx(r"\b(?:monitor|re-?check|refresh|see how)\b.*\b(?:my )?(?:competitors?|rivals?)\b|\bhow are (?:my )?(?:competitors?|rivals?)\b|\bany (?:changes|news|updates?) (?:from|with|on) (?:my )?(?:competitors?|rivals?)\b|\bcheck\b[^.?!]*\b(?:my )?(?:tracked )?(?:competitors?|rivals?)\b")),
+    Rule("ci.review_findings", "CI", _rx(r"\b(?:complaints?|complain\w*|reviews?)\b.*\bcompetitors?\b|\bcompetitors?\b.*\b(?:complaints?|reviews?)\b|\bwhat do customers (?:say|complain)\b.*\b(?:about|of)\b.*\b(?:competitor|rival)|\banaly[sz]e\b[^.?!]*\breviews?\b|\breview screenshots?\b|\bcustomer reviews?\b")),
+    Rule("ci.discover_competitors", "CI", _rx(r"^(?!.*\b(?:screenshots?|uploaded|upload|research now|reviews?|complaints?)\b).*\b(?:find|discover|research|look for|search for|identify)\b.*\b(?:new |more |my |the )?(?:competitors?|rivals?)\b|\b(?:new|more|other) competitors?\b.*\b(?:for|of)\b|^(?!.*https?://)(?!.*\b(?:stop|remove|untrack)\b).*\b(?:track|add|follow)\b[^.?!]*\b(?:a|an|new|another)\s+(?:new\s+)?(?:competitors?|rivals?)\b")),
     # B. hashtags: only an explicit request to GENERATE them. A question ABOUT hashtags (tell me about, what makes, how do, why, were those any good...) is not one.
     Rule(
         "cmo.generate_hashtags", "CMO",
@@ -111,6 +121,8 @@ RULES: tuple[Rule, ...] = BRIEFING_RULES + STATE_RULES + (
     Rule("cmo.generate_backend_terms", "CMO", _rx(rf"\b{_WRITE}\b.*\bbackend (?:search )?(?:terms|keywords)\b|\bbackend (?:search )?(?:terms|keywords)\b.*\bfor\b")),
     Rule("cmo.generate_bullets", "CMO", _rx(rf"\b{_WRITE}\b.*\b{_BULLETS}\b|\b{_BULLETS}\b.*\bfor\b")),
     Rule("cmo.generate_title_sets", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing |product |amazon |flipkart |meesho )?{_TITLES}\b|\b{_TITLES} (?:options?|ideas?|for)\b")),
+    # "improve my listing": the first step of listing work is title options (the copy pack is grounded on an approved title); competitor themes are brokered into it by the CEO when the seller has saved some.
+    Rule("cmo.generate_title_sets", "CMO", _rx(r"\b(?:improve|improving|optimi[sz]e|optimi[sz]ing|rewrite|enhance|upgrade)\b[^.?!]*\blistings?\b|\b(?:write|make|create)\b[^.?!]*\b(?:my|our)\s+listings?\b[^.?!]*\b(?:competitors?|rivals?)\b")),
     Rule("cmo.generate_description", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:product |listing )?{_DESC}\b")),
     Rule("cmo.generate_keywords", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:search |seo )?{_KEYWORDS}\b|\b{_KEYWORDS} (?:for|ideas?)\b")),
     Rule("cmo.market_trends", "CMO", _rx(
@@ -138,7 +150,7 @@ RULES: tuple[Rule, ...] = BRIEFING_RULES + STATE_RULES + (
     ),
 )
 
-_PRODUCT_AFTER_FOR = re.compile(r"\bfor (?:my|the|a|an|our)?\s*([\w][\w \-']{1,80}?)(?=\s+(?:on|in|at)\s+(?:amazon|flipkart|meesho)\b|[.,?!]|$)", re.IGNORECASE)
+_PRODUCT_AFTER_FOR = re.compile(r"\bfor (?:my|the|a|an|our)?\s*([\w][\w \-'()&/+#]{1,80}?)(?=\s+(?:on|in|at)\s+(?:amazon|flipkart|meesho)\b|[.,?!]|$)", re.IGNORECASE)
 _NICHE = re.compile(r"\b(?:niche|nich|category|segment)\s*(?:is|:|=|-)?\s*(?!(?:under|below|within|upto|up to|budget|on|in|with|for)\b)([\w][\w \-']{1,60}?)(?=[.,?!]|\s+(?:on|in|with|under|budget)\b|$)", re.IGNORECASE)
 _NICHE_BEFORE = re.compile(r"\b(?:in|for|of|within)\s+(?:the |a |an |my )?([\w][\w \-']{1,60}?)\s+(?:niche|category|segment)\b", re.IGNORECASE)
 _BUDGET = re.compile(r"(?:under|below|within|upto|up to|budget(?: of| is)?|max(?:imum)?)\s*((?:₹|rs\.?|inr)?\s*[\d,]+(?:\.\d+)?)", re.IGNORECASE)
@@ -160,7 +172,7 @@ def _product_text(raw: str | None) -> str | None:
 
 
 _SCENARIO_AMOUNT = re.compile(r"\b(?:at|to|@)\s*((?:(?i:₹|rs\.?|inr))?\s*\d[\d,]*(?:\.\d+)?)")
-_SCENARIO_COMPETITOR = re.compile(r"\b(?:against|versus|vs\.?|for|with|from)\s+([A-Z][\w\-']*(?:\s+[A-Z][\w\-']*)*)")  # a named competitor only; never guessed
+_SCENARIO_COMPETITOR = re.compile(r"\b(?:against|versus|vs\.?|for|with|from)\s+(?:the\s+)?(?:(?:verified|tracked|competitor)\s+)*([A-Z][\w\-']*(?:\s+[A-Z][\w\-']*)*)")  # a named competitor only; never guessed
 _RIVAL_PRICE_OF = re.compile(r"\b(?:at|if i match(?:ed)?|matching|match|beat|undercut)\s+(?:the\s+)?(?P<c>[\w][\w \-']{1,40}?)(?:'s|\u2019s|s')\s+(?:new\s+|current\s+)?price", re.IGNORECASE)
 _RIVAL_AT_PRICE = re.compile(r"^\W*(?:so\s+|ok\s+)?(?P<c>[\w][\w \-']{1,40}?)\s+(?:is|are|dropped|cut|lowered)\b.*?\b(?:at|to)\s*(?P<p>(?:₹|rs\.?)?\s*\d+(?:,\d+)*(?:\.\d+)?)", re.IGNORECASE)
 _STOCK_BEFORE = re.compile(r"^\W*(?:is|are)\s+(?:the\s+|my\s+|a\s+)?(?P<p>[\w][\w \-']{1,60}?)\s+worth\s+(?:stocking|buying|importing|selling)", re.IGNORECASE)
@@ -171,6 +183,15 @@ def _slots(rule: Rule, text: str) -> dict[str, str]:
     out: dict[str, str] = {}
     if rule.kind == "BUSINESS_STATE":
         return out  # a state read takes no slots: the question type decides what is read
+    if rule.key == "COMPETITOR_PRICE_IMPACT" and rule.pattern is _PRICE_DECISION:
+        decided: dict[str, str] = {}
+        target = re.search(r"\bto\s+((?:₹|rs\.?|inr)?\s*\d[\d,]*(?:\.\d+)?)", text, re.IGNORECASE)
+        if target:
+            decided["amount"] = target.group(1).strip().rstrip(",.")
+        rival = _SCENARIO_COMPETITOR.search(text)
+        if rival:
+            decided["competitor"] = rival.group(1).strip()
+        return decided
     if rule.key == "COMPETITOR_PRICE_IMPACT":
         m = _RIVAL_PRICE_OF.search(text)
         if m:
@@ -179,6 +200,13 @@ def _slots(rule: Rule, text: str) -> dict[str, str]:
         m = _RIVAL_AT_PRICE.search(text)
         c = _product_text(m.group("c")) if m else None
         return {"competitor": c, "amount": m.group("p").strip()} if m and c else {}
+    if rule.key == "ci.discover_competitors":  # only the product the seller named ("for my 1L steel bottle"); never guessed, the plan asks when it is missing
+        product = _product_text(_PRODUCT_AFTER_FOR.search(text).group(1)) if _PRODUCT_AFTER_FOR.search(text) else None
+        return {"product": product} if product else {}
+    if rule.key == "ci.competitor_remove":  # the competitor named after the verb; resolved against the tracked list by code, an unknown name is asked about
+        m = re.search(r"\b(?:remove|untrack|stop tracking|stop following|delete|drop)\s+(?:the\s+|my\s+)?(?:competitor\s+)?(?P<c>[\w][\w \-']{1,40}?)(?=\s+(?:from|as|please|for)\b|[.,?!]|$)", text, re.IGNORECASE)
+        c = _product_text(m.group("c")) if m else None
+        return {"competitor": c} if c and c.casefold() not in ("competitor", "competitors") else {}
     if rule.key == "ci.request_price_scenario":  # only what the seller said: no competitor and no price is ever assumed (the plan asks for what is missing)
         amount, rival = _SCENARIO_AMOUNT.search(text), _SCENARIO_COMPETITOR.search(text)
         return {**({"competitor": rival.group(1).strip()} if rival else {}), **({"amount": amount.group(1).strip()} if amount else {})}

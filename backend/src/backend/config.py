@@ -214,6 +214,25 @@ def recovery_sweep_interval_seconds() -> int | None:
     return value or None
 
 
+def ci_default_watchlist_limit() -> int | None:
+    """`CI_DEFAULT_WATCHLIST_LIMIT`: the most competitors a tenant may track when the tenant has no limit of its own. NO default: unset means no limit. Not a subscription-plan
+    value; plans are not decided, so this is only the hook a future plan resolver sets. Not cached."""
+    return _optional_positive_int("CI_DEFAULT_WATCHLIST_LIMIT") or 5  # the owner's limit: five active tracked competitors per seller (a tenant's own limit overrides it)
+
+
+def ci_scheduler_interval_seconds() -> int | None:
+    """`CI_SCHEDULER_INTERVAL_SECONDS`: how often a running backend runs Competitor Intelligence's housekeeping over its own stored data (default 900; `0` turns it off): expire
+    unanswered confirmation questions, release alerts held for quiet hours (after re-checking their evidence is still fresh), and add evidence-freshness reminders. It makes no outbound
+    request. An invalid value is an error at first use, not a silent default."""
+    raw = (os.environ.get("CI_SCHEDULER_INTERVAL_SECONDS") or "").strip()
+    if not raw:
+        return 900
+    value = int(raw)
+    if value < 0:
+        raise ValueError("CI_SCHEDULER_INTERVAL_SECONDS must be 0 (off) or a positive number of seconds")
+    return value or None
+
+
 def api_docs_enabled() -> bool:
     """`API_DOCS_ENABLED=true` serves the interactive docs and the OpenAPI document (`/docs`, `/redoc`, `/openapi.json`). Default OFF: they are unauthenticated and list every route,
     so a deployment opts in on purpose (a developer machine sets it in its own .env)."""
@@ -623,6 +642,22 @@ def tavily_api_key() -> str:
     block app startup; only a real `pi.discover`/`pi.supplier_lookup` call against this key
     fails, honestly, at that call site."""
     return os.environ.get("TAVILY_API_KEY", "")
+
+
+def ci_search_provider() -> str:
+    """Which `SearchProvider` CI discovery composes (competitor-intelligence-agent.md C34): `tavily` (the owner-approved default) or `mock` (fixtures only, for tests and
+    local work). Deliberately NOT cached, so a test can switch it per case. An unrecognised value is a configuration error, never a silent fallback to the mock: a
+    mock presented as a real provider would show the seller "no competitors found" for a search that never ran."""
+    value = os.environ.get("CI_SEARCH_PROVIDER", "tavily").strip().lower()
+    if value not in ("tavily", "mock"):
+        raise ConfigInvalid(f"CI_SEARCH_PROVIDER must be 'tavily' or 'mock', got {value!r}")
+    return value
+
+
+def ci_tavily_daily_query_cap() -> int:
+    """`CI_TAVILY_DAILY_QUERY_CAP`: the most Tavily queries one tenant's CI discovery may send in any rolling 24 hours (§6.28.1 cost cap). Tavily credits are shared
+    with PI, so this is a per-tenant guard, not a budget. Provisional default; the real per-tenant ceiling is a commercial decision (V16)."""
+    return _positive_int_or_default("CI_TAVILY_DAILY_QUERY_CAP", 100)
 
 
 @lru_cache

@@ -12,6 +12,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { ApiError, apiFetch, type DigestSubscription } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
+import { BusinessDetailsDialog } from "@/components/profile/BusinessDetailsDialog";
 import { errorText } from "@/lib/clerkErrors";
 import { estimatePasswordStrength } from "@/lib/passwordStrength";
 import { useShell } from "@/lib/ShellContext";
@@ -28,7 +29,7 @@ const SETTINGS_TABS = [
  * originally signed up with Google only has no password credential, and previously had no way to
  * add one — that tab is that path, using Clerk's own supported mechanism (`user.updatePassword`)
  * so it's the SAME Clerk user, tenant and membership throughout — never a second account.
- * "Business" is read-only (the backend has no business-profile update route yet) and
+ * "Business" shows the workspace and opens the mandatory Business details form (business-profile.md), and
  * "Notifications" edits the one preference the backend really stores (the CI digest
  * subscription). Marketplace and WhatsApp settings are intentionally absent: no backend exists. */
 export default function SettingsPage() {
@@ -68,6 +69,8 @@ function SettingsWorkspace() {
 
 function BusinessCard({ email }: { email: string | null }) {
   const { session, displayName, roleLabel } = useShell();
+  const [editing, setEditing] = useState(false);
+  const [savedAt, setSavedAt] = useState(false);
   const rows: [string, string][] = [
     ["Name", displayName],
     ["Email", email ?? "Not available"],
@@ -81,8 +84,27 @@ function BusinessCard({ email }: { email: string | null }) {
         Workspace
       </div>
       <div className="mt-1 text-xs" style={{ color: "var(--text-6)" }}>
-        How Metrion knows you. Editing the business profile is not available yet.
+        How Metrion knows you, and the details of your business that its assistants use to tailor their advice.
       </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            setSavedAt(false);
+            setEditing(true);
+          }}
+          className="mt-btn mt-focus min-h-[44px] rounded-xl px-4 py-2 text-sm font-bold"
+          style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}
+        >
+          Business details
+        </button>
+        {savedAt && (
+          <span role="status" className="text-sm" style={{ color: "var(--accent)" }}>
+            Business details saved.
+          </span>
+        )}
+      </div>
+      {editing && <BusinessDetailsDialog onClose={() => setEditing(false)} onSaved={() => setSavedAt(true)} />}
       <dl className="mt-4 flex flex-col gap-2.5">
         {rows.map(([k, v]) => (
           <div

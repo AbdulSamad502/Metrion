@@ -262,10 +262,19 @@ def _run_frozen(ctx: AuthContext, runtime: CeoRuntime, plan_id: UUID, plan: dict
                else cmo_delegation.heading_for(key) if delegated else "Here is what was produced for the plan you approved.")
     comp = template_only(table, heading=heading)
     answer = comp.text + ("\n\n" + cmo_delegation.result_footer(legs) if delegated else "")
+    pick_card: dict[str, Any] | None = None
+    if key == "ci.discover_competitors":
+        try:
+            from backend.ceo import ci_conversation  # noqa: PLC0415
+
+            answer += "\n\n" + ci_conversation.discovery_followup(tenant)
+            pick_card = ci_conversation.candidate_card(tenant)
+        except Exception:  # noqa: BLE001 - the list is a convenience: the search result above stands without it
+            logger.exception("could not list the discovery leads")
     if chain_run is not None:
         case = ceo_pi_research.load_case(tenant, chain_run)
         if case is not None:  # the seller reads the five-product summary, written by code from the saved case; the "View Detailed Research" link comes from the pi.report finding
             answer = pi_research.summary_text(case, chain_gaps)
     return orchestrator._finish(ctx, runtime, turn, clock, log, status="DELIVERED", route=route, route_key=key, answer=answer, kind="ANSWER", composition=comp,
-                                anchor_status=turn.derive_status(),
+                                anchor_status=turn.derive_status(), choices=pick_card,
                                 billing=unit_decision(status="DELIVERED", route=route, planned_leg_keys=leg_keys, required_keys=required, legs=turn.legs))

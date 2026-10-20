@@ -23,6 +23,7 @@ import { ApiError } from "@/lib/api";
 import { createCeoClient, type AgentCode, type CeoClient, type UiAction } from "@/lib/ceo";
 import { canvasNodes, QUICK_ACTIONS, quickActionState } from "@/lib/ceoModel";
 import type { FeedFactory } from "@/lib/ceoPolling";
+import { draftFromParams } from "@/lib/ciWorkspace";
 import { useCeoHub } from "@/lib/useCeoHub";
 import { useModalFocus } from "@/lib/useModalFocus";
 
@@ -31,8 +32,13 @@ export function CeoHub() {
   const { getToken } = useAuth();
   const client = useMemo(() => createCeoClient(getToken), [getToken]);
   // A link from another page can open a decision form directly (e.g. Products → /dashboard/ceo-hub?form=new-product); anything else is ignored.
-  const initialForm = FORM_LINKS[useSearchParams().get("form") ?? ""] ?? null;
-  return <CeoHubWorkspace client={client} initialForm={initialForm} />;
+  const params = useSearchParams();
+  const initialForm = FORM_LINKS[params.get("form") ?? ""] ?? null;
+  // The Competitors page's shortcuts open the hub with a draft message (`?ask=research&about=<product>`); the seller sends it, nothing runs on arrival (CI spec D14).
+  const initialDraft = draftFromParams(params.get("ask"), params.get("about"));
+  const rawFinding = params.get("finding");
+  const initialFindingId = params.get("ask") === "finding" && rawFinding && /^[0-9a-f-]{36}$/i.test(rawFinding) ? rawFinding : null; // an id only; the server validates it for this tenant
+  return <CeoHubWorkspace client={client} initialForm={initialForm} initialDraft={initialDraft} initialFindingId={initialFindingId} />;
 }
 
 const FORM_LINKS: Record<string, DecideKind> = { "new-product": "NEW_PRODUCT_DECISION", "price-impact": "COMPETITOR_PRICE_IMPACT" };
@@ -45,8 +51,9 @@ const workLabel = (action: string) => `Working · ${ACTION_WORDS[action.split(".
  * work behind the answers. Right, and wider: the conversation, with the chat bar fixed at the bottom of its own column. Below the desktop breakpoint the
  * two are tabs, so the conversation is never squeezed. The hub holds no orchestration logic: the backend classifies, validates, runs the specialists,
  * synthesises and safety-gates. */
-export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = null }: { client: CeoClient; feedFactory?: FeedFactory; pollMs?: number; initialForm?: DecideKind | null }) {
+export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = null, initialDraft = null, initialFindingId = null }: { client: CeoClient; feedFactory?: FeedFactory; pollMs?: number; initialForm?: DecideKind | null; initialDraft?: string | null; initialFindingId?: string | null }) {
   const hub = useCeoHub(client, feedFactory, pollMs);
+  const findingForFirstSend = useRef<string | null>(initialFindingId); // carried by the first message only, then dropped
   const frame = useFrame();
   const [drawer, setDrawer] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
@@ -119,7 +126,9 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
         return false;
       }
     }
-    void hub.sendTurn(message || "Please read what I attached.", period, action, clarification, ids); // the turn reports its own progress and errors; the composer must not wait for the whole answer
+    const findingId = findingForFirstSend.current;
+    findingForFirstSend.current = null;
+    void hub.sendTurn(message || "Please read what I attached.", period, action, clarification, ids, findingId); // the turn reports its own progress and errors; the composer must not wait for the whole answer
     return true;
   };
   const empty = hub.state === "NO_SELECTION";
@@ -293,7 +302,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
             disabled={processing || closed}
             placeholder={closed ? "This conversation is closed. Reopen it to continue." : needsInput ? "Answer here, or pick an option…" : "Ask the CEO agent anything…"}
             onSend={(t, files) => send(t, null, null, null, files)} fileStatus={(f) => fileStates[fileKey(f)]} fileInfo={(f) => fileInfos[fileKey(f)]}
-            error={uploadError}
+            error={uploadError} initialText={initialDraft ?? undefined}
           />
         </div>
       </div>
@@ -307,7 +316,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
             </div>
             <InvestigationList
               status={hub.list.status} items={hub.list.items} error={hub.list.error} selectedId={hub.selectedId} showArchived={hub.showArchived}
-              onToggleArchived={hub.setShowArchived} onSelect={(id) => { hub.select(id); setDrawer(false); }} onCreate={(t) => { void hub.create(t); setDrawer(false); }} onRetry={hub.refreshList}
+              onToggleArchived={hub.setShowArchived} onDelete={(id) => void hub.removeConversation(id)} onSelect={(id) => { hub.select(id); setDrawer(false); }} onCreate={(t) => { void hub.create(t); setDrawer(false); }} onRetry={hub.refreshList}
             />
           </div>
           <button type="button" aria-label="Close panel" className="flex-1" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setDrawer(false)} />

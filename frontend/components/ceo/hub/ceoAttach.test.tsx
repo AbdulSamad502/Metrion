@@ -85,12 +85,12 @@ describe("attachments", () => {
 describe("an attached image and competitor research", () => {
   const png = () => new File(["x"], "listing.png", { type: "image/png" });
 
-  it("says plainly that chat does not read the image, and points to the Competitors page, without uploading or starting anything", async () => {
+  it("tells the seller the CEO reads a competitor screenshot and asks to confirm, points to the Competitors page, and uploads nothing by itself", async () => {
     await openConversation();
     const u = user();
     await u.upload(screen.getByTestId("file-input"), png());
     const hint = await screen.findByTestId("image-handoff");
-    expect(hint).toHaveTextContent("does not read it or start any research");
+    expect(hint).toHaveTextContent("The CEO reads it and asks you to confirm");
     expect(within(hint).getByRole("link", { name: "Competitors page" })).toHaveAttribute("href", "/dashboard/competitors");
     expect(fake.uploads).toHaveLength(0); // choosing a file uploads nothing; the hint starts nothing
     expect(fake.count("postTurn")).toBe(0);

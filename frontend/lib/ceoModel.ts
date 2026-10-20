@@ -387,7 +387,7 @@ export function messageView(message: CeoMessage, turnById: Map<string, TurnRow>)
     badge: null,
     footnote:
       turn?.composition_mode === "TEMPLATE_FALLBACK"
-        ? "Shown from verified data only: the written summary did not pass the safety check."
+        ? "Shown as the saved results only: I did not add a written summary this time."
         : turn?.composition_mode === "TEMPLATE" && !/^(cmo|pi)\./.test(turn.route_key ?? "")
           ? "Read directly from your saved, verified results." // not for written content or web findings: those say what they are in the answer itself
           : null,

@@ -89,3 +89,18 @@ def get_by_snapshot(tenant_id: UUID, snapshot_id: UUID) -> dict[str, Any] | None
             {"tenant_id": str(tenant_id), "snapshot_id": str(snapshot_id)},
         ).mappings().first()
         return dict(row) if row else None
+
+
+def latest_for_url(tenant_id: UUID, source_url: str) -> dict[str, Any] | None:
+    """The newest review insight for a competitor listing, whether or not it was tied to a snapshot (a reviews
+    screenshot sent before any listing screenshot has no snapshot to hang on)."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text(
+                "SELECT id, sentiment_split, rating_distribution, complaint_themes, positive_themes, summarised_patterns, "
+                "reviews_considered, confidence, derivation_method, insight_state, degraded_reason, source_url, fetched_at, derived_at "
+                "FROM competitor_review_insight WHERE tenant_id = :tenant_id AND source_url = :url ORDER BY derived_at DESC LIMIT 1"
+            ),
+            {"tenant_id": str(tenant_id), "url": source_url},
+        ).mappings().first()
+        return dict(row) if row else None

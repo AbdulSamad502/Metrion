@@ -8,6 +8,8 @@ because the surrounding orchestration needed reinventing.
 
 from __future__ import annotations
 
+from competitor_intelligence.findings.build import record_review_finding
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Sequence
@@ -133,6 +135,7 @@ def submit_review_research(
     review_insight_id = competitor_review_insight_repo.insert_insight(
         tenant_id, snapshot_id=snapshot_id, source_url=source_url, fetched_at=now, draft=draft
     )
+    record_review_finding(tenant_id, competitor_url_id, now=now)  # C45/C46: a persistent finding that cites this screenshot
 
     # Mirrors `direct_path.research_run._run_status_for`'s convention: the run itself
     # succeeded — evidence was accepted and processed — even when the resulting insight is

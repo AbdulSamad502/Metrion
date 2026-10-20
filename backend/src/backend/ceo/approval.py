@@ -382,6 +382,19 @@ def prior_attempt_for(tenant_id: UUID, investigation_id: UUID, leg_keys: Sequenc
     return None
 
 
+def open_plan_for(tenant_id: UUID, investigation_id: UUID, requested_by: UUID, legs: Sequence[tuple[str, Mapping[str, Any]]], *, now: datetime) -> dict[str, Any] | None:
+    """The seller's own still-valid, not-yet-decided plan for exactly these legs and slots, or None. Used so asking again for the same thing re-shows the stored plan
+    instead of making a second card: the stored approval is bound to its hash and expiry (C8), so nothing about it is loosened."""
+    want = [(k, _norm(dict(s))) for k, s in legs]
+    for row in reversed(plan_repo.list_for_investigation(tenant_id, investigation_id)):
+        if row["status"] != "AWAITING_APPROVAL" or now >= row["expires_at"] or row["requested_by"] != requested_by:
+            continue
+        have = [(l["action_key"], {k: v for k, v in l["slots"].items() if k != "request_key"}) for l in row["plan"].get("legs", [])]
+        if have == [(k, {a: b for a, b in s.items() if a != "request_key"}) for k, s in want]:
+            return row
+    return None
+
+
 def create_plan(
     ctx: AuthContext, runtime: CeoRuntime, *, investigation_id: UUID, planned_turn_id: UUID, anchor_run_id: UUID, route: str, route_key: str | None,
     legs: Sequence[tuple[str, Mapping[str, Any]]], now: datetime, details: Sequence[str] = (), units: Mapping[str, int] | None = None,

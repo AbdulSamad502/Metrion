@@ -30,7 +30,7 @@ def _playbook(*legs: tuple[str, bool]) -> Playbook:
 # ------------------------------------------------------------------------------------------------ the 37 registered actions
 def test_the_gate_agrees_with_the_registry_metadata_for_every_registered_action():
     specs = get_registry().specs()
-    assert len(specs) == 37
+    assert len(specs) == 48  # CP4: +11 CI conversational actions (CI spec 6.21.3)
     for spec in specs:
         assert spec.effects is not None, spec.key
         decision = gate_leg(spec.key)
@@ -188,6 +188,7 @@ def test_the_gate_is_used_in_exactly_the_three_d8_places_and_the_module_does_no_
 CHAT_ACTIONS_NEEDING_APPROVAL_TODAY = frozenset({
     "pi.discover", "cmo.market_trends", "cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords",
     "cmo.generate_bullets", "cmo.generate_backend_terms", "cmo.generate_listing_copy",
+    "ci.discover_competitors",  # CI spec C34: the seller's product search terms go to Tavily, so it needs a stored approval plan like pi.discover
 })
 WITH_A_CONFIRMATION_CARD = frozenset({"pi.discover", "cmo.market_trends"})
 WITH_NO_CONFIRMATION_STEP = CHAT_ACTIONS_NEEDING_APPROVAL_TODAY - WITH_A_CONFIRMATION_CARD
@@ -210,5 +211,5 @@ def test_regression_guard_approval_required_actions_still_offered_to_chat_and_bl
     assert {k for k in reachable if _has_confirmation_card(k)} == WITH_A_CONFIRMATION_CARD
     assert {k for k in reachable if not _has_confirmation_card(k)} == WITH_NO_CONFIRMATION_STEP
     # they are all guided-input session actions, and no decision playbook leg is among them
-    assert all(ACTIONS[k].session for k in reachable)
+    assert all(ACTIONS[k].session for k in reachable - {"ci.discover_competitors"})  # CI discovery takes one resolved product, not a guided session
     assert all(not evaluate_playbook(pb).plan_required for pb in PLAYBOOKS.values())

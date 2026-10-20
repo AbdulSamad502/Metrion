@@ -749,3 +749,22 @@ def test_without_the_accounting_rule_in_effect_no_plan_is_made_and_nothing_can_c
     r = skip_details(e, e.owner, inv, turn(e, e.owner, inv, "Amazon"))
     assert r["status"] == "FAILED" and "plan" not in r and "usage accounting rule" in r["answer"]
     assert counts(e.a) == {"plans": 0, "events": 0, "units": 0, "approval_turns": 0} and e.calls == {}
+
+
+def test_an_identical_open_plan_is_found_for_reuse_and_nothing_else_is(env):
+    """`open_plan_for` (used for a repeated competitor search): the seller's own, undecided, unexpired plan with exactly the same legs and slots - never a changed, expired,
+    declined or another member's plan."""
+    e = env
+    inv, planned = plan_via_chat(e)
+    row = repo_plan(e, inv, planned["plan"]["id"])
+    legs = [(l["action_key"], l["slots"]) for l in row["plan"]["legs"]]
+    owner_id = row["requested_by"]
+    now = e.clock()
+    found = approval.open_plan_for(e.a, uuid.UUID(inv), owner_id, legs, now=now)
+    assert found is not None and str(found["id"]) == planned["plan"]["id"]
+    changed = [(k, {**s, "product_name": "Something else"}) for k, s in legs]
+    assert approval.open_plan_for(e.a, uuid.UUID(inv), owner_id, changed, now=now) is None
+    assert approval.open_plan_for(e.a, uuid.UUID(inv), uuid.uuid4(), legs, now=now) is None  # another member
+    assert approval.open_plan_for(e.a, uuid.UUID(inv), owner_id, legs, now=now + timedelta(hours=1)) is None  # expired
+    assert decline(e, e.owner, inv, planned["plan"]).status_code == 200
+    assert approval.open_plan_for(e.a, uuid.UUID(inv), owner_id, legs, now=e.clock()) is None  # decided

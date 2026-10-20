@@ -81,3 +81,31 @@ def derive_canonical(
 
     last_updated = row["finished_at"] or row["started_at"]
     return CanonicalDerived(product_id=product_id, title=row["item_title"], last_updated=last_updated)
+
+
+_LIST_PRODUCTS_SQL = text(
+    """
+    SELECT DISTINCT ON (COALESCE(sl.sku, sl.marketplace_item_id))
+           COALESCE(sl.sku, sl.marketplace_item_id) AS product_id, sl.item_title
+    FROM sales_line sl
+    WHERE sl.tenant_id = :tenant_id AND COALESCE(sl.sku, sl.marketplace_item_id) IS NOT NULL
+    ORDER BY COALESCE(sl.sku, sl.marketplace_item_id), sl.order_date DESC NULLS LAST
+    LIMIT :limit
+    """
+)
+
+
+def list_products(tenant_id: UUID, *, limit: int = 200) -> list[tuple[str, str | None]]:
+    """The seller's own products as `(product_id, latest title)`: from `sales_line` (§5.5.1 source 1), plus products the seller entered in their own profile (source 2).
+    Used by the CEO to resolve a product the seller names; read-only."""
+    with data_foundation_tenant_scope(tenant_id) as conn:
+        rows = conn.execute(_LIST_PRODUCTS_SQL, {"tenant_id": str(tenant_id), "limit": limit}).all()
+    products = [(str(r[0]), r[1]) for r in rows]
+    # Seller-entered products (§5.5.1 source 2): a product the seller described in their own product profile before any sales report names it. Read-only; never a sale.
+    from competitor_intelligence.repositories import seller_product_profile_repo  # noqa: PLC0415
+
+    known = {pid for pid, _ in products}
+    for pid, title in seller_product_profile_repo.list_profile_products(tenant_id, limit=limit):
+        if pid not in known and len(products) < limit:
+            products.append((pid, title))
+    return products

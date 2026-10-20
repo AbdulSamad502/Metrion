@@ -1,6 +1,8 @@
 # Metrion — Competitor Intelligence Agent (CI) Specification
 
 **Status:** Draft for review — **revised 2026-09-21 for CI V2 (Checkpoint 0).** The V2 revision is **additive**: it adds discovery, identity resolution, relevance scoring, customer-voice snippet retention, the two-layer alert model, the price-band formula and the generalized handoff contract (C21–C30, D8–D13, A6–A9, §5.4–§5.6, §6.10–§6.20). It changes **one** prior decision — the competitor-discovery non-goal, reversed on the record by **C21** — and leaves the evidence-upload pipeline (C2, C4, C16, the §5.1 confidence vocabulary, and the `competitor_snapshot`/`competitor_evidence`/insight data model) exactly as written.
+**V3 revision — 2026-10-18 (CI Upgrade, Checkpoint 0).** Owner-approved upgrade of CI into a **CEO-only, evidence-based research and monitoring system**. **Additive again, with deliberate reversals, each recorded and none silent:** (1) the seller-facing evidence-upload dashboard surface and the seller-product-profile form are retired in favour of CEO Hub conversation (C32, C36, C31 amended); (2) Tavily is approved as the discovery provider, with the C22 provider record still to be completed (C34); (3) the §6.13.2 gate that auto-rejects every `NOT_A_MATCH` — which, as built, rejects every cross-brand competitor — is split into identity and relationship (C43, flagged Q20); (4) the dashboard's input forms are removed (C32). V3 adds C32–C47, D14–D18, A11–A14, §5.7, §6.21–§6.29, AC38–AC58, T74–T107, Q19–Q24 and V16–V18. **C1–C31 stand except where a V3 row names the row it amends.** The arithmetic boundary, the confidence vocabulary, the snapshot/evidence data model, C23 (discovery is not intelligence), C26 (Layer 1 only) and the Brain 1 boundary are unchanged.
+
 **Prerequisites:** `deterministic-engine.md` (all margin math) · `data-foundation.md` (provenance, confidence) · `auth.md` (permissions) · `whatsapp-integration.md` (WhatsApp identity, invoke/revoke, and investigation-creation mechanics — CI decides none of this itself; §6.9 records only what that spec resolves)
 
 **The arithmetic boundary (B8).** CI may compute **deltas over its own observed facts** — a price change between two snapshots it captured. CI may **never** compute anything financial: no margin, fee, profit, tax or cost figure. All of those originate in Brain 1. CI normalises observations into a provenance-tagged input object, passes it to Brain 1, and reads the result back unchanged. CI holds no financial formula.
@@ -14,7 +16,7 @@
 | # | Decision |
 |---|---|
 | C1 | **Marketplaces:** Amazon, Flipkart and Meesho, all three at V1 (readiness §1, Product shape — Marketplaces). |
-| C2 | **Acquisition — REVISED (locked pivot): seller-submitted evidence, not fetching.** The seller uploads a screenshot of a competitor listing via Metrion's own web dashboard. A vision model extracts structured fields from it, with a **manual-entry fallback** for anything unclear or missing. Multiple screenshots may be submitted per research session and are **merged** (§5.3, §6.1). Metrion's backend **never fetches** a competitor URL, on demand or otherwise. No continuous crawling, no bulk discovery, no live monitoring, no scraping in any form. **See §1a** — WhatsApp evidence intake is a documented **future** channel, once a BSP is contracted; only dashboard upload ships in this pass. |
+| C2 | **[AMENDED V3 — the seller submits through the CEO Hub chat, not a dashboard form: C32, C36.] Acquisition — REVISED (locked pivot): seller-submitted evidence, not fetching.** The seller uploads a screenshot of a competitor listing via Metrion's own web dashboard. A vision model extracts structured fields from it, with a **manual-entry fallback** for anything unclear or missing. Multiple screenshots may be submitted per research session and are **merged** (§5.3, §6.1). Metrion's backend **never fetches** a competitor URL, on demand or otherwise. No continuous crawling, no bulk discovery, no live monitoring, no scraping in any form. **See §1a** — WhatsApp evidence intake is a documented **future** channel, once a BSP is contracted; only dashboard upload ships in this pass. |
 | C3 | **The upload-only rule applies to seller financial data; competitor data acquisition is now also seller-submitted, but through a distinct pipeline** (readiness §1, Product shape — Seller data source; `auth.md` T3–T5). Seller financials remain upload-only, parsed by marketplace-report adapters. **Competitor data is submitted by the seller as evidence** — a screenshot the seller captured, extracted by a vision model with manual-entry fallback — **never fetched by Metrion from a competitor URL, under any circumstance.** The two paths still never mix: financial uploads flow through report adapters into the canonical model; competitor evidence flows through vision extraction into `competitor_snapshot`. |
 | C4 | **Trusted domains (OP2a) — repurposed as a labeling/format check, not a fetch gate.** Since Metrion never fetches a `competitor_url`, the allowlist can no longer gate network access — there is no network access to gate. It is retained as a **data-quality validation at intake**: a submitted `competitor_url`'s host must still match one of `amazon.in`, `flipkart.com`, `meesho.com`, or their official short-link domains `amzn.in`/`fkrt.co` (D7, resolved 2026-09-21), so `marketplace` can be derived from it reliably and the enum stays meaningful. URLs outside the allowlist are still refused at intake with a clear message — the refusal is now about labeling correctness, not about preventing a fetch, because no fetch is ever attempted either way. |
 | C5 | **Facts, not expression.** No raw review text stored or reproduced beyond the bounded, transient processing scope (C14). No marketplace images rehosted — the one exception is the seller's own submitted evidence image (a reviews-tab or listing screenshot), governed by the same `competitor_evidence` retention policy as everything else in §6.8, not by this rule (§6.5). |
@@ -32,7 +34,7 @@
 | C17 | **Brain 1 owns all financial arithmetic (B1).** CI normalises evidence-derived observations into a structured, provenance-tagged input object and passes it to Brain 1. Where Brain 1 needs a new interface to accept observed competitor inputs, **Brain 1 is extended** — never CI. Output is always an *estimated margin range*, never a competitor margin. **See §1a — this feature is deferred pending a `deterministic-engine.md` extension spec.** |
 | C18 | **Fee references are backend-managed configuration (B9).** Versioned, effective-dated, source-attributed reference data consumed by Brain 1. CI never holds rates. |
 | C19 | **Retention (B6):** competitor snapshots are **not** retained indefinitely. Configurable policy, initially **90 days** (§6.8). Retention must never imply continuous monitoring — CI is on-demand only. |
-| C20 | **Direct CI execution (B7).** A dashboard **evidence-upload** CI run (trigger `EVIDENCE_UPLOAD`, §6.4, §5) is a **direct CI execution path**, not a CEO conversational route, and does not consume a CEO call. It enforces the full check set in §6.4. **See §1a — only this direct path ships in the next implementation pass.** |
+| C20 | **[AMENDED V3 — the dashboard is no longer a seller input surface; evidence enters via the CEO Hub as a fixed CEO tool dispatch: C32, C36, §6.4.]** **Direct CI execution (B7).** A dashboard **evidence-upload** CI run (trigger `EVIDENCE_UPLOAD`, §6.4, §5) is a **direct CI execution path**, not a CEO conversational route, and does not consume a CEO call. It enforces the full check set in §6.4. **See §1a — only this direct path ships in the next implementation pass.** |
 
 ### V2 additions (C21–C31) — Checkpoint-0 review, 2026-09-21
 
@@ -41,7 +43,7 @@ C21–C30 come from the externally-reviewed **CI V2 Master Specification** (five
 | # | Decision |
 |---|---|
 | C21 | **Competitor discovery — DECISION REVERSAL (locked).** The V1 non-goal *"competitor discovery (CI never finds competitors, the seller supplies them)"* is **superseded**. CI now generates research queries from the seller's own product and surfaces **candidate** competitors for seller review. This is a real reversal of a locked non-goal, recorded here in the same way C2 recorded the scraping→evidence pivot and D7 recorded the short-link resolution — **not** a silent edit. **Reason:** the Checkpoint-0 review (2026-09-21) accepted the V2 Master Specification's finding that manual-URL-only entry makes CI a screenshot-processing utility rather than a competitive-intelligence product. **Two hard limits ride with the reversal, and neither is negotiable:** (a) discovery finds *candidates only* and never populates competitive intelligence (C23); (b) **manual URL entry remains a permanent, always-available path**, independent of discovery, and is never removed or deprecated. §4's non-goal list is amended accordingly. |
-| C22 | **Search acquisition is contract-first, and no provider is named in this spec.** Discovery uses a **licensed search provider**, never scraping, never a marketplace fetch (C2 is untouched: search results are *leads*, never live marketplace facts). **No named provider may be selected or integrated by an implementation agent on its own initiative.** Implementation builds, in order: domain models → a `SearchProvider` interface → a `MockSearchProvider` returning fixture data → the discovery pipeline against that interface. Only after a **provider record** (§6.10.1 — allowed use, data retention, redistribution/display rights, attribution, region, query limits, cost) is completed for at least two candidates and **explicitly approved by a human** may a real adapter be written behind the interface. Selecting a provider is a legal/commercial decision, not an engineering one. **See §1a item 6 — deferred.** |
+| C22 | **[PARTLY RESOLVED V3 — Tavily approved by the owner 2026-10-18; the §6.10.1 provider record is still to be completed: C34.]** **Search acquisition is contract-first, and no provider is named in this spec.** Discovery uses a **licensed search provider**, never scraping, never a marketplace fetch (C2 is untouched: search results are *leads*, never live marketplace facts). **No named provider may be selected or integrated by an implementation agent on its own initiative.** Implementation builds, in order: domain models → a `SearchProvider` interface → a `MockSearchProvider` returning fixture data → the discovery pipeline against that interface. Only after a **provider record** (§6.10.1 — allowed use, data retention, redistribution/display rights, attribution, region, query limits, cost) is completed for at least two candidates and **explicitly approved by a human** may a real adapter be written behind the interface. Selecting a provider is a legal/commercial decision, not an engineering one. **See §1a item 6 — deferred.** |
 | C23 | **Discovery is not intelligence (the load-bearing V2 rule).** Search discovery finds candidates; it does **not** populate live competitor intelligence. **Every field used in comparison (§6.19), customer-voice mining (§6.18.2) or alerting (§6.17) must trace to an evidence-bearing source — a seller screenshot or a licensed data provider — never to a search snippet alone.** A candidate that has passed discovery, identity resolution and relevance scoring is still an *unevidenced candidate*: it is shown as **"Approved — awaiting evidence"**, a distinct and visible state, and is **never silently compared, mined or alerted on as if evidence existed.** The acquisition matrix in §6.10.2 is the field-by-field statement of this rule. |
 | C24 | **Product/entity identity resolution is a distinct, required pipeline stage.** A candidate is not assumed to be the competitor's actual product. Identity resolution extracts brand, model/variant, pack size and bundle status and compares them against the seller's own product record, emitting an explicit `EXACT_MATCH` / `LIKELY_VARIANT` / `UNCERTAIN` / `NOT_A_MATCH` field — never a silent assumption of exactness. Gating per §6.13.2. The entity model separates **Brand · Seller · Product · Listing · Competitor** (§6.13.3). |
 | C25 | **Relevance scoring uses the locked eight-axis algorithm in §6.14 — implemented exactly, not reinvented.** Eight axes scored 0/1/2, summed to a max of 16, banded `HIGH`/`MEDIUM`/`LOW`. Every `UNKNOWN` or `CONFLICTED` axis scores **0** and is never guessed upward, including the seller-side-unknown case. A band is **never rendered without its per-axis breakdown**. **Relevance, identity-match confidence, evidence confidence and freshness are four separate attributes and are never collapsed into one number or badge** (§6.14.5). A score computed before evidence exists is labelled **"Discovery relevance (provisional)"** (§6.14.0). This is a first-pass rule set, tunable post-launch with real seller feedback, but implementation builds *this* scheme. |
@@ -50,7 +52,30 @@ C21–C30 come from the externally-reviewed **CI V2 Master Specification** (five
 | C28 | **Generalized `Evidence` / `CIHandoff` contract, routed `CI → CEO` only.** Every finding type (price, availability, listing content, review theme, differentiation, market position) traces through one common `Evidence` record carrying a `source_type` discriminator — `SELLER_SCREENSHOT | LICENSED_PROVIDER | REVIEW_SNIPPET` — of which the C27 snippet reference is one subtype. Schema in §5.6. **Routing is `CI → CEO`, never `CI → CFO` or `CI → CMO` directly** — this is C11 restated, not a new rule, and must not regress. A `CIHandoff` payload is **never shown to the seller as-is**: it is always composed into a Competitive Brief (§6.20.2) or a CEO-orchestrated cross-agent alert first. |
 | C29 | **Market trend signals are DEFERRED, explicitly.** Any trend claim must state geography, time window, comparison baseline, search term(s), source and data freshness — a bare *"demand is rising"* is meaningless and is never emitted. The common `pytrends` route scrapes Google Trends' public frontend: **the same acquisition-risk shape as marketplace scraping, aimed at a different target**, and therefore forbidden under C2's reasoning. Trend research waits for a licensed/approved acquisition method. **This deferral does not block discovery (C21–C22), which has its own separately-resolved licensed search path.** See §1a item 7. |
 | C30 | **`SellerProduct` is a read-only baseline contract with explicit `KNOWN`/`UNKNOWN` per field.** Every seller-side value the relevance and comparison logic reads comes from this one structure (§5.5), sourced from Metrion's existing seller data. **Any field Metrion does not capture for a given seller is `UNKNOWN` — never inferred from other fields, never backfilled with an implementer's guess, never silently defaulted.** CI never writes to it. A seller-side `UNKNOWN` propagates as an `UNKNOWN` comparison scoring 0 (§6.14, C25) rather than producing an invented baseline. **See D8 (RESOLVED) and C31 — the fields with no `sales_line` source are populated by a seller-maintained product profile, which is a second legitimate *source*, not a relaxation of this rule.** |
-| C31 | **NEW — RESOLVED D8/Q12 (LOCKED, 2026-09-21). A minimal, one-time-but-editable manual seller-product form is built, and its values are stored as explicit `SellerProduct` field overrides.** Metrion ships a **seller-product-profile form — new UI and new API surface, not merely a backend view** — capturing **category, attributes (key/value pairs), keywords, current listing price (signed BIGINT paise), and fulfillment type** for the seller's own product. **This does not weaken C30's discipline in any way:** every field remains exactly `KNOWN` (the seller entered it) or `UNKNOWN` (nobody entered it) — nothing is inferred, defaulted, backfilled or derived from another field, and an unfilled form field stays `UNKNOWN` and scores 0. What C31 adds is a **second legitimate source** for populating a field, alongside the `sales_line`-derived one — `field_source` is `SELLER_ENTERED` or `CANONICAL_DERIVED` (§5.5; note this is a *source* marker, distinct from §5.1's `DERIVED` confidence value and never conflated with it). **Precedence when both exist and disagree: the seller-entered value wins**, explicitly mirroring the established competitor-side precedent — §5.3 rule 4, implemented in `packages/competitor-intelligence/.../evidence/merge.py::apply_manual_overrides`, where a `SELLER_ENTERED` value always supersedes a `VISION_EXTRACTED` one. Same pattern, seller side. Every field records which source produced it, and the override is editable at any time, never write-once. CI still **never writes** to `SellerProduct`; the profile form is a seller-facing surface, not a CI surface. Model in §5.5; scope of what the form does *not* cover in V12. |
+| C31 | **[AMENDED V3 — the *form* is superseded by CEO conversation (C32, §6.21.4); the `SellerProduct` contract, sources and precedence below are unchanged.]** **NEW — RESOLVED D8/Q12 (LOCKED, 2026-09-21). A minimal, one-time-but-editable manual seller-product form is built, and its values are stored as explicit `SellerProduct` field overrides.** Metrion ships a **seller-product-profile form — new UI and new API surface, not merely a backend view** — capturing **category, attributes (key/value pairs), keywords, current listing price (signed BIGINT paise), and fulfillment type** for the seller's own product. **This does not weaken C30's discipline in any way:** every field remains exactly `KNOWN` (the seller entered it) or `UNKNOWN` (nobody entered it) — nothing is inferred, defaulted, backfilled or derived from another field, and an unfilled form field stays `UNKNOWN` and scores 0. What C31 adds is a **second legitimate source** for populating a field, alongside the `sales_line`-derived one — `field_source` is `SELLER_ENTERED` or `CANONICAL_DERIVED` (§5.5; note this is a *source* marker, distinct from §5.1's `DERIVED` confidence value and never conflated with it). **Precedence when both exist and disagree: the seller-entered value wins**, explicitly mirroring the established competitor-side precedent — §5.3 rule 4, implemented in `packages/competitor-intelligence/.../evidence/merge.py::apply_manual_overrides`, where a `SELLER_ENTERED` value always supersedes a `VISION_EXTRACTED` one. Same pattern, seller side. Every field records which source produced it, and the override is editable at any time, never write-once. CI still **never writes** to `SellerProduct`; the profile form is a seller-facing surface, not a CI surface. Model in §5.5; scope of what the form does *not* cover in V12. |
+
+### V3 additions (C32–C47) — CI Upgrade, Checkpoint 0, 2026-10-18
+
+Decided by the owner in the CI Upgrade brief and its four corrections (2026-10-18). **C32–C47 amend only the rows they name.** The Brain 1 boundary (C9, C17, AC1), C23, C26 and the §5.1 confidence vocabulary are untouched.
+
+| # | Decision |
+|---|---|
+| C32 | **CEO is the only seller-facing conversational surface; CI has no chatbot, and the CI dashboard is a read-only visual workspace.** The seller asks, uploads and confirms **only through the CEO Hub** (dashboard and, later, WhatsApp share one CEO–CI backend workflow). The CI dashboard **shows** findings, evidence and history that CEO–CI investigations produced; it contains **no manual form and no data-entry input** (no URL form, no evidence upload, no manual-entry form, no seller-product-profile form, no threshold form). **Amends C20/R3:** a seller screenshot no longer enters through a dashboard "direct execution" button; it enters through the CEO Hub (C36), and CI's validation→extraction→store pipeline is invoked by a **fixed CEO tool dispatch**, never by an LLM choosing code (C11 unchanged). **Amends C31:** the seller-product-profile *form* is superseded by CEO conversation (§6.21.4); the `SellerProduct` contract, `KNOWN`/`UNKNOWN` discipline, `SELLER_ENTERED` precedence and its table are unchanged. **Amends the manual-entry fallback (C2):** a seller-stated value (`SELLER_ENTERED`) is still how a gap is filled, but it is collected conversationally by the CEO (C38), never by a dashboard form. |
+| C33 | **Dashboard shortcuts are CEO Hub entry points, not CI controls.** The CI dashboard keeps exactly two top-level shortcuts — **Research Competitors** and **See / Monitor Competitors** — plus contextual **Ask CEO** buttons on individual findings, competitors and candidates. Each opens the CEO Hub carrying a **structured, server-validated context reference** (the selected SKU's `product_id`, the intent, and for Ask CEO the `finding_id`), pre-composing a visible message the seller sends (D14). A shortcut **never** calls a CI run endpoint, never runs anything itself, never collects input, and never carries a client-supplied `tenant_id`. §6.21.2. |
+| C34 | **Tavily is approved as CI's discovery provider (resolves C22's human-approval gate for provider selection; owner decision 2026-10-18).** Discovery acquires **leads via the Tavily search API only — no scraping of any marketplace or search frontend** (C2 untouched). The adapter is written behind the existing `SearchProvider` interface, reuses the existing backend Tavily configuration, enforces the C4/D7 marketplace-host allowlist on every returned URL, and sits under the §6.11 query-privacy boundary and §6.12 budgets unchanged. **What the approval does not do:** it does not waive the §6.10.1 provider record, which must still be completed for Tavily in CP1 (allowed use, retention, display/redistribution, attribution, region, limits, cost); and **Tavily's terms and cost at CI volume remain pre-launch validation V11/V16**, not assumed. The two-provider comparison C22 required is waived by the owner for V3; the interface keeps a second provider swappable. §6.28. |
+| C35 | **A Tavily result is a lead, never a verified observation — restated as an enforceable rule.** No price, stock status, rating, review count or other value read from a Tavily title/snippet is ever written to `competitor_snapshot`/`competitor_snapshot_field`, used as a `competitor_prices[]` input to Brain 1, used for a delta, price band, comparison, review theme, Layer 1 alert or `CIHandoff` `validated_fact`, or given an `Evidence` record of `source_type = SELLER_SCREENSHOT`. Such a value may be **displayed** only on a discovery candidate, labelled **"reported by search — unverified"**. **During monitoring, Tavily may refresh discovery leads (new candidates; whether a candidate still surfaces) and nothing else** (C40). §6.28.3. |
+| C36 | **Image evidence enters through the CEO Hub chat attachment; WhatsApp is a placeholder only.** The seller attaches a competitor listing screenshot or a reviews-tab screenshot in the CEO Hub chat. A new trigger `CEO_HUB_UPLOAD` (§6.4) is recorded on the run. **Quality validation → duplicate detection → vision extraction → product matching → confirmation where required (C37) → evidence storage** is one fixed pipeline (§6.22). WhatsApp is declared as `EvidenceIntakeChannel = WHATSAPP`, a **placeholder**: the channel value and interface exist so both channels share one workflow, but it accepts nothing and returns a named `CHANNEL_NOT_AVAILABLE` until `whatsapp-integration.md`'s BSP exists (§1a item 3 stands). **No WhatsApp media-ingestion behaviour is specified or built here.** |
+| C37 | **Seller confirmation is risk-based — by evidence confidence and by consequence, never blanket and never absent where it matters.** A field is **consequential** if its value, once stored, would (a) feed Brain 1 (`competitor_prices[]` → price band, positioning, scenarios), (b) create or suppress a price/stock delta or alert, or (c) assert product identity as `EXACT_MATCH`. A **consequential** vision-extracted field is **confirmed by the seller before it becomes a verified observation** (conservative while Q18 stands: measured vision price accuracy 13/31 and the extractor emits no ambiguity flag). A **non-consequential** field extracted at `HIGH` confidence is stored as extracted, shown in the CEO's summary and correctable at any time without a prompt. A **non-consequential** field at `MEDIUM`/`LOW`/missing is stored with its confidence or left `UNKNOWN` and is **not** asked about unless the seller asks. A field the seller declines to confirm stays `UNKNOWN` and **never** enters a consequential path. Full matrix: §6.23. |
+| C38 | **Missing or uncertain information travels CI → CEO → seller → CEO → CI; CI never addresses the seller.** CI returns a structured **`InfoRequest`** (field, reason, evidence reference, allowed answer forms) to the CEO; the CEO phrases the question in chat; the seller's answer returns through a fixed CEO tool (`ci.confirm_field`) and is stored `SELLER_CONFIRMED`/`SELLER_ENTERED` with provenance. CI invents nothing to fill a gap (C23, §6.18). §6.23.3. |
+| C39 | **Competitor management is CEO-conversational and fully audited: approve, reject, add, remove.** The seller says it in chat; the CEO executes a **fixed** CI action. **Approve** = the C21/§6.15 accept (candidate → tracked competitor). **Reject** = decision stored with reason; a rejected candidate is not re-surfaced by later discovery unless the seller asks. **Add** = a marketplace URL the seller states in chat (C4/D7 allowlist and entitlement cap apply) or a named candidate. **Remove** = **soft removal** (`REMOVED`): excluded from comparison, monitoring and alerts; history and evidence retained under §6.8; restorable by re-adding. Bulk requests ("track these three") are echoed for the seller's confirmation before the write. Every action writes an audit event (C47); every row is tenant-scoped with RLS `FORCE`. §6.24. |
+| C40 | **"Monitoring" means *re-evaluation of stored evidence*, never watching.** A monitor request re-evaluates, from data already held: per-competitor **freshness**, **verified snapshot-to-snapshot deltas**, **review findings** and open alerts, and returns a **Monitoring Report stamped with its as-of time and each competitor's evidence date**. CI makes **no competitor fetch, no scheduled scrape and no continuous-monitoring claim** — the CEO says "as of <evidence date>", never "live", "tracking in real time" or "continuously monitored". Where evidence is stale or absent the CEO **asks the seller for a fresh screenshot** (CEO Hub; WhatsApp placeholder). A scheduled *internal* job that only re-reads stored data to compute freshness and reminders is permitted and is not monitoring of competitors (D16). Tavily may refresh **discovery leads only** (C35). §6.25. |
+| C41 | **Freshness is source-specific.** D6/D9 are unchanged for seller-screenshot price/availability (24h `is_stale`, 7-day hard ceiling) and §6.16.2's other per-field thresholds. **Adds:** a seller-confirmed or seller-entered field **inherits the age of the evidence it confirms, not the confirmation time**; a Tavily lead signal has **no freshness tier — it is always unverified** and never "fresh"; a review finding's freshness follows §6.16.2's 30 days. A stale or unconfirmed fact **never fires a confirmed alert** (AC27 unchanged). §6.25.3. |
+| C42 | **Alerts gain configurability, deduplication, quiet hours and freshness reminders — Layer 1 only (C26 unchanged).** Thresholds stay configurable per tenant and per competitor (D2, R9). **Deduplication** (§6.26.1): one alert per `(competitor, finding type, direction, evidence pair)`; a repeat fires only on a new valid snapshot whose delta against the **last alerted value** again meets the threshold. **Quiet hours** (§6.26.2): a tenant window with a timezone in which alerts are **held, not dropped**, and delivered when it ends; no default window. **Freshness reminders** (`staleness_reminder_days`) are delivered through the CEO. Channels this pass: CEO Hub and dashboard; WhatsApp placeholder. |
+| C43 | **Product identity and competitive relationship are separate, and the §6.13.2 gate is split accordingly (REVERSES part of a locked rule — D17, Q20).** *Identity* (`identity_match`, C24, **values unchanged**) answers *"is this the same sellable product as mine?"*. *Relationship* (`relationship_class`, new, §6.27.1) answers *"how does this product compete with mine?"* — `SAME_PRODUCT · VARIANT · DIRECT_COMPETITOR · FUNCTIONAL_ALTERNATIVE · UNRELATED · UNKNOWN`. **Defect this fixes (verified 2026-10-18 against `identity_resolution.py`):** `resolve_identity` returns `NOT_A_MATCH` for any different brand and §6.13.2 gates `NOT_A_MATCH` to `REJECTED`, so **every other-brand competitor is auto-rejected before relevance scoring** — the opposite of what discovery exists to find. **Fix:** `EXACT_MATCH` and `LIKELY_VARIANT` gate exactly as before; `NOT_A_MATCH` **proceeds to relevance scoring** and is rejected only if the relationship resolves to `UNRELATED`; `UNCERTAIN` stays blocked for seller review (now asked conversationally, C38). Unknown is never guessed upward (C25). Relevance, identity, relationship, evidence confidence and freshness are **five separate attributes**, never collapsed (extends C25's four). |
+| C44 | **Comparison extends to delivery, fulfillment, offers and effective price — with `UNKNOWN` kept visible.** §6.19 adds: delivery charge, fulfillment type, ratings and review counts, and **visible offers/coupons/temporary deals** as observed fields from seller evidence. **Effective price** continues to mean `listed − visible discount` (existing `effective_price`), an observed-fact subtraction under B8, **never** a margin-aware figure; an offer that needs a buyer-side condition (bank offer, first order) is recorded as an **offer with its condition**, not silently subtracted. Every unobserved value renders `UNKNOWN` with a reason, never blank or zero. §6.27.3. |
+| C45 | **Every important CI recommendation carries traceable evidence, and review analysis keeps its sample size.** A finding resolves to its `Evidence` records and states *N of M sampled*, evidence date, confidence and seller-confirmation state (§6.20, C27, extended by §6.29.2). Review analysis uses **only legitimately available evidence** — a seller-submitted reviews-tab screenshot (C6) — and never states a population statistic from a screenshot's sample. |
+| C46 | **Stable `finding_id` and the Ask-CEO contract.** Every CI finding the dashboard shows has a stable tenant-scoped `finding_id` (§5.7). **Ask CEO** passes that id; the CEO **re-reads the finding and its evidence server-side from the id** (never trusting client-supplied finding content) and continues the investigation. Findings created during CEO conversations appear on the dashboard with no seller action. A `finding_id` outside the tenant resolves `404`. §6.29.1. |
+| C47 | **CI events are structured, append-only and auditable (resolves Q9 and Q16 for CI's scope).** Event types, at minimum: `EVIDENCE_RECEIVED`, `EVIDENCE_REJECTED_QUALITY`, `EVIDENCE_DUPLICATE`, `FIELD_CONFIRMATION_REQUESTED`, `FIELD_CONFIRMED`, `FIELD_CONFIRMATION_DECLINED`, `COMPETITOR_APPROVED`, `COMPETITOR_REJECTED`, `COMPETITOR_ADDED`, `COMPETITOR_REMOVED`, `DISCOVERY_RUN_STARTED`, `DISCOVERY_RUN_COMPLETED`, `DISCOVERY_RUN_FAILED`, `QUERY_DISPATCHED`, `PRIVACY_FILTER_DROP`, `FINDING_CREATED`, `ALERT_RAISED`, `ALERT_SUPPRESSED_DEDUP`, `ALERT_HELD_QUIET_HOURS`, `MONITOR_RUN`, `CEO_INVESTIGATION_LINKED`. Each records `tenant_id`, actor (`member_id` or `SYSTEM`), timestamp, the CEO investigation/`agent_run` link where one exists, and object ids — **never raw review text or snippets** (§7 rules 8, 14). The dashboard's Evidence and Changes history is read from these events. §5.7, §6.29.3. |
 
 ---
 
@@ -67,7 +92,12 @@ This section is a scope/status annotation, not a re-decision. It defers no confi
 7. **NEW (V2). Market trend signals / trend research are DEFERRED, pending a licensed or approved acquisition method (C29).** The `pytrends` route is scraping with a different target and is refused on C2's own reasoning. No trend claim is emitted at all until this is resolved — a partially-sourced trend claim is worse than none, per the same OP3 logic that governs stale evidence (D6). **This deferral is scoped tightly and does not block discovery (C21/C22), price bands (§6.16.3) or anything else in §6.10–§6.19.**
 8. **NEW (V2). Layer 2 fused, financially-aware alerts (C26) are DEFERRED, pending a real CFO agent.** Layer 2 requires the CEO orchestrator to request a margin/contribution figure from CFO and compose it with CI's observation. **Verified against the codebase at this review: no CFO agent implementation exists** — CEO Hub reports CFO as `NOT_CONNECTED`, and only the `agent_run`/`investigation` migrations exist (same gap already recorded in item 1 above). Building Layer 2 now would mean coding against a guessed CFO response contract and, worse, would create pressure to approximate a margin figure inside CI — the exact failure C26 exists to prevent. **Layer 1 (CI, observational only) is real, unblocked and ships in this pass.** When a CFO agent exists, Layer 2 is composed by CEO; nothing in CI changes to enable it beyond emitting the `CIHandoff` payload it already emits (C28). *Update 2026-10-07: the stated blocker is stale — a real CFO agent now exists (11 `dispatch_cfo_*` functions, direct routes, Brain 1/2 wiring). Layer 2 is no longer blocked on CFO; it is specified as the CEO playbook `COMPETITOR_PRICE_IMPACT` (`ceo-agent-orchestration.md` §6.12: CI `ci.request_price_scenario` + CFO `cfo.pricing` as parallel legs, composed by CEO) and is built with the conversational CEO. CI still computes no margin (C26/AC1 unchanged).*
 
-None of these deferrals changes C1–C31, D1–D13, A1–A9 or Q1–Q17 as decisions of record; each only states which of them are not yet in scope for the next build pass.
+9. **NEW (V3).** **WhatsApp is a declared placeholder for CI evidence intake and alert delivery** (C36, C42): the `WHATSAPP` channel value exists in the shared interface and returns `CHANNEL_NOT_AVAILABLE`. Items 1 and 3 above are *narrowed, not removed*: **CEO Hub screenshot upload is now in scope** (C36) and the CEO conversational route is in scope (the CEO exists), so their "only the dashboard direct path ships" statements are **superseded for the dashboard-upload surface** — retired as a seller surface (C32) and replaced by the CEO Hub attachment path.
+10. **NEW (V3).** **Item 6 is partly resolved:** Tavily is approved, its adapter is built (CP1) and its §6.10.1 provider record is completed (§6.10.1a, 2026-10-18). **Still deferred:** the human decisions the record surfaced — redisplay rights, Tavily's retention/training use of query text, and the per-tenant cost ceiling (V16). The two-provider comparison is waived by the owner.
+11. **NEW (V3). Item 8 (Layer 2) stands.** The CEO may request a CFO scenario *when available*; where none exists the CEO says so and offers nothing financial (C26, AC29, E37).
+12. **NEW (V3). Explicitly deferred by the owner:** competitor sales predictions, speculative competitor margins, automatic repricing, unsupported market-share estimates, continuous scraping, and any additional agent. None may be built under this revision.
+
+None of these deferrals changes C1–C47, D1–D18, A1–A14 or Q1–Q24 as decisions of record; each only states which of them are not yet in scope for the next build pass.
 
 ---
 
@@ -88,6 +118,11 @@ None of these deferrals changes C1–C31, D1–D13, A1–A9 or Q1–Q17 as decis
 | D11 | Discovery opt-out default | **Discovery enabled by default, with a tenant-level opt-out a seller can set at any time** (`ci_tenant_config.discovery_enabled`, §5.4). With discovery off, manual URL entry is the whole product surface and nothing degrades except candidate suggestions. | §6.11 requires discovery be opt-out capable. Defaulting it on matches C21's reason for the reversal; defaulting it off would ship the reversal and then hide it. The opt-out is the seller's control over what leaves Metrion in a query, so it must be honoured before any query is sent, not filtered afterwards. |
 | D12 | Entitlement treatment of a discovery run | **One discovery run consumes one CI run unit** against C13's runs/month allowance, the same unit an `EVIDENCE_UPLOAD` run consumes. Candidate volume is bounded separately by §6.12's budgets. | Avoids inventing a second meter before the entitlement spec exists (Q2, Q3 already flag that gap). Provisional, and explicitly subordinate to `billing-and-pricing.md` when that spec finalizes tiers. |
 | D13 | Whether discovery may run without a seller-approved product baseline | **No.** A discovery run requires a `SellerProduct` (§5.5) with at least `title` **or** `category` `KNOWN`. With both `UNKNOWN` the run is refused with a named reason, not attempted on thin input. | Query generation from an all-`UNKNOWN` baseline would either produce useless queries or tempt an implementation into inferring a baseline — the precise failure C30 and §6.18 forbid. Refusing is the honest outcome. |
+| D14 | How a dashboard shortcut reaches the CEO (C33) | **A pre-composed, visible message the seller sends — not an auto-submitted turn.** The shortcut opens the CEO Hub with the draft text and a structured context reference (`{intent, product_id, finding_id?}`) attached; the seller presses send. | An auto-submitted click would meter a CEO turn and a CI run from an accidental click and put words in the seller's mouth. One extra click keeps the seller in control; the context is still passed structurally so the CEO never parses prose to find the SKU or finding. |
+| D15 | Which fields are "consequential" for confirmation (C37) | **Price and effective price, availability transition, and an `EXACT_MATCH` identity assertion** — the three things that reach Brain 1, an alert or a "same product" claim. Rating, review count, delivery text, offer text and listing copy are non-consequential. **While Q18 stands, a vision-extracted consequential field is always confirmed.** | Seller attention is the scarce resource; confirming every field makes a confirmation marathon (the §6.13.2 rationale) and trains click-through. Measured vision price accuracy (13/31, Q18) makes *not* confirming price indefensible. The list is configuration-shaped so Q18's resolution can relax it without a data-model change. |
+| D16 | Whether a scheduled job may exist under "no continuous monitoring" (C40) | **Yes, for stored-data re-evaluation only:** freshness recomputation and evidence-freshness reminders over rows CI already holds. **No** scheduled job ever contacts Tavily for prices, fetches a URL, or words anything as current. | Reminders need a trigger; a job that only reads CI's own tables watches no competitor. The honesty rule lives in wording and in C35 and is enforced by test (AC47). |
+| D17 | Splitting identity from relationship (C43) | **Keep the four `identity_match` values and their basis unchanged; add `relationship_class`; gate rejection on `UNRELATED`, not on `NOT_A_MATCH`.** Derivation is deterministic from identity plus the category/product/use-case axes (§6.27.1); no new LLM judgement. | Changes no persisted value and no existing relevance axis, so existing rows and tests keep their meaning. The alternative — a fifth identity value — would change a locked enum and every consumer. **This overrides a locked rule (§6.13.2; the code in `identity_resolution.py` `_GATING_TABLE` and its tests) and needs explicit owner confirmation (Q20).** |
+| D18 | Dashboard price chart with sparse data (C45, §6.29) | **Plot only real verified snapshots, each dated; draw no line between points further apart than one freshness window; show a plain empty state below two points.** | A smooth 30-day line over three snapshots is an invented trend — the failure C29 and PI §0 both forbid. |
 
 ---
 
@@ -105,6 +140,10 @@ None of these deferrals changes C1–C31, D1–D13, A1–A9 or Q1–Q17 as decis
 | A8 | **NEW (V2).** Sellers will actually upload evidence for candidates they approve, converting "Approved — awaiting evidence" into evidence-backed competitors | **High** — the whole V2 value chain (comparison, mining, alerts) is gated on evidence per C23. If conversion is low, discovery produces a list the product can say almost nothing about. Product-side mitigation (prompting, digest reminders via `staleness_reminder_days`) is outside this spec's control |
 | A9 | **NEW (V2).** The eight relevance axes and their 0/1/2 thresholds (§6.14) are approximately right for Indian marketplace categories on first launch | Medium — explicitly a first-pass rule set (C25); wrong thresholds produce a poorly-ordered Recommended set, not a wrong *fact*, and are tuned from real seller feedback without any data-model change |
 | A10 | **NEW (C31).** Enough sellers will fill the minimal seller-product-profile form (§5.5.1) — five fields, one time, editable — for relevance scoring to be materially better than the all-`UNKNOWN` baseline | Medium — if completion is low, CI degrades **gracefully and honestly** to exactly the pre-C31 behaviour (those axes score 0, nothing is invented). A wrong *score ordering*, never a wrong *fact*. Mitigation is product-side prompting, outside this spec. Tracked at V12 |
+| A11 | **NEW (V3).** Sellers will attach screenshots in chat and answer short confirmation questions (price, stock) when the CEO asks. | **High** — if not, consequential fields stay unconfirmed and CI correctly produces no verified price, band or alert (C37): honest degradation, never a fabricated figure. Mitigation is CEO wording and one-tap answers, outside this spec. |
+| A12 | **NEW (V3).** Tavily returns enough title/snippet/URL signal on Amazon, Flipkart and Meesho listings for identity resolution and provisional relevance to be useful (extends A7). | Medium — with thin snippets most axes score `UNKNOWN`/0 and the Recommended set weakens; nothing is presented as fact either way (C35). |
+| A13 | **NEW (V3).** Deterministic image checks (dimensions, size, blur measure), optionally with the local vision model, can meet the §6.22.1 quality gate. | Medium — if not, more poor images reach extraction; C37's confirmation of consequential fields is the backstop. |
+| A14 | **NEW (V3).** The CEO Hub's existing attachment mechanism (`CEO_ATTACHMENT_*` limits, attachment reader — `ceo-agent-orchestration.md` §6.34) can carry a competitor screenshot to CI's intake without weakening the CEO's request hardening. | Medium — **corrected at CP1:** the CP0 text said the CEO Hub had no attachment path; backend attachment support exists (images/PDF, env-limited, refused when unset). CP3 must audit what it already does before adding anything (§7 rules 16–18). |
 
 ---
 
@@ -113,6 +152,10 @@ None of these deferrals changes C1–C31, D1–D13, A1–A9 or Q1–Q17 as decis
 **Goals** — store seller-supplied, reference-only competitor URLs; let the seller submit evidence (dashboard screenshot upload) for those competitors; extract structured snapshots from that evidence via a vision model, with manual-entry fallback; detect threshold-breaching price and availability changes between snapshots; produce derived review insight; supply observed inputs to Brain 1 for an estimated margin band; surface findings through CEO and, where enabled, WhatsApp.
 
 **Goals — V2 additions (C21–C30).** Generate research queries from the seller's own product and surface **candidate** competitors for seller review (C21), within a locked query-privacy boundary (§6.11) and query/cost budget (§6.12) · resolve each candidate's product identity explicitly (C24) · score candidate relevance on the locked eight-axis algorithm and always show the breakdown (C25) · keep every candidate visible across three labelled tiers, filtering nothing silently (§6.15) · mine customer voice into themes with stated frequency and bounded, auditable snippet retention (C27) · emit Layer 1 observational alerts (C26) · emit a structured Competitive Brief and `CIHandoff` payloads to CEO (C28) · **supply `competitor_prices[]` as `DERIVED` inputs to `deterministic-engine.md` §5.15 and render its results unchanged.**
+
+**Goals — V3 additions (C32–C47).** One seller-facing conversation, with the CEO · screenshot evidence by CEO Hub attachment with quality, duplicate and identity checks · risk-based seller confirmation · cross-brand competitors found and classified without guessing · conversational approve/reject/add/remove with full history · honest monitoring as re-evaluation of stored evidence · configurable, deduplicated, quiet-hours-aware Layer 1 alerts · a read-only CI dashboard that mirrors actual CEO–CI findings, evidence and history, with professional empty states.
+
+**Non-goals — V3 additions.** Any manual form, input or upload on the CI dashboard (C32) · a CI chatbot or any seller-facing CI voice (C32, C38) · treating a Tavily value as an observation (C35) · any claim of continuous, live or real-time monitoring (C40) · competitor sales prediction, speculative competitor margins, automatic repricing, unsupported market-share estimates, continuous scraping, additional agents (§1a item 12) · rehosting or discovering competitor product images — the dashboard shows insights and findings only (C5, owner decision 2026-10-18) · building WhatsApp media ingestion (C36).
 
 **Non-goals — SUPERSEDED entry.** The V1 non-goal *"competitor discovery (CI never finds competitors, the seller supplies them)"* is **superseded by C21 (2026-09-21, Checkpoint-0 review)** and is struck from the list below. It is recorded here rather than deleted, so the reversal is traceable — the same treatment C2 gave the scraping→evidence pivot and D7 gave the short-link resolution. **What survives the reversal:** manual URL entry remains a permanent, always-available path (C21); discovery still never produces competitive-intelligence *facts* (C23); and nothing about discovery involves fetching a marketplace URL — C2 is untouched.
 
@@ -575,6 +618,87 @@ CIHandoff {
 
 ---
 
+### 5.7 V3 data model additions (NEW — C32–C47)
+
+Contract-level; column types and migrations are finalised in the checkpoint that builds each table. **Every table below is tenant-owned: `tenant_id uuid not null`, RLS `FORCE`, no endpoint accepting a client `tenant_id`, background work without tenant context failing closed (§7 rules 9–10, 13).** No existing column changes meaning; additions only.
+
+```sql
+-- C46/C47: a stable, tenant-scoped id for anything the dashboard shows as a finding
+ci_finding (
+  id uuid pk, tenant_id uuid not null,
+  product_id text not null,                 -- seller SKU the finding is about
+  competitor_url_id uuid,                   -- null for market-level findings
+  finding_type text not null,               -- PRICE_CHANGE | AVAILABILITY_CHANGE | REVIEW_THEME | LISTING_GAP | DIFFERENTIATION | MARKET_POSITION | FRESHNESS | DISCOVERY_CANDIDATE
+  evidence_refs uuid[] not null,            -- §5.6 Evidence ids; a finding with no evidence_refs is invalid (AC53)
+  sample_size int, sample_total int,        -- "N of M sampled" (C45); null where not applicable
+  confidence text not null,                 -- §5.6 vocabulary
+  freshness text not null,                  -- FRESH | STALE | UNAVAILABLE (§6.16.2)
+  seller_confirmation text not null,        -- NOT_REQUIRED | PENDING | CONFIRMED | DECLINED
+  engine_result_ref uuid,                   -- Brain 1 citation where a figure is shown
+  payload jsonb not null,                   -- derived, display-safe facts only; never raw review text (§7 rules 8, 14)
+  created_at timestamptz not null, superseded_by uuid
+)
+
+-- C47: append-only audit/history; the Evidence and Changes history reads from here
+ci_event (
+  id uuid pk, tenant_id uuid not null,
+  event_type text not null,                 -- C47 list
+  actor text not null,                      -- member uuid as text, or 'SYSTEM'
+  agent_run_id uuid, investigation_id uuid, -- the CEO–CI link where one exists
+  object_type text, object_id uuid,
+  detail jsonb not null default '{}',       -- ids and enums only
+  occurred_at timestamptz not null
+)  -- no UPDATE or DELETE grant to the application role (AC56)
+
+-- C37/C38: the CI -> CEO -> seller question, and its answer
+ci_info_request (
+  id uuid pk, tenant_id uuid not null,
+  competitor_url_id uuid, evidence_id uuid, snapshot_field_id uuid,
+  field_name text not null,
+  reason text not null,                     -- LOW_CONFIDENCE | CONSEQUENTIAL_FIELD | MISSING | CONFLICT | IDENTITY_UNCERTAIN | WHICH_COMPETITOR
+  consequential boolean not null,
+  proposed_value jsonb,                     -- what vision read, if anything
+  status text not null,                     -- OPEN | ANSWERED | DECLINED | EXPIRED
+  answered_value jsonb, answered_by uuid, answered_at timestamptz,
+  created_at timestamptz not null, expires_at timestamptz not null
+)
+
+-- C36: duplicate detection and channel provenance, appended to competitor_evidence
+-- ALTER competitor_evidence ADD:
+--   content_sha256 text, perceptual_hash text,                -- per-tenant duplicate detection (§6.22.2); null on legacy rows
+--   intake_channel text not null default 'DASHBOARD_UPLOAD',  -- DASHBOARD_UPLOAD (legacy rows) | CEO_HUB_ATTACHMENT | WHATSAPP (placeholder, never written)
+--   quality_status text not null default 'UNCHECKED',         -- ACCEPTED | REJECTED_LOW_QUALITY | REJECTED_NOT_A_LISTING | UNCHECKED
+--   duplicate_of uuid                                         -- the earlier evidence this duplicates, if any
+
+-- C43: appended to ci_candidate (carried to the tracked competitor)
+-- ALTER ci_candidate ADD: relationship_class text not null default 'UNKNOWN',
+--                         relationship_basis jsonb not null default '{}'   -- which identity/axis values drove it (like identity_match_basis)
+
+-- C39: soft removal on the tracked competitor
+-- ALTER competitor_url ADD: removed_at timestamptz, removed_by uuid, removal_reason text   -- status gains REMOVED
+
+-- C42: appended to ci_tenant_config
+-- quiet_hours_start time, quiet_hours_end time, quiet_hours_tz text,   -- all null = no quiet hours
+-- alert_dedup_window_hours int not null default 24,
+-- review_finding_min_sample int not null default 10                      -- provisional (Q22)
+
+ci_alert_state (                            -- dedup memory (§6.26.1)
+  tenant_id uuid not null, competitor_url_id uuid not null,
+  finding_type text not null, direction text not null,
+  last_alerted_value_paise bigint, last_alerted_snapshot_id uuid,
+  last_alerted_at timestamptz not null,
+  primary key (tenant_id, competitor_url_id, finding_type, direction)
+)
+ci_held_alert (                             -- quiet-hours queue (§6.26.2): held, never dropped
+  id uuid pk, tenant_id uuid not null, finding_id uuid not null,
+  hold_until timestamptz not null, delivered_at timestamptz
+)
+```
+
+`finding_id` is `ci_finding.id`. The existing `CIHandoff`/`Evidence` shapes (§5.6) are reused unchanged; `ci_finding` is the persisted, dashboard-addressable form of a `validated_fact` set.
+
+---
+
 ## 6. Core rules
 
 ### 6.1 URL intake and evidence submission — REVISED for the evidence model
@@ -590,6 +714,8 @@ CIHandoff {
 6. Each screenshot is queued for vision extraction independently. When every screenshot in the session has reached a terminal `extraction_status` (`EXTRACTED` or `EXTRACTION_FAILED`), the merge in §5.3 runs and produces exactly one `competitor_snapshot` for that research session.
 7. Any field extraction misses or that conflicts across screenshots (§5.3 rule 3) is exposed to the seller for manual entry/resolution before the snapshot is treated as `COMPLETE`.
 8. Run/evidence-submission volume is checked against entitlement (runs/month, §1 C13) before the session is accepted, on the same terms saved-URL count is checked at intake.
+
+**V3 amendment (C32, C36).** Rules 5–8 above describe *what* happens to a submission; **V3 changes *how a seller submits it*.** The seller no longer opens a competitor row on a dashboard and uploads there. The seller attaches the screenshot(s) in the **CEO Hub chat**; the CEO runs the fixed intake pipeline of §6.22, and a CEO-asked confirmation (§6.23) replaces the dashboard "manual entry/resolution" of rule 7. Rule 1's URL intake is likewise conversational (§6.24: the seller states the URL in chat). Entitlement checks (rules 3 and 8) are unchanged.
 
 ### 6.2 Capture run — REVISED for the evidence model
 
@@ -615,6 +741,7 @@ CI has two entry paths. Both enforce the same checks; they differ only in whethe
 | **Direct CI execution** | `EVIDENCE_UPLOAD` — dashboard screenshot submission (§5, §6.1) | **No** |
 | **CEO conversational route** | `CEO_REQUEST` | Yes |
 | **WhatsApp-confirmed** | `WHATSAPP_CONFIRM` | **Not decided here** — credit and cap treatment belongs to `whatsapp-integration.md` (§6.9) |
+| **CEO Hub upload (V3)** | `CEO_HUB_UPLOAD` — screenshot attached in the CEO Hub chat (C36, §6.22). Replaces the dashboard `EVIDENCE_UPLOAD` button as the seller's route; `EVIDENCE_UPLOAD` is retained only as the stored trigger value on legacy rows. | Per **Q19** (recommendation: the turn is a CEO turn as any other, and the intake is metered as one CI run unit) |
 
 Every CI execution, on every path, enters the **full `auth.md` §7.1 six-step chain** — authentication, membership, active status, role, permission (`agent.ci`), and resource tenant ownership. CI restates nothing; it defers to that chain in full.
 
@@ -730,6 +857,8 @@ Revisit after DPDP and legal review (`auth.md` Q9). **The legal-risk review that
 
 A `WHATSAPP_CONFIRM` trigger is recognised by §6.2 and enforced by §6.4; everything in the "still not decided" list above is pending in `whatsapp-integration.md` itself, not a CI gap.
 
+**V3 amendment (C36).** WhatsApp remains a **placeholder** for CI: the shared `EvidenceIntakeChannel` interface (§6.22.4) carries a `WHATSAPP` value that accepts nothing and returns `CHANNEL_NOT_AVAILABLE`. Everything above stays the record of what `whatsapp-integration.md` resolves; CI adds no WhatsApp behaviour.
+
 ### 6.10 Discovery pipeline and the discovery/intelligence boundary (NEW — C21–C23)
 
 Given a `SellerProduct` baseline (§5.5), CI generates research queries and surfaces candidate competitors, **replacing manual-URL-only entry as the default path while keeping manual URL entry as a permanent, always-available fallback** (C21). Query generation covers six kinds: product terms, category terms, feature terms, customer-intent phrases, alternative/substitute terms, and market/keyword terms (`ci_search_query.query_kind`, §5.4).
@@ -763,6 +892,25 @@ Before a provider is selected, a record is produced **for each candidate provide
 8. Integration tests against the real adapter
 
 **Steps 1–4 do not depend on 5–8 and must not be blocked waiting on them.** Switching providers later is a configuration change, never a rewrite. If a candidate provider's terms require retaining query text beyond what Metrion is comfortable with, that **counts against selecting them** (§6.11).
+
+#### 6.10.1a Provider record — Tavily (completed 2026-10-18, CP1; owner-approved provider, C34)
+
+Filled from Tavily's **current published terms (last updated 4 May 2026, `tavily.com/terms`) and credits documentation (`docs.tavily.com`)**, read on 2026-10-18 — not from memory. **This is an engineering reading of public text, not legal advice.** Per §6.10.1, any field the terms do not clearly answer is recorded `UNKNOWN` and treated as **not permitted** until a human resolves it.
+
+| Field | Finding | Status |
+|---|---|---|
+| Provider name | Tavily (search API) | — |
+| Allowed use | Integrating the service into a customer application that serves third-party end users is permitted (terms §§2, 3.2, 3.5). Use is described as for **internal business purposes**. The terms **do not explicitly address redisplaying search outputs to end customers** inside a paid product | **`UNKNOWN` — human/legal decision (V16)** |
+| Data retention (Metrion's side) | **Not stated** — no limit on how long a customer may keep returned results | `UNKNOWN`; Metrion's own bound is `search_cache_ttl_hours` (24 h) for reuse and the §6.8 snapshot retention for anything else; lead rows are never promoted to evidence (C35) |
+| Data retention (Tavily's side) | **Concern.** Tavily may store and use *customer input* (the query text) and outputs, **including for model training** (terms §§6.5, 9.2); no retention period is given. Under §6.11 ("terms require retaining query text beyond what Metrion is comfortable with count against selecting the provider") this is an **owner decision**, mitigated but not removed by the §6.11 privacy filter, which already keeps SKU ids, costs and tenant identifiers out of every query | **Owner/legal decision (V16)** |
+| Redistribution / display rights | Not explicitly stated (see Allowed use). Until resolved, the product shows only a lead's title, snippet and URL, labelled unverified (C35, §6.28.3), and never redistributes provider data outside the seller's own tenant | `UNKNOWN` — conservative display only |
+| Attribution | Not stated | `UNKNOWN`; none implemented |
+| Region | No India restriction. Access is barred for users in embargoed or sanctioned countries/regions and for sanctioned persons (terms §17.1) | No restriction for the target market |
+| Competing / derivative use | Customers may not build a competing product, reverse-engineer, create derivative works of the service, or train competing models on outputs (terms §§3.2, 6.6). Reasonable API use is allowed. CI uses the documented API only and does not train models on outputs | Compatible as designed |
+| Query limits | Rate limits per plan **not stated** in the credits documentation read. CI applies its own caps: `max_discovery_queries_per_run` (20), per-tenant `CI_TAVILY_DAILY_QUERY_CAP` (default 100 / rolling 24 h), 24 h per-tenant result cache | Provider limits `UNKNOWN`; CI caps in force |
+| Cost | **1 credit per basic search**; free tier **1,000 credits/month, no card**; pay-as-you-go **$0.008 per credit** once the plan limit is reached. A full discovery run is at most 20 queries = **20 credits (~$0.16)**; the free tier is therefore about **50 full runs a month, and it is shared with PI** (same key) | Known; the per-tenant monthly ceiling is a commercial decision (V16) |
+
+**Consequence for build and launch.** The adapter ships (C34) and is safe to run in development because it returns only unverified leads. **Launch of discovery to real sellers is gated on V16:** a human decision on (a) redisplay of Tavily outputs to paying sellers, (b) Tavily retaining and training on Metrion's search text, and (c) the per-tenant monthly cost ceiling. The two-provider comparison C22 required is waived by the owner; the `SearchProvider` interface keeps a second provider swappable if (a) or (b) fails.
 
 #### 6.10.2 Acquisition matrix — what discovery can and cannot produce (C23)
 
@@ -867,7 +1015,7 @@ Relevance scoring **presumes** a candidate is the competitor's actual product. I
 
 Identity resolution extracts **brand, model/variant, pack size and bundle status** from the candidate and compares them against the seller's product record (§5.5). **Match confidence is reported as its own explicit field** — `EXACT_MATCH` | `LIKELY_VARIANT` | `UNCERTAIN` | `NOT_A_MATCH` — **never silently assumed to be exact.** `ci_candidate.identity_match_basis` records which attributes drove the judgement and is required whenever `identity_match` is set.
 
-#### 6.13.2 Gating rule — tuned for friction
+#### 6.13.2 Gating rule — tuned for friction — REVISED V3 by C43 / §6.27.2: `NOT_A_MATCH` is no longer auto-rejected
 
 Requiring seller confirmation for *anything* below `EXACT_MATCH` would turn every run with ambiguous candidates into a confirmation marathon, defeating the automatic-CI experience discovery exists to deliver.
 
@@ -1203,6 +1351,272 @@ The CEO orchestrator is responsible for:
 
 **A `CIHandoff` payload is never passed through to the seller as-is.** It is always composed into a Competitive Brief (§6.20.2) or a CEO-orchestrated cross-agent alert (§6.17) first.
 
+### 6.21 The CEO-only surface (NEW — C32, C33, C46)
+
+#### 6.21.1 The rule
+
+The seller talks to **the CEO and nobody else**. CI has no chat endpoint, no seller-facing prose of its own, and no question it can ask the seller directly (C32, C38). CI returns **structured results** — findings, `InfoRequest`s, monitoring reports, candidate lists — and the CEO composes them into language. The CI dashboard displays what those investigations produced; it collects nothing.
+
+#### 6.21.2 Shortcut and Ask-CEO context contract
+
+The dashboard's two shortcuts and every contextual **Ask CEO** button open the CEO Hub with a draft message (D14) and a context reference:
+
+```
+CeoEntryContext {
+  intent:  RESEARCH_COMPETITORS | MONITOR_COMPETITORS | ASK_ABOUT_FINDING | ASK_ABOUT_COMPETITOR | ASK_ABOUT_CANDIDATE
+  product_id:        text           -- the SKU selected in the dashboard's SKU selector (required for the two shortcuts)
+  finding_id?:       uuid           -- ASK_ABOUT_FINDING (C46)
+  competitor_url_id?: uuid          -- ASK_ABOUT_COMPETITOR
+  candidate_id?:     uuid           -- ASK_ABOUT_CANDIDATE
+}
+```
+
+1. **Ids only, never content.** The CEO resolves every id **server-side, tenant-scoped**, and reads the finding/competitor/candidate and its evidence itself. A client-supplied title, price or finding body is ignored (C46).
+2. The context pre-fills the CEO's *investigation scope*; it does not run anything. The run begins only when the seller sends the message and the CEO routes it (D14).
+3. Where the seller has several SKUs and none is selected, the CEO asks which one — never defaults (A/C25 discipline).
+4. An id outside the tenant, or one that no longer exists, yields a plain "I can't find that" from the CEO and no data (`404` at the API, AC54).
+
+#### 6.21.3 Scenario → fixed CEO action map
+
+Every row is a **fixed, hand-registered CEO action** (the existing `ceo/registry.py` pattern); an LLM never chooses which code runs (C11, `agent-orchestration-patterns`). Approval and metering follow `ceo-approval-workflow.md` and the entitlement spec — **CI adds no approval mechanism of its own.**
+
+| Seller says / does | CEO action | CI function | New? |
+|---|---|---|---|
+| "Find competitors for my 1L steel bottle on Amazon" / "research more competitors" | `ci.discover_competitors` | discovery run (§6.10–§6.15), Tavily (§6.28); excludes rejected candidates (C39) | Exists; classifier route is new |
+| "Which should I track?" → approves / rejects / adds / removes | `ci.competitor_approve` · `ci.competitor_reject` · `ci.competitor_add` · `ci.competitor_remove` | §6.24 | New (extends existing accept/reject/promote) |
+| Attaches a screenshot | `ci.evidence_intake` | §6.22 pipeline | New |
+| Answers a CEO confirmation question | `ci.confirm_field` | §6.23 | New |
+| "Track / monitor my competitors" | `ci.monitor_competitors` | §6.25 re-evaluation | New |
+| "What do customers complain about at my competitors?" | `ci.review_findings` | read of §6.18 review insight, with sample size (C45) | New read action |
+| "Should I reduce my price?" | `ci.request_price_scenario` → CFO when available | existing; CEO composes with CFO output (C26) | Exists |
+| Clicks Ask CEO | per `CeoEntryContext` | read by id (C46) | New |
+
+#### 6.21.4 Seller product profile by conversation (amends C31)
+
+When CI needs a seller-side field it does not have (e.g. discovery refused under D13, or a relevance axis scoring `UNKNOWN` because the seller's price is unknown), it returns an `InfoRequest` (reason `MISSING`). The CEO asks; the seller states the value; the CEO stores it through the **existing `ci.seller_product_set` action** as `SELLER_ENTERED` and **echoes the stored values back**. Nothing is inferred, defaulted or backfilled (C30). Editing later works the same way, and dependent relevance scores are recomputed with `recalculated_from` (AC22c, unchanged).
+
+---
+
+### 6.22 Image evidence intake (NEW — C36)
+
+```
+CEO Hub attachment → quality gate → duplicate check → vision extraction → competitor/product matching
+   → confirmation where required (§6.23) → store evidence + snapshot → finding(s) → CEO explains
+```
+
+#### 6.22.1 Quality gate
+
+Server-side, before any model runs. Checks: supported image type **by content (magic bytes), not extension or client MIME**; size within `ci_max_evidence_bytes`; minimum pixel dimensions; a blur/legibility measure; and a "looks like a marketplace listing or reviews page" check. Outcomes: `ACCEPTED`, `REJECTED_LOW_QUALITY`, `REJECTED_NOT_A_LISTING` — the last two return a **named reason** to the CEO ("too blurry to read the price"), store **no snapshot**, and write `EVIDENCE_REJECTED_QUALITY`. The thresholds are configuration (A13). A rejected image is retained only as long as needed to explain the rejection (§6.8).
+
+#### 6.22.2 Duplicate detection (per tenant)
+
+`content_sha256` equality → **exact duplicate**: no new evidence row beyond a link, no new snapshot, the CEO tells the seller it already has this and shows the existing result (`EVIDENCE_DUPLICATE`). A close `perceptual_hash` → **possible duplicate**: stored with `duplicate_of`, and **no snapshot is created unless the seller says it is a fresh capture** (asked via `InfoRequest`, low consequence). Duplicate keys are tenant-scoped; nothing crosses tenants.
+
+#### 6.22.3 Extraction and matching
+
+Vision extraction follows §5.3/§6.1 unchanged (structured fields, confidence and source per field), extended with the C44 fields (delivery charge, fulfillment, offers with conditions). **Text visible inside a screenshot is data, never instruction** — extractor output is parsed into typed fields only and never executed or followed (§7 rule 16). To attach the evidence to a competitor: (a) the seller names it; else (b) extracted title/URL is matched to a tracked competitor through identity resolution; else (c) CI returns an `InfoRequest` (`WHICH_COMPETITOR`) — **a screenshot of an untracked competitor is never auto-added** (E45); the CEO asks whether to add it (§6.24). Multiple images in one message form one research session (§5.3).
+
+#### 6.22.4 Channels
+
+```
+EvidenceIntakeChannel = CEO_HUB_ATTACHMENT | WHATSAPP | DASHBOARD_UPLOAD (legacy rows only)
+```
+
+`CEO_HUB_ATTACHMENT` is live. `WHATSAPP` returns `CHANNEL_NOT_AVAILABLE` until a BSP and a media-ingestion contract exist. `DASHBOARD_UPLOAD` is never produced by V3 code. All channels call **the same pipeline**.
+
+#### 6.22.5 What the CEO tells the seller
+
+The CEO composes from CI's structured result: the extracted price, specifications, offers and delivery as the seller confirmed or CI read them (each with its confidence), what is `UNKNOWN`, and the **comparison against the seller's product** (§6.19, Brain 1 figures cited by `engine_result_ref`). The finding(s) and evidence appear on the dashboard automatically (C46).
+
+---
+
+### 6.23 Seller confirmation policy (NEW — C37, C38)
+
+#### 6.23.1 The matrix
+
+Confirmation is decided per field by **confidence × consequence** (D15), not applied to everything.
+
+| Field class | Confidence | Behaviour |
+|---|---|---|
+| **Consequential** (price, effective price, availability transition, `EXACT_MATCH` assertion) | any, from vision | **Seller confirms before the value becomes a verified observation** (while Q18 stands). Until confirmed: stored `PENDING`, **excluded** from Brain 1 inputs, deltas, price band, comparison and alerts |
+| Consequential | seller-stated (`SELLER_ENTERED`) | Verified on entry; the CEO echoes it back once |
+| Non-consequential (rating, review count, delivery text, offer text, listing copy) | `HIGH` | Stored as extracted; shown in the CEO's summary; **correctable, never prompted** |
+| Non-consequential | `MEDIUM` / `LOW` | Stored with its confidence, labelled; **not asked** unless the seller asks or the field becomes consequential |
+| Any | missing | `UNKNOWN` with a reason; asked **only** if consequential **and** needed for something the seller requested (e.g. a price comparison) |
+| Any | conflicting across screenshots (§5.3 rule 3) | `InfoRequest` (`CONFLICT`) — the seller picks or states the value |
+
+#### 6.23.2 Declines, corrections, expiry
+
+- A **declined** confirmation leaves the field `UNKNOWN` and `FIELD_CONFIRMATION_DECLINED` is recorded; it **never** enters a consequential path.
+- A seller's stated value **wins over** the extracted one (`SELLER_ENTERED`, §5.3 rule 4 — same precedent), with the original extraction retained in the audit trail.
+- An unanswered `InfoRequest` **expires** at `expires_at` (default 7 days, the D6 ceiling) → `EXPIRED`, field `UNKNOWN`, snapshot not usable for consequential paths, and an evidence-freshness reminder (C42) is the only follow-up.
+
+#### 6.23.3 The InfoRequest loop
+
+```
+CI emits InfoRequest{field, reason, evidence_id, proposed_value?, allowed_answers}  → CEO phrases the question
+→ seller answers in chat → CEO tool ci.confirm_field{info_request_id, answer} → CI stores SELLER_CONFIRMED / SELLER_ENTERED
+```
+
+An answer is bound to one `ci_info_request.id`, is **idempotent** on replay, and is accepted only from a member holding `agent.ci` within the tenant (§7 rule 20). CI never contacts the seller; **if the CEO is unavailable the request simply stays `OPEN`** (it is never routed around the CEO).
+
+---
+
+### 6.24 Competitor management and the watchlist (NEW — C39)
+
+| State | Meaning | Reached by |
+|---|---|---|
+| `CANDIDATE` | Found by discovery; unevidenced (C23) | discovery run |
+| `APPROVED` (tracked) | Seller said track it; `AWAITING_EVIDENCE` until evidence exists (C23, §6.15 rule 6) | `ci.competitor_approve` / `ci.competitor_add` |
+| `REJECTED` | Seller said no; reason stored; not re-surfaced by later discovery unless the seller asks (Q21) | `ci.competitor_reject` |
+| `REMOVED` | Soft removal of a tracked competitor | `ci.competitor_remove` |
+
+1. **Add** accepts a marketplace URL the seller states in chat; host allowlist (C4/D7), entitlement cap (C13) and tenant scope apply exactly as in §6.1. Over cap → refused with the named reason.
+2. **Remove** excludes the competitor from comparison, monitoring and alerts, closes its open alerts and `InfoRequest`s (E41), and **retains evidence and history** under §6.8. **Re-adding restores it.** Nothing is hard-deleted by this action.
+3. **Bulk** ("track these three"): the CEO echoes the named competitors and writes only after the seller confirms.
+4. **History per competitor and per seller SKU:** evidence, snapshots, decisions and events are queryable by `(product_id, competitor_url_id)`.
+5. Every action writes a `ci_event` (C47) with the actor and the CEO investigation link; every read is tenant-scoped (AC57).
+
+---
+
+### 6.25 Monitoring semantics and source-specific freshness (NEW — C40, C41)
+
+#### 6.25.1 What a monitor run does
+
+`ci.monitor_competitors(product_id)` reads, for each tracked competitor of that SKU: its latest usable snapshot and evidence date → **freshness state**; the verified snapshot-to-snapshot **deltas** and open Layer 1 alerts (§6.3, §6.17); the current **review findings** (§6.18) with sample sizes; and any open `InfoRequest`s. It performs **no outbound request to any competitor, marketplace or search provider.** It writes `MONITOR_RUN`.
+
+#### 6.25.2 The Monitoring Report and its wording
+
+The report carries `as_of` (when the run executed) and, per competitor, `evidence_date`, `freshness` (`FRESH | STALE | UNAVAILABLE`), the verified delta if any, and a **requested action** — for stale or missing evidence, *"send a fresh screenshot of <competitor>"*. Wording rules, enforced by test (AC46, AC47):
+
+- **Required:** "As of <evidence date>…", "based on the screenshot you sent on…".
+- **Forbidden:** "live", "real-time", "continuously", "always up to date", "I'm watching/tracking" in the present continuous, or any statement of a current price/stock for a competitor whose evidence is past D6's ceiling.
+- Where nothing is fresh, the CEO says so plainly and asks for evidence; it does not soften the gap.
+
+"Research more competitors" is a separate action (`ci.discover_competitors`) and is the **only** place Tavily is used; it refreshes *leads* and never touches a tracked competitor's snapshot (C35).
+
+#### 6.25.3 Freshness by source
+
+| Source | `is_stale` | Hard ceiling | Notes |
+|---|---|---|---|
+| Seller screenshot — price, availability | 24 h (§6.16.2) | 7 days (D6/D9): beyond it the current answer is `UNAVAILABLE` and fires no alert | unchanged |
+| Seller screenshot — rating, review count, listing content | 7 days | — | unchanged |
+| Review themes (reviews-tab screenshot) | 30 days | — | unchanged; snippet retention per C27 |
+| Seller-confirmed / seller-entered field | **inherits the evidence's capture date** (C41) | as above | a confirmation does not make old evidence fresh |
+| Tavily lead signal | **none — always unverified** | n/a | never counted as fresh evidence, never alerts |
+
+---
+
+### 6.26 Alert hardening (NEW — C42)
+
+1. **Deduplication.** The dedup key is `(tenant, competitor_url, finding_type, direction)`, remembered in `ci_alert_state` with the last alerted value. A repeat of the same condition produces `ALERT_SUPPRESSED_DEDUP` and no new alert. A **new** alert fires only on a **new valid snapshot** (fresh, with its consequential fields confirmed) whose delta against the **last alerted value** again meets the threshold, or on a direction change. The window is `alert_dedup_window_hours`.
+2. **Quiet hours.** `quiet_hours_start/end/tz` (all null = none). An alert raised inside the window is written to `ci_held_alert` with `ALERT_HELD_QUIET_HOURS` and **delivered when the window ends — held, never dropped.** **Re-validated at delivery:** if the underlying evidence has since gone stale (D6) the alert is **not** delivered as a confirmed alert (the seller instead gets the freshness request). No priority override in V3 (Q23).
+3. **Thresholds.** Price % (D2), availability (D3), per-competitor overrides (R9) — unchanged and configurable through CEO conversation (`ci.threshold_set`, new, writes `ci_tenant_config` / the override columns, echoed back).
+4. **Review findings.** A review finding is "significant" only if it meets `review_finding_min_sample` and states N of M (C45); thresholds provisional (Q22).
+5. **Freshness reminders.** Driven by `staleness_reminder_days`, delivered through the CEO, written as `FRESHNESS` findings; never worded as an observation about the competitor.
+6. **Never claim currency.** An alert is stamped with its evidence date. C26 (Layer 1 only, no margin/contribution/break-even) and AC29 are unchanged.
+
+---
+
+### 6.27 Matching, relationship and comparison (NEW — C43, C44)
+
+#### 6.27.1 Relationship class — derived, never guessed
+
+`relationship_class` is computed **deterministically** from `identity_match` plus the already-scored §6.14 axes; no new LLM judgement is introduced.
+
+| `relationship_class` | Derivation |
+|---|---|
+| `SAME_PRODUCT` | `identity_match = EXACT_MATCH` |
+| `VARIANT` | `identity_match = LIKELY_VARIANT` |
+| `DIRECT_COMPETITOR` | not the same product, **category axis ≥ 1** and **product axis = 2** (same function, comparable offer) — typically another brand |
+| `FUNCTIONAL_ALTERNATIVE` | not the same product, **product axis = 1** and **use-case axis ≥ 1**, or category axis ≥ 1 with product axis = 1 |
+| `UNRELATED` | **category axis = 0 *and* product axis = 0, both `KNOWN`** |
+| `UNKNOWN` | any required axis `UNKNOWN`/`CONFLICTED`, or `identity_match = UNCERTAIN` not yet approved. **Never promoted to a named class to make a list look fuller.** |
+
+`relationship_basis` records the values used. The exact thresholds are inherited from §6.14, not redefined here.
+
+**CP2 refinement (2026-10-18, built).** At discovery a search lead has no structured category and no use-case judgement, so those axes are `UNKNOWN` and, read literally, every lead would stay `UNKNOWN`. Therefore, **when category is `UNKNOWN`, the product axis alone may name `DIRECT_COMPETITOR` (axis 2) or `FUNCTIONAL_ALTERNATIVE` (axis 1), marked provisional** (`relationship_basis.is_provisional`); `UNRELATED` stays reserved for the evidence-backed case (category and product both `KNOWN` zero). The product axis at discovery is a **deterministic title-token overlap** between the lead and the seller product, brand excluded (`>= 0.5` same line, `>= 0.15` same type/different line); **low overlap is `UNKNOWN`, never "different"** (synonyms such as bottle/flask defeat a token test). **Only candidates whose relationship is `SAME_PRODUCT`, `VARIANT`, `DIRECT_COMPETITOR` or `FUNCTIONAL_ALTERNATIVE` may fill the Recommended tier**; `UNKNOWN` and `UNRELATED` candidates are scored and stay visible in the other tiers. Known limitation, tracked at V18: token overlap misses true competitors that share few words with the seller title.
+
+#### 6.27.2 Revised gate (replaces the §6.13.2 table)
+
+| `identity_match` | Behaviour |
+|---|---|
+| `EXACT_MATCH` | Proceeds to relevance scoring — **unchanged** |
+| `LIKELY_VARIANT` | Proceeds with the visible caveat — **unchanged** |
+| `UNCERTAIN` | Blocked for seller review — **unchanged**; the question is now asked by the CEO (`InfoRequest`, `IDENTITY_UNCERTAIN`) |
+| `NOT_A_MATCH` | **Proceeds to relevance scoring** (previously `REJECTED`); then rejected from the recommended flow **only if** `relationship_class = UNRELATED`. A rejected-by-relationship candidate stays visible in the raw tier (§6.15), as before |
+
+The ambiguity-travels-with-the-data rule (§6.13.2) is unchanged. **Tests and code asserting `NOT_A_MATCH → REJECTED` must be revised in CP2 and the revision named in the CP2 report — it is not a silent change.** An `EXACT_MATCH` candidate may be the seller's own listing or a reseller of the same product; it is shown with that caveat and never auto-tracked (E42).
+
+#### 6.27.3 Comparison fields (extends §6.19)
+
+Compared where observed: selling price, MRP and visible discount, **effective price** (`listed − visible discount`, B8 observed-fact arithmetic only), delivery charge, fulfillment, rating, review count, visible offers/coupons/temporary deals, and the specification attributes the seller and competitor both expose. **Offers carry their condition** (`{kind, amount_paise?, percent?, condition_text, valid_until?}`); a conditional offer is **not** subtracted from effective price. Temporary deals carry an `observed_on` date and age like any other field. Each field renders `KNOWN` with its source and confidence, or `UNKNOWN` with a reason — never blank, never zero (C44). Where the seller's own value is `UNKNOWN`, the comparison is `UNKNOWN` (C30). Price positioning, band and scenarios remain Brain 1 (§5.15/§5.15.1); CI renders them unchanged citing `engine_result_ref`.
+
+---
+
+### 6.28 Tavily discovery provider (NEW — C34, C35)
+
+#### 6.28.1 Adapter contract
+
+A `TavilySearchProvider` implements the existing `SearchProvider` protocol and returns `SearchResult` rows with `source = "TAVILY"` and `provider_response_ref`. It: reuses the existing backend Tavily key/config (never the client); sends only the §6.11-filtered query text; **drops any result whose host fails the C4/D7 allowlist** (recorded, not silently); **de-duplicates** by canonical listing (host + marketplace product id such as ASIN/FSN, else normalised URL) across queries in a run; honours §6.12 budgets plus provider-level rate and daily-cost caps (configuration); and caches per tenant only (§6.11 rule 5, §7 rule 11).
+
+**Errors are typed and honest:** a provider outage, timeout, rate limit or quota exhaustion yields a `FAILED` (or `PARTIAL`, with the completed queries named) discovery run and a CEO message saying discovery could not complete — never an empty "no competitors exist" and never a stale cache presented as fresh. Manual add (§6.24) is unaffected (C21).
+
+#### 6.28.2 Provider record (still required — C22, V16)
+
+Completed for Tavily in CP1 from Tavily's own current terms, **not from this spec or from memory**: allowed use for a commercial SaaS; whether results may be stored, for how long, and redisplayed to sellers; attribution; region; query limits; cost per query and the per-tenant monthly cost ceiling. Any field the terms do not clearly answer is recorded `UNKNOWN` and treated as **not permitted** until a human resolves it.
+
+#### 6.28.3 The lead-signal rule, operationalised
+
+Snippet-derived text (a price, "in stock", a star rating) may be parsed only into **display-only candidate fields** (`reported_*`, labelled "reported by search — unverified"). The observation path — `competitor_snapshot*`, the Brain 1 input builder, delta, band, comparison, review mining, alerts, `CIHandoff` — **must not import or read those fields**; this is enforced by a static test (T81), not by convention. The seller upgrades a lead to evidence only by submitting a screenshot (C23, C36).
+
+---
+
+### 6.29 CI dashboard and the findings contract (NEW — C32, C45, C46, C47)
+
+#### 6.29.1 What the dashboard is
+
+A **read-only visual workspace** over data CEO–CI investigations already produced. It is a **refactor** of the existing CI workspace: reuse the working components and backend connections (`/ci/summary`, `/competitor-urls`, `/market-overview`, `/comparison`, `/discovery-runs`, snapshots, events), delete every form and input, keep the original Metrion logo and the exact black/green theme (tokens configurable per `design_status.md`), and **hide technical identifiers by default** (ids, `engine_result_ref`, `evidence_id` appear only inside an expandable "details" view). It never shows a marketplace or competitor product image (C5) — insights and findings only.
+
+Layout (the combination of the two approved mockups; **the numbers in those mockups are illustrative — every real figure comes from stored evidence or Brain 1**):
+
+| Region | Content | Source |
+|---|---|---|
+| Header | Title, SKU selector, **Research Competitors** and **See / Monitor Competitors** shortcuts (C33) | read-only; shortcuts per §6.21.2 |
+| KPI row | Competitors tracked (with *verified* count) · Important changes (price/stock/review) · Your price vs market median · Customer insights count | CI reads; price/median **Brain 1** cited |
+| Market snapshot | Price band Q1/median/Q3 and typical range with "your price" position; price-history chart (D18) | **Brain 1** `compute_price_band`/positioning, cited |
+| Tabs | **Overview · Competitors · Changes · Evidence** | — |
+| Competitors | name, marketplace, price, **relationship class** (not just identity), relevance band (expand for the 8-axis breakdown, C25), last evidence date, status (Verified/Unverified), View, Ask CEO | `ci_candidate`/`competitor_url`/snapshots |
+| Changes | verified price/stock changes, freshness items, open alerts (held alerts shown as held) | `competitor_price_event`, `ci_finding`, `ci_alert_state` |
+| Evidence | evidence history per competitor (channel, date, confidence, confirmation state), pending confirmations | `competitor_evidence`, `ci_info_request`, `ci_event` |
+| Insights & recommendations | findings with evidence date and Ask CEO | `ci_finding` |
+| Review insights / listing gaps | themes with N of M and evidence date | §6.18 |
+| Discovery candidates | candidate, relationship, provisional relevance, **"Approved — awaiting evidence"** state | `ci_candidate` |
+| Recent activity | the C47 event stream, readable | `ci_event` |
+| CEO's next step | the latest CEO–CI investigation's deterministic summary, with an Ask CEO action | CEO investigation record; no text generated by CI |
+
+#### 6.29.2 "Verified", and traceability
+
+A competitor/price is **Verified** only if it comes from seller-screenshot evidence, its consequential fields are confirmed (C37), and it is within the D6 ceiling. Otherwise it is **Unverified** with the reason. Every finding row resolves to its `Evidence` records and shows its evidence date, confidence, sample size where applicable and confirmation state (C45); a finding with no evidence is not displayable (AC53).
+
+#### 6.29.3 History
+
+The Evidence and Changes history, and Recent activity, are rendered from `ci_event` and persisted findings — **not from client state or a re-computation** — so what the seller sees is what happened. Findings created during a CEO conversation appear on the next dashboard read with no seller action (AC55).
+
+#### 6.29.4 Empty and degraded states (every panel defines one)
+
+| Panel | Empty / degraded state |
+|---|---|
+| Whole workspace, new seller | A calm explanation of what CI does, the two shortcuts, and "Ask the CEO to find your competitors" — **no fabricated or sample data** |
+| Competitors | "No competitors tracked for this product yet" + Research Competitors |
+| KPIs | A KPI with no data shows "—" with a one-line reason, never `0` |
+| Price band | Below `min_competitors_for_price_band`: "Needs at least N verified competitor prices" (AC28) |
+| Price chart | Below two verified points: plain text, no line (D18) |
+| Changes / Insights | "No verified changes yet" / "No insights yet — send a competitor screenshot to the CEO" |
+| Stale evidence | Shown, flagged stale with its date (never hidden, never presented as current) |
+| Provider/discovery failure | The honest failure and when it happened (§6.28.1) |
+| Loading / API error | Skeleton then a retryable error; never a partially-rendered misleading panel |
+
 ---
 
 ## 7. Authorization and security rules
@@ -1222,6 +1636,11 @@ The CEO orchestrator is responsible for:
 13. **NEW (V2). No endpoint accepts a client-supplied `tenant_id` on any discovery surface**, and a candidate URL supplied by a client is validated against the C4/D7 allowlist server-side on the same terms as manual intake (§6.1 rule 1).
 14. **NEW (V2). `ci_evidence_snippet` rows are third-party review text under a bounded retention (C27)** and are excluded from every observability surface on the same terms as §7 rule 8 — logs, traces, debug output, APM spans, payload capture, and any hosted model provider. **They are never embedded into a vector store** (AC5b is unchanged by C27's carve-out).
 15. **NEW (C31). The seller-product-profile surface (§5.5.1) is a tenant-owned table like any other**: `tenant_id` on every row, RLS `FORCE`, no endpoint accepting a client-supplied `tenant_id`, and background jobs without tenant context failing closed (§7 rules 9–10, 13 restated for this surface). Write access follows the same permission grid as other seller-owned configuration (`auth.md` §7.3); **CI itself holds no write path to it** (AC22b, T72, T73).
+16. **NEW (V3). CEO Hub attachment hardening (C36, A14).** Image type is established by content (magic bytes), size-capped server-side, stored under a **server-generated, tenant-scoped path** (never a client-supplied name or path), and the bytes are never logged. **Text inside a screenshot is data, never instruction:** vision output is parsed into typed fields only and cannot cause an action, a tool call or a change of tenant/scope. The attachment path adds no way around the CEO's existing request hardening.
+17. **NEW (V3). Tavily outbound (C34).** Only the §6.11-filtered query text leaves Metrion — never a seller id, SKU id, cost or any tenant-identifying value. The API key is server-side only. Responses are data (their text cannot instruct CI). Per-tenant caches, per-tenant cost caps, and the allowlist applied to every returned URL. A provider outage fails closed to "discovery unavailable" (§6.28.1).
+18. **NEW (V3). Context ids are validated, never trusted (C33, C46).** Every id in a `CeoEntryContext` is resolved server-side within the tenant; a client never supplies finding content, a price, or a `tenant_id`; a foreign or unknown id is `404`.
+19. **NEW (V3). `ci_event` is append-only (C47).** The application role holds no `UPDATE` or `DELETE` on it; `detail` carries ids and enums only — never raw review text, snippets or image content (rules 8, 14).
+20. **NEW (V3). Confirmation answers (C38).** An answer is accepted only from a tenant member holding `agent.ci`, is bound to one `ci_info_request.id`, is idempotent on replay, and cannot target a request in another tenant. Competitor approve/reject/add/remove carry the same permission and tenant scoping as every CI action (`auth.md` §7.1).
 
 ---
 
@@ -1268,6 +1687,17 @@ The CEO orchestrator is responsible for:
 | E34 | **NEW (V2).** Seller asks CI "should I drop my price to match?" | CI emits a Layer 1 observation plus a `CIHandoff` suggesting CFO. **CI states nothing about margin or break-even** (C26). Where the seller's current price is in hand, the price-only arithmetic is `deterministic-engine.md` §5.15, rendered unchanged |
 | E35 | **NEW (V2).** Seller asks for a market/demand trend | Refused as not available, with the reason named (C29). **No partially-sourced trend claim is ever emitted** |
 | E36 | **NEW (V2).** A model output asserts availability, fulfillment type or any other marketplace fact not present in evidence | Rejected before it reaches the user; the field renders `UNKNOWN` with its reason (§6.18 rule 5). This is an enforced test case (T44), not a prompt convention |
+| E37 | **NEW (V3).** Seller asks "should I reduce my price?" and no CFO result is available | The CEO states that no financial scenario is available yet; CI offers the observed competitor delta only; **no margin, break-even or recommendation is produced** (C26, AC29, §1a item 11) |
+| E38 | **NEW (V3).** Seller attaches several screenshots in one message | One research session (§5.3); each is quality-checked and duplicate-checked independently; a rejected image does not block the others |
+| E39 | **NEW (V3).** Seller answers a confirmation with a value different from the extraction | The seller's value wins (`SELLER_ENTERED`); the original extraction stays in the audit trail (§6.23.2) |
+| E40 | **NEW (V3).** An `InfoRequest` is never answered | `EXPIRED`; field `UNKNOWN`; consequential paths stay closed; a freshness reminder, not an assumption (§6.23.2) |
+| E41 | **NEW (V3).** Seller removes a competitor that has open alerts or pending `InfoRequest`s | Alerts closed, requests `EXPIRED`, evidence and history retained; re-adding restores (§6.24) |
+| E42 | **NEW (V3).** A discovery candidate is `EXACT_MATCH` to the seller's own product | It may be the seller's own listing or a reseller; shown with that caveat and **never auto-tracked** (§6.27.2) |
+| E43 | **NEW (V3).** The same competitor product appears on two marketplaces | Two tracked competitors (A5: one URL, one sellable variant); never merged silently |
+| E44 | **NEW (V3).** Seller asks to monitor with no tracked competitors | The CEO says none are tracked and offers competitor research; nothing is reported as monitored (§6.25) |
+| E45 | **NEW (V3).** Seller attaches a screenshot of a competitor that is not tracked | CI asks via `InfoRequest` (`WHICH_COMPETITOR`); **never auto-adds** (§6.22.3) |
+| E46 | **NEW (V3).** Quiet hours cross midnight, or the tenant timezone changes | The window is evaluated in `quiet_hours_tz` as a wrap-around interval; held alerts keep their original `hold_until` unless the seller changes the window (§6.26.2) |
+| E47 | **NEW (V3).** Tavily returns the same listing under several URLs, or a URL that redirects off the allowlist | De-duplicated by canonical listing; an off-allowlist final host is dropped and recorded (§6.28.1) |
 
 ---
 
@@ -1289,6 +1719,9 @@ The CEO orchestrator is responsible for:
 | V13 | **NEW (V2).** Layer 2 fused alerts cannot be validated at all until a CFO agent exists (C26, §1a item 8) | Layer 2 only. Layer 1 is independently buildable and testable |
 | V14 | **NEW (V2).** Identity-resolution accuracy on real Indian marketplace search snippets — whether brand/model/pack-size/bundle can actually be distinguished from a title and a short snippet (A7) — is unproven. A weak resolver pushes candidates into `UNCERTAIN`, converting the "automatic CI" experience into the confirmation marathon §6.13.2 exists to avoid | The gating rule's friction profile, and the usefulness of the Recommended set |
 | V15 | **NEW.** **DPDP/privacy review of the C27 evidence-snippet carve-out, before launch.** C27 itself is a **locked design decision** and is not in question here — what is unvalidated is its legal standing. It is the first time any granular third-party review text is persisted anywhere in Metrion (one cited one-to-two-sentence extract per theme, 90 days, extendable for a named reason), and it has a different privacy profile from the derived aggregates C14 was written to protect. The same DPDP review already pending at §6.8 and `auth.md` Q9 must cover it **explicitly, not by implication**. **If review refuses the carve-out, §6.18.2's "every theme resolves to its snippet on demand" requirement becomes unsatisfiable and must be re-specified on the record — never quietly dropped** | Launch, not build. `ci_evidence_snippet` and §6.18.2's traceability guarantee. Does **not** block building C27 as specified |
+| V16 | **NEW (V3).** Tavily's terms and cost at CI volume (C34, §6.28.2). **The provider record is complete (§6.10.1a); three items need a human decision:** (a) the terms do not address redisplaying outputs to end customers of a paid product; (b) Tavily may retain and train on Metrion's query text; (c) the per-tenant monthly cost ceiling (free tier 1,000 credits/month is shared with PI) | Production launch of discovery |
+| V17 | **NEW (V3).** Real-seller validation of the CEO Hub screenshot-and-confirm flow (A11, A13): do sellers attach, and answer, and does the confirmation cadence feel proportionate? Includes real quality-gate behaviour on phone screenshots | Production launch of evidence intake |
+| V18 | **NEW (V3).** Accuracy of `relationship_class` on real Indian-marketplace leads across at least two categories (D17, A12) — a wrong class is a wrong *ordering/label*, never a wrong fact, but it must be measured | Production launch of cross-brand discovery |
 
 ---
 
@@ -1344,6 +1777,27 @@ The CEO orchestrator is responsible for:
 | AC35 | **NEW (V2).** CI contains no price-positioning or repricing arithmetic of its own. Where a seller price is in hand it calls `deterministic-engine.md` §5.15 with `competitor_prices[]` as `DERIVED` and renders the result citing the returned `engine_result_ref`. |
 | AC36 | **NEW (V2).** No market/demand trend claim is emitted by any surface (C29). |
 | AC37 | **NEW (V2).** Every discovery table carries `tenant_id`, is RLS-scoped with `FORCE`, and discovery background jobs without tenant context fail closed (§7 rule 10, AC12 restated for discovery). |
+| AC38 | **NEW (V3).** The CI dashboard contains **no form, input, upload control or manual-entry field**, and CI exposes no seller-facing chat endpoint (C32). |
+| AC39 | **NEW (V3).** The Research/Monitor shortcuts and every Ask CEO button open the CEO Hub with a structured context reference; none calls a CI run endpoint, collects input, or carries a client-supplied `tenant_id` or finding content (C33, §6.21.2). |
+| AC40 | **NEW (V3).** Discovery runs through a `TavilySearchProvider` behind `SearchProvider`; non-allowlisted hosts are dropped and recorded; provider failure yields an honest `FAILED`/`PARTIAL` run, never a silent empty result; no marketplace or search frontend is scraped (C34, §6.28). |
+| AC41 | **NEW (V3).** No value read from a Tavily result is written to a snapshot or snapshot field, used as a Brain 1 input, delta, band, comparison, review theme, alert or `validated_fact`; it is displayed only on a candidate and only labelled unverified. Enforced by a static test (C35, §6.28.3). |
+| AC42 | **NEW (V3).** A CEO Hub attachment passes the §6.22 pipeline: low-quality and non-listing images are rejected with a named reason and store no snapshot; an exact duplicate creates no new snapshot; the `WHATSAPP` channel returns `CHANNEL_NOT_AVAILABLE` (C36). |
+| AC43 | **NEW (V3).** A consequential vision-extracted field is never a verified observation, a Brain 1 input, a delta or an alert source until the seller confirms it; non-consequential `HIGH` fields are not prompted; a declined confirmation leaves the field `UNKNOWN` and it never reaches a consequential path (C37, §6.23). |
+| AC44 | **NEW (V3).** CI never addresses the seller: every question is an `InfoRequest` composed by the CEO, and every answer returns through `ci.confirm_field`, stored with provenance, idempotent on replay (C38). |
+| AC45 | **NEW (V3).** Approve, reject, add and remove run as fixed CEO actions; removal is soft and retains evidence and history; a rejected candidate is not re-surfaced unless asked; bulk requests are echoed before writing; each action writes a `ci_event` (C39, §6.24). |
+| AC46 | **NEW (V3).** A monitoring report carries its as-of time and each competitor's evidence date, performs no outbound request, and requests fresh evidence where stale (C40, §6.25). |
+| AC47 | **NEW (V3).** No CI- or CEO-composed text about competitor currency uses live/real-time/continuous wording, and no scheduled job contacts a competitor, marketplace or Tavily for prices — enforced by an eval and a test, not by prompt phrasing (C40, D16). |
+| AC48 | **NEW (V3).** Freshness is evaluated per source; a confirmed field inherits its evidence's age; a Tavily signal is never fresh (C41, §6.25.3). |
+| AC49 | **NEW (V3).** A repeated identical condition raises one alert; a new alert needs a new valid snapshot whose delta against the **last alerted value** meets the threshold (C42, §6.26.1). |
+| AC50 | **NEW (V3).** Alerts raised in quiet hours are held, not dropped, delivered at window end, and re-validated against freshness at delivery (C42, §6.26.2). |
+| AC51 | **NEW (V3).** An other-brand `NOT_A_MATCH` candidate reaches relevance scoring and receives a `relationship_class`; only `UNRELATED` is rejected from the recommended flow; `UNCERTAIN` stays blocked for review; `relationship_class` is never promoted from `UNKNOWN` to fill a list (C43, §6.27). |
+| AC52 | **NEW (V3).** Comparison shows delivery, fulfillment, ratings, reviews and offers with every unobserved value `UNKNOWN` plus reason; a conditional offer is recorded with its condition and not subtracted from effective price (C44, §6.27.3). |
+| AC53 | **NEW (V3).** Every displayed finding resolves to `Evidence` records and shows evidence date, confidence, sample size (N of M) where applicable and confirmation state; a finding without evidence is invalid and not displayed (C45, §6.29.2). |
+| AC54 | **NEW (V3).** Ask CEO passes a `finding_id`; the CEO re-reads the finding and evidence server-side; a foreign or unknown id is `404` and yields no data (C46, §7 rule 18). |
+| AC55 | **NEW (V3).** Findings created in CEO conversations appear on the dashboard with no seller action, and the dashboard renders persisted findings and events, never client state (C46, §6.29.3). |
+| AC56 | **NEW (V3).** Every event type in C47 is written; `ci_event` is append-only (no `UPDATE`/`DELETE` grant); `detail` never contains raw review text, snippets or image content (C47, §7 rule 19). |
+| AC57 | **NEW (V3).** Every V3 table carries `tenant_id` with RLS `FORCE`; V3 background jobs without tenant context fail closed; no V3 endpoint accepts a client-supplied `tenant_id` (§5.7, §7). |
+| AC58 | **NEW (V3).** The dashboard shows no marketplace or competitor image, hides technical identifiers by default, and every panel defines an empty/degraded state with no fabricated data and no `0` standing in for missing (C5, §6.29). |
 
 ---
 
@@ -1427,6 +1881,40 @@ The CEO orchestrator is responsible for:
 | T71 | **NEW (C31).** Seller edits the profile's `price` after candidates were scored | Dependent relevance scores are recomputed and prior rows retained via `recalculated_from`; no score is patched in place (AC22c, E26c) |
 | T72 | **NEW (C31).** Cross-tenant read of another tenant's seller-product profile row | `404`; the profile table is `tenant_id`-scoped with RLS `FORCE` like every other tenant table (AC37, §7) |
 | T73 | **NEW (C31).** Attempt a CI-side write to the seller-product profile | Refused — CI reads `SellerProduct` and writes neither of its two sources (C30, C31, §5.5.1) |
+| T74 | **NEW (V3).** Open the CI dashboard as a brand-new seller (no data) | Every panel shows its §6.29.4 empty state; **no** form, input, upload or image; the two shortcuts present; no fabricated data (AC38, AC58) |
+| T75 | **NEW (V3).** Search the backend for a CI chat/message endpoint | None exists (AC38) |
+| T76 | **NEW (V3).** Select a SKU and press Research Competitors | CEO Hub opens with a draft message and `CeoEntryContext{RESEARCH_COMPETITORS, product_id}`; **no CI endpoint is called** by the click (AC39) |
+| T77 | **NEW (V3).** Send a shortcut/Ask-CEO context with a `product_id` or `finding_id` from another tenant | `404`; no data reaches the CEO (AC39, AC54, §7 rule 18) |
+| T78 | **NEW (V3).** Tavily returns a result on a non-allowlisted host | Dropped and recorded; never a candidate (AC40, E47) |
+| T79 | **NEW (V3).** Tavily times out / rate-limits / exhausts quota mid-run | Run `FAILED` or `PARTIAL` with queries named; CEO says discovery could not complete; manual add unaffected (AC40) |
+| T80 | **NEW (V3).** A Tavily snippet says "₹2,499, in stock" | The candidate shows it only as "reported by search — unverified"; no snapshot row; price band and alerts unchanged (AC41) |
+| T81 | **NEW (V3).** Static check: does any snapshot/Brain 1-input/delta/comparison/alert module import a candidate `reported_*` field? | No — the test fails the build if one does (AC41, §6.28.3) |
+| T82 | **NEW (V3).** Attach a legible listing screenshot in the CEO Hub | Pipeline runs; evidence stored with `intake_channel = CEO_HUB_ATTACHMENT`; findings appear on the dashboard; the CEO explains extracted values and the comparison (AC42, AC55) |
+| T83 | **NEW (V3).** Attach a blurry or tiny image | `REJECTED_LOW_QUALITY` with a named reason; no snapshot; `EVIDENCE_REJECTED_QUALITY` (AC42) |
+| T84 | **NEW (V3).** Attach a photo that is not a marketplace page | `REJECTED_NOT_A_LISTING`; no snapshot (AC42) |
+| T85 | **NEW (V3).** Attach the same screenshot twice | Second is an exact duplicate: no new snapshot; the CEO shows the existing result; `EVIDENCE_DUPLICATE` (AC42) |
+| T86 | **NEW (V3).** Submit evidence through the `WHATSAPP` channel | `CHANNEL_NOT_AVAILABLE`; nothing stored (AC42, C36) |
+| T87 | **NEW (V3).** Vision reads ₹1,299 for a listing whose true price is ₹12,999; the seller has not confirmed | Price is `PENDING`; not a Brain 1 input, delta, band entry or alert source (AC43, Q18) |
+| T88 | **NEW (V3).** The seller confirms the price when the CEO asks | Stored `SELLER_CONFIRMED`; now a verified observation eligible for Brain 1 (AC43) |
+| T89 | **NEW (V3).** Vision reads a `HIGH`-confidence rating | Stored and summarised; **no confirmation prompt** (AC43, D15) |
+| T90 | **NEW (V3).** The seller declines to confirm a price | Field stays `UNKNOWN`; `FIELD_CONFIRMATION_DECLINED`; never reaches Brain 1 or an alert (AC43) |
+| T91 | **NEW (V3).** Delivery charge is not visible in the screenshot | `UNKNOWN` with a reason; shown as such in comparison; not asked unless the seller requested a landed comparison (AC43, AC52) |
+| T92 | **NEW (V3).** Trace how an `InfoRequest` reaches the seller | Only via the CEO; no CI component emits seller-facing text; answer returns through `ci.confirm_field`, idempotent on replay (AC44) |
+| T93 | **NEW (V3).** "Track these three competitors" | CEO echoes the three; on the seller's yes: three `COMPETITOR_ADDED` events, entitlement checked, tenant-scoped (AC45) |
+| T94 | **NEW (V3).** Reject a candidate, then run discovery again | The rejected candidate is not re-surfaced (AC45, Q21) |
+| T95 | **NEW (V3).** Remove a tracked competitor, then re-add it | Excluded while removed; evidence and history retained; re-add restores (AC45, E41) |
+| T96 | **NEW (V3).** Add a competitor at the entitlement cap | Refused with the named reason (AC45, C13) |
+| T97 | **NEW (V3).** Monitor a SKU with two fresh competitors and one stale | Report carries as-of time and per-competitor evidence dates; the stale one is flagged and the CEO asks for a fresh screenshot; **no outbound request is made** (AC46) |
+| T98 | **NEW (V3).** Run the wording eval over CI/CEO monitoring responses | Zero uses of live/real-time/continuous/"tracking" as a currency claim (AC47) |
+| T99 | **NEW (V3).** Run the scheduled freshness/reminder job with network access blocked | It completes; it makes no outbound request (AC47, D16) |
+| T100 | **NEW (V3).** A price field confirmed on day 6 from a day-0 screenshot | Freshness follows day 0 (inherited), not day 6 (AC48, C41) |
+| T101 | **NEW (V3).** The same −9% condition is detected on three consecutive evaluations of the same snapshot pair | One alert; two `ALERT_SUPPRESSED_DEDUP` (AC49) |
+| T102 | **NEW (V3).** After an alert at −9%, a new valid snapshot is −1% versus the last alerted value, then another is −5.1% | No alert for the first; an alert for the second (AC49) |
+| T103 | **NEW (V3).** A qualifying alert is raised inside quiet hours; the evidence goes stale before the window ends | Held at raise time; at window end it is **not** delivered as a confirmed alert — the seller gets the freshness request instead (AC50) |
+| T104 | **NEW (V3).** An other-brand listing with the same function and category; and an unrelated product | The first reaches scoring and is classed `DIRECT_COMPETITOR`; the second is `UNRELATED` and kept out of the recommended flow; existing identity-resolution outcomes are unchanged (AC51) |
+| T105 | **NEW (V3).** A competitor shows a bank-card-only coupon | Recorded as an offer with its condition; **not** subtracted from effective price (AC52) |
+| T106 | **NEW (V3).** Ask CEO on a finding of your own tenant; on another tenant's; on a finding with no evidence refs | Own: the CEO retrieves its evidence and continues. Other tenant: `404`. No-evidence finding: invalid, never displayed (AC53, AC54) |
+| T107 | **NEW (V3).** Cross-tenant read of any V3 table row; dispatch a V3 job with no tenant context | `404`; the job fails closed (AC57) |
 
 ---
 
@@ -1448,16 +1936,79 @@ The CEO orchestrator is responsible for:
 | Q6 | **RESOLVED/MOOT by this pivot.** Was "proxy / anti-bot infrastructure — budgeted, or accept a lower success rate?" Metrion never fetches a competitor URL under the evidence model (C2), so there is no request to proxy and no anti-bot posture to budget for. See **R10**. | Closed — see R10 |
 | Q7 | **Local derivation model choice and quality — still open; unaffected by Q11's resolution.** C15 mandates local-only; on 4GB VRAM, sentiment and theme extraction quality is unproven at volume. Q11 (§12, resolved) settled *how* review evidence is acquired (reviews-tab screenshot, same evidence pipeline as everything else) — it did not touch *whether the local model is good enough* to extract sentiment/themes/rating-distribution from that screenshot at usable quality. That question is exactly this one, unchanged. **Also connects to §1a item 4** (real vision-extraction model choice, unresolved) and to V10. | 🔴 Feasibility of §6.5 and of §5.3 vision extraction |
 | Q8 | **Category taxonomy mapping (BL5).** `observed_category` is captured from the seller's evidence rather than a live listing, but Amazon, Flipkart and Meesho category strings still do not agree with each other or with the fee reference store's taxonomy (`deterministic-engine.md` §5.14). A mapping layer is required and does not exist. Unaffected by the pivot. | 🔴 Blocks fee resolution for the estimated range |
-| Q9 | **CI audit event set (MN9).** §6.4 requires audit logging on every execution, but no event set or artefact is defined. `auth.md` `auth_audit` is scoped to security events only. | Orchestration / observability |
+| Q9 | **RESOLVED for CI's scope by C47 (V3, 2026-10-18) — event set and `ci_event` table defined in §5.7/§6.29.3.** Original text: **CI audit event set (MN9).** §6.4 requires audit logging on every execution, but no event set or artefact is defined. `auth.md` `auth_audit` is scoped to security events only. | Orchestration / observability |
 | Q10 | **RESOLVED/MOOT by this pivot.** Was "`robots.txt` posture (MN15) — honour strictly, for discovery only, or out of scope for user-initiated single-page fetches?" There is no fetching left to apply a `robots.txt` posture to. See **R11**. | Closed — see R11 |
 | Q11 | **RESOLVED by this decision.** Review-insight acquisition was specified in terms of "fetching raw review text" from a live listing page, which no longer exists as a capability under this pivot (C2). **Resolution:** review insight is screenshot-based, on the identical evidence model as everything else in this pivot — the seller submits a reviews-tab screenshot via the same `competitor_evidence` mechanism (§5, §5.3), a vision/derivation model extracts sentiment/themes/rating-distribution from what's visible, with the same manual-entry fallback and confidence vocabulary (`VISION_EXTRACTED`/`SELLER_ENTERED`/`DERIVED`/`UNAVAILABLE`) as the rest of the pivot. See **R12**. | Closed — see R12. Does not resolve Q7 (local model quality), which remains genuinely open and now explicitly feeds from this acquisition method. |
 | Q12 | **RESOLVED (2026-09-21) — see C31, D8, §5.5.1 and R15.** Was: *"Where do `SellerProduct`'s missing fields come from?"* **Resolution: option (b) — a minimal, editable manual seller-product form**, whose values are stored as explicit `SellerProduct` field overrides, `SELLER_ENTERED` taking precedence over canonical-derived values. `rating`/`review_count` stay out of scope and `UNKNOWN`. Do not re-raise. | Closed — see R15 |
 | Q13 | **RESOLVED (2026-09-21) — see D9, §6.16.2, AC27 and R16.** Was: *"How do §6.16.2's per-field freshness thresholds and D6/§6.8's 7-day OP3 ceiling coexist?"* **Resolution: both layers apply, exactly as D9 proposed.** The per-field thresholds set **only** `is_stale`; **D6's 7-day ceiling is unchanged and governs availability.** Seller-facing wording is a copy/UX task, not a spec ambiguity. Do not re-raise. | Closed — see R16 |
 | Q14 | **RESOLVED (2026-09-21) — see D10, §6.16.3, AC28b, R17 and `deterministic-engine.md` §5.15.1.** Was: *"Does the price-band / outlier computation belong in CI or in the deterministic engine?"* **Resolution: the engine.** `deterministic-engine.md` was amended with `compute_price_band` (§5.15.1); CI supplies `DERIVED` competitor prices and renders the result. Do not re-raise. | Closed — see R17 |
 | Q15 | **NEW (V2). Does a discovery run consume a CI run unit, or a separate meter?** D12 provisionally says one discovery run = one CI run unit against C13's runs/month, to avoid inventing a second meter before the entitlement spec exists. But a discovery run's cost profile is entirely different from an evidence-upload run's — it makes up to 20 paid provider queries, where an upload makes none — so one shared meter may misprice both. Intersects Q2, Q3 and `billing-and-pricing.md` Q4/V4, which already flag that CI's provisional per-agent numbers must be reconciled. | Entitlement / billing spec. D12 |
-| Q16 | **NEW (V2). What is the audit event set for discovery?** Q9 already flags that CI has no defined audit event set. Discovery widens it materially: a query leaving Metrion to a third party, a seller approving or rejecting a candidate, a provider error, a retention extension under C27, and a privacy-filter drop under §6.11 rule 3 are all events a seller or a regulator may reasonably ask about. `ceo-agent-orchestration.md` C7 names `agent_run` as the artifact for agent invocations, but a per-query/per-decision event set is finer-grained than a run. **Not resolved here** — flagged so it is not discovered late. | Orchestration / observability / DPDP. Extends Q9 |
+| Q16 | **RESOLVED by C47 (V3, 2026-10-18).** Original text: **NEW (V2). What is the audit event set for discovery?** Q9 already flags that CI has no defined audit event set. Discovery widens it materially: a query leaving Metrion to a third party, a seller approving or rejecting a candidate, a provider error, a retention extension under C27, and a privacy-filter drop under §6.11 rule 3 are all events a seller or a regulator may reasonably ask about. `ceo-agent-orchestration.md` C7 names `agent_run` as the artifact for agent invocations, but a per-query/per-decision event set is finer-grained than a run. **Not resolved here** — flagged so it is not discovered late. | Orchestration / observability / DPDP. Extends Q9 |
 | Q17 | **RECLASSIFIED, not open (2026-09-21) — moved to V15, see R18.** Was: *"Does the C27 snippet carve-out survive DPDP review?"* **C27's design is approved and locked** — the snippet carve-out, its 90-day default, the named-reason extension and the "source evidence expired" behaviour are all decided and buildable as specified. What remains is a **legal-review-before-launch item, not a design ambiguity**, and it is therefore tracked as **production-validation blocker V15**. Do not re-raise here. | Closed as a question — tracked at V15 / R18 |
 | Q18 | **NEW (2026-10-02, evidence-backed). Can a `VISION_EXTRACTED` price be trusted at §6.16.1's `HIGH` at all?** §6.16.1 assigns `HIGH` to a field "extracted cleanly ... with no ambiguity flag from the model". The wired model (llava 7B via Ollama, `evidence/vision_extractor.py`) **never emits an ambiguity flag**, so every vision price is `HIGH` by construction, and `alerts/layer1.py` presents it to the seller as a `HIGH`-confidence validated fact. Measured with the production prompt/parser on a synthetic set of known prices (`packages/competitor-intelligence/scripts/vision_price_eval/`, small n, one layout — evidence, not a population accuracy): price correct **13/31**; by length of the true price 2-digit 3/6, 3-digit 9/13, **4-digit 1/8, 5-digit 0/4** (dropped digits: ₹12,999 → ₹1,299, ₹1,999 → ₹199); MRP correct **0/31**; fields absent from the image reported anyway (rating 55%, rupee discount 23% — and `effective_price = listed − visible_discount`, so a hallucinated discount moves the price delta). Not fixed by resolution (6/9 at 1280 and 640 px), `format: json` (3/12 on the 4-5 digit set), or `temperature: 0` (1/12). A second price-only read by the same model is **not** a validator (4 of its 7 agreements were wrong). A wrong price feeds price events, Layer 1 alerts and the price band unchallenged. **Options (decision needed — not implemented):** (a) cap vision-extracted money fields below `HIGH` and make them alert-ineligible until `SELLER_ENTERED` confirmation (behaviour change to §6.16.1/§6.17; most real listings are ≥ ₹1,000); (b) route vision money fields through the existing `PENDING_MANUAL_ENTRY` path as pre-filled suggestions; (c) add an independent signal (OCR, or a cropped high-resolution read of the price region) before any trust tier is assigned; (d) re-run the evaluation on real seller screenshots first (Q7) — the synthetic set may be harsher or kinder than real listings. Recommended: (d) immediately, then (a) or (b) until (c) exists. | 🔴 Trust (§6.16.1), alerts (§6.17), price band (§6.16.3) |
+| Q19 | **NEW (V3). Does a CEO Hub screenshot upload consume a CEO call, a CI run unit, or both?** C20 said a dashboard upload consumed no CEO call; the upload now arrives inside a CEO turn. **Recommendation:** the turn is metered as any CEO turn, and the intake is metered as **one CI run unit** (the D12 unit), with no second meter. Extends Q2/Q15. | Entitlement spec; CP3 |
+| Q20 | **NEW (V3). Confirm the reversal of §6.13.2's `NOT_A_MATCH → REJECTED` gate (C43, D17).** The 2026-10-18 audit shows the shipped gate rejects every other-brand competitor. **Recommendation:** approve the split (identity unchanged, rejection moves to `relationship_class = UNRELATED`). It overrides a locked rule, so it is **not built until the owner confirms**; CP2 is blocked on it. | CP2 |
+| Q21 | **NEW (V3). Does a rejected candidate stay rejected permanently, or expire (e.g. 90 days)?** **Recommendation:** stays rejected until the seller asks to reconsider. | CP5 |
+| Q22 | **NEW (V3). What makes a review finding "significant"?** `review_finding_min_sample` is provisionally 10, and a theme-frequency floor is undecided. **Recommendation:** minimum sample 10 and a theme in at least 20% of the sample, both tenant-configurable, and always shown as N of M. Evidence-backed tuning follows real seller data. | CP5 |
+| Q23 | **NEW (V3). Should any alert bypass quiet hours** (e.g. a large price drop or a stock-out)? **Recommendation:** no in V3 — one rule, held and delivered at window end, revisited with seller feedback. | CP5 |
+| Q24 | **NEW (V3). Does storing a seller-stated product-profile value or a threshold through the CEO need a plan-approval card, or is an echo-back enough?** **Recommendation:** echo-back, no approval card (low consequence, editable, never destructive); competitor remove and bulk add keep their confirm step (C39). Subject to `ceo-approval-workflow.md`. | CP4 |
+
+### V3 build record — what was built, how it deviates, what is not built (updated 2026-10-19)
+
+Recorded so nothing is silently resolved. **Built and verified on branch `feat/ci-upgrade` (uncommitted):** Tavily provider, listing-URL canonicaliser and daily cost cap (CP1); relationship classification, the split identity/relationship gate, rejected-candidate non-resurfacing, band eligibility (CP2); quality gate, duplicate detection, consequential-field policy, intake pipeline, confirmation settlement, `PENDING`-price exclusion from every consequential read (CP3); watchlist add/remove/approve/reject, monitoring report, wording rule, CEO actions and chat routes (CP4); alert dedup, quiet hours, held-alert delivery with freshness re-validation, and the housekeeping scheduler (CP5); read-only dashboard and `GET /ci/workspace` (CP6); the CEO conversations for screenshot intake, confirmation, correction, add-by-link, approve/reject by number and alert settings; persistent `ci_finding` ids with Ask CEO by id (C46); Brain 1 `compute_competitor_effective_price` (`deterministic-engine.md` §5.15.2) and the "What a buyer pays" column; the CI narration checks inside the CEO composition gate (`tests/unit/test_ci_narration_safety.py`) and CI cases in the `ceo_eval` set. Migrations `20261018_0001`, `20261018_0002`, `20261019_0001` (competitor-intelligence package) and `20261014_0021` (backend) are applied on a clean Postgres 16 + pgvector database and exercised by the integration tests.
+
+**Verified results (this machine, 2026-10-19):**
+
+- Backend integration against a real Postgres (Docker, port 5544): full suite run once on the final code minus the one slow file: 2316 passed, 4 skipped, 1 xfailed, 7 failed. Four of the seven were stale pins or missing registrations and are fixed and re-verified (privilege-boundary guard: the four new CI tables were app-deletable, now revoked; specialist-readiness pins; tenant-data-inventory classification of the new CI tables). Three (`test_pi_payload_pins` and two in `test_pi_usage`) are existing Product Intelligence failures in files this work did not touch: their Tavily test doubles do not accept the `include_domains` argument PI's supplier lookup now passes. They are not CI regressions and are left unfixed. The slow safety-gate file (700 hostile-classifier cases) was run separately: after adding `ci.discover_competitors` to its approval-required set it is re-verified (see the build report). Later targeted re-runs after the final fixes: CEO and CI conversation files 62 passed, approval workflow 44 passed, privilege boundary 27 passed. Backend unit suite: 4948 passed, 6 xfailed. CI package suite including its database tests: 500 passed. Calc-engine including its database tests: 486 passed, 1 skipped.
+- CI package unit suite: 422 passed. Calc-engine unit suite: 391 passed, 1 skipped.
+- Frontend: tsc clean after deleting the stale `.next` and regenerating route types; eslint 0 errors (2 old warnings); vitest 494 of 495 passed (run with a 60 s per-test timeout because the machine was loaded; the earlier failures were 5 s timeouts). The one failure is `app/premiumLayer.scope.test.ts`, which fails identically with this work stashed (existing, unrelated).
+- Live Tavily smoke test (one search, generic keywords, no seller data): 5 leads returned, all on allow-listed marketplace hosts, canonical single-listing URLs, no price fields taken from snippets. Not repeated; no population claim.
+- Local Ollama vision, end to end through the CEO chat (opt-in test `tests/integration/test_ci_local_ollama_e2e.py`): on the owner's two real Amazon listing screenshots (a ₹279 bottle, a ₹2,299 watch, both free delivery) and a generated reviews image, the intake read the page, held price, discount and offers until the seller confirmed, took the seller's correction (including an explicit 'discount 0'), and the dashboard then showed the engine's effective price and buyer total with free delivery counted as an observed zero and the card and coupon offers named as not counted. The reviews screenshot produced stored themes from 5 reviews, labelled DERIVED, and a later complaints question was answered instead of being mistaken for naming the image. Two real bugs were found and fixed by this run. The small model also misreads: it invented a ₹260 discount on the watch and added noise words as themes, which is why confirmation is required.
+
+**Deviations from this spec, decided while building (all accepted by the owner on 2026-10-18 unless noted):**
+
+1. **Soft removal reuses `ARCHIVED`**, not a new `REMOVED` status (§6.24): every ACTIVE-only query already excludes it; who/when/why are in `removed_*`.
+2. **Provisional relationship** (§6.27.1): with category unknown, the product axis alone may name `DIRECT_COMPETITOR`/`FUNCTIONAL_ALTERNATIVE`; the discovery-time product axis is a deterministic title-token overlap that returns `UNKNOWN`, never "different".
+3. **Price-band eligibility (decided):** `SAME_PRODUCT`, `VARIANT` and `DIRECT_COMPETITOR` that are evidence-verified enter the band; `FUNCTIONAL_ALTERNATIVE` is shown but excluded.
+4. **`ci.discover_competitors` is `SELLER_DATA_OUT`** (the seller's product search terms go to Tavily), so it is approval-gated like `pi.discover`; from chat it depends on the stored-approval-plan workflow being enabled (`CEO_APPROVAL_ENABLED`). Asking again for the identical search while its plan is open and unexpired re-shows that plan instead of creating a second card; an approved plan stays single-use (approval is bound to the plan hash and expiry, C8), so a repeat after approval is a new request.
+5. **Dedup/quiet hours are applied when a price event is written** (`alerts/raise_alert.py`), recorded as `competitor_price_event.alert_suppressed_reason` and `ci_held_alert`; Layer 1 reads hide suppressed and held events. The observation itself is never altered. **Quiet-hours timezone (decided):** the seller's configured tenant timezone, else `Asia/Kolkata`; the reply names the zone used.
+6. **Competitor watchlist limit (decided):** a nullable per-tenant `ci_tenant_config.max_active_competitors` plus an operator default `CI_DEFAULT_WATCHLIST_LIMIT`. Neither is set by default, so no limit applies and none is invented; the application role can read the column but not write it. Subscription-plan limits are still undecided (C13/Q3).
+7. **Bulk add is echo-confirmed (C39, decided):** a message with more than one link is answered with the list and the product, and nothing is added until the seller says yes. A single link is added directly.
+8. **Q19–Q24 recommendations were adopted as built** (one CI run unit per intake; rejected candidates stay rejected; review-finding minimum sample 10; no quiet-hours override; echo-back instead of an approval card for thresholds) — still subject to owner confirmation.
+9. **Database security finding fixed while verifying:** migration `20261012_0018` made `ci_tenant_config` SELECT-only for the application role and ran after the competitor-intelligence column grants, so on a fresh database saving quiet hours failed with `permission denied`. `20261014_0021` re-grants exactly the seller-editable alert columns after it. Existing databases are unaffected only if they were upgraded in that order; re-run the backend migration head on any such database.
+
+**Remaining limitations (explicitly open, none hidden):**
+
+- **WhatsApp** remains a placeholder (`CHANNEL_NOT_AVAILABLE`).
+- **No real-LLM narration eval was run** (owner instruction: local models only). The CI narration cases (`CI-NR-01..11`) are written in `ceo_eval/fixtures/composer.jsonl` but have never been run against a model; the composition gate itself is tested with scripted adversarial models.
+- **Local-model read quality is limited** (Q7, Q18): the small local vision model misreads prices; this is why consequential fields are held until the seller confirms. Real-seller-screenshot accuracy is unmeasured.
+- **Production validation:** V15 (DPDP review), V16 (Tavily terms), V17–V18, and a measured Tavily cost per discovery run are not done.
+- **Sidebar/logo shell** was not visually re-verified after the dashboard replacement (the dashboard itself was verified at desktop and mobile widths).
+- The seven-day freshness ceiling and the scheduler's 15-minute cadence (`CI_SCHEDULER_INTERVAL_SECONDS`) are defaults, not tuned on real traffic.
+
+#### Addendum 2026-10-20 — manual acceptance rounds and completion phases P0–P4 (owner decisions of record)
+
+- **Watchlist cap.** At most 5 ACTIVE tracked competitors per seller across all marketplaces (`ci_tenant_config.max_active_competitors`, else `CI_DEFAULT_WATCHLIST_LIMIT`, else 5), enforced atomically inside the write transaction (per-tenant advisory lock). Pending discovery leads and stopped competitors do not count; "ALL" respects it. The CEO and the dashboard show "N of 5".
+- **Conversation.** "Track my competitors" offers names plus ALL; tracking a discovered lead by name resolves that lead's own listing; a seller with one product has it selected; exactly one tracked competitor is assumed for an unnamed screenshot; an unreadable price asks for a clearer screenshot; a partial confirmation keeps the price and stores left-out fields as UNKNOWN; a displayed percentage is never a rupee discount.
+- **Price percentages (deterministic-engine.md §5.15 amendment).** `PRICE_POSITIONING` carries the rupee gap, `gap_pct` (relative to the competitor's price) and `gap_pct_of_seller_price`; the CEO labels each denominator.
+- **Unbranded leads** are ranked by title relevance; identity stays UNCONFIRMED and is never promoted.
+- **CI → CFO.** A pricing decision starts the finance session prefilled from verified data (competitor, product, profile price, the competitor's verified price beside a named target, single fee row, remembered GST basis) and asks only what is missing; a cost is never invented.
+- **CI → CEO → CMO (slim-cmo-agent.md §6.7 implemented).** For the listing-writing actions the CEO reads the seller's fresh COMPLETE `competitor_listing_insight` rows (requires `agent.ci` and a passing CI entitlement check; no CI unit consumed) and freezes their ids into the plan card (`ci_insight_ids`). CMO re-checks that each id is the seller's own (404 otherwise), appends derived single words only to the prompt as MARKET CONTEXT, and records `input_mode = CEO_BROKERED_CI` with `ci_inputs_snapshot` only when they were actually used. The saved competitor title / description / bullets are used solely for a deterministic originality check (5-word shared run, or ≥70% word overlap between units, fails); a competitor brand word, or any search-volume / ranking / popularity / conversion claim, also fails. A failed informed draft is rewritten from the seller's own facts alone and the result says so. Competitor prices are never read. No usable insight, stale (>30 days, `CMO_CI_INSIGHT_MAX_AGE_DAYS`), or no `agent.ci` → independent mode with a one-line note on the plan card. "Improve my listing" routes to title options.
+- **Reviews, option B.** Review themes come only from review screenshots or seller-confirmed text with a real sample size (`review_finding_min_sample`). A reviews question with no saved review evidence gives deterministic review-page links built from the listing links the seller supplied, says that no page is read and a search snippet is not a review, and asks for a screenshot. Nothing is scraped, searched or invented.
+- **Dashboard.** Header shortcuts remain CEO shortcuts: research, monitor, and "Track a competitor".
+- **Tests.** `test_ci_p0..p4`, `test_ci_manual_regressions*`, `test_ci_end_to_end_flow`, `slim-cmo tests/unit/test_ci_inputs.py`, and the opt-in local-Ollama evals (`CI_LOCAL_OLLAMA_E2E=1`, `CMO_LOCAL_OLLAMA_EVAL=1`; the CMO eval: informed draft usable in 3 of 3 runs, nothing delivered ever failed the originality/claims check).
+- **Top-15 discovery (owner decision 2026-10-20).** "Find my competitors" surfaces the top 15 matches (`max_recommended_candidates` default 15; migration `20261020_0001`), numbered best match first, with the seller's free slots and who holds the others. The seller picks up to their free slots (never more than 5 tracked in all); a pick that does not fit adds nothing and says so; a full list asks the seller to stop tracking one first, then pick. Picked leads become tracked competitors on the list.
+- **Category-driven discovery and the pick card (owner decision 2026-10-20).** "Find my competitors" first asks WHICH of the categories in the seller's business profile (one or more, or ALL; numbers or names; a product name still works). One search runs per chosen category (`category:<name>` runs, merged into one ranked list, each lead tagged with its category; identity stays UNCERTAIN). The top 15 are shown as a numbered list AND a `CANDIDATE_PICK` card (`investigation_message.choices`, allowed on a CEO ANSWER by migration `20261020_0023`) with check boxes up to the free slots; Save sends `track <numbers>`, so the same cap checks apply. Picked leads are tracked until the seller removes them, and the dashboard groups them under "Category: <name>".
+- **Manual round 4 (owner, 2026-10-21).**
+  - *Genuine leads.* `discovery/lead_quality.py`: books / keyword-dump / too-short titles are never surfaced; recognisable brands rank first, then any brand, then title match; at most 2 leads per brand; a tracked competitor is named by its brand-first cleaned title (not "water steel bottle"). This removes plainly-not-a-competitor leads; it cannot prove a business is genuine or successful, and a listing's existence is not re-checked (nothing is fetched). Own-website competitors are not searched (marketplace domains only).
+  - *Check-box cards.* One generic `PICK` card (`ci_conversation.pick_card`, rendered by `PickCard.tsx`): categories to search, the top matches to track, the tracked competitors (details / verify / stop), and "which competitor is in this screenshot" (radio, with "None of these"). Pressing a button sends the text its template makes, so the same checks run as for typed text. Migration `20261021_0024` lets a CEO ANSWER carry it.
+  - *No link prompts.* The CEO never asks the seller for a listing link; it points to "find my competitors" and the tick boxes. A pasted link is still understood, silently.
+  - *Conversation focus.* `ci_conversation.focus_competitor`: "this competitor", "it", "that screenshot", "I am talking about this one" mean the competitor most recently named in the last 14 messages; price, facts, review-sample and screenshot answers use it, and all tracked competitors are read whichever product or category they are grouped under. A message that names no product no longer produces "Which product (SKU)?".
+  - *Open questions.* "Cancel ..." (short) closes the open guided question; a sentence of 8+ words that is not a free-text answer is a new request, never swallowed.
+  - *Fewer questions.* Skip is never the recommended choice; marketplace choices are the ones in the business profile; the product's saved title/brand/size are not asked again; the title question offers the product name in one click; the use and search-word detail questions were dropped for titles; the four extra per-unit finance costs are one question ("do you know them?"), and "no" leaves them unknown (never guessed).
+  - *CMO.* "Analyze my competitors' titles, keywords and selling points" is answered from the saved listing insights (derived words, sample size, no search-volume or ranking claim); "Improve my ... listing ..." routes to title options (competitor themes brokered as before).
+  - *Dashboard.* No tabs and no "Ask CEO" labels: each competitor has Verify price / Stop tracking, each lead has Track this, each finding has Explain this, reviews have Add more reviews; "Unavailable" became "Needs a screenshot"; raw relevance scores became Low / Medium / High; the history became a per-day activity summary; a category group shows "Compare your price" instead of a band error; the Monitor button was removed.
+- **Not done / known.** Real-LLM evals; WhatsApp; Tavily review-source discovery (links are derived from the seller's own listing links instead, at no search cost); two pre-existing float-literal lint failures in `slim_cmo/generation/prompts.py` (description target) and three Product Intelligence Tavily-fake tests are unrelated to this work.
 
 ### Resolved — do not re-flag
 
@@ -1480,4 +2031,8 @@ The CEO orchestrator is responsible for:
 | R17 | **NEW.** Home of the price-band / outlier arithmetic (was Q14; D10) | **The deterministic engine — decided 2026-09-21, and `deterministic-engine.md` amended accordingly.** The quartile/IQR/fence/outlier computation is `compute_price_band`, `deterministic-engine.md` §5.15.1. CI supplies the tenant's tracked competitor prices as `DERIVED` inputs plus the configured minimum, and renders the returned `metric_result` rows citing their `engine_result_ref` — the same pattern as `compute_price_positioning`/`compute_repricing_scenario`. **CI never computes a quartile, IQR, fence or outlier flag** (AC28b, T56). §6.16.3 keeps the product rules only. |
 | R18 | **NEW.** Whether the C27 snippet carve-out is approved (was Q17) | **C27 is approved and locked as scoped — decided 2026-09-21.** The design is not in question and is buildable as written. The remaining DPDP/privacy legal review is a **pre-launch validation item, not a design ambiguity**, and is tracked as **V15**. Do not re-open C27 as a question; if legal review later refuses the carve-out, that is a new decision recorded on the record, not a rediscovery of this one. |
 | R14 | **NEW (V2).** Whether an implementation agent may choose a search provider | **No — decided, not open.** C22 and §1a item 6: interface + mock first; a named provider requires the §6.10.1 provider record and explicit human approval. "Clean ToS" by reputation is not a basis for selection. |
+| R19 | **NEW (V3).** Whether the dashboard is a seller input surface (was R3's "a dashboard button is a CEO path") | **No — superseded by C32 (2026-10-18).** The CEO Hub is the only seller conversational and input surface; the dashboard is read-only, with two CEO shortcuts and Ask CEO buttons that pass ids, not content (C33). |
+| R20 | **NEW (V3).** Which search provider (R14) | **Tavily — approved by the owner 2026-10-18 (C34).** The §6.10.1 record and commercial/terms validation still follow (V16). A Tavily value is a lead, never an observation (C35). |
+| R21 | **NEW (V3).** Whether identity and competitive relationship are one concept | **Separate (C43).** Identity answers "same product?"; relationship answers "how does it compete?". The gate split awaits owner confirmation as Q20. |
+| R22 | **NEW (V3).** Whether "monitoring" implies watching competitors | **No (C40).** It is re-evaluation of stored evidence with an honest as-of stamp; Tavily refreshes discovery leads only. |
 | R12 | Review-insight acquisition mechanism (was Q11) | **Screenshot-based, on the same evidence model as everything else in this pivot (§6.5, C6).** The seller submits a reviews-tab screenshot via the same `competitor_evidence`/`research_session_id` mechanism as listing evidence (§5.3, §6.1); a vision/derivation model extracts sentiment, themes and rating distribution from what's visible, with the same `SELLER_ENTERED` manual-entry fallback for unclear or missing fields, and the same confidence vocabulary (§5.1). Not a new acquisition mechanism — C2 applied to a different evidence type. C14/C15's transient/local-only rule now scopes to the *review text read off the screenshot*, not the screenshot's stored image bytes, which follow the ordinary evidence-image retention policy (§6.8). **Q7 (local model quality) is unaffected and remains open.** |

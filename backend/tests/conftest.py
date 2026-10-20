@@ -12,6 +12,20 @@ TEST_LLM_HOSTS = "localhost:11434,127.0.0.1:11434,127.0.0.1:9,ollama.test:11434"
 
 
 @pytest.fixture(autouse=True)
+def _ci_housekeeping_is_off_in_tests(monkeypatch):
+    """The periodic CI housekeeping thread is started by the app lifespan; tests run its cycle directly instead."""
+    monkeypatch.setenv("CI_SCHEDULER_INTERVAL_SECONDS", "0")
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _ci_discovery_uses_the_mock_provider_in_tests(monkeypatch):
+    """CI discovery's default provider is Tavily (CI spec C34); no test may call it. Tests that exercise the Tavily composition set the variable themselves."""
+    monkeypatch.setenv("CI_SEARCH_PROVIDER", "mock")
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _attest_the_fake_llm_endpoints_used_by_tests(monkeypatch):
     monkeypatch.setenv("LLM_OPERATOR_CONTROLLED_HOSTS", TEST_LLM_HOSTS)
     yield

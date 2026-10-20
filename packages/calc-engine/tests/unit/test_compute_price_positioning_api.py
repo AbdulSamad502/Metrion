@@ -57,3 +57,12 @@ def test_compute_repricing_scenario_result_shape() -> None:
     assert result.is_available is True
     assert result.value_paise == 70_000
     assert "not margin-aware" in result.calculation_basis
+
+
+def test_the_gap_is_also_stated_as_a_percentage_of_the_sellers_own_price_with_both_denominators_in_the_basis() -> None:
+    """₹399 against ₹329: the gap is ₹70.00; 70/399 = 17.54% of the seller's price and 70/329 = 21.28% of the competitor's. Both are exact, rounded once, and labelled."""
+    (row, *_rest) = compute_price_positioning(seller_price_paise=Paise(39_900), seller_price_confidence=Confidence.MANUAL, competitor_prices=[_cp(32_900)], computed_at=NOW)
+    assert row.value_paise == 7_000
+    assert "gap_pct=21.28%" in row.calculation_basis and "gap_pct_of_seller_price=17.54%" in row.calculation_basis
+    (cheaper, *_r) = compute_price_positioning(seller_price_paise=Paise(30_000), seller_price_confidence=Confidence.MANUAL, competitor_prices=[_cp(40_000)], computed_at=NOW)
+    assert cheaper.value_paise == -10_000 and "gap_pct_of_seller_price=-33.33%" in cheaper.calculation_basis and "gap_pct=-25.00%" in cheaper.calculation_basis

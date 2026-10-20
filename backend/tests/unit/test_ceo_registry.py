@@ -126,7 +126,7 @@ def test_cfo_preview_is_the_denial_surface_without_an_entitlement_gate(registry)
 
 def test_specialists_that_write_their_own_run_are_marked(registry):
     own = {s.key for s in registry.specs() if s.writes_own_run}
-    assert {"pi.discover", "pi.supplier_lookup"} <= own and all(k.startswith(("pi.", "cmo.")) for k in own)
+    assert {"pi.discover", "pi.supplier_lookup"} <= own and all(k.startswith(("pi.", "cmo.", "ci.")) for k in own)
     assert not registry.get("cfo.reconcile").writes_own_run  # CFO writes none: the choke point does
 
 

@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.usefixtures("two_tenants"), pytest.mark.skipif(not os.
 
 def walk_to_candidates(ctx, rt, inv, first):
     res = say(ctx, rt, inv, "SKU-1")
-    res = say(ctx, rt, inv, "", card=res.message_id, option=res.choices["options"][0]["key"])  # fee reference
+    # (the fee reference is filled in from saved data when only one exists)
     res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, "Prices exclude GST"))
     res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, "I do not know"))
     return say(ctx, rt, inv, "499")
@@ -36,14 +36,14 @@ def test_the_competitor_is_taken_from_the_question_and_their_captured_price_is_o
     rt = rt_for(calls)
     inv = start(ctx, rt)
     first = orchestrator.run_turn(ctx, rt, inv, "what is my margin at Acme Steel's price?")
-    assert first.clarify_for == "sku" and first.choices["pending"]["collected"] == {"competitor": str(comp)} and first.answer.startswith("(2 of 11)")
+    assert first.clarify_for == "sku" and first.choices["pending"]["collected"] == {"competitor": str(comp), "fee": {"marketplace": "meesho", "category": "*", "fee_type": "COMMISSION"}} and "(3 of 8)" in first.answer
     res = walk_to_candidates(ctx, rt, inv, first)
     assert res.clarify_for == "candidate_prices_paise"
     [offer] = [o for o in res.choices["options"] if o["kind"] in ("RECOMMENDED", "ALTERNATIVE")]
     assert offer["label"] == "Match Acme Steel price (₹520.00)" and "Not verified" in offer["reason"]  # CI's figure, dated, labelled
     assert "candidate_prices_paise" not in res.choices["pending"]["collected"] and calls == {}  # offered, never filled in
     nxt = say(ctx, rt, inv, "", card=res.message_id, option=offer["key"])
-    assert nxt.clarify_for == "shipping" and nxt.choices["pending"]["collected"]["candidate_prices_paise"] == [52000]
+    assert nxt.clarify_for == "costs_gate" and nxt.choices["pending"]["collected"]["candidate_prices_paise"] == [52000]
 
 
 def test_a_price_the_seller_states_is_taken_as_theirs_and_not_asked_again(two_tenants, app_user, seed):  # noqa: F811
@@ -54,9 +54,9 @@ def test_a_price_the_seller_states_is_taken_as_theirs_and_not_asked_again(two_te
     rt = rt_for(calls)
     inv = start(ctx, rt)
     first = orchestrator.run_turn(ctx, rt, inv, "Acme Steel is at 449, what is my margin")
-    assert first.choices["pending"]["collected"] == {"competitor": str(comp), "candidate_prices_paise": [44900]}
+    assert first.choices["pending"]["collected"] == {"competitor": str(comp), "candidate_prices_paise": [44900], "fee": {"marketplace": "meesho", "category": "*", "fee_type": "COMMISSION"}}
     nxt = walk_to_candidates(ctx, rt, inv, first)
-    assert nxt.clarify_for == "shipping"  # the candidate price was already given
+    assert nxt.clarify_for == "costs_gate"  # the candidate price was already given
 
 
 def test_an_unknown_competitor_name_is_asked_about_never_guessed(two_tenants, app_user, seed):  # noqa: F811
@@ -66,4 +66,4 @@ def test_an_unknown_competitor_name_is_asked_about_never_guessed(two_tenants, ap
     rt = rt_for({})
     inv = start(ctx, rt)
     first = orchestrator.run_turn(ctx, rt, inv, "what is my margin at Zed Corp's price?")
-    assert first.clarify_for == "competitor" and "Acme Steel" in [o["label"] for o in first.choices["options"]] and first.choices["pending"]["collected"] == {}
+    assert first.clarify_for == "competitor" and "Acme Steel" in [o["label"] for o in first.choices["options"]] and first.choices["pending"]["collected"] == {"fee": {"marketplace": "meesho", "category": "*", "fee_type": "COMMISSION"}}

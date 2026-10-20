@@ -11,7 +11,7 @@ def test_defaults_match_locked_spec_values() -> None:
     assert budget.max_discovery_queries_per_run == 20
     assert budget.max_raw_candidates == 50
     assert budget.max_analyzed_candidates == 20
-    assert budget.max_recommended_candidates == 5
+    assert budget.max_recommended_candidates == 15
     assert budget.max_followup_searches_per_candidate == 3
     assert budget.discovery_run_timeout_seconds == 120
     assert budget.search_cache_ttl_hours == 24

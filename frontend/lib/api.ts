@@ -56,6 +56,8 @@ export type SessionResponse = {
   membershipStatus: string | null;
   role: string | null;
   onboardingState: "PENDING_EMAIL_VERIFICATION" | "PENDING_ONBOARDING" | "ACTIVE";
+  /** Has the first-run business-details step been finished (business-profile.md D4)? Only `false` sends a member to it. */
+  profileComplete?: boolean;
 };
 
 // --- Step 4: CEO Hub / Competitor Intelligence ---------------------------------------

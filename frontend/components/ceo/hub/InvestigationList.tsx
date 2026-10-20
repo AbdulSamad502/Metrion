@@ -21,6 +21,7 @@ export function InvestigationList({
   selectedId,
   showArchived,
   onToggleArchived,
+  onDelete,
   onSelect,
   onCreate,
   onRetry,
@@ -31,11 +32,13 @@ export function InvestigationList({
   selectedId: string | null;
   showArchived: boolean;
   onToggleArchived: (v: boolean) => void;
+  onDelete?: (id: string) => void;
   onSelect: (id: string) => void;
   onCreate: (title?: string) => void;
   onRetry: () => void;
 }) {
   const [title, setTitle] = useState("");
+  const [confirmId, setConfirmId] = useState<string | null>(null);
   const shown = visibleInvestigations(items, showArchived);
   const archivedCount = items.filter((i) => i.status === "ARCHIVED").length;
 
@@ -84,7 +87,7 @@ export function InvestigationList({
         {shown.map((i) => {
           const selected = i.id === selectedId;
           return (
-            <li key={i.id}>
+            <li key={i.id} className="group relative">
               <button
                 type="button"
                 onClick={() => onSelect(i.id)}
@@ -103,6 +106,33 @@ export function InvestigationList({
                   </time>
                 </span>
               </button>
+              {onDelete && i.status !== "ARCHIVED" && (
+                <button
+                  type="button"
+                  aria-label={`Delete conversation ${investigationTitle(i)}`}
+                  title="Delete conversation"
+                  onClick={() => setConfirmId(i.id)}
+                  className="mt-btn mt-focus absolute right-2 top-2 rounded-md p-1.5 opacity-60 transition-opacity hover:opacity-100 focus:opacity-100"
+                  style={{ color: "var(--text-4)" }}
+                >
+                  <Icon name="trash" size={14} />
+                </button>
+              )}
+              {confirmId === i.id && onDelete && (
+                <div role="alertdialog" aria-label="Confirm delete" className="mt-1 flex flex-col gap-2 rounded-lg px-2.5 py-2.5" style={{ border: "1px solid var(--border-hover)", background: "var(--fill-hover)" }}>
+                  <p className="m-0 t-meta" style={{ color: "var(--text-3)" }}>
+                    Delete this conversation? It disappears from your list. Its findings and the audit record are kept by Metrion and are not erased.
+                  </p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { onDelete(i.id); setConfirmId(null); }} className="mt-btn mt-focus rounded-lg px-3 py-1.5 t-meta font-bold" style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}>
+                      Delete
+                    </button>
+                    <button type="button" onClick={() => setConfirmId(null)} className="mt-btn mt-focus rounded-lg px-3 py-1.5 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </li>
           );
         })}

@@ -107,12 +107,12 @@ def test_a_fully_persuaded_model_cannot_run_anything_the_code_does_not_allow(key
     assert ran - {"ceo.chat_turn"} <= set(called) | {None}
 
 
-def test_the_approval_gated_set_is_exactly_the_twelve_the_report_names():
+def test_the_approval_gated_set_is_exactly_the_thirteen_the_report_names():
     assert GATED == {
-        "pi.discover", "pi.supplier_lookup", "cmo.generate_title_sets", "cmo.generate_listing_copy", "cmo.generate_description", "cmo.generate_bullets",
+        "pi.discover", "pi.supplier_lookup", "ci.discover_competitors", "cmo.generate_title_sets", "cmo.generate_listing_copy", "cmo.generate_description", "cmo.generate_bullets",
         "cmo.generate_keywords", "cmo.generate_backend_terms", "cmo.generate_hashtags", "cmo.catalog_answer", "cmo.market_trends", "cmo.analyze_attachment",
     }
-    assert len(KEYS) == 37 and len([s for s in REAL.specs() if s.wired]) == 36 and [s.key for s in REAL.specs() if not s.wired] == ["ci.research_now"]
+    assert len(KEYS) == 48 and len([s for s in REAL.specs() if s.wired]) == 47 and [s.key for s in REAL.specs() if not s.wired] == ["ci.research_now"]
 
 
 @pytest.mark.parametrize("key", sorted(GATED & set(ACTIONS)))
@@ -127,7 +127,7 @@ def test_each_chat_reachable_gated_action_is_refused_or_asked_and_planned_but_ne
     rt = with_classifier(runtime(Scripted({}), Grounded(), registry=registry), model)
     inv = start(ctx, rt)
     res = orchestrator.run_turn(ctx, rt, inv, msg)
-    if key == "pi.discover":
+    if key in ("pi.discover", "ci.discover_competitors"):  # both send the seller's data out: the same fixed refusal until the approval workflow is on
         assert called == [] and res.status == "DENIED" and res.answer.startswith(orchestrator.APPROVAL_UNAVAILABLE_TEXT[:40])
     else:
         assert called == [] and res.status in ("CLARIFIED", "PLANNED"), (res.status, res.answer[:120])

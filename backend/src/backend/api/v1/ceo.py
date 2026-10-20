@@ -125,6 +125,9 @@ class TurnBody(BaseModel):
     action: UiActionBody | None = None
     clarification: ClarificationReplyBody | None = None  # answers a decision card; resumes ITS pending intent with no model call (spec 6.32)
     attachment_ids: list[UUID] = Field(default_factory=list, max_length=20)  # files uploaded to this investigation; checked against it and the configured count
+    # The CI dashboard's "Ask CEO" on one stored finding (CI spec C33, C46): an id only, never content. The CEO re-reads the finding and its evidence from the database, tenant-scoped; an id that is not this
+    # tenant's is simply "not found".
+    ci_finding_id: UUID | None = Field(default=None, alias="ciFindingId")
     # An explicit date range chosen with the UI's date picker. Both or neither. When present it is THE period for the turn: the model
     # neither chooses nor withholds it, and the same deterministic resolver validates it (a future or inverted range is a 422).
     period_start: date | None = None
@@ -260,6 +263,7 @@ def post_turn(
         result = orchestrator.run_turn(
             ctx, runtime, investigation_id, body.message, period=explicit, ui_action=ui, clarification=reply, attachment_ids=tuple(body.attachment_ids),
             sink=bus.sink_for(_tenant(ctx), investigation_id), request_key=str(body.client_request_id) if body.client_request_id is not None else None,
+            ci_finding_id=body.ci_finding_id,
         )
         if not result.replayed:
             bus.done(_tenant(ctx), investigation_id, status=result.status)  # only a turn that actually ran ends a stream: a refused (409) or replayed one must not end another's

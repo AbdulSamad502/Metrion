@@ -234,7 +234,7 @@ describe("a turn: processing, progressive findings, completion", () => {
     await openInvestigation(id);
     await ask("What should I focus on?");
     fake.completeTurn({ answer: "- Not available: No seller goal has been recorded.", compositionMode: "TEMPLATE_FALLBACK" });
-    expect(await screen.findByText(/did not pass the safety check/)).toBeInTheDocument();
+    expect(await screen.findByText(/saved results only/)).toBeInTheDocument();
   });
 
   it("a failed request keeps the thread usable, shows plain words, and still reloads what the server persisted", async () => {

@@ -21,6 +21,22 @@ const stub = (h: Handler) => { const f = vi.fn(async (url: string, init?: Reques
 beforeEach(() => window.history.replaceState(null, "", "/settings#notifications"));
 afterEach(() => vi.unstubAllGlobals());
 
+describe("Settings: business details", () => {
+  it("the Business details button opens the form pre-filled, and Cancel closes it", async () => {
+    window.history.replaceState(null, "", "/settings#business");
+    const profile = { businessName: "Asha Home Goods", description: "We sell steel kitchen storage to families.", categories: "Kitchen storage", marketplaces: ["AMAZON"], priceSegment: "BUDGET", targetCustomer: "Families", businessStage: "GROWING", state: "Goa", updatedAt: "2026-10-20T10:00:00+00:00" };
+    stub(() => json({ profile, complete: true, suggestedName: null }));
+    render(<SettingsPage />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Business details" }));
+    const dialog = await screen.findByRole("dialog", { name: "Business details" });
+    await waitFor(() => expect(screen.getByLabelText("What is your business called?")).toHaveValue("Asha Home Goods"));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(dialog).not.toBeInTheDocument();
+  });
+});
+
 describe("Settings: competitor digest preference", () => {
   it("shows plain wording and a working Retry when the preference cannot be loaded", async () => {
     let calls = 0;

@@ -47,10 +47,10 @@ def test_a_chip_or_typed_chat_starts_a_conversation_about_inputs_not_a_form_and_
     inv = start(ctx, rt)
     res = orchestrator.run_turn(ctx, rt, inv, ASK)
     assert res.status == "CLARIFIED" and res.clarify_for == "competitor" and calls == {}
-    assert res.choices["kind"] == "INPUT" and res.answer.startswith("(1 of 11)") and "Which competitor" in res.answer
+    assert res.choices["kind"] == "INPUT" and "From your saved data I already have: the fee rate" in res.answer and "(2 of 8)" in res.answer and "Which competitor" in res.answer
     labels = [o["label"] for o in res.choices["options"]]
     assert set(labels[:2]) == {"Acme Copper", "Acme Steel"}  # real tracked competitors, never invented
-    assert labels[-2:] == ["Other", "Cancel"] and sum(1 for o in res.choices["options"] if o["kind"] in ("RECOMMENDED", "ALTERNATIVE")) <= 3
+    assert "Other" in labels and labels[-1] == "Cancel" and sum(1 for o in res.choices["options"] if o["kind"] in ("RECOMMENDED", "ALTERNATIVE")) <= 3
     chip = orchestrator.run_turn(ctx, rt, start(ctx, rt), "New product", ui_action=UI("PLAYBOOK", "NEW_PRODUCT_DECISION"))
     assert chip.status == "CLARIFIED" and chip.clarify_for == "sku" and chip.answer.startswith("(1 of 10)")
 
@@ -84,13 +84,14 @@ def test_the_whole_price_impact_conversation_builds_the_same_inputs_as_the_form_
     res = orchestrator.run_turn(ctx, rt, inv, "Price impact", ui_action=UI("PLAYBOOK", "COMPETITOR_PRICE_IMPACT"))
     res = say(ctx, rt, inv, "Acme Steel")  # 1 competitor, typed
     res = say(ctx, rt, inv, "SKU-1")  # 2 sku
-    assert res.clarify_for == "fee"
-    res = say(ctx, rt, inv, "", card=res.message_id, option=res.choices["options"][0]["key"])  # 3 fee reference: an option (the seeded fee row)
-    assert res.clarify_for == "basis"
+    assert res.clarify_for == "basis"  # 3 the fee row was filled in from saved data (only one exists), so it is not asked
     res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, "Prices exclude GST"))  # 4 basis: an option
     res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, "I do not know"))  # 5 GST unknown: an option
     res = say(ctx, rt, inv, "₹499")  # 6 current price
     res = say(ctx, rt, inv, "449, 479")  # 7 candidates
+    assert res.clarify_for == "costs_gate" and [o["label"] for o in res.choices["options"][:2]] == ["I will enter them", "I do not know them yet"]  # one question instead of four
+    assert not any(o["kind"] == "RECOMMENDED" and o.get("skip") for o in res.choices["options"])  # a skip is never the recommended choice
+    res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, "I will enter them"))
     assert res.clarify_for == "shipping" and [o["label"] for o in res.choices["options"][:2]] == ["None (0), I confirm", "Unknown"]
     assert [o["label"] for o in res.choices["options"] if o.get("skip")] == ["Unknown"] and any(o["kind"] == "BACK" for o in res.choices["options"])  # only the deliberate "unknown" is skippable
     res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, "None (0), I confirm"))  # 8 shipping confirmed zero

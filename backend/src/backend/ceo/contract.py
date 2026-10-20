@@ -201,6 +201,8 @@ class LegContext:
     turn_run_id: UUID  # the CEO anchor `agent_run` (the leg's parent)
     leg_run_id: UUID | None  # the choke point's own child row, or None when the specialist writes its own
     now: datetime
+    business_profile: str | None = None  # the seller's self-declared profile, one short quoted line built by code (business-profile.md D6): context only, never a figure
+    business_profile_brief: Mapping[str, Any] | None = None  # the same profile as a short structured record (fixed keys, words only) for the specialist being called
 
 
 Invoke = Callable[[Any, Any, LegContext], Mapping[str, Any]]  # (validated slots, AuthContext, LegContext) -> structured payload

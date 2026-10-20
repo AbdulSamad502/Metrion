@@ -77,7 +77,7 @@ def get_by_id(tenant_id: UUID, snapshot_id: UUID) -> dict[str, Any] | None:
                 """
                 SELECT id, competitor_url_id, ci_capture_run_id, research_session_id, source_url,
                        variant_key, captured_at, capture_status, listed_price_paise,
-                       visible_discount_paise, availability, rating, rating_count
+                       visible_discount_paise, availability, rating, rating_count, price_confirmation
                 FROM competitor_snapshot
                 WHERE tenant_id = :tenant_id AND id = :id
                 """
@@ -141,7 +141,7 @@ def list_snapshots(tenant_id: UUID, competitor_url_id: UUID, *, limit: int = 50)
             text(
                 """
                 SELECT id, captured_at, capture_status, confidence, title, listed_price_paise,
-                       visible_discount_paise, availability, variant_key, source_url
+                       visible_discount_paise, availability, variant_key, source_url, price_confirmation
                 FROM competitor_snapshot
                 WHERE tenant_id = :tenant_id AND competitor_url_id = :competitor_url_id
                 ORDER BY captured_at DESC
@@ -151,6 +151,20 @@ def list_snapshots(tenant_id: UUID, competitor_url_id: UUID, *, limit: int = 50)
             {"tenant_id": str(tenant_id), "competitor_url_id": str(competitor_url_id), "limit": limit},
         ).mappings()
         return [dict(r) for r in rows]
+
+
+def set_price_confirmation(tenant_id: UUID, snapshot_id: UUID, state: str) -> None:
+    """C37: `PENDING` while a vision-extracted consequential field awaits the seller;
+    `CONFIRMED` / `DECLINED` after. `latest_usable_snapshot` and `latest_comparable_snapshot`
+    read only `NOT_REQUIRED`/`CONFIRMED`, so a pending or declined price can never reach a
+    Brain 1 input, a delta or an alert."""
+    if state not in ("NOT_REQUIRED", "PENDING", "CONFIRMED", "DECLINED"):
+        raise ValueError(f"unknown price_confirmation {state!r}")
+    with tenant_scope(tenant_id) as conn:
+        conn.execute(
+            text("UPDATE competitor_snapshot SET price_confirmation = :state WHERE tenant_id = :tenant_id AND id = :id"),
+            {"state": state, "tenant_id": str(tenant_id), "id": str(snapshot_id)},
+        )
 
 
 def latest_usable_snapshot(tenant_id: UUID, competitor_url_id: UUID) -> dict[str, Any] | None:
@@ -167,9 +181,10 @@ def latest_usable_snapshot(tenant_id: UUID, competitor_url_id: UUID) -> dict[str
                 """
                 SELECT id, captured_at, capture_status, confidence, title, description, bullets,
                        observed_category, listed_price_paise, visible_discount_paise, rating,
-                       rating_count, availability, variant_key, source_url
+                       rating_count, availability, variant_key, source_url, price_confirmation
                 FROM competitor_snapshot
                 WHERE tenant_id = :tenant_id AND competitor_url_id = :competitor_url_id
+                  AND price_confirmation IN ('NOT_REQUIRED', 'CONFIRMED')
                 ORDER BY captured_at DESC
                 LIMIT 20
                 """
@@ -213,6 +228,7 @@ def latest_comparable_snapshot(
                 WHERE tenant_id = :tenant_id
                   AND competitor_url_id = :competitor_url_id
                   AND capture_status = ANY(CAST(:comparable_statuses AS text[]))
+                  AND price_confirmation IN ('NOT_REQUIRED', 'CONFIRMED')
                   AND variant_key IS NOT DISTINCT FROM :variant_key
                   AND (CAST(:exclude_snapshot_id AS uuid) IS NULL OR id != CAST(:exclude_snapshot_id AS uuid))
                 ORDER BY captured_at DESC

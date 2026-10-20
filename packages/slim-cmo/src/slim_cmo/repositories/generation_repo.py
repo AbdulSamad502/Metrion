@@ -41,7 +41,7 @@ _INSERT = text(
        grounding_approval_id, grounding_basis, output_text, output_structured, format_constraint_ref,
        status, failure_reason, request_key, agent_run_id, generated_by)
     VALUES
-      (:tenant_id, :sku, :marketplace, :output_type, 'INDEPENDENT', NULL, :image_analysis_id,
+      (:tenant_id, :sku, :marketplace, :output_type, :input_mode, CAST(:ci_inputs_snapshot AS jsonb), :image_analysis_id,
        :grounding_approval_id, :grounding_basis, :output_text, CAST(:output_structured AS jsonb),
        :format_constraint_ref, :status, :failure_reason, :request_key, :agent_run_id, :generated_by)
     RETURNING id
@@ -107,6 +107,7 @@ def insert_generation(conn: Connection, tenant_id: UUID, rec: GenerationRecord) 
                 "format_constraint_ref": rec.format_constraint_ref, "status": rec.status.value,
                 "failure_reason": rec.failure_reason, "request_key": rec.request_key,
                 "agent_run_id": rec.agent_run_id, "generated_by": rec.generated_by,
+                "input_mode": rec.input_mode, "ci_inputs_snapshot": json.dumps(rec.ci_inputs_snapshot) if rec.ci_inputs_snapshot is not None else None,
             },
         ).one()
     except IntegrityError as exc:

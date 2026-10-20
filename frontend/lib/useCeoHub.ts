@@ -247,7 +247,7 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
   );
 
   const sendTurn = useCallback(
-    async (message: string, period: ExplicitPeriod | null, action: UiAction | null = null, clarification: ClarificationReply | null = null, attachmentIds: string[] = []) => {
+    async (message: string, period: ExplicitPeriod | null, action: UiAction | null = null, clarification: ClarificationReply | null = null, attachmentIds: string[] = [], ciFindingId: string | null = null) => {
       const id = selectedRef.current;
       if (!id) return;
       const text = message.trim();
@@ -297,7 +297,7 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
       let error: string | null = null;
       let last: TurnResponse | null = null;
       try {
-        last = await client.postTurn(id, text, period, action, clarification, attachmentIds, clientRequestId);
+        last = await client.postTurn(id, text, period, action, clarification, attachmentIds, clientRequestId, ciFindingId);
         unansweredRef.current = null; // answered: the next send, even with identical text, is a new submission
       } catch (e) {
         if (isTurnBusy(e)) setNotice(failure(e)); // told once as a notice; the running task keeps its own status
@@ -400,6 +400,18 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
     }
   }, [client, loadDetail, refreshList]);
 
+  /** "Delete" a conversation from the seller's list. The server keeps conversation history, findings and the audit record permanently (they are never purged), so this hides it
+   * (ARCHIVED) and takes it off the screen; it is the same server call as Archive. */
+  const removeConversation = useCallback(async (id: string) => {
+    try {
+      await client.archive(id);
+      await refreshList();
+      if (selectedRef.current === id) await loadDetail(id, true);
+    } catch (e) {
+      setNotice(failure(e));
+    }
+  }, [client, loadDetail, refreshList]);
+
   // A question the server stored but has not answered (refresh mid-run, lost reply): shown as still being answered and re-read until the answer arrives. The composer stays
   // usable on purpose: a send is how an abandoned turn gets settled and reported, and the server refuses it with a plain notice while a live turn still owns the conversation.
   const awaitingAnswer = turn.phase === "idle" && detail.status === "ready" && isAwaitingAnswer(detail.data?.messages, detail.data?.investigation.status);
@@ -413,6 +425,6 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
 
   return {
     awaitingAnswer, state, list, availability, health, memory, needs, forgetMemory, shared, forgetShared, refreshShared, flows, loadFlow, refreshHealth, selectedId, detail, turn, showArchived, setShowArchived, busyAgent, notice, dismissNotice: () => setNotice(null),
-    refreshList, select, create, sendTurn, setAttached, resolve, reopen, archive, approvePlan, declinePlan, planBusy, retryDetail: () => selectedRef.current && loadDetail(selectedRef.current, false),
+    refreshList, select, create, sendTurn, setAttached, resolve, reopen, archive, removeConversation, approvePlan, declinePlan, planBusy, retryDetail: () => selectedRef.current && loadDetail(selectedRef.current, false),
   };
 }

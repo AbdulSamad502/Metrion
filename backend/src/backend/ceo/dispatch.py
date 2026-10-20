@@ -33,7 +33,7 @@ from pydantic import BaseModel, ValidationError
 
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_VIEW, has_permission
-from backend.ceo import provenance
+from backend.ceo import profile_context, provenance
 from backend.ceo.approval_gate import gate_leg
 from backend.ceo.contract import (
     ActionSpec,
@@ -309,9 +309,10 @@ def dispatch(
             permission_check="PASS", entitlement_check=ent_text, status="RUNNING", started_at=at,
             parent_run_id=turn.anchor_run_id, investigation_id=turn.investigation_id,
         )
+    profile_note, profile_brief = profile_context.for_leg(ctx.tenant_id)  # fail-soft: (None, None) when absent or unreadable
     leg_ctx = LegContext(
         tenant_id=ctx.tenant_id, requested_by=ctx.app_user_id, investigation_id=turn.investigation_id,
-        turn_run_id=turn.anchor_run_id, leg_run_id=leg_run, now=at,
+        turn_run_id=turn.anchor_run_id, leg_run_id=leg_run, now=at, business_profile=profile_note, business_profile_brief=profile_brief,
     )
 
     def finish(status: str, reason: str | None, refs: tuple[Ref, ...] = ()) -> bool:
@@ -332,7 +333,7 @@ def dispatch(
 
     try:
         assert spec.invoke is not None
-        with agent_run_repo.parent_run_scope(turn.anchor_run_id):
+        with agent_run_repo.parent_run_scope(turn.anchor_run_id), profile_context.for_agents(profile_note, profile_brief):
             payload = spec.invoke(model, ctx, leg_ctx)
     except HTTPException as exc:
         # The specialist's own gate refused (402 entitlement / 403 permission) or rejected the request.

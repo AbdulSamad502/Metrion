@@ -68,6 +68,59 @@ def _text(max_len: int = 120) -> Callable[[str, Ctx, Mapping[str, Any]], Any]:
     return parse
 
 
+def _sku(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    """A SKU typed the way the seller lists it. When it is (or contains) one of their own products' title or id, the product's own id is stored, so the answer is the product
+    and not the seller's sentence; anything else is kept as typed (a SKU the seller has not uploaded is still theirs to name)."""
+    t = " ".join(raw.split())
+    if not 0 < len(t) <= 120:
+        return Reject("Please answer in at most 120 characters.")
+    try:
+        from backend.ceo import slot_resolvers  # noqa: PLC0415
+
+        found = slot_resolvers.resolve_seller_product(ctx.tenant_id, t)
+        if isinstance(found, slot_resolvers.ProductMatch):
+            return found.product_id
+        if isinstance(slot_resolvers.resolve_competitor(ctx.tenant_id, t), slot_resolvers.CompetitorMatch):
+            names = "; ".join(f"“{title or pid}”" for pid, title in ceo_reads.list_seller_products(ctx.tenant_id)[:6])
+            return Reject("That is one of your tracked competitors, not one of your products, so I cannot use it as the SKU." + (f" Your products: {names}." if names else ""))
+    except Exception:  # noqa: BLE001 - a lookup problem never blocks the answer; it is kept as typed
+        pass
+    return t
+
+
+_FREE_TEXT_FIELDS = frozenset({"seller_title", "niche", "product_name", "category", "category_hint", "supplier_name", "notes"})
+_CANCEL_PHRASE = re.compile(r"\b(?:cancel|abort|never ?mind|forget (?:it|this|that)|stop (?:this|the|asking)|drop (?:this|it))\b", re.IGNORECASE)
+
+
+def is_cancel_request(text: str) -> bool:
+    """"Cancel this finance calculation", "never mind", "forget it": the seller is closing the open question, in any wording (not only the bare word)."""
+    return bool(_CANCEL_PHRASE.search(text)) and len(text.split()) <= 6
+
+
+def is_unrelated_to_open_question(card: Mapping[str, Any], text: str, ctx: Ctx) -> bool:
+    """True when what the seller typed is clearly a NEW request and not an answer to the open question: it cannot be read as an answer AND it is a sentence or a question.
+    A short or readable answer, and the cancel words, are always answers. Used so an open question never swallows the seller's next request."""
+    t = " ".join(text.split())
+    if not t or t.casefold() in CANCEL_WORDS:
+        return False
+    try:
+        playbook = str(card.get("playbook") or (card.get("pending") or {}).get("key") or "")
+        fields = SESSIONS.get(playbook)
+        if fields is None:
+            return False
+        collected = dict((card.get("pending") or {}).get("collected") or {})
+        f = _next_field(fields, ctx, collected)
+        if f is None:
+            return False
+        if f.name not in _FREE_TEXT_FIELDS and not f.name.startswith("fact_") and len(t.split()) >= 8:
+            return True  # a closed question (an amount, a product, a choice) is answered in a few words: a long sentence is a new request, whatever else it mentions
+        if not isinstance(f.parse(t, ctx, collected), Reject):
+            return False
+    except Exception:  # noqa: BLE001
+        return False
+    return len(t.split()) >= 5 or "?" in t
+
+
 def _amount(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     paise = slot_resolvers.parse_amount_paise(raw)
     return paise if paise is not None else Reject("I could not read that as an amount in rupees above zero. For example 499 or 1,299.50.")
@@ -173,10 +226,30 @@ def _window(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
 
 
 # ------------------------------------------------------------------------------------------------ questions and options
+def _costs_gate(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = " ".join(raw.strip().casefold().replace("’", "'").split())
+    if t in ("enter", "yes", "i know them", "enter them") or t.startswith("i will enter"):
+        return "enter"
+    if t in ("unknown", "no", "skip", "not yet") or re.search(r"\b(?:do not|don't|dont|do n't) know\b", t) or "not sure" in t:
+        return "unknown"
+    return Reject("Choose whether you will enter your shipping, advertising, returns and other costs now, or that you do not know them yet.")
+
+
+def _enters_costs(ctx: Ctx, got: Mapping[str, Any]) -> bool:
+    return got.get("costs_gate") == "enter"
+
+
+COSTS_GATE = Field(
+    "costs_gate", lambda ctx, got: "Do you know your shipping, advertising, returns and other costs per unit? If not, I leave them out and show only what can be worked out (nothing is guessed).", _costs_gate,
+    lambda ctx, got: (Option("I will enter them", "enter", "I ask for each one"), Option("I do not know them yet", "unknown", "Margins that depend on them show as unavailable", unknown=True)),
+)
+
+
 def _cost_field(name: str, question: str) -> Field:
     return Field(
         name, lambda ctx, got: question, _cost,
         lambda ctx, got: (Option("None (0), I confirm", "none", "You are sure it is zero"), Option("Unknown", "unknown", "Margins that depend on it will show as unavailable", unknown=True)),
+        applies=_enters_costs,
     )
 
 
@@ -219,7 +292,7 @@ def _rival_price_option(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
 PRICE_IMPACT: tuple[Field, ...] = (
     Field("competitor", lambda c, g: "Which competitor changed their price?", _competitor, _competitor_options,
           lambda c, g: None if ceo_reads.list_active_competitors(c.tenant_id, limit=1) else "No competitors are being tracked yet. Add one on the Competitor Intelligence page first."),
-    Field("sku", lambda c, g: "Which SKU is this for? Type it the way you list it.", _text()),
+    Field("sku", lambda c, g: "Which SKU is this for? Type it the way you list it.", _sku),
     Field("fee", lambda c, g: "Which marketplace, category and fee type should I price it under?", _fee, _fee_choices,
           lambda c, g: None if _fee_options(c) else "No marketplace fee rates are set up yet, so I cannot price a margin. Ask your account owner to add them."),
     Field("basis", lambda c, g: "Do the prices you will give me include GST?", _basis,
@@ -230,6 +303,7 @@ PRICE_IMPACT: tuple[Field, ...] = (
     Field("candidate_prices_paise", lambda c, g: "Which prices should I compare? Give rupee amounts separated by commas"
           + (f", up to {c.max_candidate_prices}." if c.max_candidate_prices else "."), _prices,
           _rival_price_option),
+    COSTS_GATE,
     _cost_field("shipping", "What is the shipping cost per unit? Type an amount, or choose an option."),
     _cost_field("advertising", "What is the advertising cost per unit?"),
     _cost_field("return_rto", "What do returns and RTO cost you per unit?"),
@@ -269,7 +343,15 @@ def _optional_text(max_len: int) -> Callable[[str, Ctx, Mapping[str, Any]], Any]
     return parse
 
 
-_MARKETPLACE_OPTIONS = lambda ctx, got: tuple(Option(m.title(), m.title()) for m in _MARKETPLACE_NAMES)  # noqa: E731
+def _MARKETPLACE_OPTIONS(ctx: Ctx, got: Mapping[str, Any]) -> tuple[Option, ...]:  # noqa: N802
+    """Amazon, Flipkart, Meesho: the ones in the seller's business profile first (and only those, when the profile lists any), so the seller is not offered a marketplace they do not use."""
+    try:
+        mine = ceo_reads.business_marketplaces(ctx.tenant_id)
+    except Exception:  # noqa: BLE001 - a profile read problem only means all three are offered
+        mine = []
+    names = [m for m in _MARKETPLACE_NAMES if not mine or m.upper() in mine] or list(_MARKETPLACE_NAMES)
+    return tuple(Option(m.title(), m.title(), "A marketplace in your business profile" if mine else "") for m in names)
+
 _LAST_TIME = "What you chose last time"
 
 
@@ -354,7 +436,8 @@ def _fact_field(attr: str) -> Field:
 
 
 IMAGE_FACT_FIELDS: tuple[Field, ...] = tuple(_fact_field(a) for a in IMAGE_FACT_ATTRS)
-_SELLER_TITLE = Field("seller_title", lambda c, g: "What title do you use for it today (or want to use)? I will write from it, so what you give me is what the copy is based on.", _text(500))
+_SELLER_TITLE = Field("seller_title", lambda c, g: "What title do you use for it today (or want to use)? I will write from it, so what you give me is what the copy is based on.", _text(500),
+                      lambda c, g: (Option(f"Use “{g['product_name']}”", str(g["product_name"]), "Your product name, as you gave it"),) if g.get("product_name") else ())
 
 def _fit(words: Sequence[str], limit: int = 100) -> str:
     out: list[str] = []
@@ -409,7 +492,7 @@ CMO_TITLES: tuple[Field, ...] = (
     *_COMMON_FIRST,
     Field("category_hint", lambda c, g: "Which category is it in? For example kitchen, apparel, electronics. Or choose themes I already hold.", _optional_text(100), _theme_options, optional=True),
     Field("marketplaces", lambda c, g: _marketplace_question("titles"), _marketplaces, _cmo_marketplace_options(False)),
-    _BRAND_Q, _SIZE_Q, _FEATURES_Q, _USE_Q, _KEYWORDS_Q,
+    _BRAND_Q, _SIZE_Q, _FEATURES_Q,
 )
 CMO_HASHTAGS: tuple[Field, ...] = (
     *_COMMON_FIRST,
@@ -769,7 +852,7 @@ class Blocked:
 
 
 def _card(playbook: str, f: Field, ctx: Ctx, collected: Mapping[str, Any]) -> dict[str, Any]:
-    opts: list[dict[str, Any]] = [{"key": f"opt-{i}", "label": o.label, "kind": "RECOMMENDED" if i == 0 else "ALTERNATIVE", "value": o.text, "reason": o.reason, "refs": {}, **({"skip": True} if o.unknown else {})}
+    opts: list[dict[str, Any]] = [{"key": f"opt-{i}", "label": o.label, "kind": "RECOMMENDED" if i == 0 and not (o.unknown or o.text == "skip") else "ALTERNATIVE", "value": o.text, "reason": o.reason, "refs": {}, **({"skip": True} if o.unknown else {})}
             for i, o in enumerate(list(f.options(ctx, collected))[:MAX_OPTIONS])]
     opts.append({"key": "other", "label": "Other", "kind": "OTHER", "value": None, "reason": "Type your answer in the chat bar", "refs": {}})
     if collected:  # not the first question: the seller may step back and answer the previous one again (the earlier answer stays visible in the thread)
@@ -811,9 +894,62 @@ def start(
             parsed = f.parse(raw, ctx, collected)
             if not isinstance(parsed, Reject):
                 collected[f.name] = parsed
+    note = _derive_price_impact(ctx, fields, collected, named_competitor=bool((prefill or {}).get("competitor"))) if playbook == "COMPETITOR_PRICE_IMPACT" else ""
     if _next_field(fields, ctx, collected) is None:
         return Done(playbook, _to_inputs(playbook, collected))
-    return _ask(playbook, fields, ctx, collected, prefix="")
+    return _ask(playbook, fields, ctx, collected, prefix=note)
+
+
+def _derive_price_impact(ctx: Ctx, fields: Sequence[Field], collected: dict[str, Any], *, named_competitor: bool = False) -> str:
+    """Fills in what the seller's own verified data already says, so the CEO asks only for what is missing: the competitor (when only one is tracked), the product it is tracked for
+    (or the seller's only product), the seller's own price from their product profile, the competitor's VERIFIED current price as a price to compare, the fee row when only one exists,
+    and the GST basis the seller confirmed last time. Every value goes through the same parser as a typed answer; nothing the seller did not give or confirm is invented (a cost is
+    never filled in). Returns a one-line note of what was filled in, shown before the next question."""
+    from datetime import datetime, timezone
+
+    from backend.ceo.figure_format import format_paise
+
+    by = {f.name: f for f in fields}
+    facts: list[str] = []
+
+    def put(name: str, raw: str, said: str) -> bool:
+        if name in collected or name not in by:
+            return False
+        parsed = by[name].parse(raw, ctx, collected)
+        if isinstance(parsed, Reject):
+            return False
+        collected[name] = parsed
+        facts.append(said)
+        return True
+
+    try:
+        tracked = [r for r in ceo_reads.list_active_competitors(ctx.tenant_id, limit=MAX_OPTIONS)]
+        if "competitor" not in collected and len(tracked) == 1 and not named_competitor:  # a name the seller gave that matched nothing is asked about, never replaced by the only one tracked
+            put("competitor", ceo_reads.competitor_label(tracked[0]), f"the competitor you track, {ceo_reads.competitor_label(tracked[0])}")
+        comp = next((r for r in tracked if str(r["id"]) == str(collected.get("competitor"))), None)
+        products = ceo_reads.list_seller_products(ctx.tenant_id)
+        sku = (comp or {}).get("linked_sku") or (products[0][0] if len(products) == 1 else None)
+        if sku:
+            title = next((t for p, t in products if p == sku and t), sku)
+            put("sku", str(sku), f"your product {title}")
+            price = ceo_reads.seller_profile_price(ctx.tenant_id, str(sku))
+            if price:
+                put("current_price_paise", format_paise(price), f"your selling price {format_paise(price)} from your product profile")
+        if comp is not None:
+            snap = ceo_reads.competitor_handoff(ctx.tenant_id, UUID(str(comp["id"])), now=datetime.now(timezone.utc))
+            if not isinstance(snap, ceo_reads.CiUnavailable) and snap.listed_price_paise and snap.capture_status in ("COMPLETE", "PARTIAL") and not snap.is_stale:
+                prices = list(collected.get("candidate_prices_paise") or [])
+                # only beside a price the seller already named to test ("to ₹349"): with none named the seller chooses, and "match their price" is offered as an option
+                if prices and int(snap.listed_price_paise) not in prices and (ctx.max_candidate_prices is None or len(prices) < ctx.max_candidate_prices):
+                    collected["candidate_prices_paise"] = [*prices, int(snap.listed_price_paise)]
+                    facts.append(f"{ceo_reads.competitor_label(comp)}'s verified price {format_paise(snap.listed_price_paise)}")
+        options = _fee_options(ctx)
+        if len(options) == 1:
+            o = options[0]
+            put("fee", f"{o['marketplace']} {o['category']} {o['fee_type']}", f"the fee rate for {o['marketplace'].title()}")
+    except Exception:  # noqa: BLE001 - a lookup problem only means more questions are asked
+        pass
+    return ("From your saved data I already have: " + "; ".join(facts) + ". Only what is missing is asked. ") if facts else ""
 
 
 def start_data_request(session: str, sku: str, ctx: Ctx, resume: Mapping[str, Any]) -> Ask:
@@ -898,7 +1034,7 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
             again["resume"] = card["resume"]
         if card.get("addons"):
             again["addons"] = list(card["addons"])
-        return Ask(f"{parsed.why} {f.question(ctx, collected)}", again)
+        return Ask(f"{parsed.why} {f.question(ctx, collected)} (Say “cancel” to leave this question.)", again)
     collected[f.name] = parsed
     resume = card.get("resume")
     addons = tuple(card.get("addons") or ())
@@ -967,7 +1103,7 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "competitor_url_id": c["competitor"], "sku": c["sku"], "marketplace": fee["marketplace"], "category": fee["category"], "fee_type": fee["fee_type"], "basis": c["basis"],
         "gst_rate_pct": c["gst_rate_pct"], "current_price_paise": c["current_price_paise"], "candidate_prices_paise": c["candidate_prices_paise"],
-        "shipping": c["shipping"], "advertising": c["advertising"], "return_rto": c["return_rto"], "other": c["other"],
+        **{k: c.get(k, {"state": "UNKNOWN"}) for k in ("shipping", "advertising", "return_rto", "other")},  # not entered = not known: margins that need them show as unavailable
     }
 
 

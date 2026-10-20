@@ -97,7 +97,7 @@ def read_the_photo(p: Photo):
 def confirm_facts(p: Photo, inv: str):
     """The seller answers the CEO's questions in order: the product (typed), a CORRECTED colour, the material and brand as read, the size skipped, no category, and the skippable extra details skipped."""
     asked = []
-    answers = ["steel water bottle", "silver", "steel", "skip", "AquaKeep", "skip", "skip", "skip"]  # ... then no category, no key features, no main use (the 9th question, search words, is dropped at the limit of 8)
+    answers = ["steel water bottle", "silver", "steel", "skip", "AquaKeep", "skip", "skip"]  # ... then no category, no key features (the main-use and search-word questions are no longer asked)
     last = None
     for a in answers:
         last = say(p.c, inv, a)

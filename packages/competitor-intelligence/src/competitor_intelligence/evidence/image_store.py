@@ -20,6 +20,10 @@ class ImageStore(Protocol):
     def read(self, image_ref: str) -> bytes: ...
 
 
+class ImageWriterStore(Protocol):
+    def write(self, data: bytes) -> str: ...
+
+
 class LocalDiskImageStore:
     """Reads from the same directory `backend/api/v1/ci.py`'s upload endpoint writes to
     (`ci_evidence_storage_dir()`) — this package takes that directory as a plain string at
@@ -42,3 +46,16 @@ class LocalDiskImageStore:
         if not resolved.is_file():
             raise ImageNotFound(f"no evidence image found for ref '{image_ref}'")
         return resolved.read_bytes()
+
+
+    def write(self, data: bytes) -> str:
+        """Stores `data` under a server-generated name and returns the opaque `image_ref`.
+        The name is a fresh UUID plus an extension taken from the image's own content, never
+        from anything a client supplied (§7 rule 16): no client-controlled path or filename."""
+        import uuid
+
+        suffix = ".png" if data.startswith(bytes([0x89]) + b"PNG") else ".webp" if data[8:12] == b"WEBP" else ".jpg"
+        self._base_dir.mkdir(parents=True, exist_ok=True)
+        image_ref = f"{uuid.uuid4()}{suffix}"
+        (self._base_dir / image_ref).write_bytes(data)
+        return image_ref

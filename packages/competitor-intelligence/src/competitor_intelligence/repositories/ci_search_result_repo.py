@@ -58,6 +58,22 @@ def insert_results(
             )
 
 
+def titles_by_url(tenant_id: UUID, urls: list[str]) -> dict[str, dict[str, str | None]]:
+    """The title and snippet a search returned for each listing link (the newest per link), so a lead can be shown by what it is called. Nothing is fetched or invented: a link
+    the search did not return a title for simply has none."""
+    if not urls:
+        return {}
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                "SELECT DISTINCT ON (result_url) result_url, result_title, result_snippet FROM ci_search_result "
+                "WHERE tenant_id = :t AND result_url = ANY(:urls) ORDER BY result_url, fetched_at DESC"
+            ),
+            {"t": str(tenant_id), "urls": list(urls)},
+        ).all()
+    return {r[0]: {"title": r[1], "snippet": r[2]} for r in rows}
+
+
 def find_result_by_url(tenant_id: UUID, discovery_run_id: UUID, url: str) -> SearchResult | None:
     """Reconstructs the original title/snippet for a candidate's URL within one discovery
     run — used by the "Promote to analysis" seller action (§6.15 rule 4), which needs the

@@ -20,6 +20,7 @@ from __future__ import annotations
 import contextvars
 import dataclasses
 import hashlib
+import json
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -32,7 +33,7 @@ from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
 from backend.ceo.approval_gate import evaluate_playbook, plan_required
-from backend.ceo import approval, business_state, classifier, clarification, cmo_delegation, compound, conversational, deadlines, recovery, data_requests, findings, input_session, intent_router, memory, needs, references
+from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_delegation, compound, conversational, deadlines, recovery, data_requests, findings, input_session, intent_router, memory, needs, profile_context, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.billing import UnitDecision, unit_decision
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
@@ -40,7 +41,7 @@ from backend.ceo.contract import TERMINAL_TURN_STATUSES, AgentCode, ApprovalGran
 from backend.ceo.dispatch import CeoTurn, dispatch, open_turn
 from backend.ceo.evidence import EvidenceCollector, finding_status_for_entry
 from backend.ceo.presentation import present_entry, present_leg, safe
-from backend.ceo.plans import ACTIONS, GST_KEY, INTERNAL_ACTIONS, SLOT_VOCAB, GST_ROUTE_KEYS, PLAYBOOK_LEG_SLOTS, PLAYBOOKS, SLOT_QUESTIONS, Clarification, ResolvedSlots, gst_route_key, normalise_marketplace, resolve_playbook_run, resolve_slots
+from backend.ceo.plans import ACTIONS, GST_KEY, INTERNAL_ACTIONS, SLOT_VOCAB, GST_ROUTE_KEYS, PLAYBOOK_LEG_SLOTS, PLAYBOOKS, SLOT_QUESTIONS, Clarification, ResolvedSlots, gst_route_key, product_choice_question, discovery_question, normalise_marketplace, resolve_playbook_run, resolve_slots
 from backend.ceo.playbook_inputs import InvalidInputs
 from backend.ceo.runtime import CeoRuntime, EventLog, EventSink, StageClock, TurnEvent
 from backend.ceo.turn_lock import investigation_turn_lock
@@ -48,11 +49,13 @@ from backend.entitlement import meter_ceo_turn
 from backend.repositories import accounting_cutover_repo
 from backend.repositories import investigation_repo as repo
 from backend.repositories import ceo_need_repo
-from backend.services import ceo_attachment_analysis, ceo_briefs, ceo_inputs
+from backend.services import ceo_attachment_analysis, ceo_briefs, ceo_inputs, cmo_ci_inputs
+from backend.services.ceo_reads import product_facts as ceo_reads_product_facts
 
 logger = logging.getLogger(__name__)
 
 _ACKS: contextvars.ContextVar[list[str]] = contextvars.ContextVar("ceo_memory_acks", default=[])
+_CI_FINDING: contextvars.ContextVar[UUID | None] = contextvars.ContextVar("ceo_ci_finding", default=None)  # the dashboard's Ask CEO: one stored CI finding id for THIS turn (CI spec C46)
 _SUBMISSION: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar("ceo_submission", default=None)  # this turn's submission key + text hash, written onto its turn row
 MAX_MESSAGE_CHARS = 4000  # a request-size bound, not a business threshold
 GENERAL_GUIDANCE_TEXT = "This is general advice, not derived from your data."
@@ -196,7 +199,7 @@ def _resume_plain_question(tenant: UUID, investigation_id: UUID, text: str) -> U
         return None
     msgs = repo.list_messages(tenant, investigation_id)
     last = msgs[-1] if msgs else None
-    if last is None or last["role"] != "CEO" or last["kind"] != "CLARIFICATION" or last.get("choices") or not last.get("turn_id"):
+    if last is None or last["role"] != "CEO" or last["kind"] != "CLARIFICATION" or (last.get("choices") or {}).get("kind", "") not in ("", "PICK") or not last.get("turn_id"):  # a check-box card is answered by typing the same numbers
         return None
     turn = repo.get_turn(tenant, last["turn_id"]) or {}
     result = turn.get("classifier_result") or {}
@@ -214,6 +217,22 @@ def _with_request_key(done: Any, anchor: str) -> dict[str, Any]:
     if done.playbook in ("pi.discover", "NEW_PRODUCT_DECISION"):
         out["ceo_ref"] = f"ceo-{anchor}"
     return out
+
+
+def _single_product_default(tenant: UUID, decision: Any, cat: Any) -> Any:
+    """A competitor search that names no product, from a seller who has exactly ONE product, is for that product. A named product (even one that is not theirs) is never replaced, and with
+    several products the seller is asked."""
+    if decision.raw_key != "ci.discover_competitors" or decision.slots.get("product") or "MISSING_SLOT" not in decision.flags:
+        return decision
+    if ci_conversation.has_categories(tenant):
+        return decision  # the seller's business profile lists categories: the search asks which ones, instead of assuming the one product
+    only = ci_conversation.only_product(tenant)
+    if only is None:
+        return decision
+    pid, title = only
+    payload = {"route": "ACTION", "route_key": "ci.discover_competitors", "slots": {"product": title or pid}, "needs_agent": None, "clarify_for": None}
+    d = classifier.parse_decision(json.dumps(payload), cat)
+    return classifier.Decision(d.parse_ok, d.raw_route, d.raw_key, d.route, d.key, d.slots, d.needs_agent, d.clarify_for, frozenset({*d.flags, "RULE_ROUTED"}), addons=decision.addons)
 
 
 def _clarification_text(slot: str) -> str:
@@ -251,14 +270,14 @@ def _turn_context(tenant: UUID, inv: dict[str, Any], current_msg: UUID) -> tuple
     ideas = references.latest_ideas(repo.list_findings(tenant, inv["id"]))  # what the seller was shown earlier ("the list above"), quoted as data so the CEO does not forget it
     ideas_line = ("Product ideas shown earlier in this conversation (from public web sources, not verified): " + "; ".join(f"#{n} {name}" for n, name in enumerate(ideas[:10], start=1))) if ideas else None
     composer_ctx = " | ".join(x for x in (summary, _recalled(tenant), ideas_line, ("Earlier the seller asked: " + "; ".join(earlier_questions)) if earlier_questions else None) if x) or None
-    return classifier.TurnContext(summary, recent, findings), composer_ctx
+    return classifier.TurnContext(summary, recent, findings, profile_note=profile_context.summary(tenant)), composer_ctx
 
 
 # ------------------------------------------------------------------------------------------------ the turn
 def run_turn(
     ctx: AuthContext, runtime: CeoRuntime, investigation_id: UUID, message: str, *, sink: EventSink | None = None,
     period: tuple[date, date] | None = None, ui_action: UiAction | None = None, clarification: ClarificationReply | None = None, attachment_ids: Sequence[UUID] = (),
-    request_key: str | None = None,
+    request_key: str | None = None, ci_finding_id: UUID | None = None,
 ) -> TurnResult:
     """One turn, serialized per investigation (spec E24): a second turn waits for the running one (bounded by `CEO_TURN_LOCK_WAIT_SECONDS`)
     or is refused with `TurnInProgress`. Everything below, including any summary regeneration, runs under that lock."""
@@ -266,7 +285,11 @@ def run_turn(
     if repo.get_investigation(ctx.tenant_id, investigation_id) is None:  # RLS: another tenant's id is a plain not-found, and takes no lock
         raise repo.InvestigationNotFound(str(investigation_id))
     with investigation_turn_lock(investigation_id, config.ceo_turn_lock_wait_seconds()):
-        return _run_turn_locked(ctx, runtime, investigation_id, message, sink=sink, period=period, ui_action=ui_action, clarification=clarification, attachment_ids=attachment_ids, request_key=request_key)
+        _CI_FINDING.set(ci_finding_id)
+        try:
+            return _run_turn_locked(ctx, runtime, investigation_id, message, sink=sink, period=period, ui_action=ui_action, clarification=clarification, attachment_ids=attachment_ids, request_key=request_key)
+        finally:
+            _CI_FINDING.set(None)
 
 
 def _run_turn_locked(
@@ -311,7 +334,12 @@ def _run_turn_locked(
         tail = repo.list_messages(tenant, investigation_id)
         last = tail[-1] if tail else None
         if last is not None and last["role"] == "CEO" and last["kind"] == "CLARIFICATION" and (last.get("choices") or {}).get("kind") == "INPUT":
-            clarification = ClarificationReply(last["id"], None)
+            # whatever the seller types is the ANSWER, unless it is plainly a new request (a sentence that cannot be read as the answer): then the open question is dropped and
+            # the message is handled as a fresh request, so one open question can never swallow everything the seller asks next
+            if input_session.is_cancel_request(text):
+                clarification = ClarificationReply(last["id"], "cancel")  # "cancel this calculation": the open question is closed, nothing runs
+            elif not input_session.is_unrelated_to_open_question(last["choices"], text, input_session.Ctx(tenant, runtime.clock().date(), runtime.max_candidate_prices)):
+                clarification = ClarificationReply(last["id"], None)
     if clarification is not None and ui_action is None and has_permission(role=ctx.role, permissions=ctx.permissions, key=INVESTIGATION_VIEW):
         # Answering a decision card resumes ITS pending intent with the chosen option (or the typed text) and no model call. Resolved before anything is
         # written, and only for a member who may view the investigation (anyone else is refused by admission below, learning nothing about cards).
@@ -514,6 +542,10 @@ def _run_admitted(
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, conversational.WELCOME_TEXT, now, marker={"directGreeting": True})
         if conversational.is_capability_question(text):
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, conversational.capability_answer(caps), now, marker={"directCapabilities": True})
+    if ui_action is None:  # a competitor screenshot, a confirmation answer, "track this link", "approve 1 and 3", or the dashboard's Ask CEO on one finding (CI spec 6.21)
+        ci_turn = _ci_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, attached, attachments, text, now, cat)
+        if ci_turn is not None:
+            return ci_turn
     if ui_action is None and not attachments and ceo_attachment_analysis.refers_to_earlier_file(text):  # "continue with the file I attached before": same conversation, newest spreadsheet, named
         reply = ceo_attachment_analysis.answer_from_earlier(tenant, inv_id, text)
         return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, reply, now, marker={"attachmentAnalysis": True, "earlierAttachment": True})
@@ -545,7 +577,7 @@ def _run_admitted(
     if period is not None:
         preset["period"] = f"{period[0].isoformat()} to {period[1].isoformat()}"
         tctx = classifier.TurnContext(
-            tctx.summary, tctx.recent, tctx.findings,
+            tctx.summary, tctx.recent, tctx.findings, profile_note=tctx.profile_note,
             period_note=f"The seller already chose the period {preset['period']} with the date picker; it is supplied, do not ask for it.",
         )
 
@@ -556,7 +588,7 @@ def _run_admitted(
         classifier_model = "none (UI action)"
         log.emit("CLASSIFIED", route=decision.route, routeKey=decision.key, source="UI_ACTION")
     elif (ruled := intent_router.route(routed_text, cat)) is not None:  # an unmistakable request: the explicit rule decides, instantly (spec 6.35)
-        decision = ruled
+        decision = _single_product_default(tenant, ruled, cat)
         classifier_model = "rules"
         log.emit("CLASSIFIED", route=decision.route, routeKey=decision.key, source="RULES")
     else:
@@ -665,7 +697,7 @@ def _run_admitted(
                 prefill = cmo_delegation.prefill_for(key, decision.slots, repo.list_messages(tenant, inv_id), all_plans)
                 if prefill.get("marketplace") and normalise_marketplace(text) is None:  # a marketplace the seller did not write is never taken from a model: it is asked
                     prefill = {k: v for k, v in prefill.items() if k != "marketplace"}
-                carry = cmo_delegation.carried_facts(key, prefill.get("product"), all_plans)
+                carry = {**ceo_reads_product_facts(tenant, prefill.get("product")), **cmo_delegation.carried_facts(key, prefill.get("product"), all_plans)}  # saved profile first, this conversation's answers win
             started = input_session.start(key, input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices), prefill=prefill, carry=carry)
             if isinstance(started, input_session.Ask) and cmo_delegated:
                 started = cmo_delegation.begin(started, action_key=key, now=now)
@@ -710,7 +742,12 @@ def _run_admitted(
                     logger.exception("could not save PI memory")
                 notes = [f"Researching: {run_inputs['category_text']} on " + ", ".join(str(m).title() for m in run_inputs["marketplaces"]) + "."]
         elif route == "ACTION":
-            resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct={k: v for k, v in run_inputs.items() if k not in input_session.CEO_ONLY_INPUTS})
+            direct = {k: v for k, v in run_inputs.items() if k not in input_session.CEO_ONLY_INPUTS}
+            if key in cmo_delegation.CI_INFORMED:  # CEO-brokered: the seller's saved competitor listing themes inform the writing (slim-cmo-agent.md 6.7); none usable = independent, said on the card
+                ci_ids, _ = cmo_ci_inputs.broker(tenant, ctx.role, ctx.permissions, now=now)
+                if ci_ids:
+                    direct["ci_insight_ids"] = ci_ids
+            resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct=direct)
             notes = list(resolved.echoes())
             input_session.remember_confirmed(tenant, key, run_inputs, source_ref={"message_id": str(user_msg)}, user_id=ctx.app_user_id)  # CMO's private choice, best-effort (agent-memory C6)
         else:
@@ -792,6 +829,11 @@ def _run_admitted(
         card = session_card
         if card is None and pending is not None and clarify_slot in clarification.CARD_SLOTS:
             card = clarification.build(tenant, slot=clarify_slot, pending=pending, candidates=candidates, now=now)  # real candidates only; None = a plain question
+        if clarify_text is None and clarify_slot == "product" and decision.raw_key == "ci.discover_competitors":
+            clarify_text = discovery_question(tenant)
+            _cats = ci_conversation.business_categories(tenant)
+            if card is None and _cats:  # the profile's categories as check boxes; ticking and pressing the button sends the same numbers the seller could type
+                card = {**ci_conversation.category_card(_cats), "slot": "product", "pending": clarification.pending_intent(decision.raw_route, decision.raw_key, decision.slots, {})}  # the seller's business-profile categories, else their own products (or the plain fact that there are none)
         return _finish(ctx, runtime, turn, clock, log, status="CLARIFIED", route=route, route_key=None, answer=clarify_text or _clarification_text(clarify_slot or "UNCLEAR_REQUEST"),
                        kind="CLARIFICATION", composition=None, anchor_status="COMPLETE", clarify_for=clarify_slot, classifier_flags=flags, choices=card)
     if route == "OUT_OF_SCOPE":
@@ -911,7 +953,7 @@ def _run_admitted(
     else:
         log.emit("SYNTHESIS_STARTED")
         with clock.span("synthesis"):
-            comp = compose(runtime.composer, text, route, table, summary=composer_ctx)
+            comp = compose(runtime.composer, text, route, table, summary=composer_ctx, profile=tctx.profile_note)
         if comp.completion is not None:
             clock.note("synthesisModelMs", comp.completion.wall_ms)  # the model-only part of the synthesis span (the rest is the gate and rendering)
     answer = comp.text + ("\n\n" + "\n".join(notes) if notes else "")
@@ -967,10 +1009,21 @@ def _plan_turn(
             followup = {"action_key": image_followup["action_key"], "slots": dict(image_followup["slots"]), "attachment_id": str(image_followup["attachment"]["id"])}
             continue
         d, u = cmo_delegation.plan_extras(k, slots, preview)
+        if d and k in cmo_delegation.CI_INFORMED:
+            if slots.get("ci_insight_ids"):
+                d.append(cmo_delegation.CI_USED_LINE.format(n=len(slots["ci_insight_ids"])))
+            else:
+                d.append(cmo_delegation.ci_unused_line(cmo_ci_inputs.broker(ctx.tenant_id, ctx.role, ctx.permissions, now=runtime.clock())[1]))
         if d and len(legs) == 1:  # a delegated CMO task: a purpose-written title and short lines for the card; the full details above stay complete in the plan
             compact, title = cmo_delegation.compact_lines(k, slots, preview), cmo_delegation.plan_title(k, slots)
         details.extend(d)
         units.update(u)
+    # Asking for the same competitor search again while its plan is still open re-shows that stored plan (its hash and expiry are unchanged) instead of asking a second time.
+    open_plan = approval.open_plan_for(ctx.tenant_id, inv_id, ctx.app_user_id, legs, now=runtime.clock()) if key == "ci.discover_competitors" else None  # type: ignore[arg-type]
+    if open_plan is not None:
+        return _finish(ctx, runtime, turn, clock, log, status="CLARIFIED", route=route, route_key=key, answer=(
+            "That plan is already waiting for your approval above: nothing new was created and nothing has run. Press Approve on that card, or decline it and ask again."),
+            kind="ANSWER", composition=None, anchor_status="COMPLETE", classifier_flags=flags)
     try:
         with clock.span("planning"):
             built, message_id = approval.create_plan(ctx, runtime, investigation_id=inv_id, planned_turn_id=turn.turn_id, anchor_run_id=turn.anchor_run_id,  # type: ignore[arg-type]
@@ -1196,9 +1249,56 @@ def _attachment_notes(attachments: Sequence[Mapping[str, Any]]) -> list[str]:
     return out
 
 
+def _ci_direct(
+    ctx: AuthContext, runtime: CeoRuntime, inv_id: UUID, user_msg: UUID, turn: CeoTurn, clock: StageClock, log: EventLog, attached: frozenset[str],
+    attachments: Sequence[Mapping[str, Any]], text: str, now: datetime, cat: classifier.Catalog,
+) -> TurnResult | None:
+    """The CEO's deterministic Competitor Intelligence conversations (`ci_conversation`). Returns None when the turn is not one, and the normal route then runs
+    exactly as before. Each step is a FIXED registered action run through the same choke point as every other leg (permission, attachment, entitlement, audit); the
+    reply is written by code from what those legs stored. Nothing here asks a model anything."""
+    tenant = ctx.tenant_id
+    assert tenant is not None
+    if "CI" not in attached:
+        return None
+    try:
+        ruled = intent_router.route(text, cat)
+        other_agent = ruled is not None and not str(ruled.key or "").startswith("ci.") and ruled.route in ("ACTION", "PLAYBOOK")
+        ceo_last = [m for m in repo.list_messages(tenant, inv_id) if m.get("role") == "CEO"]
+        plan = ci_conversation.plan_turn(
+            tenant, inv_id, text, attachments, recent=[str(m.get("content") or "") for m in repo.list_messages(tenant, inv_id)[-14:]], latest_attachments=repo.latest_attachments(tenant, inv_id, limit=5), finding_id=_CI_FINDING.get(),
+            other_agent_intent=other_agent, last_ceo_text=str(ceo_last[-1]["content"]) if ceo_last else "", router_matched=ruled is not None,
+        )
+    except Exception:  # noqa: BLE001 - a planning failure never costs the seller their answer: the normal route takes over
+        logger.exception("CI conversation planning failed")
+        return None
+    if plan is None:
+        return None
+    if not plan.steps:
+        return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, ci_conversation.compose(plan, []), now, marker={"ciConversation": plan.kind}, choices=plan.card)
+    first = plan.steps[0].key
+    turn.turn_id = _create_turn(
+        tenant, inv_id, user_message_id=user_msg, agent_run_id=turn.anchor_run_id, route="ACTION", route_key=first, slots={}, route_source="CLASSIFIER",
+        classifier_result={"ciConversation": plan.kind, "model": "rules", "steps": [s.key for s in plan.steps]}, status="PLAN_VALIDATED", now=now,
+    )
+    log.emit("PLAN_VALIDATED", route="ACTION", routeKey=first)
+    results: list[tuple[ci_conversation.Step, LegResult]] = []
+    try:
+        for step in plan.steps:
+            typed: dict[str, Any] = {}
+            if step.key == "ci.request_price_scenario":  # validated by the planner: a tracked competitor of this tenant and the seller's own price
+                typed = {"competitor_url_id": UUID(str(step.slots["competitor_url_id"])), "seller_price_paise": int(step.slots["seller_price_paise"])}
+            results.append((step, _run_leg(turn, runtime, ResolvedSlots(tenant_id=tenant, today=now.date(), direct=dict(step.slots), **typed), step.key, attached, clock, log)))
+    except Exception:  # noqa: BLE001
+        logger.exception("a CI step failed")
+        return _finish(ctx, runtime, turn, clock, log, status="FAILED", route="ACTION", route_key=first, answer="I could not do that just now, and nothing was changed. Please try again.",
+                       kind="ANSWER", composition=None, anchor_status="FAILED", error_reason="CI step failed")
+    return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route="ACTION", route_key=first, answer=ci_conversation.compose(plan, results), kind="ANSWER",
+                   composition=None, anchor_status="COMPLETE")
+
+
 def _answer_direct(
     ctx: AuthContext, runtime: CeoRuntime, inv_id: UUID, user_msg: UUID, turn: CeoTurn, clock: StageClock, log: EventLog, text: str, now: datetime,
-    marker: Mapping[str, Any] | None = None,
+    marker: Mapping[str, Any] | None = None, choices: Mapping[str, Any] | None = None,
 ) -> TurnResult:
     """An answer written by code from memory: no classifier, no composer, nothing run."""
     tenant = ctx.tenant_id
@@ -1208,7 +1308,8 @@ def _answer_direct(
         classifier_result={**(marker or {"directMemoryAnswer": True}), "model": "rules"}, status="PLAN_VALIDATED", now=now,
     )
     log.emit("PLAN_VALIDATED", route="ADVISORY", routeKey=None)
-    return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route="ADVISORY", route_key=None, answer=text, kind="ANSWER", composition=None, anchor_status="COMPLETE")
+    return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route="ADVISORY", route_key=None, answer=text, kind="ANSWER", composition=None, anchor_status="COMPLETE",
+                   choices=choices)
 
 
 def _answer_input(

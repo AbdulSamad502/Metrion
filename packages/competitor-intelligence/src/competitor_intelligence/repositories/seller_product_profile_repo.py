@@ -37,6 +37,25 @@ def get_profile(tenant_id: UUID, product_id: str) -> dict[str, Any] | None:
         return dict(row) if row is not None else None
 
 
+def list_profile_products(tenant_id: UUID, *, limit: int = 200) -> list[tuple[str, str | None]]:
+    """The products this tenant's seller entered in their own profile, as `(product_id, title)`; the title is the profile's own `title` attribute when the seller gave one."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT p.product_id,
+                       (SELECT a ->> 'value' FROM jsonb_array_elements(COALESCE(p.attributes, '[]'::jsonb)) a WHERE a ->> 'key' = 'title' LIMIT 1)
+                FROM seller_product_profile p
+                WHERE p.tenant_id = :tenant_id
+                ORDER BY p.created_at
+                LIMIT :limit
+                """
+            ),
+            {"tenant_id": str(tenant_id), "limit": limit},
+        ).all()
+    return [(str(r[0]), r[1]) for r in rows]
+
+
 def upsert_profile(
     tenant_id: UUID,
     product_id: str,
@@ -99,6 +118,11 @@ def profile_to_manual_overrides(row: dict[str, Any] | None) -> dict[str, Any]:
         overrides["category"] = row["category"]
     if row.get("attributes") is not None:
         overrides["attributes"] = tuple((a["key"], a["value"]) for a in row["attributes"])
+        title = next((a["value"] for a in row["attributes"] if str(a.get("key", "")).strip().casefold() == "title" and a.get("value")), None)
+        if title:  # a product the seller described themselves is named by their own title (side notes in brackets are not part of what it is)
+            import re  # noqa: PLC0415
+
+            overrides["title"] = " ".join(re.sub(r"\s*[(\[][^)\]]*[)\]]", " ", title).split()) or title
     if row.get("keywords") is not None:
         overrides["keywords"] = tuple(row["keywords"])
     if row.get("price_paise") is not None:

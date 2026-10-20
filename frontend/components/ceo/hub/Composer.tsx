@@ -14,15 +14,17 @@ const STATUS_WORDS: Record<FileStatus, string> = { uploading: "Uploading…", up
 const sizeOf = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${n >> 10} KB` : `${n >> 20} MB`); // a file size, not money: whole units by bit shift (the hub does no number formatting)
 
 export function Composer({
-  disabled, placeholder, onSend, error, fileStatus, fileInfo,
+  disabled, placeholder, onSend, error, fileStatus, fileInfo, initialText,
 }: {
+  /** A draft to start with (from a link in another page). The seller reads it, can edit it, and sends it: nothing is sent by arriving here. */
+  initialText?: string;
   disabled: boolean; placeholder: string; error?: string | null; fileStatus?: (f: File) => FileStatus | undefined;
   /** What the backend reported about a file once it was uploaded (for a spreadsheet: its sheets and size, or why it could not be read as a table). */
   fileInfo?: (f: File) => string | undefined;
   /** May return a promise; resolving to `false` means the message was NOT sent (an upload failed): the text and the files are kept so the seller can retry. */
   onSend: (text: string, files: File[]) => void | boolean | Promise<void | boolean>;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText ?? "");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -81,8 +83,8 @@ export function Composer({
       )}
       {files.some((f) => f.type.startsWith("image/")) && (
         <p className="m-0 t-meta" data-testid="image-handoff" style={{ color: "var(--text-4)" }}>
-          Chat only stores an attached image; it does not read it or start any research. If it is a screenshot of a competitor&apos;s listing, add it as evidence on the{" "}
-          <Link href="/dashboard/competitors" className="mt-focus font-semibold underline" style={{ color: "var(--text-2)" }}>Competitors page</Link>, where the price is read and you can correct it.
+          Attach a competitor&apos;s listing or reviews screenshot and say which competitor it shows, for example “this is The Better Home 1L”. The CEO reads it and asks you to confirm the price, discount, delivery and offers before anything is used. A product photo is read only after you approve. Results appear on the{" "}
+          <Link href="/dashboard/competitors" className="mt-focus font-semibold underline" style={{ color: "var(--text-2)" }}>Competitors page</Link>.
         </p>
       )}
       {error && <div role="alert" className="t-meta" style={{ color: "var(--negative)" }}>{error}</div>}

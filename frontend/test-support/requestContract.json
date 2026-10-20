@@ -1,5 +1,9 @@
 {
  "routes": {
+  "GET /api/v1/business-profile": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/ceo-hub/agents": {
    "query": [],
    "requiredQuery": []
@@ -181,6 +185,12 @@
   },
   "GET /api/v1/ci/summary": {
    "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ci/workspace": {
+   "query": [
+    "product_id"
+   ],
    "requiredQuery": []
   },
   "GET /api/v1/cmo/market-trends": {
@@ -724,6 +734,13 @@
    "query": [],
    "requiredQuery": []
   },
+  "PUT /api/v1/business-profile": {
+   "body": {
+    "$ref": "#/components/schemas/BusinessProfileIn"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "PUT /api/v1/ceo/investigations/{investigation_id}/agents/{agent_code}": {
    "body": {
     "$ref": "#/components/schemas/AttachBody"
@@ -1104,6 +1121,59 @@
    "title": "BusinessOnboardingRequest",
    "type": "object"
   },
+  "BusinessProfileIn": {
+   "additionalProperties": false,
+   "description": "All eight fields are required: there is no default anywhere, so a missing one is a validation error (never a silent blank).",
+   "properties": {
+    "business_name": {
+     "title": "Business Name",
+     "type": "string"
+    },
+    "business_stage": {
+     "title": "Business Stage",
+     "type": "string"
+    },
+    "categories": {
+     "title": "Categories",
+     "type": "string"
+    },
+    "description": {
+     "title": "Description",
+     "type": "string"
+    },
+    "marketplaces": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Marketplaces",
+     "type": "array"
+    },
+    "price_segment": {
+     "title": "Price Segment",
+     "type": "string"
+    },
+    "state": {
+     "title": "State",
+     "type": "string"
+    },
+    "target_customer": {
+     "title": "Target Customer",
+     "type": "string"
+    }
+   },
+   "required": [
+    "business_name",
+    "description",
+    "categories",
+    "marketplaces",
+    "price_segment",
+    "target_customer",
+    "business_stage",
+    "state"
+   ],
+   "title": "BusinessProfileIn",
+   "type": "object"
+  },
   "CandidateDecisionRequest": {
    "properties": {
     "decision": {
@@ -1197,6 +1267,15 @@
       }
      ],
      "title": "Category Hint"
+    },
+    "ci_insight_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "title": "Ci Insight Ids",
+     "type": "array"
     },
     "image_analysis_id": {
      "anyOf": [
@@ -1904,6 +1983,15 @@
      ],
      "title": "Category Hint"
     },
+    "ci_insight_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "title": "Ci Insight Ids",
+     "type": "array"
+    },
     "image_analysis_id": {
      "anyOf": [
       {
@@ -2234,6 +2322,15 @@
       }
      ],
      "title": "Category Hint"
+    },
+    "ci_insight_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "title": "Ci Insight Ids",
+     "type": "array"
     },
     "image_analysis_id": {
      "anyOf": [
@@ -3622,6 +3719,15 @@
      ],
      "title": "Category Hint"
     },
+    "ci_insight_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "title": "Ci Insight Ids",
+     "type": "array"
+    },
     "image_analysis_id": {
      "anyOf": [
       {
@@ -3801,6 +3907,18 @@
      "maxItems": 20,
      "title": "Attachment Ids",
      "type": "array"
+    },
+    "ciFindingId": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Cifindingid"
     },
     "clarification": {
      "anyOf": [

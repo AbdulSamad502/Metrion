@@ -64,29 +64,28 @@ def walk(key, answers, prefill):
     return slots, out
 
 
-def test_titles_ask_the_five_details_one_at_a_time_each_skippable():
+def test_titles_ask_the_three_details_one_at_a_time_each_skippable():
     slots, out = walk("cmo.generate_title_sets", ["skip"] * 8, {"product": "steel water bottle", "marketplace": "Amazon"})
-    assert slots[:6] == ["category_hint", "fact_brand", "fact_size", "fact_key_features", "fact_main_use", "fact_search_keywords"]
+    assert slots[:4] == ["category_hint", "fact_brand", "fact_size", "fact_key_features"]  # fewer questions: the use and search-word details are not asked
     assert isinstance(out, ins.Done) and "brand" not in out.inputs and "attributes" not in out.inputs  # skipped = absent, never a default
 
 
 def test_every_detail_question_offers_skip():
     out = ask_for("cmo.generate_title_sets", product="steel water bottle", marketplace="Amazon")
     out = ins.advance(out.card, option_key=None, text="skip", ctx=CTX)  # category
-    for slot in ("fact_brand", "fact_size", "fact_key_features", "fact_main_use", "fact_search_keywords"):
+    for slot in ("fact_brand", "fact_size", "fact_key_features"):
         assert out.card["slot"] == slot
-        assert any(o["label"] == "Skip" for o in out.card["options"])
-        out = ins.advance(out.card, option_key=None, text="skip", ctx=CTX) if slot != "fact_search_keywords" else out
+        skip = next(o for o in out.card["options"] if o["label"] == "Skip")
+        assert skip["kind"] != "RECOMMENDED"  # a skip is never the recommended choice
+        out = ins.advance(out.card, option_key=None, text="skip", ctx=CTX) if slot != "fact_key_features" else out
 
 
 def test_answered_details_become_the_sellers_own_statements():
-    _, out = walk("cmo.generate_title_sets", ["skip", "Acme", "1 litre", "double wall, wide mouth", "gym", "steel bottle, flask"], {"product": "steel water bottle", "marketplace": "Amazon"})
+    _, out = walk("cmo.generate_title_sets", ["skip", "Acme", "1 litre", "double wall, wide mouth"], {"product": "steel water bottle", "marketplace": "Amazon"})
     assert isinstance(out, ins.Done)
     assert out.inputs["brand"] == "Acme"
     assert {"name": "Size", "value": "1 litre"} in out.inputs["attributes"]
     assert {"name": "Key Features", "value": "double wall, wide mouth"} in out.inputs["attributes"]
-    assert {"name": "Main Use", "value": "gym"} in out.inputs["attributes"]
-    assert {"name": "Search Keywords", "value": "steel bottle, flask"} in out.inputs["attributes"]
 
 
 def test_details_count_inside_the_question_limit_and_never_stop_a_task_at_it(monkeypatch):

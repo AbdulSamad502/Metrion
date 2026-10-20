@@ -34,6 +34,12 @@ def list_active_competitors(tenant_id: UUID, *, limit: int) -> list[dict[str, An
     return competitor_url_repo.list_active(tenant_id, limit=limit)
 
 
+def list_seller_products(tenant_id: UUID, *, limit: int = 200) -> list[tuple[str, str | None]]:
+    from competitor_intelligence.seller_product.derive import list_products
+
+    return list_products(tenant_id, limit=limit)
+
+
 def competitor_handoff(tenant_id: UUID, competitor_url_id: UUID, *, now: Any) -> CiHandoffSnapshot | CiUnavailable:
     return build_ci_handoff_snapshot(tenant_id, competitor_url_id, now=now)
 
@@ -186,3 +192,66 @@ def pi_product_suppliers(tenant_id: UUID, product_name: str) -> list[dict[str, A
     """Supplier leads Product Intelligence found for one of the five products of the newest saved research (matched by name), so the CEO can OFFER them when it asks for a quote.
     Tenant-scoped, read-only; an unknown product gives []."""
     return pi_actions.suppliers_for_product(tenant_id, product_name)
+
+
+def business_marketplaces(tenant_id: UUID) -> list[str]:
+    """The marketplaces the seller said they sell on in their business profile (upper-case codes, in a fixed order), or [] when there is no profile."""
+    from backend.repositories import business_profile_repo  # noqa: PLC0415
+
+    row = business_profile_repo.get(tenant_id)
+    have = {str(m).upper() for m in (row or {}).get("marketplaces") or []}
+    return [m for m in ("AMAZON", "FLIPKART", "MEESHO") if m in have]
+
+
+_PROFILE_FACTS = {"brand": "fact_brand", "size": "fact_size", "capacity": "fact_size", "volume": "fact_size"}
+
+
+def product_facts(tenant_id: UUID, product_text: str | None) -> dict[str, str]:
+    """What the seller already told Metrion about one of their products, as answers to the writing questions, so they are not asked again: the title they use (from their product profile)
+    and, when their profile lists them, the brand and size. The seller's own statements only; nothing is read from a competitor and nothing is guessed."""
+    from competitor_intelligence.repositories import seller_product_profile_repo  # noqa: PLC0415
+    from competitor_intelligence.seller_product.derive import list_products  # noqa: PLC0415
+
+    wanted = " ".join((product_text or "").casefold().split())
+    if not wanted:
+        return {}
+    pid = next((p for p, t in list_products(tenant_id) if wanted in {" ".join(str(x or "").casefold().split()) for x in (p, t)}), None)
+    row = seller_product_profile_repo.get_profile(tenant_id, pid) if pid else None
+    if not row:
+        return {}
+    out: dict[str, str] = {}
+    for a in row.get("attributes") or []:
+        key, value = str((a or {}).get("key") or "").strip().casefold(), str((a or {}).get("value") or "").strip()
+        if key == "title" and value:
+            out["seller_title"] = value[:500]
+        elif key in _PROFILE_FACTS and value and _PROFILE_FACTS[key] not in out:
+            out[_PROFILE_FACTS[key]] = value[:80]
+    return out
+
+
+def business_categories(tenant_id: UUID) -> list[str]:
+    """The categories the seller gave in their business profile, as short names (empty when there is no profile)."""
+    from backend.services import ci_categories  # noqa: PLC0415
+
+    return ci_categories.business_categories(tenant_id)
+
+
+def resolve_categories(raw: str | None, categories: list[str]) -> list[str]:
+    from backend.services import ci_categories  # noqa: PLC0415
+
+    return ci_categories.resolve_categories(raw, categories)
+
+
+def seller_profile_price(tenant_id: UUID, sku: str) -> int | None:
+    """The selling price the seller entered in their own product profile (paise), or None."""
+    from competitor_intelligence.repositories import seller_product_profile_repo  # noqa: PLC0415
+
+    row = seller_product_profile_repo.get_profile(tenant_id, sku)
+    return int(row["price_paise"]) if row and row.get("price_paise") else None
+
+
+def competitor_label(row: Any) -> str:
+    """The seller's own name for a tracked competitor, else the name derived from its link (so an unnamed one can still be referred to)."""
+    from competitor_intelligence.watchlist.labels import label_of  # noqa: PLC0415
+
+    return label_of(row)

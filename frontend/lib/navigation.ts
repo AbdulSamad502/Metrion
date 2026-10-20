@@ -23,7 +23,7 @@ export const PAGE_COPY = {
   "ceo-hub": { title: "CEO Hub", subtitle: "Ask in plain words. Metrion answers from your data, or hands the question to the right specialist." },
   notifications: { title: "Action Center", subtitle: "Competitor price alerts and information Metrion needs from you, each with its next step" },
   products: { title: "Products", subtitle: "Find product ideas, check whether they are worth stocking, and shortlist suppliers" },
-  competitors: { title: "Competitors", subtitle: "Track competitor prices, add your own evidence, and see what changed" },
+  competitors: { title: "Competitors", subtitle: "What the CEO has found about your competitors: prices, changes and what customers say. Ask the CEO to do anything new" },
   cfo: { title: "Profit & Finance", subtitle: "Profit, cash, GST and where money leaks, calculated from the reports you upload" },
   cmo: { title: "Listings & Marketing", subtitle: "Titles, listing copy, catalog answers and market research, for you to copy and never published for you" },
   agents: { title: "Agents", subtitle: "The specialists behind Metrion: what each one does and whether it is available to you" },

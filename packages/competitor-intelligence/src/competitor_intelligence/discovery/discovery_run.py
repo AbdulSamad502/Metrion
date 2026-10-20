@@ -47,14 +47,17 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from competitor_intelligence.capture.allowlist import marketplace_for_host
+from competitor_intelligence.discovery.lead_quality import brand_of, is_junk, rank_key
 from competitor_intelligence.discovery.budget import DiscoveryBudget
 from competitor_intelligence.discovery.identity_resolution import (
     GatingOutcome,
     IdentityMatch,
+    IdentityResolution,
     enters_relevance_scoring,
     gate,
     resolve_identity,
 )
+from competitor_intelligence.discovery.relationship import Relationship, classify_relationship, product_tier_from_tokens
 from competitor_intelligence.discovery.query_runner import DiscoveryQueryRunResult, run_discovery_queries
 from competitor_intelligence.discovery.relevance_scoring import (
     AxisResult,
@@ -123,7 +126,9 @@ def _seller_keywords(seller_product: SellerProduct) -> frozenset[str] | None:
     return frozenset(kw.strip().lower() for kw in seller_product.keywords if kw.strip())
 
 
-def build_relevance_inputs(candidate: SearchResult, seller_product: SellerProduct) -> RelevanceScoreInputs:
+def build_relevance_inputs(
+    candidate: SearchResult, seller_product: SellerProduct, resolution: IdentityResolution | None = None
+) -> RelevanceScoreInputs:
     """Assembles the eight axes for one candidate against the seller's product, per the
     module-level docstring's honesty rules. `features` has no structured candidate-side
     source at discovery time (Sec 6.10.2) and is therefore always UNKNOWN today, the same
@@ -133,7 +138,10 @@ def build_relevance_inputs(candidate: SearchResult, seller_product: SellerProduc
 
     return RelevanceScoreInputs(
         category=score_category(seller_product.category, None),
-        product=score_product_similarity(None),
+        product=score_product_similarity(
+            product_tier_from_tokens(resolution.basis) if resolution is not None else None,
+            "title-token overlap with your product (provisional, from a search lead)" if resolution is not None else None,
+        ),
         price_proximity=score_price_proximity(seller_product.price_paise, None),
         features=AxisResult(0, AxisState.UNKNOWN, "structured feature data not available from a search result"),
         keywords=score_overlap(seller_keywords, candidate_keywords or None, axis_label="keyword"),
@@ -146,6 +154,9 @@ def build_relevance_inputs(candidate: SearchResult, seller_product: SellerProduc
 # --------------------------------------------------------------------------------------
 # Run orchestration
 # --------------------------------------------------------------------------------------
+
+
+MAX_PER_BRAND = 2  # leads of one brand in the shown list
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,9 +242,14 @@ def start_discovery_run(
 
     ci_discovery_run_repo.update_status(tenant_id, discovery_run_id, status="DISCOVERING")
 
+    # -- a candidate the seller already rejected for this product is not re-surfaced (§6.24) --
+    rejected = ci_candidate_repo.rejected_urls(tenant_id, seller_product.product_id)
+    # plainly-not-a-competitor leads (books, keyword-stuffed titles, titles too short to name a product) are never surfaced (owner decision 2026-10-20)
+    raw_results = tuple(r for r in query_result.raw_results if r.url not in rejected and not is_junk(r.title))
+
     # -- create RAW candidates for every deduplicated raw result --------------------------
     raw_candidate_ids: list[UUID] = []
-    for result in query_result.raw_results:
+    for result in raw_results:
         candidate_id = ci_candidate_repo.create_candidate(
             tenant_id,
             discovery_run_id=discovery_run_id,
@@ -248,27 +264,41 @@ def start_discovery_run(
     analyzed_ids = raw_candidate_ids[: budget.max_analyzed_candidates]
     uncertain_ids: list[UUID] = []
     scored: list[tuple[UUID, RelevanceBreakdown]] = []
+    titles: dict[UUID, str | None] = {}
 
-    for candidate_id, result in zip(analyzed_ids, query_result.raw_results[: budget.max_analyzed_candidates]):
+    for candidate_id, result in zip(analyzed_ids, raw_results[: budget.max_analyzed_candidates]):
+        titles[candidate_id] = result.title
         resolution = resolve_identity(result, seller_product)
         ci_candidate_repo.set_identity_resolution(tenant_id, candidate_id, resolution, tier="ANALYZED")
 
         outcome = gate(resolution.identity_match)
         if outcome is GatingOutcome.BLOCKED_FOR_REVIEW:
             uncertain_ids.append(candidate_id)
-            continue
-        if outcome is GatingOutcome.REJECTED:
+            # Identity cannot be confirmed (a product with no recorded brand, or a title with none): the lead is still scored by what is visible so the seller can see which are worth
+            # a look. Its identity stays UNCERTAIN, it is never presented as the same product, and it is never a verified observation (owner decision 2026-10-20).
+            breakdown, _relationship = _score_and_classify(tenant_id, candidate_id, result, seller_product, resolution)
+            product_axis = breakdown.axis_results["product"]
+            if product_axis.state is AxisState.KNOWN and product_axis.score >= 1:  # its title matches the seller's product at least in type: eligible to be surfaced, ranked by score
+                scored.append((candidate_id, breakdown))
             continue
 
         assert enters_relevance_scoring(resolution.identity_match)
-        inputs = build_relevance_inputs(result, seller_product)
-        breakdown = score_relevance(inputs, is_provisional=True)
-        ci_candidate_relevance_repo.insert_relevance(tenant_id, candidate_id=candidate_id, breakdown=breakdown)
-        scored.append((candidate_id, breakdown))
+        breakdown, relationship = _score_and_classify(tenant_id, candidate_id, result, seller_product, resolution)
+        if relationship.recommendable:  # C43: UNKNOWN / UNRELATED never fill the Recommended tier
+            scored.append((candidate_id, breakdown))
 
     # -- Recommended tier: top max_recommended_candidates by score (Sec 6.15) -------------
-    scored.sort(key=lambda pair: pair[1].total_score, reverse=True)
-    recommended_ids = tuple(candidate_id for candidate_id, _ in scored[: budget.max_recommended_candidates])
+    # recognisable brands first, then any brand, then how well the title matches; at most two leads per brand so the list is a spread of businesses, not one seller's variants
+    scored.sort(key=lambda pair: rank_key(titles.get(pair[0]), pair[1].total_score), reverse=True)
+    per_brand: dict[str, int] = {}
+    picked: list[UUID] = []
+    for candidate_id, _ in scored:
+        brand = (brand_of(titles.get(candidate_id)) or "").casefold()
+        if brand and per_brand.get(brand, 0) >= MAX_PER_BRAND:
+            continue
+        per_brand[brand] = per_brand.get(brand, 0) + 1
+        picked.append(candidate_id)
+    recommended_ids = tuple(picked[: budget.max_recommended_candidates])
     for candidate_id in recommended_ids:
         ci_candidate_repo.set_tier(tenant_id, candidate_id, "RECOMMENDED")
 
@@ -429,18 +459,17 @@ def accept_candidate(tenant_id: UUID, candidate_id: UUID, *, decided_by: UUID) -
             f"candidate {candidate_id}'s URL is not on the trusted-domain allowlist (C4/D7)"
         )
 
-    ci_candidate_repo.set_seller_decision(tenant_id, candidate_id, decision="APPROVED", decided_by=decided_by)
-
     run = ci_discovery_run_repo.get_run(tenant_id, UUID(str(candidate["discovery_run_id"])))
     linked_sku = run["seller_product_ref"] if run is not None else None
 
-    competitor_url_id = competitor_url_repo.create_url(
+    competitor_url_id = competitor_url_repo.create_url(  # raises WatchlistFull when every slot is taken: the lead then stays undecided
         tenant_id,
         marketplace=Marketplace(candidate["marketplace"]),
         url=candidate["candidate_url"],
         added_by=decided_by,
         linked_sku=linked_sku,
     )
+    ci_candidate_repo.set_seller_decision(tenant_id, candidate_id, decision="APPROVED", decided_by=decided_by)
     ci_candidate_repo.set_competitor_url_id(tenant_id, candidate_id, competitor_url_id)
 
     run_outcome = advance_after_review(tenant_id, UUID(str(candidate["discovery_run_id"])))
@@ -505,10 +534,35 @@ def promote_to_analysis(
             advance_after_review(tenant_id, UUID(str(candidate["discovery_run_id"])))
         return None
 
-    inputs = build_relevance_inputs(candidate_result, seller_product)
+    breakdown, _relationship = _score_and_classify(tenant_id, candidate_id, candidate_result, seller_product, resolution)
+    return breakdown
+
+
+def _score_and_classify(
+    tenant_id: UUID,
+    candidate_id: UUID,
+    result: SearchResult,
+    seller_product: SellerProduct,
+    resolution: IdentityResolution,
+) -> tuple[RelevanceBreakdown, Relationship]:
+    """Relevance (§6.14) then relationship (§6.27.1, C43) for a candidate that has cleared the
+    identity gate; both are persisted. Relationship is derived from the scored axes and the
+    identity result — it never feeds back into the score."""
+    inputs = build_relevance_inputs(result, seller_product, resolution)
     breakdown = score_relevance(inputs, is_provisional=True)
     ci_candidate_relevance_repo.insert_relevance(tenant_id, candidate_id=candidate_id, breakdown=breakdown)
-    return breakdown
+    axes = breakdown.axis_results
+    relationship = classify_relationship(
+        resolution.identity_match, category=axes["category"], product=axes["product"], use_case=axes["use_case"]
+    )
+    ci_candidate_repo.set_relationship(
+        tenant_id,
+        candidate_id,
+        relationship_class=relationship.relationship_class.value,
+        basis=relationship.basis,
+        is_provisional=relationship.is_provisional,
+    )
+    return breakdown, relationship
 
 
 def _outcome_from_row(run: dict[str, object]) -> DiscoveryRunOutcome:

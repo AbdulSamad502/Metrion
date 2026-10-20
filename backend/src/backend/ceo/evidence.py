@@ -56,6 +56,10 @@ def _label_for_row(code: str, row: Mapping[str, Any]) -> str:
     basis = str(row.get("calculation_basis") or "")
     if code == "MARGIN_AT_PRICE" and (m := _CANDIDATE_PRICE_RE.search(basis)):
         return f"Margin if you sell at {format_paise(int(m.group(1)))}"
+    if code == "PRICE_POSITIONING" and (m := re.search(r"vs (\w+) \(reference_price_paise=\d+, gap_pct=(-?[\d.]+)%(?:, gap_pct_of_seller_price=(-?[\d.]+)%)?", basis)):
+        word = {"AVERAGE": "average", "MIN": "lowest", "MAX": "highest"}.get(m.group(1), m.group(1).lower())
+        mine = f"{m.group(3)}% of your price, " if m.group(3) else ""
+        return f"Your price compared with the competitor's {word} price ({mine}{m.group(2)}% of the competitor's price; a plus means you are higher)"
     if code == "LANDED_COST_PER_UNIT" and (m := _SUPPLIER_RE.search(basis)):
         return f"{base} ({m.group(1) or m.group(2)})"
     return base
@@ -138,6 +142,11 @@ def _cmo_rule_note(a: Mapping[str, Any]) -> str | None:
 
 
 LEG_LABELS: Mapping[str, str] = {
+    "ci.discover_competitors": "The competitor search",
+    "ci.monitor_competitors": "The competitor check",
+    "ci.review_findings": "The review summary",
+    "ci.request_price_scenario": "The price comparison",
+    "ci.competitor_remove": "Stopping the tracking",
     "cmo.generate_title_sets": "The title options",
     "cmo.generate_hashtags": "The hashtags",
     "cmo.generate_description": "The description",
@@ -156,6 +165,17 @@ LEG_LABELS: Mapping[str, str] = {
     "cfo.gst_lookup": "The GST rate lookup",
     "service.gst_lookup": "The GST rate lookup",
     "ci.request_price_scenario": "The competitor price comparison",
+    "ci.evidence_intake": "The reading of your competitor screenshot",
+    "ci.confirm_field": "The confirmation of the competitor details",
+    "ci.competitor_add": "The competitor you asked to track",
+    "ci.competitor_remove": "The competitor you asked to stop tracking",
+    "ci.competitor_approve": "The competitor you approved",
+    "ci.competitor_reject": "The competitor you rejected",
+    "ci.monitor_competitors": "The check of your tracked competitors",
+    "ci.review_findings": "What competitor reviews say",
+    "ci.explain_finding": "The finding you asked about",
+    "ci.alert_settings_set": "Your competitor alert settings",
+    "ci.review_intake": "The reading of your competitor reviews screenshot",
     "cfo.pricing": "The margin at each candidate price",
     "cfo.landed_cost": "The landed cost",
     "cfo.supplier_ranking": "The supplier ranking",
@@ -218,7 +238,10 @@ class EvidenceCollector:
     offers: list[tuple[str, str]] = field(default_factory=list)
     conflicts: list[Conflict] = field(default_factory=list)
     artefacts: list[tuple[str, tuple[str, ...], str | None]] = field(default_factory=list)
+    ci_legs: bool = False  # a Competitor Intelligence result is in this evidence: the composition gate then applies the CI narration rules
+    finance_legs: bool = False  # a finance result is too, so a price / margin implication may be stated from it
     _seen: set[UUID] = field(default_factory=set)
+    _pp_values: set = field(default_factory=set)  # price-comparison gaps already shown (one competitor gives the same gap against its average, lowest and highest)
 
     # ---- sources
     def add_gap(self, message: str) -> None:
@@ -259,10 +282,16 @@ class EvidenceCollector:
                 self._offer("cfo.preview", "See the free CFO preview")
             return
         if leg.status is LegStatus.PARTIAL:
-            if leg.action_key == "cfo.batch_size":  # the usual cause, in plain words (live run 2026-10-14): a product never sold needs the supplier's minimum order or delivery time
+            if leg.action_key == "ci.discover_competitors":
+                pass  # the search finished; its own result (below) says what it found, so no generic "partial" notice that names an internal action
+            elif leg.action_key == "cfo.batch_size":  # the usual cause, in plain words (live run 2026-10-14): a product never sold needs the supplier's minimum order or delivery time
                 self.add_gap(BATCH_PARTIAL_TEXT)
             else:
                 self.add_gap(f"{label} returned a partial result.")
+        if leg.action_key.startswith("ci."):
+            self.ci_legs = True
+        elif leg.action_key.startswith("cfo."):
+            self.finance_legs = True
         snapshot = (len(self.facts), len(self.gaps), len(self.artefacts), len(self.attach), len(self.offers))
         try:
             self._leg_facts(leg)
@@ -312,6 +341,12 @@ class EvidenceCollector:
                 self.add_gap(f"A figure from {source_label.lower()} was left out: its source record could not be verified.")
             return
         built = figure_from_metric_row(row)
+        if str(row.get("metric_code")) == "PRICE_POSITIONING" and not isinstance(built, Gap):
+            key = (row.get("value_paise"), "PRICE_POSITIONING")
+            if key in self._pp_values:  # one competitor gives the same gap as its average, lowest and highest: said once
+                self._seen.add(ref.id)
+                return
+            self._pp_values.add(key)
         if isinstance(built, Gap):
             self.add_gap(built.message)
             self._seen.add(ref.id)
@@ -356,6 +391,14 @@ class EvidenceCollector:
         elif leg.action_key == "cfo.batch_size":
             if leg.status in (LegStatus.COMPLETE, LegStatus.PARTIAL) and not payload.get("dataRequestId"):
                 self.add_fact("About \"Most units your budget allows\"", "this is the largest quantity your budget and the supplier's minimum order allow. It is a ceiling, not a recommendation to buy that many and not a sales forecast.", "SOURCE_DERIVED")
+        elif leg.action_key == "ci.monitor_competitors":
+            self._ci_monitor(payload)
+        elif leg.action_key == "ci.review_findings":
+            self._ci_reviews(payload)
+        elif leg.action_key == "ci.discover_competitors":
+            self._ci_discovery(payload)
+        elif leg.action_key == "ci.competitor_remove":
+            self.add_fact("Competitor removed", "it is no longer tracked; its history is kept" if payload.get("status") == "OK" else "it could not be removed", "SOURCE_DERIVED")
         elif leg.action_key == "pi.report":
             self._pi_candidates(payload)
         elif leg.action_key == "cmo.market_trends_preview":
@@ -371,6 +414,59 @@ class EvidenceCollector:
                 self.add_fact(f"Briefing signal: {str(signal.get('category', 'signal')).replace('_', ' ').lower()}",
                               f"{str(signal.get('severityLabel', 'unrated')).lower()} severity; suggested action type "
                               f"{str(signal.get('recommendedActionType', 'none')).replace('_', ' ').lower()}")
+
+    def _ci_monitor(self, payload: Mapping[str, Any]) -> None:
+        """A re-check of SAVED competitor evidence (CI spec C40): freshness and verified changes in words. No price is stated here (a price is a figure and reaches the seller only
+        through the dashboard or a finance result); no digit appears, so the composer has nothing to restate; a competitor without current evidence is a named gap, never a guess."""
+        products = payload.get("products") or []
+        if not any(p.get("competitors") for p in products):
+            self.add_gap("No competitors are tracked yet, so there is nothing to re-check.")
+            return
+        words = {"FRESH": "its newest screenshot is recent", "STALE": "its newest screenshot is getting old"}
+        for p in products:
+            for c in (p.get("competitors") or [])[:8]:
+                label = " ".join(str(c.get("label") or "A competitor").split())[:80]
+                if c.get("freshness") in words:
+                    change = ""
+                    if c.get("verifiedDeltaPct") and c.get("deltaDirection"):
+                        change = "; a verified price " + ("drop" if c["deltaDirection"] == "DECREASE" else "rise") + " was recorded between its last two screenshots"
+                    self.add_fact(label, words[str(c["freshness"])] + change, "SOURCE_DERIVED")
+                if c.get("requestedAction"):
+                    self.add_gap(f"{label}: there is no current evidence, so I cannot say what it charges now. The seller can {c['requestedAction']}.")
+        self.add_fact("How this was checked", "from the screenshots the seller already sent; nothing was looked up on any marketplace and nothing is watched between screenshots", "SOURCE_DERIVED")
+
+    def _ci_reviews(self, payload: Mapping[str, Any]) -> None:
+        rows = payload.get("findings") or []
+        if not rows:
+            self.add_gap("There is no saved competitor review evidence yet. The seller can send a screenshot of a competitor's reviews.")
+            return
+        for r in rows[:6]:
+            label = " ".join(str(r.get("label") or "A competitor").split())[:80]
+            themes = r.get("complaintThemes")
+            names = [t["theme"] if isinstance(t, dict) else str(t) for t in themes] if isinstance(themes, list) else list((themes or {}).keys())
+            n = r.get("reviewsConsidered")
+            if isinstance(n, int) and r.get("reviewInsightId"):  # the number of reviews read is a stored figure with its source, never a number the model types
+                when = datetime.fromisoformat(str(r["derivedAt"])) if r.get("derivedAt") else None
+                self._add_figure(Figure(f"Reviews read for {label}", str(n), Register.DERIVED, Ref(RefKind.AGENT_REPORT_FIELD, UUID(str(r["reviewInsightId"])), source="competitor_review_insight", as_of=when), as_of=when))
+            praise = r.get("positiveThemes")
+            pos = [t["theme"] if isinstance(t, dict) else str(t) for t in praise] if isinstance(praise, list) else list((praise or {}).keys())
+            text = ("customers mention: " + ", ".join(str(x)[:60] for x in names[:4])) if names else "no recurring complaint was found in the reviews that were read"
+            if pos:
+                text += "; praised: " + ", ".join(str(x)[:60] for x in pos[:3])
+            self.add_fact(label, text, "SOURCE_DERIVED")
+        missing = payload.get("competitorsWithoutReviewEvidence")
+        if isinstance(missing, int) and missing > 0:
+            self.add_gap(f"{missing} tracked competitor{'s have' if missing != 1 else ' has'} no review screenshot yet, so nothing can be said about {'them' if missing != 1 else 'it'}. The seller can send one.")
+        self.add_fact("About these themes", "they come from a small sample of reviews in screenshots the seller sent, not from all of a competitor's reviews", "SOURCE_DERIVED")
+
+    def _ci_discovery(self, payload: Mapping[str, Any]) -> None:
+        status = str(payload.get("status") or "")
+        if status in ("FAILED",):
+            self.add_gap("The competitor search did not complete, so finding nothing does not mean there are no competitors.")
+        elif status in ("PARTIAL",):
+            self.add_gap("The competitor search only partly completed, so more competitors may exist.")
+        else:
+            self.add_fact("Competitor search", "finished; what it found are search leads, not verified prices. The ones that look like the seller's product are on the Competitors page under \"Found, awaiting your decision\", and the seller can say \"show me what you found\" to see them and decide", "SOURCE_DERIVED")
 
     def _pi_candidates(self, payload: Mapping[str, Any]) -> None:
         """Product ideas Product Intelligence found on the public web: their names, quoted and labelled. They are not figures, carry no sales data and are never
@@ -523,4 +619,6 @@ class EvidenceCollector:
             untrusted=tuple((f"U{i}", s, t) for i, (s, t) in enumerate(untrusted, start=1)),
             conflicts=tuple((f"C{i}", c.what, conflict_rules.render(c)) for i, c in enumerate(verified, start=1)),
             artefacts=tuple(self.artefacts),
+            ci_narration=self.ci_legs,
+            finance_present=self.finance_legs,
         )

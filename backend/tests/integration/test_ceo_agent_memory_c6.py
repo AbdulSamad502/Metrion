@@ -112,12 +112,12 @@ def test_skipping_the_optional_marketplace_remembers_nothing(two_tenants, app_us
 def _finish_price_impact(ctx, rt, inv, competitor_label, basis_label):
     orchestrator.run_turn(ctx, rt, inv, "Price impact", ui_action=UI("PLAYBOOK", "COMPETITOR_PRICE_IMPACT"))
     res = say(ctx, rt, inv, competitor_label)
-    res = say(ctx, rt, inv, "SKU-1")
-    res = say(ctx, rt, inv, "", card=res.message_id, option=res.choices["options"][0]["key"])
+    res = say(ctx, rt, inv, "SKU-1")  # (the only fee row is filled in from saved data)
     res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, basis_label))
     res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, "I do not know"))
     for typed in ("₹499", "449, 479"):
         res = say(ctx, rt, inv, typed)
+    res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, "I will enter them"))
     for _ in range(4):
         res = say(ctx, rt, inv, "", card=res.message_id, option=option_key(res, "None (0), I confirm"))
     return res
@@ -143,12 +143,10 @@ def test_ci_and_cfo_remember_the_confirmed_competitor_and_basis_and_offer_them_f
     again = orchestrator.run_turn(ctx, rt, start(ctx, rt), "Price impact", ui_action=UI("PLAYBOOK", "COMPETITOR_PRICE_IMPACT"))
     opts = [o for o in again.choices["options"] if o["kind"] in ("RECOMMENDED", "ALTERNATIVE")]
     assert opts[0]["label"] == "Acme Steel" and opts[0]["reason"] == LAST and len(opts) == 3
-    assert again.choices["pending"]["collected"] == {}
+    assert list(again.choices["pending"]["collected"]) == ["fee"]  # only the single fee row from saved data; the competitor and basis are offered, not filled in
     card = input_session.advance(again.choices, option_key=opts[0]["key"], text="", ctx=ictx(a))
     card = input_session.advance(card.card, option_key=None, text="SKU-1", ctx=ictx(a))
-    assert card.card["slot"] == "fee"
-    card = input_session.advance(card.card, option_key="opt-0", text="", ctx=ictx(a))
-    assert card.card["slot"] == "basis" and "basis" not in card.card["pending"]["collected"]
+    assert card.card["slot"] == "basis"  # the only fee row was filled in from saved data and "basis" not in card.card["pending"]["collected"]
     assert (first_option(card.card)["label"], first_option(card.card)["value"], first_option(card.card)["reason"]) == ("Prices exclude GST", "exclusive", LAST)
     assert [o["label"] for o in card.card["options"][:2]] == ["Prices exclude GST", "Prices include GST"]
 
@@ -219,6 +217,7 @@ def test_forgetting_removes_the_offer(two_tenants, app_user, seed):  # noqa: F81
 def test_a_bad_or_unknown_remembered_value_is_not_offered(two_tenants, app_user, seed):  # noqa: F811
     a, _ = two_tenants
     seed.url(a, "Acme Steel")
+    seed.url(a, "Other Rival")  # with a single tracked competitor it would be filled in; with two the seller is asked
     # written around the validation on purpose (as a bug or an old row might): reading still refuses it
     keep(a, app_user, "CMO", "last_marketplaces", "AMAZON, BITCOIN")
     keep(a, app_user, "CFO", "last_basis", "MAYBE")
@@ -227,6 +226,6 @@ def test_a_bad_or_unknown_remembered_value_is_not_offered(two_tenants, app_user,
     s = input_session.start("cmo.generate_description", ictx(a), {"product": "steel bottle"})
     assert [o["label"] for o in s.card["options"][:3]] == ["Amazon", "Flipkart", "Meesho"] and all(o["reason"] != LAST for o in s.card["options"])
     p = input_session.start("COMPETITOR_PRICE_IMPACT", ictx(a), {})
-    assert p.card["slot"] == "competitor" and [o["label"] for o in p.card["options"] if o["kind"] != "OTHER" and o["kind"] != "CANCEL"] == ["Acme Steel"]
+    assert p.card["slot"] == "competitor" and [o["label"] for o in p.card["options"] if o["kind"] not in ("OTHER", "CANCEL", "BACK")] == ["Acme Steel", "Other Rival"] or [o["label"] for o in p.card["options"] if o["kind"] not in ("OTHER", "CANCEL", "BACK")] == ["Other Rival", "Acme Steel"]
     assert all(o["reason"] != LAST for o in p.card["options"])  # untracked label: not offered
 

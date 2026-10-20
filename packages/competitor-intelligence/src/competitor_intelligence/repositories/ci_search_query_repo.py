@@ -95,3 +95,23 @@ def find_unexpired_query_id(
             },
         ).first()
         return UUID(str(row[0])) if row is not None else None
+
+
+def count_sent_since(tenant_id: UUID, *, provider_name: str, since: datetime) -> int:
+    """How many queries this tenant actually sent to `provider_name` since `since` — the
+    per-tenant cost-cap basis (§6.28.1, C34). Counts `ci_search_query` rows, which are written
+    only for a query that really went to the provider (a cache hit writes none)."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM ci_search_query
+                WHERE tenant_id = :tenant_id
+                  AND provider_name = :provider_name
+                  AND sent_at >= :since
+                """
+            ),
+            {"tenant_id": str(tenant_id), "provider_name": provider_name, "since": since},
+        ).first()
+        return int(row[0]) if row is not None else 0
