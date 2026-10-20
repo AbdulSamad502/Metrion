@@ -61,12 +61,40 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip().casefold()
 
 
+_NAME_STOP = frozenset({"the", "a", "an", "my", "for", "of", "and", "competitor", "competitors", "listing", "product", "this", "that", "tracked", "verified", "price", "amazon", "flipkart", "meesho"})
+
+
+def _name_tokens(s: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", s.casefold())
+
+
+def label_matches(text: str, label: str) -> bool:
+    """Does what the seller wrote mean this competitor? Its whole name, its name without a variant note, a SHORT phrase made only of words from the name ("CASPIAN Astra 1L"),
+    or a long message that contains the name's first two distinctive words. Never a single word, so two unrelated competitors are not mistaken for each other."""
+    t = _norm(text)
+    if any(k in t for k in _label_keys(label)):
+        return True
+    label_tokens = _name_tokens(label)
+    words = [w for w in _name_tokens(t) if w not in _NAME_STOP]
+    if len(words) >= 2 and set(words) <= set(label_tokens):
+        return True
+    lead = [w for w in label_tokens if w not in _NAME_STOP][:2]
+    return len(lead) == 2 and len(" ".join(lead)) >= 8 and " ".join(lead) in t
+
+
+def _label_keys(label: str) -> tuple[str, ...]:
+    """What the seller may say to mean this competitor: its whole name, or the name without a trailing variant note ("..., Royal Blue", "(Pack of 2)", "- Black")."""
+    full = _norm(label)
+    head = _norm(re.split(r"\s*(?:,|\(|\[|\s-\s|\s–\s)", label, maxsplit=1)[0])
+    return (full,) if head == full or len(head) < 8 else (full, head)
+
+
 def resolve_competitor(tenant_id: UUID, raw: str | None) -> CompetitorMatch | CompetitorUnresolved:
     """Matches the seller's words against THIS tenant's active tracked competitors by their own label: an exact (case-insensitive) label wins; otherwise a
     single label that contains the words (or that the words contain). Several candidates is AMBIGUOUS, never a pick."""
     text = _norm(raw or "")
     rows = ceo_reads.list_active_competitors(tenant_id, limit=_MAX_TRACKED)
-    labelled = [(UUID(str(r["id"])), str(r["label"])) for r in rows if r.get("label")]
+    labelled = [(UUID(str(r["id"])), ceo_reads.competitor_label(r)) for r in rows]  # an unnamed competitor has a derived name, so it can still be referred to
     if not rows:
         return CompetitorUnresolved("NONE_TRACKED")
     if not text or not labelled:
@@ -74,7 +102,7 @@ def resolve_competitor(tenant_id: UUID, raw: str | None) -> CompetitorMatch | Co
     exact = [(i, l) for i, l in labelled if _norm(l) == text]
     if len(exact) == 1:
         return CompetitorMatch(*exact[0])
-    pool = exact or [(i, l) for i, l in labelled if _norm(l) in text or text in _norm(l)]
+    pool = exact or [(i, l) for i, l in labelled if label_matches(text, l) or text in _norm(l)]
     if len(pool) == 1:
         return CompetitorMatch(*pool[0])
     if len(pool) > 1:
@@ -87,5 +115,39 @@ def resolve_competitor_ref(tenant_id: UUID, url_id: UUID) -> CompetitorMatch | N
     unknown one is simply not found: a reference is never trusted for existing."""
     for r in ceo_reads.list_active_competitors(tenant_id, limit=_MAX_TRACKED):
         if UUID(str(r["id"])) == url_id:
-            return CompetitorMatch(url_id, str(r.get("label") or "Competitor"))
+            return CompetitorMatch(url_id, ceo_reads.competitor_label(r))
     return None
+
+
+@dataclass(frozen=True, slots=True)
+class ProductMatch:
+    product_id: str
+    title: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ProductUnresolved:
+    reason: str  # NONE_KNOWN | NOT_FOUND | AMBIGUOUS
+    choices: tuple[str, ...] = ()
+
+
+def resolve_seller_product(tenant_id: UUID, raw: str | None) -> ProductMatch | ProductUnresolved:
+    """Matches the seller's words against THIS tenant's own products (their SKU, or the title on their latest sales line). An exact SKU or title wins; otherwise a
+    single product whose title contains the words (or that the words contain). Several is AMBIGUOUS, none is NOT_FOUND — never a pick."""
+    text = _norm(raw or "")
+    products = ceo_reads.list_seller_products(tenant_id)
+    if not products:
+        return ProductUnresolved("NONE_KNOWN")
+    labelled = [(pid, title or pid) for pid, title in products]
+    shown = tuple(label for _, label in labelled[:MAX_COMPETITOR_CHOICES])
+    if not text:
+        return ProductUnresolved("NOT_FOUND", shown)
+    exact = [(pid, label) for pid, label in labelled if _norm(pid) == text or _norm(label) == text]
+    if len(exact) == 1:
+        return ProductMatch(exact[0][0], exact[0][1])
+    pool = exact or [(pid, label) for pid, label in labelled if _norm(label) in text or text in _norm(label) or _norm(pid) in text]
+    if len(pool) == 1:
+        return ProductMatch(pool[0][0], pool[0][1])
+    if len(pool) > 1:
+        return ProductUnresolved("AMBIGUOUS", tuple(label for _, label in pool[:MAX_COMPETITOR_CHOICES]))
+    return ProductUnresolved("NOT_FOUND", shown)

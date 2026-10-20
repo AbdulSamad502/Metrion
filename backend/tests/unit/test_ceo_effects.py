@@ -12,7 +12,7 @@ from backend.ceo.registry import ActionRegistry, RegistryError, _with_effects, g
 
 def test_every_registered_action_has_exactly_one_effects_entry_and_vice_versa():
     keys = {s.key for s in get_registry().specs()}
-    assert len(keys) == 36
+    assert len(keys) == 48
     assert keys == set(ACTION_EFFECTS)
     assert all(s.effects is ACTION_EFFECTS[s.key] for s in get_registry().specs())
 
@@ -48,8 +48,9 @@ def test_inconsistent_metadata_is_refused():
 def test_the_derived_approval_set_is_a_visible_diff_when_it_changes():
     gated = {s.key for s in get_registry().specs() if s.effects.requires_approval}
     assert gated == {
-        "cmo.catalog_answer", "cmo.generate_backend_terms", "cmo.generate_bullets", "cmo.generate_description", "cmo.generate_hashtags",
+        "cmo.analyze_attachment", "cmo.catalog_answer", "cmo.generate_backend_terms", "cmo.generate_bullets", "cmo.generate_description", "cmo.generate_hashtags",
         "cmo.generate_keywords", "cmo.generate_listing_copy", "cmo.generate_title_sets", "cmo.market_trends", "pi.discover", "pi.supplier_lookup",
+        "ci.discover_competitors",
     }
 
 
@@ -74,19 +75,20 @@ def test_every_external_action_names_where_the_data_goes():
             assert fx.model_egress, key
 
 
-def test_ci_discovery_is_internal_only_while_its_provider_is_the_mock():
-    """`ci.discover_competitors` is classified NONE because `ci_actions.run_discovery` composes `MockSearchProvider`. If a real provider is wired the
-    classification MUST change in the same change: this test fails until ACTION_EFFECTS is edited deliberately."""
+def test_ci_discovery_is_seller_data_out_because_its_provider_is_tavily():
+    """`ci.discover_competitors` sends the seller's product search terms to Tavily (CI spec C34), so it is `SELLER_DATA_OUT` and approval-gated. The composition root
+    must pick its provider through `services.ci_search`; if that changes (or the payload does), this row must be reclassified in the same change."""
     import inspect
 
     from backend.services import ci_actions
 
     source = inspect.getsource(ci_actions.run_discovery)
-    assert "provider=MockSearchProvider()" in source
-    assert ACTION_EFFECTS["ci.discover_competitors"].external is External.NONE
-    from competitor_intelligence.discovery.mock_search_provider import MockSearchProvider
-
-    assert MockSearchProvider.__module__.endswith("mock_search_provider")
+    assert "select_search_provider(" in source
+    assert "MockSearchProvider" not in source
+    fx = ACTION_EFFECTS["ci.discover_competitors"]
+    assert fx.external is External.SELLER_DATA_OUT
+    assert fx.destinations == ("Tavily",) and fx.egress == ("SELLER_PRODUCT_SEARCH_TERMS",)
+    assert fx.requires_approval
 
 
 def test_the_registry_class_still_accepts_specs_without_effects_for_isolated_tests():

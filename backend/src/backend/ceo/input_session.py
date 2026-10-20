@@ -56,6 +56,7 @@ class Field:
     options: Callable[[Ctx, Mapping[str, Any]], Sequence[Option]] = lambda ctx, got: ()
     unanswerable: Callable[[Ctx, Mapping[str, Any]], str | None] = lambda ctx, got: None  # a reason the question can never be answered (nothing to choose from)
     applies: Callable[[Ctx, Mapping[str, Any]], bool] = lambda ctx, got: True  # False = not asked (e.g. a quote is already stored); the field is simply absent
+    optional: bool = False  # a skippable extra detail: when the question limit is reached with only these left, the task goes on without them instead of stopping
 
 
 # ------------------------------------------------------------------------------------------------ parsers
@@ -65,6 +66,59 @@ def _text(max_len: int = 120) -> Callable[[str, Ctx, Mapping[str, Any]], Any]:
         return t if 0 < len(t) <= max_len else Reject(f"Please answer in at most {max_len} characters.")
 
     return parse
+
+
+def _sku(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    """A SKU typed the way the seller lists it. When it is (or contains) one of their own products' title or id, the product's own id is stored, so the answer is the product
+    and not the seller's sentence; anything else is kept as typed (a SKU the seller has not uploaded is still theirs to name)."""
+    t = " ".join(raw.split())
+    if not 0 < len(t) <= 120:
+        return Reject("Please answer in at most 120 characters.")
+    try:
+        from backend.ceo import slot_resolvers  # noqa: PLC0415
+
+        found = slot_resolvers.resolve_seller_product(ctx.tenant_id, t)
+        if isinstance(found, slot_resolvers.ProductMatch):
+            return found.product_id
+        if isinstance(slot_resolvers.resolve_competitor(ctx.tenant_id, t), slot_resolvers.CompetitorMatch):
+            names = "; ".join(f"“{title or pid}”" for pid, title in ceo_reads.list_seller_products(ctx.tenant_id)[:6])
+            return Reject("That is one of your tracked competitors, not one of your products, so I cannot use it as the SKU." + (f" Your products: {names}." if names else ""))
+    except Exception:  # noqa: BLE001 - a lookup problem never blocks the answer; it is kept as typed
+        pass
+    return t
+
+
+_FREE_TEXT_FIELDS = frozenset({"seller_title", "niche", "product_name", "category", "category_hint", "supplier_name", "notes"})
+_CANCEL_PHRASE = re.compile(r"\b(?:cancel|abort|never ?mind|forget (?:it|this|that)|stop (?:this|the|asking)|drop (?:this|it))\b", re.IGNORECASE)
+
+
+def is_cancel_request(text: str) -> bool:
+    """"Cancel this finance calculation", "never mind", "forget it": the seller is closing the open question, in any wording (not only the bare word)."""
+    return bool(_CANCEL_PHRASE.search(text)) and len(text.split()) <= 6
+
+
+def is_unrelated_to_open_question(card: Mapping[str, Any], text: str, ctx: Ctx) -> bool:
+    """True when what the seller typed is clearly a NEW request and not an answer to the open question: it cannot be read as an answer AND it is a sentence or a question.
+    A short or readable answer, and the cancel words, are always answers. Used so an open question never swallows the seller's next request."""
+    t = " ".join(text.split())
+    if not t or t.casefold() in CANCEL_WORDS:
+        return False
+    try:
+        playbook = str(card.get("playbook") or (card.get("pending") or {}).get("key") or "")
+        fields = SESSIONS.get(playbook)
+        if fields is None:
+            return False
+        collected = dict((card.get("pending") or {}).get("collected") or {})
+        f = _next_field(fields, ctx, collected)
+        if f is None:
+            return False
+        if f.name not in _FREE_TEXT_FIELDS and not f.name.startswith("fact_") and len(t.split()) >= 8:
+            return True  # a closed question (an amount, a product, a choice) is answered in a few words: a long sentence is a new request, whatever else it mentions
+        if not isinstance(f.parse(t, ctx, collected), Reject):
+            return False
+    except Exception:  # noqa: BLE001
+        return False
+    return len(t.split()) >= 5 or "?" in t
 
 
 def _amount(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
@@ -124,6 +178,16 @@ def _quantity(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     return int(t) if re.fullmatch(r"\d{1,8}", t) and int(t) > 0 else Reject("Give the number of units as a whole number above zero, for example 200.")
 
 
+def _optional_whole(label: str) -> Callable[[str, Ctx, Mapping[str, Any]], Any]:
+    """A whole number above zero, or None when the seller skips it (a missing MOQ / lead time is absent, never zero)."""
+    def parse(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+        if raw.strip().casefold() in _SKIP_WORDS:
+            return None
+        t = raw.strip().replace(",", "")
+        return int(t) if re.fullmatch(r"\d{1,6}", t) and int(t) > 0 else Reject(f"Give {label} as a whole number above zero, or skip it.")
+    return parse
+
+
 def _competitor(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     found = slot_resolvers.resolve_competitor(ctx.tenant_id, raw)
     if isinstance(found, slot_resolvers.CompetitorMatch):
@@ -162,10 +226,30 @@ def _window(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
 
 
 # ------------------------------------------------------------------------------------------------ questions and options
+def _costs_gate(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = " ".join(raw.strip().casefold().replace("’", "'").split())
+    if t in ("enter", "yes", "i know them", "enter them") or t.startswith("i will enter"):
+        return "enter"
+    if t in ("unknown", "no", "skip", "not yet") or re.search(r"\b(?:do not|don't|dont|do n't) know\b", t) or "not sure" in t:
+        return "unknown"
+    return Reject("Choose whether you will enter your shipping, advertising, returns and other costs now, or that you do not know them yet.")
+
+
+def _enters_costs(ctx: Ctx, got: Mapping[str, Any]) -> bool:
+    return got.get("costs_gate") == "enter"
+
+
+COSTS_GATE = Field(
+    "costs_gate", lambda ctx, got: "Do you know your shipping, advertising, returns and other costs per unit? If not, I leave them out and show only what can be worked out (nothing is guessed).", _costs_gate,
+    lambda ctx, got: (Option("I will enter them", "enter", "I ask for each one"), Option("I do not know them yet", "unknown", "Margins that depend on them show as unavailable", unknown=True)),
+)
+
+
 def _cost_field(name: str, question: str) -> Field:
     return Field(
         name, lambda ctx, got: question, _cost,
         lambda ctx, got: (Option("None (0), I confirm", "none", "You are sure it is zero"), Option("Unknown", "unknown", "Margins that depend on it will show as unavailable", unknown=True)),
+        applies=_enters_costs,
     )
 
 
@@ -208,7 +292,7 @@ def _rival_price_option(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
 PRICE_IMPACT: tuple[Field, ...] = (
     Field("competitor", lambda c, g: "Which competitor changed their price?", _competitor, _competitor_options,
           lambda c, g: None if ceo_reads.list_active_competitors(c.tenant_id, limit=1) else "No competitors are being tracked yet. Add one on the Competitor Intelligence page first."),
-    Field("sku", lambda c, g: "Which SKU is this for? Type it the way you list it.", _text()),
+    Field("sku", lambda c, g: "Which SKU is this for? Type it the way you list it.", _sku),
     Field("fee", lambda c, g: "Which marketplace, category and fee type should I price it under?", _fee, _fee_choices,
           lambda c, g: None if _fee_options(c) else "No marketplace fee rates are set up yet, so I cannot price a margin. Ask your account owner to add them."),
     Field("basis", lambda c, g: "Do the prices you will give me include GST?", _basis,
@@ -219,6 +303,7 @@ PRICE_IMPACT: tuple[Field, ...] = (
     Field("candidate_prices_paise", lambda c, g: "Which prices should I compare? Give rupee amounts separated by commas"
           + (f", up to {c.max_candidate_prices}." if c.max_candidate_prices else "."), _prices,
           _rival_price_option),
+    COSTS_GATE,
     _cost_field("shipping", "What is the shipping cost per unit? Type an amount, or choose an option."),
     _cost_field("advertising", "What is the advertising cost per unit?"),
     _cost_field("return_rto", "What do returns and RTO cost you per unit?"),
@@ -258,7 +343,15 @@ def _optional_text(max_len: int) -> Callable[[str, Ctx, Mapping[str, Any]], Any]
     return parse
 
 
-_MARKETPLACE_OPTIONS = lambda ctx, got: tuple(Option(m.title(), m.title()) for m in _MARKETPLACE_NAMES)  # noqa: E731
+def _MARKETPLACE_OPTIONS(ctx: Ctx, got: Mapping[str, Any]) -> tuple[Option, ...]:  # noqa: N802
+    """Amazon, Flipkart, Meesho: the ones in the seller's business profile first (and only those, when the profile lists any), so the seller is not offered a marketplace they do not use."""
+    try:
+        mine = ceo_reads.business_marketplaces(ctx.tenant_id)
+    except Exception:  # noqa: BLE001 - a profile read problem only means all three are offered
+        mine = []
+    names = [m for m in _MARKETPLACE_NAMES if not mine or m.upper() in mine] or list(_MARKETPLACE_NAMES)
+    return tuple(Option(m.title(), m.title(), "A marketplace in your business profile" if mine else "") for m in names)
+
 _LAST_TIME = "What you chose last time"
 
 
@@ -294,8 +387,57 @@ def _cmo_marketplace_options(single: bool, *, skip: bool = False) -> Callable[[C
 
 
 _SKIP = lambda why: (lambda ctx, got: (Option("Skip", "skip", why),))  # noqa: E731
-_PRODUCT = Field("product_name", lambda c, g: "What is the product? Name it the way a buyer would search for it.", _text(200))
-_SELLER_TITLE = Field("seller_title", lambda c, g: "What title do you use for it today (or want to use)? I will write from it, so what you give me is what the copy is based on.", _text(500))
+_PRONOUNS = frozenset({"it", "this", "that", "this one", "that one", "this product", "that product", "the product", "my product", "the same", "same", "same product", "the same product", "them"})
+
+
+def _product_text(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    """The product the seller sells, in their own words. A pronoun ("it", "this product") is NOT a product name: it is asked for again, never stored as if it were one."""
+    t = " ".join(raw.split())
+    if t.casefold().strip(" .!?") in _PRONOUNS:
+        return Reject("Please name the product itself, for example steel water bottle.")
+    return _text(200)(raw, ctx, got)
+
+
+# ---- facts read from an attached product photo (ceo-cmo-delegation.md CD2, 6.4). The hidden entries "_obs" / "_attachment" ride in `collected` (JSON, text only); they are never an
+# input of the CMO action. An observation is only ever OFFERED as a one-click confirmation of the SELLER's own statement; it is never filled in, and visible text is never offered.
+IMAGE_FACT_ATTRS: tuple[str, ...] = ("color", "material", "size", "brand")  # asked one by one, only when the photo showed a value; product_type is offered for the product name
+_FROM_ATTACHMENT = "From your attachment: a suggestion, not verified. Choosing it confirms it as your own statement"
+
+
+def observed(got: Mapping[str, Any]) -> Mapping[str, str]:
+    obs = got.get("_obs")
+    return {k: v for k, v in obs.items() if isinstance(k, str) and isinstance(v, str) and v.strip()} if isinstance(obs, Mapping) else {}
+
+
+def _product_question(ctx: Ctx, got: Mapping[str, Any]) -> str:
+    seen = observed(got).get("product_type")
+    if seen:
+        return f"What is the product? Your attachment looks like a {seen} (read from the photo, not verified). Confirm that, or type the product the way a buyer would search for it."
+    return ("What is the product? Name it the way a buyer would search for it. If you would rather show me, attach a photo of it and ask again: I will read what is visible and "
+            "ask you to confirm each detail.")
+
+
+def _product_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    seen = observed(got).get("product_type")
+    return (Option(f"Yes, a {seen}", seen, _FROM_ATTACHMENT),) if seen and len(seen) <= 200 else ()
+
+
+_PRODUCT = Field("product_name", _product_question, _product_text, _product_options)
+
+
+def _fact_field(attr: str) -> Field:
+    return Field(
+        f"fact_{attr}",
+        lambda c, g: f"Your attachment suggests the {attr} is \u201c{observed(g).get(attr, '')}\u201d (read from the photo, not verified). Is that right? Confirm it, type the correct {attr}, or skip.",
+        _optional_text(60),
+        lambda c, g: (Option(f"Yes, {observed(g).get(attr, '')}", observed(g).get(attr, ""), _FROM_ATTACHMENT), Option("Skip", "skip", f"The {attr} is not used")),
+        applies=lambda c, g, a=attr: bool(observed(g).get(a)),
+    )
+
+
+IMAGE_FACT_FIELDS: tuple[Field, ...] = tuple(_fact_field(a) for a in IMAGE_FACT_ATTRS)
+_SELLER_TITLE = Field("seller_title", lambda c, g: "What title do you use for it today (or want to use)? I will write from it, so what you give me is what the copy is based on.", _text(500),
+                      lambda c, g: (Option(f"Use “{g['product_name']}”", str(g["product_name"]), "Your product name, as you gave it"),) if g.get("product_name") else ())
 
 def _fit(words: Sequence[str], limit: int = 100) -> str:
     out: list[str] = []
@@ -327,19 +469,63 @@ def _theme_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
     return (*out, Option("Skip", "skip", "Titles are written without a category hint"))[:MAX_OPTIONS]
 
 
+def _marketplace_question(noun: str) -> str:
+    return f"Which marketplace do you want {noun} for (Amazon, Flipkart, Meesho)?"
+
+
+def _detail(attr: str, question: str, why: str, max_len: int = 200) -> Field:
+    """An optional, skippable high-value detail the seller may add (brand, size, features...). It is the seller's own statement, never guessed and never filled in; skipping it is fine
+    (the result then warns that the input was thin). Where a photo already suggested a value for the same detail, the photo-confirmation question is asked instead."""
+    return Field(
+        f"fact_{attr}", lambda c, g: question, _optional_text(max_len), _SKIP(why), applies=lambda c, g, a=attr: not observed(g).get(a), optional=True,
+    )
+
+
+_BRAND_Q = _detail("brand", "What is the brand? Skip it if it has none.", "No brand is used", 80)
+_SIZE_Q = _detail("size", "What size or capacity is it (for example 1 litre, large, 500 g)? Skip it if not relevant.", "No size is used", 60)
+_FEATURES_Q = _detail("key_features", "What are 1 to 3 key features buyers care about? Only what is true; I add none of my own. Skip if you would rather not say.", "No features are used")
+_USE_Q = _detail("main_use", "What is it mainly used for, or who is it for (for example gym, school, office, kids)? Skip if not relevant.", "No main use is used", 120)
+_KEYWORDS_Q = _detail("search_keywords", "Any 1 to 3 search words you want people to find it by? Separate them with commas, or skip.", "No extra search words are used", 120)
+
+_COMMON_FIRST = (_PRODUCT, *IMAGE_FACT_FIELDS)
 CMO_TITLES: tuple[Field, ...] = (
-    _PRODUCT,
-    Field("category_hint", lambda c, g: "Which category is it in? For example kitchen, apparel, electronics. Or choose themes I already hold.", _optional_text(100), _theme_options),
-    Field("marketplaces", lambda c, g: "Which marketplace should the titles be written for? You can name more than one.", _marketplaces, _cmo_marketplace_options(False)),
+    *_COMMON_FIRST,
+    Field("category_hint", lambda c, g: "Which category is it in? For example kitchen, apparel, electronics. Or choose themes I already hold.", _optional_text(100), _theme_options, optional=True),
+    Field("marketplaces", lambda c, g: _marketplace_question("titles"), _marketplaces, _cmo_marketplace_options(False)),
+    _BRAND_Q, _SIZE_Q, _FEATURES_Q,
 )
 CMO_HASHTAGS: tuple[Field, ...] = (
-    _PRODUCT,
-    Field("marketplace", lambda c, g: "Which marketplace are the hashtags for?", _optional_marketplace, _cmo_marketplace_options(True, skip=True)),
+    *_COMMON_FIRST,
+    Field("marketplace", lambda c, g: _marketplace_question("hashtags"), _optional_marketplace, _cmo_marketplace_options(True, skip=True)),
+    _BRAND_Q, _FEATURES_Q,
 )
-CMO_GROUNDED: tuple[Field, ...] = (
-    _PRODUCT,
-    Field("marketplace", lambda c, g: "Which marketplace is this for?", _one_marketplace, _cmo_marketplace_options(True)),
+
+
+def _grounded(noun: str) -> tuple[Field, ...]:
+    return (
+        *_COMMON_FIRST,
+        Field("marketplace", lambda c, g: _marketplace_question(noun), _one_marketplace, _cmo_marketplace_options(True)),
+        _SELLER_TITLE,
+        _BRAND_Q, _SIZE_Q, _FEATURES_Q,
+    )
+
+
+CMO_DESCRIPTION, CMO_KEYWORDS, CMO_BULLETS, CMO_LISTING = _grounded("a description"), _grounded("keywords"), _grounded("bullets"), _grounded("the listing copy")
+CMO_GROUNDED = CMO_BULLETS  # kept for importers that only need "the grounded shape"; each action has its own table so the question names what is being written
+
+
+def _amazon_only(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    found = _one_marketplace(raw, ctx, got)
+    if isinstance(found, Reject):
+        return found
+    return found if found == "AMAZON" else Reject("Backend search terms are an Amazon-only field, so this can only be written for Amazon. Type Amazon.")
+
+
+CMO_BACKEND_TERMS: tuple[Field, ...] = (
+    *_COMMON_FIRST,
+    Field("marketplace", lambda c, g: "Backend search terms are an Amazon field. Confirm Amazon.", _amazon_only, lambda c, g: (Option("Amazon", "Amazon"),)),
     _SELLER_TITLE,
+    _BRAND_Q, _FEATURES_Q,
 )
 def _niche(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     t = " ".join(raw.split())
@@ -356,15 +542,6 @@ def _price_range(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     if len(values) != 2 or any(v is None for v in values) or values[0] >= values[1]:  # type: ignore[operator]
         return Reject("Give the selling price range as two rupee amounts, for example 500 to 1,500, or skip it.")
     return {"min": values[0], "max": values[1]}
-
-
-def _depth(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
-    t = raw.strip().casefold()
-    if t.startswith(("quick", "shallow", "fast")):
-        return "SHALLOW"
-    if t.startswith(("complete", "deep", "full", "thorough")):
-        return "COMPLETE"
-    return Reject("Choose a quick scan or a complete research run.")
 
 
 _YES_WORDS = frozenset({"yes", "y", "yeah", "yep", "yup", "ok", "okay", "sure", "confirm", "confirmed", "proceed", "go", "run", "do", "save", "please", "ahead", "it", "now", "and"})
@@ -384,8 +561,7 @@ def _pi_summary(ctx: Ctx, got: Mapping[str, Any]) -> str:
     where = ", ".join(str(m).title() for m in got.get("marketplaces", []))
     rng = got.get("price_range")
     span = f", selling between {format_paise(rng['min'])} and {format_paise(rng['max'])}" if rng else ""
-    depth = "a complete run" if got.get("depth") == "COMPLETE" else "a quick scan"
-    return (f"Here is what I will research: {got.get('category')} on {where}, with a budget of {format_paise(got.get('budget'))}{span}, as {depth}. "
+    return (f"Here is what I will research: {got.get('category')} on {where}, with a budget of {format_paise(got.get('budget'))}{span}. "
             "I will save this as your research brief and run Product Intelligence. Shall I go ahead?")
 
 
@@ -414,8 +590,7 @@ PI_DISCOVER: tuple[Field, ...] = (
     Field("marketplaces", lambda c, g: "Which marketplace will you sell on? You can name more than one.", _marketplaces,
           lambda c, g: (*_remembered("last_marketplaces", lambda v: v.title(), lambda v: v)(c, g), *_MARKETPLACE_OPTIONS(c, g))[:MAX_OPTIONS]),
     Field("price_range", lambda c, g: "Roughly what selling price range do you have in mind? For example 500 to 1,500. You can skip this.", _price_range, _SKIP("The search is not limited to a price range")),
-    Field("depth", lambda c, g: "How thorough should the research be?", _depth,
-          lambda c, g: (Option("Quick scan", "quick", "Faster and lighter; a good first look"), Option("Complete run", "complete", "Slower and uses more of your research allowance"))),
+    # No research-depth question: PI records quick/complete but both run the same research today (product-intelligence-agent.md D2), so asking would promise a difference that does not exist.
     Field("confirm", _pi_summary, _yes, lambda c, g: (Option("Yes, run it", "yes"),)),
 )
 
@@ -443,7 +618,8 @@ def _np_summary(ctx: Ctx, got: Mapping[str, Any]) -> str:
     parts: list[str] = []
     if "supplier_name" in got:
         ship = f", with {format_paise(got['order_shipping'])} shipping for the whole order" if got.get("order_shipping") else ""
-        parts.append(f"a supplier quote from {got['supplier_name']} at {format_paise(got['unit_cost'])} per unit{ship}")
+        extra = "".join(f", {label} {got[k]}" for k, label in (("moq", "a minimum order of"), ("lead_time_days", "a lead time in days of")) if got.get(k))
+        parts.append(f"a supplier quote from {got['supplier_name']} at {format_paise(got['unit_cost'])} per unit{ship}{extra}")
     if "budget" in got:
         parts.append(f"a batch budget of {format_paise(got['budget'])}")
     return (f"Here is what I will save as your own figures: {' and '.join(parts)}. Then I will run the numbers (landed cost, supplier ranking and batch size) for "
@@ -454,15 +630,71 @@ def _quote_applies(ctx: Ctx, got: Mapping[str, Any]) -> bool:
     return _needs_quote(ctx, got)
 
 
+def _product_leads(ctx: Ctx, got: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Supplier leads Product Intelligence found for the product being stocked (best evidenced first), or [] (a read that fails just offers nothing)."""
+    try:
+        return list(ceo_reads.pi_product_suppliers(ctx.tenant_id, str(got.get("sku") or "")))
+    except Exception:  # noqa: BLE001 - offering leads is a convenience; the question is still asked
+        return []
+
+
+def _supplier_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    """The suppliers Product Intelligence already found for this product, offered as choices (never filled in): the seller must pick one or type another."""
+    out: list[Option] = []
+    for lead in _product_leads(ctx, got):
+        name = " ".join(str(lead.get("supplier_name") or "").split())[:80]
+        if name and all(o.text != name for o in out):
+            where = f" ({str(lead['locality'])[:30]})" if lead.get("locality") else ""
+            out.append(Option(name[:55] + where, name, "Found by Product Intelligence: a web lead, not verified"))
+    return tuple(out[:3])
+
+
+def _unit_cost_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    """A price the chosen supplier PUBLISHES, offered as a choice with its source: it is the supplier's page, not a quote, so picking it is the seller's own decision."""
+    chosen = " ".join(str(got.get("supplier_name") or "").split()).casefold()
+    for lead in _product_leads(ctx, got):
+        price = lead.get("published_price")
+        if price and " ".join(str(lead.get("supplier_name") or "").split()).casefold() == chosen:
+            low = int(price["low_paise"])
+            return (Option(f"{_rupees(str(low))} per {price.get('unit') or 'unit'} (published by this supplier)", f"{low // 100}.{low % 100:02d}",
+                           "Published on the supplier's own page; not a quote. Pick it only if the supplier confirmed it"),)
+    return ()
+
+
+def _budget_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    """The budget the seller already stated in the research brief that found this product, offered as one choice (reused, never re-asked from scratch, never filled in silently)."""
+    try:
+        stated = ceo_reads.pi_research_budget(ctx.tenant_id, str(got.get("sku") or ""))
+    except Exception:  # noqa: BLE001 - a convenience only
+        return ()
+    if not stated:
+        return ()
+    low = int(stated)
+    return (Option(f"{_rupees(str(low))} (the budget you gave for this research)", f"{low // 100}.{low % 100:02d}", "Your own figure from the research brief"),)
+
+
+def _lead_time(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    """Lead time in days. It may be skipped only when the minimum order quantity was given: for a product never sold, the batch-size estimate needs one of the two (the stored quote
+    cannot be amended later, so it is asked now)."""
+    if raw.strip().casefold() in _SKIP_WORDS:
+        if got.get("moq") is None:
+            return Reject("I need either the minimum order quantity or the delivery lead time, or the units estimate cannot be worked out for a product you have never sold. Type the lead time in days (for example 21), or use Back to give the minimum order quantity.")
+        return None
+    return _optional_whole("the lead time in days")(raw, ctx, got)
+
+
 NEW_PRODUCT: tuple[Field, ...] = (
     Field("sku", lambda c, g: "Which SKU are you thinking of stocking? Type it the way you list it.", _text()),
     Field("quantity", lambda c, g: "How many units are you considering?", _quantity),
     Field("window", lambda c, g: "Which sales-history period should I look at?", _window, _window_choices),
-    Field("supplier_name", lambda c, g: "I have no supplier quote saved for this product. Which supplier is it from?", _text(80), applies=_quote_applies),
-    Field("unit_cost", lambda c, g: "What is that supplier's price per unit, in rupees?", _amount, applies=_quote_applies),
+    Field("supplier_name", lambda c, g: "I have no supplier quote saved for this product. Which supplier is it from? Pick one Product Intelligence found, or type the supplier's name.", _text(80), _supplier_options, applies=_quote_applies),
+    Field("unit_cost", lambda c, g: "What is that supplier's price per unit, in rupees? (Use the price they quoted you.)", _amount, _unit_cost_options, applies=_quote_applies),
     Field("order_shipping", lambda c, g: "What is the shipping for the whole order, in rupees? Skip it if the quote does not state it.", _optional_amount,
           _SKIP("Not stated; margins that need it stay unavailable"), applies=_quote_applies),
-    Field("budget", lambda c, g: "What is your budget for this batch, in rupees? I will fit the quantity to it.", _amount, applies=lambda c, g: _needs_budget(c, g)),
+    Field("moq", lambda c, g: "What is the supplier's minimum order quantity, in units? Skip it if the quote does not state it. (The batch-size estimate needs this or the lead time for a product you have never sold.)",
+          _optional_whole("the minimum order quantity"), _SKIP("Not stated"), applies=_quote_applies),
+    Field("lead_time_days", lambda c, g: "How many days does the supplier take to deliver? You can skip this only if you gave the minimum order quantity.", _lead_time, _SKIP("Not stated"), applies=_quote_applies),
+    Field("budget", lambda c, g: "What is your budget for this batch, in rupees? I will fit the quantity to it.", _amount, _budget_options, applies=lambda c, g: _needs_budget(c, g)),
     Field("confirm", _np_summary, _yes, lambda c, g: (Option("Yes, save and run", "yes"),), applies=lambda c, g: _needs_quote(c, g) or _needs_budget(c, g)),
 )
 
@@ -492,6 +724,8 @@ DR_QUOTE: tuple[Field, ...] = (
     Field("supplier_name", lambda c, g: f"I need a supplier quote for {g.get('sku')}. Which supplier is it from?", _text(80)),
     Field("unit_cost", lambda c, g: "What is that supplier's price per unit, in rupees?", _amount),
     Field("order_shipping", lambda c, g: "What is the shipping for the whole order, in rupees? Skip it if the quote does not state it.", _optional_amount, _SKIP("Not stated; margins that need it stay unavailable")),
+    Field("moq", lambda c, g: "What is the supplier's minimum order quantity, in units? Skip it if the quote does not state it.", _optional_whole("the minimum order quantity"), _SKIP("Not stated")),
+    Field("lead_time_days", lambda c, g: "How many days does the supplier take to deliver? Skip it if the quote does not state it.", _optional_whole("the lead time in days"), _SKIP("Not stated")),
     Field("confirm", _dr_summary(lambda g: f"a supplier quote from {g['supplier_name']} at {_money(g['unit_cost'])} per unit for {g['sku']}"), _yes, _DR_CONFIRM_OPTIONS),
 )
 DR_BUDGET: tuple[Field, ...] = (
@@ -504,16 +738,70 @@ def _optional_marketplaces(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     return [] if raw.strip().casefold() in _SKIP_WORDS else _marketplaces(raw, ctx, got)
 
 
+def _niche_terms(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    """The niche the seller wants researched (ceo-cmo-delegation.md CD12): "skip" -> None (marketplace news only), "use my confirmed terms" -> the marker KEEP, otherwise up to
+    5 short terms separated by commas. CMO's own screening still decides whether each term may be saved and sent; nothing here is guessed."""
+    t = " ".join(raw.split())
+    if t.casefold() in _SKIP_WORDS:
+        return None
+    if t.casefold() in ("use my confirmed terms", "keep", "keep my confirmed terms", "use confirmed"):
+        return KEEP_CONFIRMED
+    terms = [x.strip() for x in re.split(r"[,;]", t) if x.strip()]
+    if not terms or len(terms) > 5 or any(not (2 <= len(x) <= 60) for x in terms) or any(re.fullmatch(r"[\d\s.,%-]+", x) for x in terms):
+        return Reject("Name the niche in words: up to five short terms separated by commas, for example steel water bottle, insulated flask. Or skip it.")
+    return terms
+
+
+def _niche_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    try:
+        have = ceo_reads.confirmed_niche_terms(ctx.tenant_id)
+    except Exception:  # noqa: BLE001 - an offer is a convenience; the question is still asked
+        have = []
+    keep = (Option("Use my confirmed terms: " + ", ".join(have[:5]), "use my confirmed terms", "Terms you confirmed earlier; I will not change them"),) if have else ()
+    return (*keep, Option("Skip", "skip", "Only marketplace news is researched; no niche search is sent"))[:MAX_OPTIONS]
+
+
+KEEP_CONFIRMED = "KEEP_CONFIRMED"
+
+def _news_kind(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    """The one choice question for news: A niche / B everyday trending / C both. Typed a/b/c or the words work like the buttons."""
+    t = " ".join(raw.casefold().split()).strip(" .!?)(")
+    if t == "c" or "both" in t:
+        return "BOTH"
+    if t == "a" or "niche" in t or "business" in t:
+        return "NICHE"
+    if t == "b" or any(w in t for w in ("trend", "everyday", "daily", "general")):
+        return "TRENDING"
+    return Reject("Please choose A (news for my business niche), B (everyday trending ecommerce news) or C (both).")
+
+
+def _has_confirmed_niche(ctx: Ctx) -> bool:
+    try:
+        return bool(ceo_reads.confirmed_niche_terms(ctx.tenant_id))
+    except Exception:  # noqa: BLE001 - unknown: the niche is asked rather than assumed
+        return False
+
+
+NEWS_SECTIONS: Mapping[str, tuple[str, ...]] = {"NICHE": ("NICHE",), "TRENDING": ("MARKET_NEWS",), "BOTH": ("NICHE", "MARKET_NEWS")}  # NICHE = confirmed terms; MARKET_NEWS = the reviewed generic marketplace-news searches (slim_cmo.trends.queries)
+
 CMO_TRENDS: tuple[Field, ...] = (
-    Field("marketplaces", lambda c, g: "Which marketplace should the market research focus on? You can name more than one, or skip to cover all.", _optional_marketplaces,
-          lambda c, g: (Option("All three", "all"), Option("Amazon", "Amazon"), Option("Flipkart", "Flipkart"))),
+    Field("news_kind", lambda c, g: "What news do you want? A) News for my business niche, B) Everyday trending ecommerce news (Amazon, Flipkart, Meesho, seller policy, festive-season updates), or C) Both.",
+          _news_kind, lambda c, g: (Option("A) My business niche", "niche", "Searches use your confirmed niche terms"), Option("B) Everyday trending news", "trending", "Needs no niche"),
+                                    Option("C) Both", "both", "Niche news and everyday trending news"))),
+    # marketplaces are not asked: the generic news searches cover Amazon, Flipkart and Meesho by default
+    Field("marketplaces", lambda c, g: "Which marketplace should the market research focus on?", _optional_marketplaces, applies=lambda c, g: False),
+    Field("niche", lambda c, g: "Which niche should the news cover? Type up to five short terms separated by commas (for example steel water bottle, insulated flask). "
+                                "I will save them as your confirmed niche terms, and only those terms are sent to the search providers.", _niche_terms, _niche_options,
+          applies=lambda c, g: g.get("news_kind") in ("NICHE", "BOTH") and not _has_confirmed_niche(c)),
 )
+CEO_ONLY_INPUTS = frozenset({"niche", "news_kind"})  # collected by the CEO, never a slot of the CMO action
 DR_TREND_RUN: tuple[Field, ...] = (
     Field("preview", lambda c, g: "", _text(4000)),
     Field("confirm", lambda c, g: str(g.get("preview", "")), _yes, lambda c, g: (Option("Yes, run the research", "yes", "Sends exactly these searches"),)),
 )
 
-CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords", "cmo.market_trends")
+CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords", "cmo.generate_bullets", "cmo.generate_backend_terms",
+                "cmo.generate_listing_copy", "cmo.market_trends")
 # classifier slot name -> session field it can pre-fill (the seller already said it); the answer still goes through the same parser
 PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget", "candidate_prices_paise"),
                                           "competitor": ("competitor",)}
@@ -524,7 +812,8 @@ SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "pi.discover": PI_DISCOVER,
     "cmo.market_trends": CMO_TRENDS, "dr.trend_run": DR_TREND_RUN,
     "dr.cogs_per_unit": DR_COGS, "dr.supplier_quote": DR_QUOTE, "dr.batch_budget": DR_BUDGET,
-    "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_GROUNDED, "cmo.generate_keywords": CMO_GROUNDED,
+    "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_DESCRIPTION, "cmo.generate_keywords": CMO_KEYWORDS,
+    "cmo.generate_bullets": CMO_BULLETS, "cmo.generate_backend_terms": CMO_BACKEND_TERMS, "cmo.generate_listing_copy": CMO_LISTING,
 }
 
 
@@ -563,7 +852,7 @@ class Blocked:
 
 
 def _card(playbook: str, f: Field, ctx: Ctx, collected: Mapping[str, Any]) -> dict[str, Any]:
-    opts: list[dict[str, Any]] = [{"key": f"opt-{i}", "label": o.label, "kind": "RECOMMENDED" if i == 0 else "ALTERNATIVE", "value": o.text, "reason": o.reason, "refs": {}, **({"skip": True} if o.unknown else {})}
+    opts: list[dict[str, Any]] = [{"key": f"opt-{i}", "label": o.label, "kind": "RECOMMENDED" if i == 0 and not (o.unknown or o.text == "skip") else "ALTERNATIVE", "value": o.text, "reason": o.reason, "refs": {}, **({"skip": True} if o.unknown else {})}
             for i, o in enumerate(list(f.options(ctx, collected))[:MAX_OPTIONS])]
     opts.append({"key": "other", "label": "Other", "kind": "OTHER", "value": None, "reason": "Type your answer in the chat bar", "refs": {}})
     if collected:  # not the first question: the seller may step back and answer the previous one again (the earlier answer stays visible in the thread)
@@ -583,14 +872,21 @@ def _next_field(fields: Sequence[Field], ctx: Ctx, collected: Mapping[str, Any])
 
 
 def _progress(fields: Sequence[Field], collected: Mapping[str, Any], ctx: Ctx) -> str:
-    return f"({len(collected) + 1} of {len(_active(fields, ctx, collected))}) "
+    names = {f.name for f in fields}
+    answered = sum(1 for k in collected if k in names)  # hidden entries (a photo's observations) and facts carried from earlier in the conversation are not answers to this task's questions
+    return f"({answered + 1} of {len(_active(fields, ctx, collected))}) "
 
 
-def start(playbook: str, ctx: Ctx, prefill: Mapping[str, str] | None = None) -> Ask | Done | Blocked:
+def start(
+    playbook: str, ctx: Ctx, prefill: Mapping[str, str] | None = None, hidden: Mapping[str, Any] | None = None, carry: Mapping[str, str] | None = None,
+) -> Ask | Done | Blocked:
     """Begin a session. Anything the seller already said (`prefill`, classifier slot text) is parsed by the SAME field parser and skipped when it reads cleanly;
-    text that does not parse is simply asked again."""
+    text that does not parse is simply asked again. `hidden` seeds underscore-named entries (the observations read from the seller's photo): never answers, never inputs."""
     fields = SESSIONS[playbook]
-    collected: dict[str, Any] = {}
+    collected: dict[str, Any] = {k: v for k, v in (hidden or {}).items() if k.startswith("_")}
+    for name, value in (carry or {}).items():  # details the seller already confirmed earlier in this conversation for the SAME product: not asked again (the plan card shows them)
+        if isinstance(value, str) and value.strip() and (name.startswith("fact_") or name in {f.name for f in fields}):
+            collected[name] = value
     for f in fields:
         slot = next((k for k, v in PREFILL.items() if f.name in v), None)
         raw = (prefill or {}).get(slot) if slot else None
@@ -598,9 +894,62 @@ def start(playbook: str, ctx: Ctx, prefill: Mapping[str, str] | None = None) -> 
             parsed = f.parse(raw, ctx, collected)
             if not isinstance(parsed, Reject):
                 collected[f.name] = parsed
+    note = _derive_price_impact(ctx, fields, collected, named_competitor=bool((prefill or {}).get("competitor"))) if playbook == "COMPETITOR_PRICE_IMPACT" else ""
     if _next_field(fields, ctx, collected) is None:
         return Done(playbook, _to_inputs(playbook, collected))
-    return _ask(playbook, fields, ctx, collected, prefix="")
+    return _ask(playbook, fields, ctx, collected, prefix=note)
+
+
+def _derive_price_impact(ctx: Ctx, fields: Sequence[Field], collected: dict[str, Any], *, named_competitor: bool = False) -> str:
+    """Fills in what the seller's own verified data already says, so the CEO asks only for what is missing: the competitor (when only one is tracked), the product it is tracked for
+    (or the seller's only product), the seller's own price from their product profile, the competitor's VERIFIED current price as a price to compare, the fee row when only one exists,
+    and the GST basis the seller confirmed last time. Every value goes through the same parser as a typed answer; nothing the seller did not give or confirm is invented (a cost is
+    never filled in). Returns a one-line note of what was filled in, shown before the next question."""
+    from datetime import datetime, timezone
+
+    from backend.ceo.figure_format import format_paise
+
+    by = {f.name: f for f in fields}
+    facts: list[str] = []
+
+    def put(name: str, raw: str, said: str) -> bool:
+        if name in collected or name not in by:
+            return False
+        parsed = by[name].parse(raw, ctx, collected)
+        if isinstance(parsed, Reject):
+            return False
+        collected[name] = parsed
+        facts.append(said)
+        return True
+
+    try:
+        tracked = [r for r in ceo_reads.list_active_competitors(ctx.tenant_id, limit=MAX_OPTIONS)]
+        if "competitor" not in collected and len(tracked) == 1 and not named_competitor:  # a name the seller gave that matched nothing is asked about, never replaced by the only one tracked
+            put("competitor", ceo_reads.competitor_label(tracked[0]), f"the competitor you track, {ceo_reads.competitor_label(tracked[0])}")
+        comp = next((r for r in tracked if str(r["id"]) == str(collected.get("competitor"))), None)
+        products = ceo_reads.list_seller_products(ctx.tenant_id)
+        sku = (comp or {}).get("linked_sku") or (products[0][0] if len(products) == 1 else None)
+        if sku:
+            title = next((t for p, t in products if p == sku and t), sku)
+            put("sku", str(sku), f"your product {title}")
+            price = ceo_reads.seller_profile_price(ctx.tenant_id, str(sku))
+            if price:
+                put("current_price_paise", format_paise(price), f"your selling price {format_paise(price)} from your product profile")
+        if comp is not None:
+            snap = ceo_reads.competitor_handoff(ctx.tenant_id, UUID(str(comp["id"])), now=datetime.now(timezone.utc))
+            if not isinstance(snap, ceo_reads.CiUnavailable) and snap.listed_price_paise and snap.capture_status in ("COMPLETE", "PARTIAL") and not snap.is_stale:
+                prices = list(collected.get("candidate_prices_paise") or [])
+                # only beside a price the seller already named to test ("to ₹349"): with none named the seller chooses, and "match their price" is offered as an option
+                if prices and int(snap.listed_price_paise) not in prices and (ctx.max_candidate_prices is None or len(prices) < ctx.max_candidate_prices):
+                    collected["candidate_prices_paise"] = [*prices, int(snap.listed_price_paise)]
+                    facts.append(f"{ceo_reads.competitor_label(comp)}'s verified price {format_paise(snap.listed_price_paise)}")
+        options = _fee_options(ctx)
+        if len(options) == 1:
+            o = options[0]
+            put("fee", f"{o['marketplace']} {o['category']} {o['fee_type']}", f"the fee rate for {o['marketplace'].title()}")
+    except Exception:  # noqa: BLE001 - a lookup problem only means more questions are asked
+        pass
+    return ("From your saved data I already have: " + "; ".join(facts) + ". Only what is missing is asked. ") if facts else ""
 
 
 def start_data_request(session: str, sku: str, ctx: Ctx, resume: Mapping[str, Any]) -> Ask:
@@ -617,6 +966,30 @@ def start_confirm(session: str, ctx: Ctx, text: str, resume: Mapping[str, Any]) 
     assert isinstance(ask, Ask)
     ask.card["resume"] = dict(resume)
     return ask
+
+
+def resume_ask(playbook: str, ctx: Ctx, collected: Mapping[str, Any]) -> Ask | Done | Blocked:
+    """The question that follows what is already `collected` (used to carry on after a pause), or `Done` when nothing is left to ask."""
+    fields = SESSIONS[playbook]
+    if _next_field(fields, ctx, collected) is None:
+        return Done(playbook, _to_inputs(playbook, dict(collected)))
+    return _ask(playbook, fields, ctx, collected, prefix="")
+
+
+def only_optional_left(playbook: str, ctx: Ctx, collected: Mapping[str, Any]) -> bool:
+    """True when every question still to be asked is a skippable extra detail."""
+    left = [f for f in SESSIONS[playbook] if f.name not in collected and f.applies(ctx, collected)]
+    return bool(left) and all(f.optional for f in left)
+
+
+def finish_without_optional(playbook: str, collected: Mapping[str, Any]) -> Done:
+    """The task goes on with what has been given; the skippable details not yet asked are simply absent (never defaulted)."""
+    return Done(playbook, _to_inputs(playbook, dict(collected)))
+
+
+def field_names(playbook: str, ctx: Ctx, collected: Mapping[str, Any]) -> list[str]:
+    """The names of the fields still to be asked, given `collected`, in order."""
+    return [f.name for f in SESSIONS[playbook] if f.name not in collected and f.applies(ctx, collected)]
 
 
 def _ask(playbook: str, fields: Sequence[Field], ctx: Ctx, collected: Mapping[str, Any], *, prefix: str) -> Ask | Blocked:
@@ -661,7 +1034,7 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
             again["resume"] = card["resume"]
         if card.get("addons"):
             again["addons"] = list(card["addons"])
-        return Ask(f"{parsed.why} {f.question(ctx, collected)}", again)
+        return Ask(f"{parsed.why} {f.question(ctx, collected)} (Say “cancel” to leave this question.)", again)
     collected[f.name] = parsed
     resume = card.get("resume")
     addons = tuple(card.get("addons") or ())
@@ -687,15 +1060,28 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
         quote: dict[str, Any] = {"supplier_name": c["supplier_name"], "unit_cost_paise": c["unit_cost"], "sku": c["sku"]}
         if c.get("order_shipping") is not None:
             quote["shipping_paise"] = c["order_shipping"]
+        for key in ("moq", "lead_time_days"):
+            if c.get(key) is not None:
+                quote[key] = c[key]
         return {"save": {"quote": quote}, "sku": c["sku"]}
     if playbook == "pi.discover":
         rng = c.get("price_range")
         return {
-            "category_text": c["category"], "budget_paise": c["budget"], "marketplaces": c["marketplaces"], "depth": c["depth"],
+            "category_text": c["category"], "budget_paise": c["budget"], "marketplaces": c["marketplaces"], "depth": "SHALLOW",
             **({"target_price_min_paise": rng["min"], "target_price_max_paise": rng["max"]} if rng else {}),
         }
     if playbook in CMO_SESSIONS:
-        out = {k: v for k, v in c.items() if v is not None}  # a skipped optional field is simply absent: nothing is defaulted
+        out = {k: v for k, v in c.items() if v is not None and not k.startswith("_")}  # a skipped optional field is simply absent: nothing is defaulted
+        if playbook == "cmo.market_trends":
+            out["sections"] = list(NEWS_SECTIONS.get(str(out.get("news_kind")), NEWS_SECTIONS["BOTH"]))
+            if "niche" in c and c["niche"] is None:  # the seller was asked for a niche and skipped it: no niche searches exist, so the everyday trending news is what runs (the plan card lists the searches)
+                out["sections"] = [s for s in out["sections"] if s != "NICHE"] or list(NEWS_SECTIONS["TRENDING"])
+            out.pop("marketplaces", None)
+        facts = {k[len("fact_"):]: out.pop(k) for k in list(out) if k.startswith("fact_")}  # only what the seller CONFIRMED or typed, as their own statement
+        if "brand" in facts:
+            out["brand"] = facts.pop("brand")
+        if facts:
+            out["attributes"] = [{"name": name.replace("_", " ").title(), "value": value} for name, value in facts.items()]
         return out
     if playbook == "NEW_PRODUCT_DECISION":
         out: dict[str, Any] = {"sku": c["sku"], "quantity": c["quantity"], **c["window"]}
@@ -705,6 +1091,9 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
                 quote: dict[str, Any] = {"supplier_name": c["supplier_name"], "unit_cost_paise": c["unit_cost"], "sku": c["sku"]}
                 if c.get("order_shipping") is not None:
                     quote["shipping_paise"] = c["order_shipping"]
+                for key in ("moq", "lead_time_days"):
+                    if c.get(key) is not None:
+                        quote[key] = c[key]
                 save["quote"] = quote
             if "budget" in c:
                 save["budget_paise"] = c["budget"]
@@ -714,7 +1103,7 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "competitor_url_id": c["competitor"], "sku": c["sku"], "marketplace": fee["marketplace"], "category": fee["category"], "fee_type": fee["fee_type"], "basis": c["basis"],
         "gst_rate_pct": c["gst_rate_pct"], "current_price_paise": c["current_price_paise"], "candidate_prices_paise": c["candidate_prices_paise"],
-        "shipping": c["shipping"], "advertising": c["advertising"], "return_rto": c["return_rto"], "other": c["other"],
+        **{k: c.get(k, {"state": "UNKNOWN"}) for k in ("shipping", "advertising", "return_rto", "other")},  # not entered = not known: margins that need them show as unavailable
     }
 
 

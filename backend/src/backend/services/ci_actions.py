@@ -24,8 +24,6 @@ from calc_engine.formulas.price_positioning import CompetitorPrice, RepricingSta
 from calc_engine.repositories import metric_result_repo
 from calc_engine.types import Confidence, Paise
 from competitor_intelligence.discovery.discovery_run import DiscoveryRunOutcome, start_discovery_run
-from competitor_intelligence.discovery.mock_search_provider import PROVIDER_NAME as MOCK_PROVIDER_NAME
-from competitor_intelligence.discovery.mock_search_provider import MockSearchProvider
 from competitor_intelligence.discovery.search_cache import PostgresSearchResultCache
 from competitor_intelligence.repositories import (
     ci_tenant_config_repo,
@@ -33,10 +31,13 @@ from competitor_intelligence.repositories import (
     competitor_url_repo,
     seller_product_profile_repo,
 )
+
 from competitor_intelligence.seller_product.derive import derive_canonical
 from competitor_intelligence.seller_product.merge import merge_seller_product
 from competitor_intelligence.seller_product.types import SellerProduct
 from competitor_intelligence.types import CaptureStatus
+
+from backend.services.ci_search import select_search_provider
 
 _METRIC_CONFIG_VERSION = "CI_PRICE_SCENARIO.v1"
 
@@ -183,18 +184,20 @@ def run_price_scenario(
 
 
 def run_discovery(tenant_id: UUID, *, requested_by: UUID, seller_product: SellerProduct) -> DiscoveryRunOutcome:
-    """§6.10-§6.15's direct-execution composition, unchanged from the existing
-    `POST /discovery-runs` route — same composition root (`MockSearchProvider`; C22's locked
-    build order forbids selecting a real provider until one is legally/commercially
-    approved)."""
+    """§6.10-§6.15's direct-execution composition, shared by the `POST /discovery-runs` route and
+    the CEO action. The provider is chosen in one place, `services.ci_search.select_search_provider`
+    (Tavily, owner-approved 2026-10-18, C34; the mock only when `CI_SEARCH_PROVIDER=mock`).
+    Tavily sends the seller's product search terms to a third party, so `ceo/effects.py` classifies
+    this action as seller data out — that row and this composition must change together."""
     discovery_enabled = ci_tenant_config_repo.get_discovery_enabled(tenant_id)
     budget = ci_tenant_config_repo.get_discovery_budget(tenant_id)
+    selected = select_search_provider(tenant_id)
     return start_discovery_run(
         tenant_id,
         requested_by=requested_by,
         seller_product=seller_product,
-        provider=MockSearchProvider(),
-        provider_name=MOCK_PROVIDER_NAME,
+        provider=selected.provider,
+        provider_name=selected.provider_name,
         cache=PostgresSearchResultCache(),
         budget=budget,
         discovery_enabled=discovery_enabled,

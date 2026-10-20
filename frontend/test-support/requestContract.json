@@ -1,5 +1,9 @@
 {
  "routes": {
+  "GET /api/v1/business-profile": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/ceo-hub/agents": {
    "query": [],
    "requiredQuery": []
@@ -51,6 +55,14 @@
    "requiredQuery": []
   },
   "GET /api/v1/ceo/investigations/{investigation_id}/needs": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/investigations/{investigation_id}/plans": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/ceo/investigations/{investigation_id}/plans/{plan_id}": {
    "query": [],
    "requiredQuery": []
   },
@@ -198,6 +210,12 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/ci/workspace": {
+   "query": [
+    "product_id"
+   ],
+   "requiredQuery": []
+  },
   "GET /api/v1/cmo/market-trends": {
    "query": [],
    "requiredQuery": []
@@ -208,6 +226,63 @@
   },
   "GET /api/v1/cmo/niche-terms": {
    "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/showcase/compliance": {
+   "query": [
+    "marketplace",
+    "sku"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/showcase/copy-packs": {
+   "query": [
+    "cursor",
+    "limit",
+    "marketplace",
+    "q",
+    "sku"
+   ],
+   "requiredQuery": [
+    "marketplace"
+   ]
+  },
+  "GET /api/v1/cmo/showcase/hashtags": {
+   "query": [
+    "cursor",
+    "limit",
+    "q",
+    "sku"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/showcase/products": {
+   "query": [
+    "q"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/showcase/titles": {
+   "query": [
+    "approvedOnly",
+    "cursor",
+    "from",
+    "limit",
+    "marketplace",
+    "q",
+    "sku",
+    "to",
+    "view"
+   ],
+   "requiredQuery": [
+    "marketplace"
+   ]
+  },
+  "GET /api/v1/cmo/showcase/trends": {
+   "query": [
+    "cursor",
+    "limit"
+   ],
    "requiredQuery": []
   },
   "GET /api/v1/ops/live": {
@@ -233,6 +308,14 @@
    "requiredQuery": []
   },
   "GET /api/v1/pi/report/{run_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/pi/research": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/pi/research/{run_id}": {
    "query": [],
    "requiredQuery": []
   },
@@ -289,6 +372,20 @@
   },
   "POST /api/v1/ceo/investigations/{investigation_id}/attachments": {
    "multipart": true,
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/investigations/{investigation_id}/plans/{plan_id}/approve": {
+   "body": {
+    "$ref": "#/components/schemas/ApproveBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/ceo/investigations/{investigation_id}/plans/{plan_id}/decline": {
+   "body": {
+    "$ref": "#/components/schemas/DeclineBody"
+   },
    "query": [],
    "requiredQuery": []
   },
@@ -647,6 +744,13 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cmo/showcase/usage-events": {
+   "body": {
+    "$ref": "#/components/schemas/UsageEventBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cmo/title-approvals": {
    "body": {
     "$ref": "#/components/schemas/ApprovalBody"
@@ -694,9 +798,24 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/pi/research/{run_id}/pin": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/pi/research/{run_id}/unpin": {
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/pi/supplier-lookup": {
    "body": {
     "$ref": "#/components/schemas/SupplierLookupRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "PUT /api/v1/business-profile": {
+   "body": {
+    "$ref": "#/components/schemas/BusinessProfileIn"
    },
    "query": [],
    "requiredQuery": []
@@ -936,6 +1055,22 @@
    "title": "ApprovalBody",
    "type": "object"
   },
+  "ApproveBody": {
+   "description": "Approval is bound to the plan id (the path) AND the hash the seller was shown. The server recomputes the hash; this value is only compared, never used as content.",
+   "properties": {
+    "plan_hash": {
+     "maxLength": 200,
+     "minLength": 1,
+     "title": "Plan Hash",
+     "type": "string"
+    }
+   },
+   "required": [
+    "plan_hash"
+   ],
+   "title": "ApproveBody",
+   "type": "object"
+  },
   "AttachBody": {
    "properties": {
     "attached": {
@@ -1119,6 +1254,59 @@
    "title": "BusinessOnboardingRequest",
    "type": "object"
   },
+  "BusinessProfileIn": {
+   "additionalProperties": false,
+   "description": "All eight fields are required: there is no default anywhere, so a missing one is a validation error (never a silent blank).",
+   "properties": {
+    "business_name": {
+     "title": "Business Name",
+     "type": "string"
+    },
+    "business_stage": {
+     "title": "Business Stage",
+     "type": "string"
+    },
+    "categories": {
+     "title": "Categories",
+     "type": "string"
+    },
+    "description": {
+     "title": "Description",
+     "type": "string"
+    },
+    "marketplaces": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Marketplaces",
+     "type": "array"
+    },
+    "price_segment": {
+     "title": "Price Segment",
+     "type": "string"
+    },
+    "state": {
+     "title": "State",
+     "type": "string"
+    },
+    "target_customer": {
+     "title": "Target Customer",
+     "type": "string"
+    }
+   },
+   "required": [
+    "business_name",
+    "description",
+    "categories",
+    "marketplaces",
+    "price_segment",
+    "target_customer",
+    "business_stage",
+    "state"
+   ],
+   "title": "BusinessProfileIn",
+   "type": "object"
+  },
   "CandidateDecisionRequest": {
    "properties": {
     "decision": {
@@ -1212,6 +1400,15 @@
       }
      ],
      "title": "Category Hint"
+    },
+    "ci_insight_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "title": "Ci Insight Ids",
+     "type": "array"
     },
     "image_analysis_id": {
      "anyOf": [
@@ -1895,6 +2092,24 @@
    "title": "DeclareLineStatusOverrideHttpRequest",
    "type": "object"
   },
+  "DeclineBody": {
+   "properties": {
+    "reason": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Reason"
+    }
+   },
+   "title": "DeclineBody",
+   "type": "object"
+  },
   "DigestSubscriptionRequest": {
    "properties": {
     "channel": {
@@ -2295,6 +2510,15 @@
      ],
      "title": "Category Hint"
     },
+    "ci_insight_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "title": "Ci Insight Ids",
+     "type": "array"
+    },
     "image_analysis_id": {
      "anyOf": [
       {
@@ -2625,6 +2849,15 @@
       }
      ],
      "title": "Category Hint"
+    },
+    "ci_insight_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "title": "Ci Insight Ids",
+     "type": "array"
     },
     "image_analysis_id": {
      "anyOf": [
@@ -3496,7 +3729,6 @@
        "type": "number"
       },
       {
-       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
        "type": "string"
       },
       {
@@ -3880,7 +4112,6 @@
        "type": "number"
       },
       {
-       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
        "type": "string"
       },
       {
@@ -4365,6 +4596,15 @@
      ],
      "title": "Category Hint"
     },
+    "ci_insight_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "title": "Ci Insight Ids",
+     "type": "array"
+    },
     "image_analysis_id": {
      "anyOf": [
       {
@@ -4545,6 +4785,18 @@
      "title": "Attachment Ids",
      "type": "array"
     },
+    "ciFindingId": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Cifindingid"
+    },
     "clarification": {
      "anyOf": [
       {
@@ -4687,7 +4939,6 @@
        "type": "number"
       },
       {
-       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
        "type": "string"
       },
       {
@@ -4856,6 +5107,75 @@
     }
    },
    "title": "UpdateSellerProductRequest",
+   "type": "object"
+  },
+  "UsageEventBody": {
+   "additionalProperties": false,
+   "properties": {
+    "generationId": {
+     "format": "uuid",
+     "title": "Generationid",
+     "type": "string"
+    },
+    "kind": {
+     "enum": [
+      "VIEWED",
+      "COPIED",
+      "MARKED_USED"
+     ],
+     "title": "Kind",
+     "type": "string"
+    },
+    "optionId": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Optionid"
+    },
+    "resultPart": {
+     "anyOf": [
+      {
+       "enum": [
+        "TITLE",
+        "BULLET_1",
+        "BULLET_2",
+        "BULLET_3",
+        "BULLET_4",
+        "BULLET_5",
+        "DESCRIPTION",
+        "BACKEND_TERMS",
+        "FULL_PACK",
+        "HASHTAGS"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Resultpart"
+    },
+    "surface": {
+     "enum": [
+      "DASHBOARD",
+      "CHAT"
+     ],
+     "title": "Surface",
+     "type": "string"
+    }
+   },
+   "required": [
+    "generationId",
+    "kind",
+    "surface"
+   ],
+   "title": "UsageEventBody",
    "type": "object"
   },
   "VoidRequest": {

@@ -44,6 +44,10 @@ def ask_through_to_confirm(ctx, rt, inv):
     res = say(ctx, rt, inv, "Sunrise Traders")
     res = say(ctx, rt, inv, "250")
     res = say(ctx, rt, inv, "5000")  # order shipping
+    assert res.clarify_for == "moq"  # live run 2026-10-14: a never-sold product's batch size needs the MOQ or the lead time, so both are asked (each skippable)
+    res = say(ctx, rt, inv, "50")
+    assert res.clarify_for == "lead_time_days"
+    res = say(ctx, rt, inv, "21")
     assert res.clarify_for == "budget"
     res = say(ctx, rt, inv, "1,00,000")
     assert res.clarify_for == "confirm"
@@ -63,6 +67,7 @@ def test_nothing_is_saved_or_run_until_the_seller_confirms_and_then_the_real_leg
     assert done.status == "DELIVERED" and set(calls) == set(PRODUCT_LEGS) and done.composition_mode == "TEMPLATE"
     [quote] = ceo_reads.stored_quotes(a, "Leather Formal Shoes")
     assert quote["value"]["unit_cost_paise"] == 25000 and quote["value"]["shipping_paise"] == 500000 and quote["value"]["supplier_name"] == "Sunrise Traders"
+    assert quote["value"]["moq"] == 50 and quote["value"]["lead_time_days"] == 21  # the supplier's own terms, as the seller stated them
     [budget] = ceo_reads.stored_budget(a)
     assert budget["value"]["amount_paise"] == 10000000
     [landed] = calls["cfo.landed_cost"]

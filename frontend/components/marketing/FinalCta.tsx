@@ -8,11 +8,6 @@ export function FinalCta() {
 
   return (
     <section ref={reveal} className="mt-reveal relative px-6 py-28 text-center">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[300px]"
-        style={{ background: "radial-gradient(ellipse 560px 260px at 50% 30%, var(--accent-fill-subtle), transparent)" }}
-      />
       <h2 className="relative text-[32px] font-bold tracking-tight sm:text-[42px]" style={{ color: "var(--text-hero)", letterSpacing: "-0.01em" }}>
         Start growing profitably.
       </h2>

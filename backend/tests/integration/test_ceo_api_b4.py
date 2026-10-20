@@ -103,7 +103,7 @@ def test_availability_reflects_the_members_permissions_and_truthful_chat_actions
     client, ha, _, a, _ = api
     full = client.get("/api/v1/ceo/agents/availability", headers=ha).json()
     assert {k: v["status"] for k, v in full.items()} == {"CFO": "PRESENT", "CI": "PRESENT", "PI": "PRESENT", "CMO": "PRESENT"}
-    assert {k: v["chatActions"] for k, v in full.items()} == {"CFO": 6, "CI": 1, "PI": 1, "CMO": 1}  # CFO +GST lookup (Route A), CI price positioning, PI report only, CMO market-trends preview only: the approval-required ones (D-8) are refused from chat, so they are not counted
+    assert {k: v["chatActions"] for k, v in full.items()} == {"CFO": 6, "CI": 4, "PI": 1, "CMO": 9}  # CFO +GST lookup (Route A), CI price positioning + re-check + review findings + remove a competitor (CI spec 6.21.3; discovery is approval-required, so not counted), PI report only, CMO market-trends preview only: the approval-required ones (D-8) are refused from chat, so they are not counted
     member = login(clerk, a, role=PARTNER_ROLE, permissions={AGENT_CEO: True, INVESTIGATION_VIEW: True})
     assert client.get("/api/v1/ceo/agents/availability", headers=member).json()["CFO"]["status"] == "NOT_PERMITTED"
     assert client.get("/api/v1/ceo/agents/availability", headers={}).status_code == 401
@@ -235,6 +235,7 @@ def test_the_repository_reopen_is_strict_and_keeps_the_note(two_tenants, app_use
 def test_availability_never_counts_an_approval_required_action_as_runnable_from_chat(api, clerk):
     """D-8: `chatActions` is what chat can actually run. The six approval-required chat actions are refused until a stored approval plan exists, so they are not counted;
     the count equals the unflagged chat actions per agent. (Agent pages are separate surfaces and are not part of this number.)"""
+    from backend.ceo import cmo_delegation
     from backend.ceo.approval_gate import plan_required
     from backend.ceo.plans import ACTIONS, VIRTUAL_ROUTES
     from backend.ceo.registry import get_registry
@@ -243,9 +244,9 @@ def test_availability_never_counts_an_approval_required_action_as_runnable_from_
     reg = get_registry()
     expected: dict[str, int] = {}
     for k in ACTIONS:
-        if not plan_required([k]):
+        if not plan_required([k]) or k in cmo_delegation.DELEGATED_ACTIONS:  # the five CMO actions go to a plan card
             agent = reg.get(VIRTUAL_ROUTES.get(k, (k,))[0]).agent.value
             expected[agent] = expected.get(agent, 0) + 1
     got = {k: v["chatActions"] for k, v in client.get("/api/v1/ceo/agents/availability", headers=ha).json().items()}
     assert got == {"CFO": expected.get("CFO", 0), "CI": expected.get("CI", 0), "PI": expected.get("PI", 0), "CMO": expected.get("CMO", 0)}
-    assert got["PI"] == 1 and got["CMO"] == 1  # not 2 and 6: pi.discover, cmo.market_trends and the four cmo.generate_* are blocked in chat
+    assert got["PI"] == 1 and got["CMO"] == 9  # pi.discover stays blocked; the eight delegated CMO writing actions + trends end at a plan card

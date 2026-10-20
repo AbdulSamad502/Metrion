@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from slim_cmo.constraints import ResolvedConstraint
 from slim_cmo.generation.engine import Evaluation, classify_failure, run_attempts
-from slim_cmo.generation.facts import FactContext
+from slim_cmo.generation.facts import FactContext, is_thin_input
 from slim_cmo.generation.outcomes import Delivered, Failed, Outcome
 from slim_cmo.generation.parse import Parsed
 from slim_cmo.generation.prompts import prompt_facts, title_prompt
@@ -92,6 +92,7 @@ def generate_title_set(
         "unverified_limits": list(resolved.unverified_limits),
         "attempts": log.attempts,
         "excluded_facts": list(facts.excluded),
+        "thin_input": is_thin_input(facts),
     }
     return Delivered(OutputType.TITLE_SET, structured, None, log.attempts, options)
 

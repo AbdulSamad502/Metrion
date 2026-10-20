@@ -142,9 +142,9 @@ export async function loadList(getToken: Getter, f: ListFilters): Promise<Expens
   if (f.offset) q.set("offset", String(f.offset));
   if (f.limit) q.set("limit", String(f.limit));
   const qs = q.toString();
-  return apiFetch<ExpenseListResponse>(`${BASE}${qs ? `?${qs}` : ""}`, await getToken());
+  return apiFetch<ExpenseListResponse>(qs ? `${BASE}?${qs}` : BASE, await getToken());
 }
 
 export async function post<T = { expenseId: string }>(getToken: Getter, path: string, body: unknown): Promise<T> {
-  return apiFetch<T>(`${BASE}${path}`, await getToken(), { method: "POST", body: JSON.stringify(body) });
+  return apiFetch<T>(BASE + path, await getToken(), { method: "POST", body: JSON.stringify(body) });
 }

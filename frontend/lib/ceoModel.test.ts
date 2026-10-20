@@ -95,7 +95,7 @@ describe("messages and hub state", () => {
     expect(messageView(ceo({}), t(turn({ route: "OUT_OF_SCOPE" }))).badge).toBe("Out of scope");
     expect(messageView(ceo({}), t(turn({ status: "DENIED" }))).badge).toBe("Not permitted");
     expect(messageView(ceo({}), t(turn({ status: "FAILED" }))).badge).toBe("Could not complete");
-    expect(messageView(ceo({}), t(turn({ composition_mode: "TEMPLATE_FALLBACK" }))).footnote).toMatch(/did not pass the safety check/);
+    expect(messageView(ceo({}), t(turn({ composition_mode: "TEMPLATE_FALLBACK" }))).footnote).toMatch(/saved results only/);
     expect(messageView(ceo({}), t(turn({ composition_mode: "TEMPLATE" }))).footnote).toMatch(/saved, verified results/);
     expect(messageView(ceo({ role: "SYSTEM", kind: "SYSTEM_NOTE" }), new Map()).tone).toBe("note");
     expect(messageView(ceo({ role: "USER", kind: "TEXT" }), new Map()).tone).toBe("user");

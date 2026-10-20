@@ -53,14 +53,14 @@ CASES = [
     ("What product ideas did you find?", None, "BUSINESS_STATE", "QT_PRODUCT_IDEAS", "DELIVERED", []),
     ("What did the product research find for yoga mats?", None, "BUSINESS_STATE", "QT_PRODUCT_IDEAS", "DELIVERED", []),
     # --- misrouting guards: these must NOT start a market-wide discovery run
-    ("Research my competitor's product reviews", "MODEL", None, None, None, []),
+    ("Research my competitor's product reviews", None, "ACTION", "ci.review_findings", "DELIVERED", ["ci.review_findings"]),  # CI's own rule: it reads the saved review evidence, never a market-wide discovery
     ("What are my top selling products?", "MODEL", None, None, None, []),
-    # --- marketing / CMO (metered: approval-gated)
-    ("Write hashtags for my steel water bottle on Amazon", None, "ADVISORY", None, "DENIED", []),
-    ("Write a title for my steel bottle on Flipkart", None, "ADVISORY", None, "DENIED", []),
-    ("Write a description for my yoga mat", None, "ADVISORY", None, "DENIED", []),
-    ("Give me keywords for my yoga mat", None, "ADVISORY", None, "DENIED", []),
-    ("What's trending in my niche?", None, "ADVISORY", None, "DENIED", []),
+    # --- marketing / CMO (metered): the CEO asks for what is missing, or - when everything is given - stores a plan card; NOTHING runs before the seller approves it
+    ("Write hashtags for my steel water bottle on Amazon", None, "CLARIFY", None, "CLARIFIED", []),  # product and marketplace are given; the optional brand question is asked before the plan
+    ("Write a title for my steel bottle on Flipkart", None, "CLARIFY", None, "CLARIFIED", []),
+    ("Write a description for my yoga mat", None, "CLARIFY", None, "CLARIFIED", []),
+    ("Give me keywords for my yoga mat", None, "CLARIFY", None, "CLARIFIED", []),
+    ("What's trending in my niche?", None, "CLARIFY", None, "CLARIFIED", []),
     ("What titles did we write?", None, "BUSINESS_STATE", "QT_LISTING_CONTENT", "DELIVERED", []),
     # --- competitors / pricing (non-financial routing only)
     ("What are my competitors charging?", None, "BUSINESS_STATE", "QT_COMPETITORS_PRICES", "DELIVERED", []),
@@ -76,7 +76,7 @@ CASES = [
     # --- ambiguous / irrelevant / unsupported: the model decides; plan validation holds either way
     ("Hello", ADVISORY, "ADVISORY", None, "DELIVERED", []),
     ("asdfgh", verdict("CLARIFY", clarify_for="UNCLEAR_REQUEST"), "CLARIFY", None, "CLARIFIED", []),
-    ("Delete my competitor Acme", OUT_OF_SCOPE, "OUT_OF_SCOPE", None, "DELIVERED", []),
+    ("Delete my competitor Acme", None, "CLARIFY", None, "CLARIFIED", []),  # CI's remove rule: with no competitor tracked the seller is told so, nothing is run
     ("Upload my sales file", OUT_OF_SCOPE, "OUT_OF_SCOPE", None, "DELIVERED", []),
     ("Find suppliers for yoga mats", OUT_OF_SCOPE, "OUT_OF_SCOPE", None, "DELIVERED", []),
     # a model that wrongly offers something outside the catalog is stopped by code

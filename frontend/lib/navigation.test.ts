@@ -9,7 +9,7 @@ describe("navigation (customer-goal groups)", () => {
     expect(SYSTEM_GROUP_LABEL).toBe("System");
     expect(NAV_GROUPS[1].items.map((i) => i.label)).toEqual(["Products", "Competitors", "Profit & Finance", "Profit Calculator", "Listings & Marketing"]);
     expect(FOOTER_NAV.map((i) => i.label)).toEqual(["Agents", "Settings"]);
-    expect(NAV_GROUPS[0].items.map((i) => i.label)).toEqual(["Overview", "Ask Metrion", "Action Center"]);
+    expect(NAV_GROUPS[0].items.map((i) => i.label)).toEqual(["Overview", "CEO Hub", "Action Center"]);
   });
   it("keeps every real route reachable and lists no inert 'Soon' entry", () => {
     const hrefs = allNavItems().map((i) => i.href);

@@ -46,7 +46,7 @@ class _FakeTavily:
         self._results = results or []
         self._raises = raises
 
-    def search(self, query, *, include_images=False, max_results=10):
+    def search(self, query, *, include_images=False, max_results=10, **_):
         if self._raises:
             raise TavilyUnavailable("rate limit")
         return self._results
@@ -307,3 +307,60 @@ def test_supplier_filter_prefers_supplier_signal_results_when_over_cap(_patch_re
 
     inserted = _patch_repos
     assert inserted[0]["supplier_name"] == "Footwear Wholesale Supplier Delhi"
+
+
+# --- first live run (2026-10-14): a brand's own page, a news article and a retailer were persisted as "supplier leads" for a Sony product ---
+def _r(url, title, content="c"):
+    return TavilySearchResult(url=url, title=title, content=content, score=0.5, published_date=None, retrieved_at=_NOW)
+
+
+def test_a_lead_needs_supplier_evidence_so_brand_news_and_retail_pages_are_not_leads() -> None:
+    results = [
+        _r("https://www.sony-asia.com/headphones/products/wf-1000xm6", "WF-1000XM6 | Wireless Noise Cancelling | Sony Asia Pacific"),
+        _r("https://mashable.com/article/sony-wf-1000xm6-earbuds-launch", "The Sony WF-1000XM6 are here: price, specs, where to buy"),
+        _r("https://www.bhphotovideo.com/c/product/1905382-REG/technics", "Technics EAH-AZ100 Reference-Class True Wireless"),
+        _r("https://www.smcomputech.in/sony-earbuds.html", "Sony Earbuds Trader"),
+        _r("https://www.indiamart.com/proddetail/cmf-buds-2-285848323719", "CMF BUDS 2 at Rs 185/piece | Earpods in Surat"),
+        _r("https://x.example/oem", "Earbuds OEM manufacturer Shenzhen"),
+    ]
+    kept = pi_supplier_lookup._filter_and_rank_supplier_results(results, max_results=10, candidate_title="Sony WF-1000XM6")
+    assert [r.url for r in kept] == [
+        "https://www.indiamart.com/proddetail/cmf-buds-2-285848323719", "https://www.smcomputech.in/sony-earbuds.html", "https://x.example/oem",
+    ]  # real bulk listings (trade directories) first, then explicit supplier pages; none of the brand, news or retail pages
+
+
+def test_a_product_with_no_evidenced_supplier_gets_no_lead_rather_than_a_misleading_one(_patch_repos) -> None:
+    tavily = _FakeTavily(results=[_r("https://www.sony-asia.com/x", "Sony Asia Pacific product page")])
+    [result] = pi_supplier_lookup.lookup_suppliers_for_candidates(
+        _TENANT_ID, run_id=_RUN_ID, candidate_ids=[_CANDIDATE_ID], places=_FakePlaces(matches=[]), tavily=tavily, now=_NOW
+    )
+    assert result.lead_ids == () and "no supplier lead found" in result.degraded_reason
+
+
+def test_a_google_place_that_does_not_read_like_a_supplier_is_neither_enriched_nor_a_lead(_patch_repos) -> None:
+    places = _FakePlaces(matches=[PlaceIdResult(place_id="p1", display_name="The Bose Store", retrieved_at=_NOW)])
+    [result] = pi_supplier_lookup.lookup_suppliers_for_candidates(
+        _TENANT_ID, run_id=_RUN_ID, candidate_ids=[_CANDIDATE_ID], places=places, tavily=_FakeTavily(), now=_NOW
+    )
+    assert places.enrich_calls == [] and result.lead_ids == ()  # no paid call spent on a brand store
+
+
+def test_the_trade_directories_are_searched_directly_and_their_pages_lead(_patch_repos) -> None:
+    class _Tavily(_FakeTavily):
+        def __init__(self):
+            super().__init__()
+            self.calls = []
+
+        def search(self, query, *, include_images=False, max_results=10, **kw):
+            self.calls.append((query, kw.get("include_domains")))
+            if kw.get("include_domains"):
+                return [_r("https://www.indiamart.com/proddetail/x-1", "Sony Earbuds at Rs 450/piece | Noida | ID")]
+            return [_r("https://x.example/oem", "Earbuds OEM manufacturer")]
+
+    t = _Tavily()
+    pi_supplier_lookup.lookup_suppliers_for_candidates(
+        _TENANT_ID, run_id=_RUN_ID, candidate_ids=[_CANDIDATE_ID], places=_FakePlaces(matches=[]), tavily=t, now=_NOW
+    )
+    assert any(d and "indiamart.com" in d for _, d in t.calls) and any(d is None for _, d in t.calls)
+    assert [row["source_url"] for row in _patch_repos][0].startswith("https://www.indiamart.com/")  # the bulk listing comes first
+    assert _patch_repos[0]["contact"]["published_price"]["low_paise"] == 45000  # its stated per-piece price is kept as a labelled fact

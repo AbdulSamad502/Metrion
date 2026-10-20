@@ -19,13 +19,15 @@ generation ids; the route layer (P5) meters each delivered id with `cmo_metering
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
 from slim_cmo import billing
+from slim_cmo.ci_inputs import CiInputs, check_output, texts_of
 from slim_cmo.claims import ApprovalRef, Grounding, GroundingResult, check_grounding, shared_text_findings
 from slim_cmo.config import (
     FORMAT_CONSTRAINT_MAX_AGE_DAYS,
@@ -86,6 +88,7 @@ class Intake:
     image_analysis_id: UUID | None = None
     text_only_confirmed: bool = False  # E7: explicit seller confirmation to proceed without a usable analysis
     agent_run_id: UUID | None = None
+    ci_inputs: CiInputs | None = None  # CEO-brokered competitor-listing attributes (section 6.7); absent = independent mode
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +187,17 @@ class _HookedProvider:
         if hook is not None:
             hook()
         return self._inner.complete(model=model, prompt=prompt)
+
+
+class _CiProvider:
+    """Appends the MARKET CONTEXT block (derived words only) to every prompt of one generation. The generators build their own prompts; this keeps the competitor context out of
+    their code and out of any run that has no brokered inputs."""
+
+    def __init__(self, inner: LlmProvider, block: str) -> None:
+        self._inner, self._block = inner, block
+
+    def complete(self, *, model: str, prompt: str) -> str:
+        return self._inner.complete(model=model, prompt=prompt + self._block)
 
 
 class GenerationService:
@@ -429,9 +443,22 @@ class GenerationService:
                 grounding_basis = GroundingBasis(basis) if basis else None
                 grounding_approval = approval_id
 
+        input_mode, ci_snapshot, ci_note = "INDEPENDENT", None, None
         if failure is None:
             assert gen_cfg is not None
-            outcome = self._generate(output_type, marketplace, resolved, ctx, anchor, gen_cfg, hash_cfg)
+            ci = intake.ci_inputs if intake.ci_inputs is not None and intake.ci_inputs.usable() and output_type is not OutputType.CATALOG_ANSWER else None
+            if ci is not None:
+                own_words = set(re.findall(r"[^\W_]+", ctx.allowed_context.casefold()))  # a competitor's first word that is also the seller's own wording (e.g. "steel") is not a brand to avoid
+                ci = replace(ci, exclude_terms=tuple(t for t in ci.exclude_terms if t.casefold() not in own_words))
+                outcome = self._generate(output_type, marketplace, resolved, ctx, anchor, gen_cfg, hash_cfg, ci=ci)
+                problems = check_output([*texts_of(outcome.structured, outcome.output_text), *(o.text for o in outcome.options)], ci) if isinstance(outcome, Delivered) else ["NOT_DELIVERED"]  # title options live outside `structured`
+                if problems:  # a copy / light rewrite / market claim, or no usable draft: written again from the seller's own facts alone, and said so
+                    ci_note = "A draft informed by competitor themes was set aside by the originality and claims checks (" + ", ".join(problems) + "); this was written from your own product facts alone."
+                    outcome = self._generate(output_type, marketplace, resolved, ctx, anchor, gen_cfg, hash_cfg)
+                else:
+                    input_mode, ci_snapshot = "CEO_BROKERED_CI", ci.snapshot()
+            else:
+                outcome = self._generate(output_type, marketplace, resolved, ctx, anchor, gen_cfg, hash_cfg)
             if isinstance(outcome, Failed):
                 failure, outcome = outcome.failure, None
             elif output_type is OutputType.TITLE_SET and resolved is not None:
@@ -445,7 +472,7 @@ class GenerationService:
             actor=actor, intake=intake, key=key, sku=sku, output_type=output_type, marketplace=marketplace,
             outcome=outcome if isinstance(outcome, Delivered) else None, failure=failure, provenance=provenance,
             constraint_ref=constraint_ref, grounding_basis=grounding_basis, grounding_approval=grounding_approval,
-            ctx=ctx,
+            ctx=ctx, input_mode=input_mode, ci_snapshot=ci_snapshot, ci_note=ci_note,
         )
         try:
             generation_id = self._store.save_generation(actor.tenant_id, record)
@@ -489,9 +516,10 @@ class GenerationService:
 
     def _generate(
         self, output_type: OutputType, marketplace: Marketplace | None, resolved: ResolvedConstraint | None,
-        ctx: FactContext, anchor: str | None, gen_cfg: GenerationConfig, hash_cfg: HashtagConfig | None,
+        ctx: FactContext, anchor: str | None, gen_cfg: GenerationConfig, hash_cfg: HashtagConfig | None, ci: CiInputs | None = None,
     ) -> Outcome:
-        common: dict[str, Any] = {"provider": self._provider, "model": self._model, "facts": ctx, "retry_bound": gen_cfg.internal_retry_bound}
+        provider: LlmProvider = _CiProvider(self._provider, ci.prompt_block()) if ci is not None else self._provider
+        common: dict[str, Any] = {"provider": provider, "model": self._model, "facts": ctx, "retry_bound": gen_cfg.internal_retry_bound}
         if output_type is OutputType.HASHTAGS:
             assert hash_cfg is not None
             return standalone_gen.generate_hashtags(hashtag_set_size=hash_cfg.hashtag_set_size, **common)
@@ -512,7 +540,7 @@ class GenerationService:
         self, *, actor: Actor, intake: Intake, key: str, sku: str | None, output_type: OutputType,
         marketplace: Marketplace | None, outcome: Delivered | None, failure: Failure | None,
         provenance: dict[str, Any], constraint_ref: UUID | None, grounding_basis: GroundingBasis | None,
-        grounding_approval: UUID | None, ctx: FactContext,
+        grounding_approval: UUID | None, ctx: FactContext, input_mode: str = "INDEPENDENT", ci_snapshot: dict[str, Any] | None = None, ci_note: str | None = None,
     ) -> GenerationRecord:
         base: dict[str, Any] = dict(
             output_type=output_type, marketplace=marketplace, sku=sku, request_key=key, generated_by=actor.user_id,
@@ -521,12 +549,12 @@ class GenerationService:
             grounding_approval_id=grounding_approval,
         )
         if outcome is not None:
-            structured = {**outcome.structured, "provenance": provenance}
+            structured = {**outcome.structured, "provenance": {**provenance, **({"ci_note": ci_note} if ci_note else {})}}
             if output_type is OutputType.LISTING_COPY and marketplace is not None:
                 structured["diagnostics"] = {"shared_text": self._shared_text(actor, key, marketplace, outcome)}
             return GenerationRecord(
                 status=GenerationStatus.COMPLETE, output_text=outcome.output_text, output_structured=structured,
-                failure_reason=None, options=outcome.options, **base,
+                failure_reason=None, options=outcome.options, input_mode=input_mode, ci_inputs_snapshot=ci_snapshot, **base,
             )
         assert failure is not None
         return GenerationRecord(

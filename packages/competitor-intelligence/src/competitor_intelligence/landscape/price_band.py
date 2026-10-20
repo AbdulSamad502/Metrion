@@ -16,6 +16,7 @@ axes, §5.4) — it stays visible elsewhere, just never counted in a market-wide
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 from competitor_intelligence.discovery.identity_resolution import IdentityMatch
@@ -26,6 +27,20 @@ from competitor_intelligence.repositories import (
 )
 
 _ELIGIBLE_IDENTITY_MATCHES = frozenset({IdentityMatch.EXACT_MATCH.value, IdentityMatch.LIKELY_VARIANT.value})
+
+# C43 (CP2): a seller-approved other-brand product is a competitor, and the market band is
+# about competitors. Same-function products from other brands belong in it; a functional
+# alternative is shown in comparison but kept out of the band, because a different kind of
+# product is priced on a different scale and would skew the typical range.
+_ELIGIBLE_RELATIONSHIPS = frozenset({"SAME_PRODUCT", "VARIANT", "DIRECT_COMPETITOR"})
+
+
+def _is_band_eligible(candidate: dict[str, Any] | None) -> bool:
+    if candidate is None:
+        return True  # manually added competitor: the seller named it
+    if candidate["identity_match"] in _ELIGIBLE_IDENTITY_MATCHES:
+        return True
+    return candidate.get("relationship_class") in _ELIGIBLE_RELATIONSHIPS
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +66,7 @@ def eligible_competitor_prices(tenant_id: UUID, product_id: str) -> list[Eligibl
     eligible: list[EligibleCompetitorPrice] = []
     for url in urls:
         candidate = ci_candidate_repo.get_by_competitor_url_id(tenant_id, url["id"])
-        if candidate is not None and candidate["identity_match"] not in _ELIGIBLE_IDENTITY_MATCHES:
+        if not _is_band_eligible(candidate):
             continue
         snapshot = competitor_snapshot_repo.latest_usable_snapshot(tenant_id, url["id"])
         if snapshot is None:

@@ -1,0 +1,406 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1340" width="100%" height="100%">
+  <defs>
+    <!-- Deep Obsidian Studio Background -->
+    <radialGradient id="cmoBg" cx="24%" cy="6%" r="70%">
+      <stop offset="0%" stop-color="#081A0F" />
+      <stop offset="42%" stop-color="#070907" />
+      <stop offset="100%" stop-color="#040504" />
+    </radialGradient>
+
+    <!-- Translucent Dark Glass Card Surfaces -->
+    <linearGradient id="cardGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#121813" stop-opacity="0.94" />
+      <stop offset="100%" stop-color="#080C08" stop-opacity="0.98" />
+    </linearGradient>
+
+    <!-- Elevated Section Sub-Surface -->
+    <linearGradient id="subSurfaceGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#151F17" stop-opacity="0.75" />
+      <stop offset="100%" stop-color="#0A100C" stop-opacity="0.90" />
+    </linearGradient>
+
+    <!-- Active Approved Title Card Glass -->
+    <linearGradient id="activeTitleGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#182A1C" stop-opacity="0.92" />
+      <stop offset="100%" stop-color="#0C140E" stop-opacity="0.98" />
+    </linearGradient>
+
+    <!-- Metrion Signature Brand Emerald -->
+    <linearGradient id="brandEmerald" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#52E082" />
+      <stop offset="100%" stop-color="#28C765" />
+    </linearGradient>
+
+    <!-- Soft Depth Shadow -->
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.65" />
+    </filter>
+
+    <!-- Laser Emerald Glow Filter -->
+    <filter id="emeraldGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <style>
+    .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; }
+    .label-caps { font-size: 8.5px; font-weight: 700; fill: #6B796D; letter-spacing: 0.09em; text-transform: uppercase; }
+    .title-h1 { font-size: 15px; font-weight: 700; fill: #FFFFFF; letter-spacing: -0.01em; }
+    .num-bold { font-family: "Inter", -apple-system, sans-serif; font-weight: 700; fill: #FFFFFF; letter-spacing: -0.02em; }
+    .text-muted { fill: #879488; font-size: 11px; }
+    .border-standard { stroke: rgba(255, 255, 255, 0.08); stroke-width: 1; rx: 12; }
+    .border-active { stroke: rgba(40, 199, 101, 0.40); stroke-width: 1.2; rx: 12; }
+  </style>
+
+  <!-- Base Canvas Background -->
+  <rect width="1440" height="1340" fill="url(#cmoBg)" />
+
+  <!-- ================= LEFT NAVIGATION SIDEBAR ================= -->
+  <g id="sidebar">
+    <rect x="0" y="0" width="248" height="1340" fill="#060806" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+    
+    <!-- Metrion Brand Logo -->
+    <g transform="translate(24, 26)">
+      <path d="M 6 36 Q 16 4 28 6 Q 18 20 22 34 Q 30 14 44 2 Q 40 18 36 34" fill="none" stroke="url(#brandEmerald)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+      <polygon points="43,2 45,4 43,6 41,4" fill="#52E082" />
+      <text x="56" y="22" class="font-sans" font-size="20" font-weight="700" fill="#FFFFFF" letter-spacing="-0.02em">Metrion</text>
+      <text x="56" y="34" class="font-sans label-caps" font-size="7.5" fill="#28C765" letter-spacing="0.14em">ENGINE OF GROWTH</text>
+    </g>
+
+    <!-- Navigation List -->
+    <g transform="translate(14, 96)" class="font-sans">
+      <text x="14" y="0" class="label-caps" font-size="9" fill="#435044">Profit Intelligence</text>
+      
+      <g transform="translate(0, 14)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Overview</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+      <g transform="translate(0, 52)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">CEO Hub</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+      <g transform="translate(0, 90)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Products (PI)</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+      <g transform="translate(0, 128)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Competitors (CI)</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+      <g transform="translate(0, 166)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Finance (CFO)</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+
+      <!-- ACTIVE: Marketing (CMO) Tab -->
+      <g transform="translate(0, 204)">
+        <rect x="0" y="4" width="220" height="38" rx="10" fill="rgba(40,199,101,0.12)" stroke="rgba(40,199,101,0.28)" stroke-width="1" />
+        <rect x="0" y="4" width="4" height="38" rx="2" fill="#28C765" />
+        <circle cx="22" cy="23" r="3.5" fill="#28C765" filter="url(#emeraldGlow)" />
+        <text x="36" y="27" font-size="13" font-weight="700" fill="#28C765">Marketing (CMO)</text>
+      </g>
+
+      <text x="14" y="268" class="label-caps" font-size="9" fill="#435044">Autonomous Ops</text>
+      <g transform="translate(0, 282)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Copy Generator</text><circle cx="22" cy="20" r="3" fill="#28C765" /></g>
+      <g transform="translate(0, 320)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Market Trends</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+    </g>
+
+    <!-- Bottom Account Status -->
+    <g transform="translate(16, 1260)">
+      <rect x="0" y="0" width="216" height="50" rx="10" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+      <circle cx="25" cy="25" r="14" fill="rgba(40,199,101,0.16)" />
+      <text x="18" y="29" class="font-sans" font-size="11" font-weight="700" fill="#28C765">ZS</text>
+      <text x="48" y="21" class="font-sans" font-size="12" font-weight="600" fill="#FFFFFF">Zyquora Store</text>
+      <text x="48" y="35" class="font-sans" font-size="10" fill="#6B796D">CMO · Recommend-Only</text>
+    </g>
+  </g>
+
+  <!-- ================= TOP HEADER BAR ================= -->
+  <g transform="translate(278, 22)">
+    <text x="0" y="22" class="font-sans" font-size="22" font-weight="700" fill="#FFFFFF">Slim CMO Dashboard</text>
+    <text x="0" y="40" class="font-sans text-muted">SEO Copy Generation · Marketplace Rules (Amazon, Flipkart, Meesho) · Live Trends</text>
+
+    <!-- Active Product Selector & Action -->
+    <g transform="translate(776, 4)">
+      <rect x="0" y="0" width="194" height="34" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+      <circle cx="16" cy="17" r="4" fill="#28C765" />
+      <text x="28" y="21" class="font-sans" font-size="11" fill="#FFFFFF">Product: Emerald Watch ▾</text>
+    </g>
+    <g transform="translate(984, 4)">
+      <rect x="0" y="0" width="154" height="34" rx="8" fill="#28C765" />
+      <text x="16" y="21" class="font-sans" font-size="12" font-weight="700" fill="#041208">+ Generate New Pack</text>
+    </g>
+  </g>
+
+  <!-- ================= 1. SECTION: MARKET TRENDS & FRESH E-COM NEWS (TOP FULL-WIDTH) ================= -->
+  <g transform="translate(278, 76)">
+    <rect x="0" y="0" width="1138" height="174" rx="14" fill="url(#cardGrad)" class="border-active" filter="url(#softShadow)" />
+
+    <!-- Container Header -->
+    <g transform="translate(24, 18)" class="font-sans">
+      <rect x="0" y="0" width="52" height="18" rx="4" fill="#28C765" />
+      <text x="7" y="13" font-size="9.5" font-weight="700" fill="#041208">NEWS</text>
+      <text x="62" y="15" class="title-h1" font-size="14.5">Market Trends &amp; Fresh E-Commerce News (§6.8)</text>
+      <text x="770" y="15" class="text-muted">Niche: <tspan fill="#28C765" font-weight="700">"Men's Chronograph Watches"</tspan> · Updated Today</text>
+    </g>
+    <line x1="24" y1="44" x2="1114" y2="44" stroke="rgba(255,255,255,0.06)" />
+
+    <!-- 3 Live Trend / News Cards (Amazon, Flipkart, Niche Buzz) -->
+    <g transform="translate(24, 56)" class="font-sans">
+      <!-- Card 1: Amazon Policy -->
+      <g transform="translate(0, 0)">
+        <rect x="0" y="0" width="348" height="100" rx="8" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <rect x="12" y="10" width="84" height="16" rx="3" fill="rgba(82,224,130,0.18)" />
+        <text x="16" y="22" font-size="8" font-weight="700" fill="#52E082">AMAZON INDIA</text>
+        <text x="104" y="22" class="text-muted" font-size="9">Verified 2h ago · Official</text>
+        
+        <text x="12" y="44" font-size="12" font-weight="700" fill="#FFFFFF">Diwali Festive Search Indexing Expansion</text>
+        <text x="12" y="60" class="text-muted" font-size="10.5">Algorithm increased weight for gift-phrases across watch listings.</text>
+        <text x="12" y="82" font-size="10" font-weight="600" fill="#28C765">Action: Gifting terms placed in Backend Search Terms below ✓</text>
+      </g>
+
+      <!-- Card 2: Flipkart Logistics Policy -->
+      <g transform="translate(366, 0)">
+        <rect x="0" y="0" width="348" height="100" rx="8" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <rect x="12" y="10" width="60" height="16" rx="3" fill="rgba(255,255,255,0.06)" />
+        <text x="16" y="22" font-size="8" font-weight="700" fill="#FFFFFF">FLIPKART</text>
+        <text x="78" y="22" class="text-muted" font-size="9">Platform Update · News</text>
+        
+        <text x="12" y="44" font-size="12" font-weight="700" fill="#FFFFFF">Regional Express Dispatch Deadline</text>
+        <text x="12" y="60" class="text-muted" font-size="10.5">Same-day hub handover required to keep search visibility badges.</text>
+        <text x="12" y="82" font-size="10" font-weight="600" fill="#28C765">Recommendation: Highlight "Express Dispatch" in product highlights</text>
+      </g>
+
+      <!-- Card 3: Niche Trend -->
+      <g transform="translate(732, 0)">
+        <rect x="0" y="0" width="358" height="100" rx="8" fill="rgba(40,199,101,0.04)" stroke="rgba(40,199,101,0.22)" stroke-width="1" />
+        <rect x="12" y="10" width="76" height="16" rx="3" fill="rgba(40,199,101,0.2)" />
+        <text x="16" y="22" font-size="8" font-weight="700" fill="#28C765">NICHE TREND</text>
+        <text x="96" y="22" class="text-muted" font-size="9">Tavily &amp; YouTube Signal</text>
+        
+        <text x="12" y="44" font-size="12" font-weight="700" fill="#FFFFFF">Emerald Sunray Dial Interest (+34%)</text>
+        <text x="12" y="60" class="text-muted" font-size="10.5">Surging consumer interest in deep green dials in unboxing videos.</text>
+        <text x="12" y="82" font-size="10" font-weight="600" fill="#52E082">Status: Matched · High-Volume Title leads with Royal Sunray Dial</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ================= 2. SECTION: FREQUENTLY USED SEO TITLES (REPLACING "S-OPTION" JARGON) ================= -->
+  <g transform="translate(278, 268)">
+    <rect x="0" y="0" width="1138" height="344" rx="14" fill="url(#cardGrad)" class="border-standard" filter="url(#softShadow)" />
+
+    <!-- Section Header + Marketplace Switcher Tabs -->
+    <g transform="translate(24, 18)" class="font-sans">
+      <circle cx="5" cy="8" r="3" fill="#28C765" filter="url(#emeraldGlow)" />
+      <text x="14" y="12" class="title-h1">Frequently Used SEO Titles</text>
+      <text x="238" y="12" class="text-muted">Proven e-commerce title formats · Click to lock approval and generate copy pack below</text>
+
+      <!-- Multi-Marketplace Tab Switcher -->
+      <g transform="translate(774, -4)">
+        <text x="-92" y="18" class="text-muted" font-size="10.5">Target Channel:</text>
+        <!-- Amazon Tab (Active) -->
+        <rect x="0" y="0" width="102" height="26" rx="6" fill="#28C765" />
+        <text x="12" y="17" font-size="10" font-weight="700" fill="#041208">Amazon (200c)</text>
+        <!-- Flipkart Tab -->
+        <rect x="110" y="0" width="102" height="26" rx="6" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+        <text x="120" y="17" font-size="10" font-weight="600" fill="#DADFD6">Flipkart (150c)</text>
+        <!-- Meesho Tab -->
+        <rect x="220" y="0" width="102" height="26" rx="6" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+        <text x="232" y="17" font-size="10" font-weight="600" fill="#DADFD6">Meesho (100c)</text>
+      </g>
+    </g>
+    <line x1="24" y1="46" x2="1114" y2="46" stroke="rgba(255,255,255,0.06)" />
+
+    <!-- 4 Industry-Standard Frequently Used Titles -->
+    <g transform="translate(24, 58)" class="font-sans">
+      
+      <!-- Title Format 1: High-Volume Search Format (APPROVED / ACTIVE) -->
+      <g transform="translate(0, 0)">
+        <rect x="0" y="0" width="1090" height="58" rx="8" fill="url(#activeTitleGrad)" stroke="rgba(40,199,101,0.45)" stroke-width="1.3" />
+        <rect x="14" y="12" width="70" height="18" rx="4" fill="rgba(40,199,101,0.22)" />
+        <text x="19" y="24" font-size="8.5" font-weight="700" fill="#28C765">APPROVED ✓</text>
+        
+        <text x="96" y="24" font-size="10.5" font-weight="700" fill="#52E082">High-Volume Search Title</text>
+        <text x="256" y="24" font-size="10" font-weight="600" fill="#879488">174 / 200 Chars (Target: Broad Organic Ranking)</text>
+        <text x="14" y="44" font-size="12" font-weight="600" fill="#FFFFFF">Zyquora Men's Emerald Sunray Chronograph Watch | 316L Stainless Steel, Sapphire Glass, Genuine Soft Leather Strap</text>
+        
+        <g transform="translate(984, 14)">
+          <rect x="0" y="0" width="94" height="26" rx="5" fill="#28C765" />
+          <text x="12" y="17" font-size="10" font-weight="700" fill="#041208">Locked Root</text>
+        </g>
+      </g>
+
+      <!-- Title Format 2: Brand & Specification-Led Format -->
+      <g transform="translate(0, 64)">
+        <rect x="0" y="0" width="1090" height="54" rx="8" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <text x="14" y="20" font-size="10" font-weight="700" fill="#879488">Brand &amp; Specification-Led Title</text>
+        <text x="220" y="20" font-size="10" font-weight="600" fill="#879488">188 / 200 Chars (Target: Premium / High AOV Shoppers)</text>
+        <text x="14" y="38" font-size="11.5" font-weight="500" fill="#DADFD6">Zyquora Luxury Men Watch — Deep Emerald Green Sunray Dial Chrono, Waterproof 5ATM Tested with Anti-Scratch Crystal</text>
+        <g transform="translate(994, 14)">
+          <rect x="0" y="0" width="84" height="24" rx="4" fill="rgba(255,255,255,0.05)" />
+          <text x="14" y="16" font-size="9.5" font-weight="600" fill="#FFFFFF">Select ↗</text>
+        </g>
+      </g>
+
+      <!-- Title Format 3: Mobile-First / Short Feed Format -->
+      <g transform="translate(0, 124)">
+        <rect x="0" y="0" width="1090" height="54" rx="8" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <text x="14" y="20" font-size="10" font-weight="700" fill="#879488">Mobile-First Short Title</text>
+        <text x="176" y="20" font-size="10" font-weight="600" fill="#879488">96 / 100 Chars (Optimized for App Feeds &amp; Meesho Display)</text>
+        <text x="14" y="38" font-size="11.5" font-weight="500" fill="#DADFD6">Zyquora Men's Emerald Green Sunray Chronograph Watch with Genuine Brown Leather Strap</text>
+        <g transform="translate(994, 14)">
+          <rect x="0" y="0" width="84" height="24" rx="4" fill="rgba(255,255,255,0.05)" />
+          <text x="14" y="16" font-size="9.5" font-weight="600" fill="#FFFFFF">Select ↗</text>
+        </g>
+      </g>
+
+      <!-- Title Format 4: Festive & Gifting Search Format -->
+      <g transform="translate(0, 184)">
+        <rect x="0" y="0" width="1090" height="54" rx="8" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <text x="14" y="20" font-size="10" font-weight="700" fill="#879488">Festive &amp; Gifting Title</text>
+        <text x="160" y="20" font-size="10" font-weight="600" fill="#879488">178 / 200 Chars (Target: Seasonal &amp; Gifting Buyers)</text>
+        <text x="14" y="38" font-size="11.5" font-weight="500" fill="#DADFD6">Zyquora Luxury Emerald Chrono Watch in Gift Box | Men's Designer Timepiece with Genuine Leather &amp; 5ATM Rating</text>
+        <g transform="translate(994, 14)">
+          <rect x="0" y="0" width="84" height="24" rx="4" fill="rgba(255,255,255,0.05)" />
+          <text x="14" y="16" font-size="9.5" font-weight="600" fill="#FFFFFF">Select ↗</text>
+        </g>
+      </g>
+
+      <!-- Footer Info -->
+      <g transform="translate(0, 248)">
+        <text x="0" y="12" class="text-muted" font-size="10.5">Approval ID #APP-7721 locked · Titles validated for syntax · Clean character count without truncation</text>
+        <g transform="translate(950, -2)">
+          <rect x="0" y="0" width="140" height="24" rx="5" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+          <text x="12" y="16" font-size="9.5" font-weight="600" fill="#FFFFFF">Regenerate (1 Unit) ↺</text>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <!-- ================= 3. SECTION: MARKETPLACE COPY PACK (FULL-WIDTH BELOW TITLES) ================= -->
+  <g transform="translate(278, 634)">
+    <rect x="0" y="0" width="1138" height="420" rx="14" fill="url(#cardGrad)" class="border-active" filter="url(#softShadow)" />
+
+    <!-- Section Header + Direct Copy Pack Button -->
+    <g transform="translate(24, 18)" class="font-sans">
+      <circle cx="5" cy="8" r="3" fill="#52E082" />
+      <text x="14" y="12" class="title-h1">Grounded Marketplace Copy Pack (Built from High-Volume Search Title)</text>
+      <text x="500" y="12" class="text-muted">Atomic Pack: 5 Bullets + Product Description + 249-Byte Search Terms (C8)</text>
+
+      <!-- Primary Copy Action -->
+      <g transform="translate(962, -4)">
+        <rect x="0" y="0" width="128" height="30" rx="6" fill="#28C765" />
+        <text x="14" y="19" font-size="11" font-weight="700" fill="#041208">Copy Full Pack ↗</text>
+      </g>
+    </g>
+    <line x1="24" y1="46" x2="1114" y2="46" stroke="rgba(255,255,255,0.06)" />
+
+    <!-- Feature Bullets Header & Grid -->
+    <g transform="translate(24, 56)" class="font-sans">
+      <text x="0" y="0" class="label-caps">5 Feature Bullets (Max 250 Chars per bullet)</text>
+
+      <!-- Bullet 1 -->
+      <g transform="translate(0, 8)">
+        <rect x="0" y="0" width="1090" height="44" rx="6" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+        <text x="12" y="18" font-size="10.5" font-weight="700" fill="#28C765">• ROYAL SUNRAY DIAL:</text>
+        <text x="148" y="18" font-size="10.5" fill="#DADFD6">Rich emerald dial reflecting natural outdoor light with clean chronograph sub-dials.</text>
+        <text x="12" y="34" class="text-muted" font-size="9">146 / 250 Chars · Grounded in Photo</text>
+        <g transform="translate(1028, 11)">
+          <rect x="0" y="0" width="50" height="22" rx="4" fill="rgba(255,255,255,0.06)" />
+          <text x="11" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">Copy</text>
+        </g>
+      </g>
+
+      <!-- Bullet 2 (CI Gap) -->
+      <g transform="translate(0, 56)">
+        <rect x="0" y="0" width="1090" height="44" rx="6" fill="rgba(40,199,101,0.04)" stroke="rgba(40,199,101,0.22)" stroke-width="1" />
+        <text x="12" y="18" font-size="10.5" font-weight="700" fill="#52E082">• ZERO BREAK-IN LEATHER:</text>
+        <text x="184" y="18" font-size="10.5" fill="#DADFD6">Pre-softened wristband eliminates stiff pin bite and discomfort reported in rival watches.</text>
+        <text x="12" y="34" class="text-muted" font-size="9">158 / 250 Chars · Solves Competitor Review Gap</text>
+        <g transform="translate(1028, 11)">
+          <rect x="0" y="0" width="50" height="22" rx="4" fill="rgba(255,255,255,0.06)" />
+          <text x="11" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">Copy</text>
+        </g>
+      </g>
+
+      <!-- Bullet 3 -->
+      <g transform="translate(0, 104)">
+        <rect x="0" y="0" width="1090" height="44" rx="6" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+        <text x="12" y="18" font-size="10.5" font-weight="700" fill="#FFFFFF">• 316L STEEL &amp; 5ATM WATERPROOF:</text>
+        <text x="240" y="18" font-size="10.5" fill="#DADFD6">Solid stainless casing sealed against monsoon humidity and splashes with screw-down back.</text>
+        <text x="12" y="34" class="text-muted" font-size="9">152 / 250 Chars · Verified Spec Sheet</text>
+        <g transform="translate(1028, 11)">
+          <rect x="0" y="0" width="50" height="22" rx="4" fill="rgba(255,255,255,0.06)" />
+          <text x="11" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">Copy</text>
+        </g>
+      </g>
+
+      <!-- Bullet 4 -->
+      <g transform="translate(0, 152)">
+        <rect x="0" y="0" width="1090" height="44" rx="6" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+        <text x="12" y="18" font-size="10.5" font-weight="700" fill="#FFFFFF">• JAPANESE QUARTZ PRECISION:</text>
+        <text x="206" y="18" font-size="10.5" fill="#DADFD6">High-precision battery-powered movement with integrated date window display.</text>
+        <text x="12" y="34" class="text-muted" font-size="9">149 / 250 Chars · Integrated Date Feature</text>
+        <g transform="translate(1028, 11)">
+          <rect x="0" y="0" width="50" height="22" rx="4" fill="rgba(255,255,255,0.06)" />
+          <text x="11" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">Copy</text>
+        </g>
+      </g>
+
+      <!-- Bullet 5 -->
+      <g transform="translate(0, 200)">
+        <rect x="0" y="0" width="1090" height="44" rx="6" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+        <text x="12" y="18" font-size="10.5" font-weight="700" fill="#FFFFFF">• PREMIUM GIFT BOX READY:</text>
+        <text x="180" y="18" font-size="10.5" fill="#DADFD6">Packaged in a matte black designer gift box with velvet pillow and 1-year warranty card.</text>
+        <text x="12" y="34" class="text-muted" font-size="9">142 / 250 Chars · Festive Gifting Ready</text>
+        <g transform="translate(1028, 11)">
+          <rect x="0" y="0" width="50" height="22" rx="4" fill="rgba(255,255,255,0.06)" />
+          <text x="11" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">Copy</text>
+        </g>
+      </g>
+
+      <!-- Product Description Block -->
+      <g transform="translate(0, 252)">
+        <text x="0" y="0" class="label-caps">SEO Product Description (Clean Text Block)</text>
+        <g transform="translate(0, 6)">
+          <rect x="0" y="0" width="1090" height="46" rx="6" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+          <text x="12" y="20" font-size="10.5" fill="#DADFD6">The Zyquora Emerald Sunray Chronograph combines boardroom elegance with daily durability. Crafted with an emerald green sunray dial, precision Japanese quartz movement, and anti-scratch sapphire crystal. 316L surgical stainless steel and supple genuine leather deliver all-day comfort without rigid break-in.</text>
+          <g transform="translate(1028, 12)">
+            <rect x="0" y="0" width="50" height="22" rx="4" fill="rgba(255,255,255,0.06)" />
+            <text x="11" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">Copy</text>
+          </g>
+        </g>
+      </g>
+
+      <!-- Amazon Backend Search Terms -->
+      <g transform="translate(0, 314)">
+        <text x="0" y="0" class="label-caps">Amazon Backend Search Terms (214 / 249 Bytes Used)</text>
+        <g transform="translate(0, 6)">
+          <rect x="0" y="0" width="1090" height="34" rx="6" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+          <text x="12" y="21" font-size="10.5" font-weight="500" fill="#FFFFFF">mens green dial watch chronograph formal wrist watch leather analog quartz luxury boys watch gift</text>
+          <g transform="translate(1028, 6)">
+            <rect x="0" y="0" width="50" height="22" rx="4" fill="rgba(255,255,255,0.06)" />
+            <text x="11" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">Copy</text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <!-- ================= 4. SECTION: BOTTOM SATELLITE TOOLS & HASHTAGS (EXPANDED FOOTER) ================= -->
+  <g transform="translate(278, 1076)">
+    <rect x="0" y="0" width="1138" height="136" rx="14" fill="url(#cardGrad)" class="border-standard" filter="url(#softShadow)" />
+
+    <g transform="translate(24, 18)" class="font-sans">
+      <!-- Header -->
+      <circle cx="5" cy="8" r="3" fill="#28C765" />
+      <text x="14" y="12" class="title-h1">Social Marketing Hashtags &amp; Compliance Summary</text>
+      <text x="440" y="12" class="text-muted">Separate marketing suggestions · Not a marketplace listing field (§6.6)</text>
+      <line x1="0" y1="26" x2="1090" y2="26" stroke="rgba(255,255,255,0.06)" />
+
+      <!-- Hashtags List -->
+      <g transform="translate(0, 36)">
+        <text x="0" y="0" class="label-caps">Suggested Social Tags (Instagram / Shorts / Reels):</text>
+        <g transform="translate(0, 8)">
+          <rect x="0" y="0" width="1090" height="34" rx="6" fill="url(#subSurfaceGrad)" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+          <text x="14" y="21" font-size="11" font-weight="600" fill="#52E082">#MensWatch #ChronoWatch #EmeraldDial #LuxuryWatchesIndia #WristGame #FormalWearMen #FestiveGiftingIndia</text>
+          <g transform="translate(1028, 6)">
+            <rect x="0" y="0" width="50" height="22" rx="4" fill="rgba(255,255,255,0.06)" />
+            <text x="11" y="15" font-size="9.5" font-weight="600" fill="#FFFFFF">Copy</text>
+          </g>
+        </g>
+      </g>
+
+      <!-- Bottom Compliance Disclaimer -->
+      <g transform="translate(0, 90)">
+        <text x="0" y="14" class="text-muted" font-size="10.5">Recommend-only mode active (C1) · Zero marketplace credentials held · No pricing or tax claims included (C7) · Ready for Seller Central paste</text>
+      </g>
+    </g>
+  </g>
+</svg>

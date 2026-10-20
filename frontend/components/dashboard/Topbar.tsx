@@ -82,8 +82,8 @@ export function Topbar({
             href="/dashboard/ceo-hub"
             className="mt-btn mt-btn-secondary mt-focus flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 t-body font-semibold"
           >
-            <span className="hidden sm:inline">Ask Metrion</span>
-            <span className="sm:hidden">Ask</span>
+            <span className="hidden sm:inline">CEO Hub</span>
+            <span className="sm:hidden">CEO</span>
             <Icon name="arrow" size={13} strokeWidth={1.9} />
           </Link>
         )}

@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.v1 import ceo, ceo_hub, cfo, ci, cmo, expense_ledger, onboarding, ops, pi, ping, session
+from backend.api.v1 import business_profile, ceo, ceo_hub, cfo, ci, cmo, cmo_showcase, expense_ledger, onboarding, ops, pi, ping, session
 from backend.config import (
     api_max_body_bytes,
     api_docs_enabled,
@@ -96,10 +96,43 @@ def _sweep_ownerless_runs_forever(stop: threading.Event | None = None) -> None:
             logger.exception("periodic recovery pass failed")
 
 
+def _ci_housekeeping_forever(stop: threading.Event | None = None) -> None:
+    """Competitor Intelligence's periodic housekeeping (spec 6.25, D16): per tenant, expire unanswered confirmation questions, release quiet-hours alerts (re-checking freshness)
+    and add freshness reminders. It reads and writes only CI's own tables and makes no outbound request. A Postgres advisory lock lets exactly one worker run a cycle."""
+    from backend import config
+    from backend.repositories import ceo_runtime_repo
+    from competitor_intelligence.scheduler.cycle import run_tenant_cycle
+
+    stop = stop or threading.Event()
+    try:
+        interval = config.ci_scheduler_interval_seconds()
+    except ValueError:
+        logger.error("CI_SCHEDULER_INTERVAL_SECONDS is invalid; the CI housekeeping pass is off")
+        return
+    while interval is not None and not stop.wait(interval):
+        lock = ceo_runtime_repo.AdvisoryLock("ci-housekeeping")
+        try:
+            if not lock.try_acquire():
+                continue
+            for tenant_id in ceo_runtime_repo.list_tenant_ids():
+                try:
+                    counts = run_tenant_cycle(tenant_id)
+                    if any(counts.values()):
+                        logger.info("CI housekeeping for one tenant: %s", counts)
+                except Exception:  # noqa: BLE001 - one tenant's failure never stops the others
+                    logger.exception("CI housekeeping failed for a tenant")
+        except Exception:  # noqa: BLE001
+            logger.exception("CI housekeeping pass failed")
+        finally:
+            lock.release()
+            lock.close()
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     threading.Thread(target=_settle_abandoned_ceo_turns, name="ceo-recovery", daemon=True).start()
     threading.Thread(target=_sweep_ownerless_runs_forever, name="run-recovery", daemon=True).start()
+    threading.Thread(target=_ci_housekeeping_forever, name="ci-housekeeping", daemon=True).start()
     yield
 
 
@@ -165,6 +198,7 @@ def create_app() -> FastAPI:
     install_logging()
 
     app.include_router(session.router)
+    app.include_router(business_profile.router)
     app.include_router(onboarding.router)
     app.include_router(ping.router)
     app.include_router(ops.router)
@@ -174,6 +208,7 @@ def create_app() -> FastAPI:
     app.include_router(expense_ledger.router)
     app.include_router(pi.router)
     app.include_router(cmo.router)
+    app.include_router(cmo_showcase.router)
     app.include_router(ceo_hub.router)
     app.include_router(ceo.router)
 

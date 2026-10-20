@@ -76,7 +76,7 @@ def test_every_planned_action_is_a_wired_registry_action_with_valid_slots():
     # every value code can resolve, so each plan can build its slots (the resolvers themselves are tested where their data lives)
     resolved = ResolvedSlots(
         tenant_id=TENANT, today=TODAY, period=base.period, marketplace=base.marketplace, competitor_url_id=uuid.uuid4(), competitor_label="Rival",
-        seller_price_paise=49900, pi_run_id=uuid.uuid4(), product_text="steel water bottle",
+        seller_price_paise=49900, pi_run_id=uuid.uuid4(), product_text="steel water bottle", product_id="SKU-1",
     )
     sample = {  # what each guided input session ends with (spec 6.35)
         "pi.discover": {"niche_brief_id": str(uuid.uuid4()), "depth": "SHALLOW"},
@@ -84,6 +84,9 @@ def test_every_planned_action_is_a_wired_registry_action_with_valid_slots():
         "cmo.generate_hashtags": {"request_key": "k", "product_name": "bottle"},
         "cmo.generate_description": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
         "cmo.generate_keywords": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
+        "cmo.generate_bullets": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
+        "cmo.generate_backend_terms": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
+        "cmo.generate_listing_copy": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
         "cmo.market_trends": {"request_key": "k", "marketplaces": ["AMAZON"], "plan_digest": "a" * 64},  # spec 6.40: the run is bound to a confirmed preview
         "cmo.market_trends_preview": {"marketplaces": ["AMAZON"]},
     }

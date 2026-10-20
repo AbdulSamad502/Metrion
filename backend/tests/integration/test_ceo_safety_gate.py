@@ -61,7 +61,9 @@ def class1_cases():
 
 # D-8: an IN-catalog action that needs approval is refused (an explicit DENIED explanation, nothing asked or run) instead of being turned into a clarification question.
 # Spelled out here on purpose (not computed from the gate) so a change to the approval-required set is a reviewed edit.
-APPROVAL_REQUIRED_CHAT_ACTIONS = frozenset({"pi.discover", "cmo.market_trends", "cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords"})
+APPROVAL_REQUIRED_CHAT_ACTIONS = frozenset({"pi.discover", "ci.discover_competitors"})  # still refused outright (both send the seller's data out; CI's competitor search joined in V3)
+# The five CMO chat actions are no longer refused (ceo-cmo-delegation.md): the CEO asks for what is missing and then stores a plan card; NOTHING executes before approval.
+CMO_PLANNED_CHAT_ACTIONS = frozenset({"cmo.market_trends", "cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords"})
 
 
 def _class1_violations(ctx, rt, tenant, cases, first_index=0):
@@ -70,7 +72,8 @@ def _class1_violations(ctx, rt, tenant, cases, first_index=0):
     failures = []
     for i, (r, k, s) in enumerate(cases, start=first_index):
         inv, res = _run(ctx, rt, f"c1-{i}")
-        blocked = r == "ACTION" and k in APPROVAL_REQUIRED_CHAT_ACTIONS
+        # ci.discover_competitors is asked for its product first (a CLARIFY) when the model gave none; once it has one, it gets the same fixed refusal as pi.discover.
+        blocked = r == "ACTION" and k in APPROVAL_REQUIRED_CHAT_ACTIONS and (k != "ci.discover_competitors" or bool(s.get("product")))
         wrong = (res.route != "ADVISORY" or res.status != "DENIED" or res.answer != orchestrator.APPROVAL_UNAVAILABLE_TEXT) if blocked else res.route != "CLARIFY"
         if _children(tenant, res) or repo.list_findings(tenant, inv) or wrong:
             failures.append((r, k, s, res.route, res.status))
@@ -90,11 +93,11 @@ def test_class1_a_hostile_classifier_can_execute_nothing_outside_the_closed_cata
 
 def test_class1_the_approval_required_cases_alone_execute_nothing_and_are_refused_not_asked(two_tenants, app_user, health_config):  # noqa: F811
     """The slice of the class-1 cases that name an approval-required action, run on their own (20 turns instead of 700): nothing executes, nothing is asked, and
-    the seller gets the fixed refusal. The full 700-case test above remains the authority."""
+    the seller gets the fixed refusal (pi.discover) or a question / plan card with nothing executed (CMO). The full 700-case test above remains the authority."""
     a, _ = two_tenants
     all_cases = class1_cases()
-    picked = [(i, c) for i, c in enumerate(all_cases) if c[0] == "ACTION" and c[1] in APPROVAL_REQUIRED_CHAT_ACTIONS]
-    assert len(picked) == 20  # pi.discover and cmo.generate_title_sets x 10 slot sets
+    picked = [(i, c) for i, c in enumerate(all_cases) if c[0] == "ACTION" and c[1] in (APPROVAL_REQUIRED_CHAT_ACTIONS | CMO_PLANNED_CHAT_ACTIONS)]
+    assert len(picked) == 30  # pi.discover, ci.discover_competitors and cmo.generate_title_sets x 10 slot sets
     table = {f"c1-{i}": decision(route=r, route_key=k or None, slots=s) for i, (r, k, s) in picked}
     rt = runtime(Scripted(table), Grounded())
     ctx = ctx_for(a, user_id=app_user)

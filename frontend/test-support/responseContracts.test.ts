@@ -15,6 +15,7 @@ const OUT = path.join(ROOT, "test-support", "responseContracts.json");
 const CONTRACTS: { route: string; file: string; type: string; wrap?: string }[] = [
   { route: "GET /api/v1/session", file: "lib/api.ts", type: "SessionResponse" },
   { route: "GET /api/v1/ci/summary", file: "lib/api.ts", type: "CiSummary" },
+  { route: "GET /api/v1/ci/workspace", file: "lib/ciWorkspace.ts", type: "CiWorkspace" },
   { route: "GET /api/v1/ceo-hub/agents", file: "lib/api.ts", type: "AgentStatus", wrap: "list" },
   { route: "GET /api/v1/cfo/data-requests", file: "lib/api.ts", type: "DataRequestItem", wrap: "list" },
   { route: "GET /api/v1/ci/alerts", file: "lib/api.ts", type: "Layer1AlertsResponse" },

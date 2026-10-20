@@ -62,3 +62,32 @@ def expand(findings: Sequence[Mapping[str, Any]], text: str) -> tuple[str, list[
     if m:
         out = out[: m.start()] + sub(m, len(ideas)) + out[m.end():]
     return out, notes
+
+
+# "how many units / what batch size should we buy of the top #1 product?" is the stocking decision for that product: it is rewritten (deterministically, only when the seller
+# named a product by position or as the top one of a list shown in this conversation) into the exact question the stocking flow already handles.
+_BATCH_ASK = re.compile(
+    r"\bbatch size\b|\bhow (?:many|much)\b[^?.]*\b(?:units?|pieces?|pcs|quantity|stock|buy|order|purchase)\b|\b(?:units?|quantity|pieces?)\b[^?.]*\b(?:to|should)\b[^?.]*\b(?:buy|order|stock|purchase)\b",
+    re.IGNORECASE)
+_TOP_ONE = re.compile(rf"\b(?:the\s+)?(?:top|best|first|#1)\s*(?:one|{_NOUN}|pick)?\b", re.IGNORECASE)
+
+
+def batch_rewrite(findings: Sequence[Mapping[str, Any]], text: str) -> tuple[str, list[str]] | None:
+    """`(new_text, notes)` when the message asks how many units to buy of a product named by position ("#2", "the top product") in the list above, else None."""
+    if not _BATCH_ASK.search(text):
+        return None
+    ideas = latest_ideas(findings)
+    if not ideas:
+        return None
+    n: int | None = None
+    for rx in _PATTERNS:
+        m = rx.search(text)
+        if m:
+            n = int(m.group("n")) if "n" in rx.groupindex and m.group("n") else _ORDINALS.get((m.groupdict().get("w") or "").lower())
+            break
+    if n is None and _TOP_ONE.search(text):
+        n = 1
+    if n is None or not 1 <= n <= len(ideas):
+        return None
+    name = ideas[n - 1]
+    return f"is {name} worth stocking?", [f"Taking #{n} as “{name}” from the product ideas above."]

@@ -3,6 +3,14 @@
 **Status:** Draft for review — **CP0 amendment 2026-10-03, rounds 2 and 3 applied; P2 review decisions (2026-10-03) applied** (marketplace-specific copy packs; seven-section trend reports; catalog-seeded niche; budgets and evidence rules — §14 is the change log)
 **Prerequisites:** `auth.md` (permissions, execution paths) · `ceo-agent-orchestration.md` (routing, multimodal intake §6.9) · `cfo-agent.md` (GST ownership, §6.6/§6.8) · `competitor-intelligence-agent.md` (CI boundary, §6.6/§6.19) · `product-intelligence-agent.md` (source discipline §0, C14) · `data-foundation.md` (provenance, raw-file store) · `entitlement.md` (metering)
 
+> **Superseded / amended 2026-10-12 (owner decisions CD1–CD8, `ceo-cmo-delegation.md`).** Not a rewrite: the sections below stand except where they are listed here.
+> - **§8.1 "Registered direct execution paths" and any seller-facing use of them are superseded.** The seller reaches the CMO **only through the CEO** (CEO delegates, collects missing inputs, handles plan approval, presents results). The registered action *keys*, their permissions, units and billing (§8.1.1–§8.5) are unchanged; what changes is that **no frontend control calls the direct HTTP routes**. Whether the routes themselves are retired, kept internal or kept for non-UI use is open (`ceo-cmo-delegation.md` OQ-5).
+> - **§6.1 intake:** the CEO builds the intake only from validated inputs (code-parsed seller answers, stored records by id, an `attachment_id`); the CMO declares what it needs through a pure requirement function over a closed vocabulary (`ceo-cmo-delegation.md` §6.3). Marketplaces are still never defaulted.
+> - **§6.2 / §6.2.2 images:** the seller's photo arrives as an `attachment_id` in the shared `investigation_attachment` store and is handed over **by reference** to a new reference-taking action (working name `cmo.analyze_attachment`); the CMO loads the bytes by its own tenant-scoped read and runs the existing normalise/store/analyse path. `cmo.upload_image` (raw bytes) is still not callable by the CEO. Trust gate, `UNVERIFIED_HINT` handling and `cmo.confirm_image_hint` are unchanged; the seller-facing label for any unconfirmed image-derived value is **"from your attachment — suggested, not verified"**. Only an endpoint in `LLM_OPERATOR_CONTROLLED_HOSTS` may receive the image.
+> - **§6.4 approval:** unchanged as a *choice record* (`cmo_title_approval`); it is distinct from the **plan approval** that now precedes every metered generation (`ceo-approval-workflow.md`), given by buttons on a chat card. The orchestration §6.9 row that lets a UI "Approve & generate copy" button call two direct paths is **superseded**: choosing a title is a chat option card, the copy pack is a separate plan.
+> - **Dashboard / frontend:** the CMO page becomes a **read-only showcase** (market trends & news, frequently used titles, grounded copy pack, hashtags & compliance summary) with no generation, regeneration, upload, approval or niche forms (`ceo-cmo-delegation.md` §6.8–§6.10). Niche confirmation moves into chat (reverses orchestration §6.40 "stays on the CMO page"; OQ-14).
+> - **§13 open questions Q6, Q7** (image retention, single vs multiple images) gain a dependency: the shared attachment store keeps the original bytes with metadata (`ceo-cmo-delegation.md` OQ-8).
+
 ## 0. Recommend-only, no exception
 
 **Slim CMO never writes to a marketplace.** Every output — title, bullets, description, keywords, hashtags, an answer to a catalog question, a trend report — is a **proposal the seller copies and pastes themselves.** This is the system-wide write-back decision (readiness §1, Product shape — Write-back: "None. Recommend-only; every output is a proposal") applied without exception. CMO holds no marketplace credential, no listing-write scope, and no API integration that could publish on the seller's behalf. Seller **approval** (§6.4) is approval of *which proposal to build on*; it is never an instruction to publish. This governs every section below and is restated at AC1.
@@ -485,6 +493,8 @@ In both routes the rate shown is copied from the structured `gst_lookup_result` 
 ## 8. Authorization, entitlement and billing semantics
 
 ### 8.1 Registered direct execution paths
+
+> **Amended 2026-10-12:** seller-facing use of these paths is superseded by CEO-first delegation (see the note at the top of this spec and `ceo-cmo-delegation.md`). The table below remains the authority for action keys, permissions and units; the routes are no longer a seller entry point.
 
 Per `auth.md` §5.2 guardrail — one named action, declared fields only (§6.1), no generic "invoke CMO" endpoint. Each writes one `agent_run` row (`ceo-agent-orchestration.md` C7).
 

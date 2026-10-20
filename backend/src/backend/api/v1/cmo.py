@@ -26,7 +26,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from slim_cmo import billing
 from slim_cmo.catalog.attributes import CatalogAttribute
@@ -45,7 +45,7 @@ from slim_cmo.types import Marketplace, OutputType, TrendSection
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CMO, CATALOG_VIEW, FILES_UPLOAD, RESEARCH_MARKET_TRENDS, has_permission
-from backend.services import cmo_actions, cmo_images, cmo_runtime, cmo_trends
+from backend.services import cmo_actions, cmo_ci_inputs, cmo_images, cmo_runtime, cmo_trends
 from backend.services.cmo_actions import Principal, QuotaDenied, RequestInProgress
 from backend.services.cmo_runtime import CmoNotConfigured
 from backend.uploads import read_upload_capped
@@ -82,6 +82,8 @@ class ProductBody(_Body):
     target_price_paise: NonNegInt | None = None
     image_analysis_id: UUID | None = None
     text_only_confirmed: bool = False
+    ci_insight_ids: list[UUID] = Field(default_factory=list, max_length=5)  # section 6.7: saved competitor listing insights the CEO brokered; each must be the seller's own (404 otherwise)
+    _ci: Any = PrivateAttr(default=None)  # the CiInputs built from them by `_billable` (never part of the request)
 
 
 class TitleSetsBody(ProductBody):
@@ -133,7 +135,7 @@ def _intake(body: ProductBody, agent_run_id: UUID | None) -> Intake:
         request_key=body.request_key, sku=body.sku, product_name=body.product_name, brand=body.brand,
         category_hint=body.category_hint, attributes=tuple((a.name, a.value) for a in body.attributes),
         notes=tuple(body.notes), target_price_paise=body.target_price_paise, image_analysis_id=body.image_analysis_id,
-        text_only_confirmed=body.text_only_confirmed, agent_run_id=agent_run_id,
+        text_only_confirmed=body.text_only_confirmed, agent_run_id=agent_run_id, ci_inputs=body._ci,
     )
 
 
@@ -220,6 +222,7 @@ def _billable(
     p = _principal(ctx)
 
     def go() -> dict[str, Any]:
+        body._ci = cmo_ci_inputs.load_inputs(ctx, body.ci_insight_ids) if body.ci_insight_ids else None  # 404 for an id that is not the seller's; None = run independently
         rt = cmo_runtime.build_runtime()  # looked up on the module so tests can substitute a fake provider
         return cmo_actions.run_billable(
             p, rt, action=action, items=items, request_key=body.request_key,
@@ -371,6 +374,22 @@ async def post_image(file: UploadFile, ctx: AuthContext = require_auth(permissio
     data = await read_upload_capped(file, max_bytes=max_bytes, env_var="CMO_IMAGE_MAX_BYTES")
     declared = file.content_type or ""
     return await run_in_threadpool(_guarded, lambda: cmo_images.upload_image(p, rt, data, declared))
+
+
+class AnalyzeAttachmentBody(_Body):
+    """The CEO -> CMO hand-off of a photo BY REFERENCE (ceo-cmo-delegation.md CD5): an attachment id of the CEO conversation and, optionally, the content hash the CEO saw. Nothing
+    else - no bytes, no text. There is deliberately NO HTTP route for it: the CEO reaches it in-process (`cmo.analyze_attachment`), and the seller never calls it directly."""
+
+    attachment_id: UUID
+    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+def analyze_attachment_for_ceo(body: AnalyzeAttachmentBody, ctx: AuthContext, investigation_id: UUID) -> dict[str, Any]:
+    """`cmo.analyze_attachment` - loads the referenced photo through the CMO's OWN tenant-scoped read and runs the existing normalise -> store -> analyse path. 0 units."""
+    from backend.services import cmo_attachment
+
+    p = _principal(ctx)
+    return _guarded(lambda: cmo_attachment.analyze_attachment(p, investigation_id, body.attachment_id, body.sha256))
 
 
 @router.post("/image-analyses")

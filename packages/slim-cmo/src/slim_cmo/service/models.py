@@ -104,7 +104,7 @@ class StoredAnalysis:
 
 @dataclass(frozen=True, slots=True)
 class GenerationRecord:
-    """One `cmo_generation` row (+ title options). Always INDEPENDENT mode in P3 (P11 for CI)."""
+    """One `cmo_generation` row (+ title options). INDEPENDENT unless CI attributes were brokered by the CEO."""
 
     output_type: OutputType
     marketplace: Marketplace | None
@@ -121,6 +121,8 @@ class GenerationRecord:
     grounding_basis: GroundingBasis | None
     grounding_approval_id: UUID | None
     options: tuple[AcceptedOption, ...] = ()
+    input_mode: str = "INDEPENDENT"  # CEO_BROKERED_CI only when competitor-listing attributes were actually used (section 6.7, AC2)
+    ci_inputs_snapshot: dict[str, Any] | None = None
 
 
 class GenerationStore(Protocol):

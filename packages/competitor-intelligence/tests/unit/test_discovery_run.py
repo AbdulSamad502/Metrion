@@ -108,6 +108,14 @@ class _FakeCandidateRepo:
         c["identity_match"] = resolution.identity_match.value
         c["tier"] = tier
 
+    def rejected_urls(self, tenant_id, seller_product_ref):
+        return {c["candidate_url"] for c in self.candidates.values() if c.get("seller_decision") == "REJECTED"} | set(getattr(self, "_prior_rejected", set()))
+
+    def set_relationship(self, tenant_id, candidate_id, *, relationship_class, basis, is_provisional):
+        c = self.candidates[candidate_id]
+        c["relationship_class"] = relationship_class
+        c["relationship_is_provisional"] = is_provisional
+
     def set_tier(self, tenant_id, candidate_id, tier):
         self.candidates[candidate_id]["tier"] = tier
 
@@ -275,7 +283,9 @@ class TestStartDiscoveryRun:
         assert len(outcome.uncertain_candidate_ids) == 1
         assert outcome.recommended_candidate_ids == ()
 
-    def test_different_brand_is_not_a_match_and_never_recommended(self, _patch_repos):
+    def test_cross_brand_competitor_is_scored_classified_and_recommended(self, _patch_repos):
+        # C43 (Q20, owner-approved): a different brand's same-function product is NOT_A_MATCH on
+        # identity and a competitor on relationship. It used to be auto-rejected before scoring.
         provider = MockSearchProvider(
             default_results=[_result("https://amazon.in/dp/xyz", "Globex Wireless Mouse X200", "wireless mouse")]
         )
@@ -289,9 +299,50 @@ class TestStartDiscoveryRun:
             budget=DiscoveryBudget(),
             discovery_enabled=True,
         )
-        # NOT_A_MATCH does not block the run and is never recommended.
         assert outcome.status == "COMPLETE"
-        assert outcome.recommended_candidate_ids == ()
+        assert len(outcome.recommended_candidate_ids) == 1
+        (candidate,) = _patch_repos["candidate_repo"].candidates.values()
+        assert candidate["identity_match"] == "NOT_A_MATCH"
+        assert candidate["relationship_class"] == "DIRECT_COMPETITOR"
+        assert candidate["relationship_is_provisional"] is True  # category is unknown for a search lead
+
+    def test_cross_brand_lead_with_no_product_signal_is_scored_but_never_recommended(self, _patch_repos):
+        provider = MockSearchProvider(
+            default_results=[_result("https://amazon.in/dp/xyz", "Globex Garden Hose 20m", "hose")]
+        )
+        outcome = start_discovery_run(
+            TENANT,
+            requested_by=REQUESTED_BY,
+            seller_product=_seller_product(),
+            provider=provider,
+            provider_name="MOCK",
+            cache=InMemorySearchResultCache(),
+            budget=DiscoveryBudget(),
+            discovery_enabled=True,
+        )
+        assert outcome.status == "COMPLETE"
+        assert outcome.recommended_candidate_ids == ()  # UNKNOWN is never promoted to fill a list (C25, C43)
+        (candidate,) = _patch_repos["candidate_repo"].candidates.values()
+        assert candidate["relationship_class"] == "UNKNOWN"
+
+    def test_a_previously_rejected_candidate_is_not_resurfaced(self, _patch_repos):
+        # §6.24 / Q21: a rejection holds across later discovery runs for the same product.
+        _patch_repos["candidate_repo"]._prior_rejected = {"https://amazon.in/dp/xyz"}
+        provider = MockSearchProvider(
+            default_results=[_result("https://amazon.in/dp/xyz", "Globex Wireless Mouse X200", "wireless mouse")]
+        )
+        outcome = start_discovery_run(
+            TENANT,
+            requested_by=REQUESTED_BY,
+            seller_product=_seller_product(),
+            provider=provider,
+            provider_name="MOCK",
+            cache=InMemorySearchResultCache(),
+            budget=DiscoveryBudget(),
+            discovery_enabled=True,
+        )
+        assert outcome.raw_candidate_count == 0 and outcome.recommended_candidate_ids == ()
+        assert _patch_repos["candidate_repo"].candidates == {}
 
     def test_max_raw_candidates_budget_hit_propagates_to_partial_status(self, _patch_repos, monkeypatch):
         # run_discovery_queries's own budget-limit behaviour (query_runner.py) is already

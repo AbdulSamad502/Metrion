@@ -4,7 +4,9 @@ seeded row this package doesn't own the decision to create."""
 
 from __future__ import annotations
 
+from datetime import time
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
@@ -41,7 +43,7 @@ def get_price_threshold_pct(tenant_id: UUID) -> Decimal:
         return row[0] if row else DEFAULT_PRICE_THRESHOLD_PCT
 
 
-def get_config(tenant_id: UUID) -> dict[str, object]:
+def get_config(tenant_id: UUID) -> dict[str, Any]:
     """Every `ci_tenant_config` column, defaulted per-field when no row exists yet —
     used by the alert-override resolution path and the CEO Hub's settings surface so
     neither has to know the no-row-yet case individually."""
@@ -122,3 +124,76 @@ def get_discovery_budget(tenant_id: UUID) -> DiscoveryBudget:
         discovery_run_timeout_seconds=row["discovery_run_timeout_seconds"],
         search_cache_ttl_hours=row["search_cache_ttl_hours"],
     )
+
+
+DEFAULT_ALERT_DEDUP_WINDOW_HOURS = 24
+
+
+DEFAULT_REVIEW_FINDING_MIN_SAMPLE = 10  # CI spec Q22 (provisional)
+
+
+def get_review_min_sample(tenant_id: UUID) -> int:
+    """The fewest reviews a screenshot must show before a review finding is raised from it (the tenant's own setting, else the spec default)."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(text("SELECT review_finding_min_sample FROM ci_tenant_config WHERE tenant_id = :tenant_id"), {"tenant_id": str(tenant_id)}).first()
+    return int(row[0]) if row and row[0] else DEFAULT_REVIEW_FINDING_MIN_SAMPLE
+
+
+def get_watchlist_limit(tenant_id: UUID) -> int | None:
+    """This tenant's own cap on tracked competitors, or None when none is set (no limit is invented). Only an operator can set it."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(text("SELECT max_active_competitors FROM ci_tenant_config WHERE tenant_id = :tenant_id"), {"tenant_id": str(tenant_id)}).first()
+    return None if row is None else row[0]
+
+
+def get_alert_settings(tenant_id: UUID) -> dict[str, Any]:
+    """Quiet hours (all three unset = none) and the dedup window (§6.26). A tenant with no row gets
+    no quiet hours and the default window — never an invented window."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text(
+                "SELECT quiet_hours_start, quiet_hours_end, quiet_hours_tz, alert_dedup_window_hours "
+                "FROM ci_tenant_config WHERE tenant_id = :tenant_id"
+            ),
+            {"tenant_id": str(tenant_id)},
+        ).mappings().first()
+    if row is None:
+        return {"quiet_hours_start": None, "quiet_hours_end": None, "quiet_hours_tz": None, "alert_dedup_window_hours": DEFAULT_ALERT_DEDUP_WINDOW_HOURS}
+    return dict(row)
+
+
+def set_alert_settings(
+    tenant_id: UUID,
+    *,
+    updated_by: UUID,
+    quiet_start: time | None = None,
+    quiet_end: time | None = None,
+    quiet_tz: str | None = None,
+    clear_quiet: bool = False,
+    price_threshold_pct: Decimal | None = None,
+) -> None:
+    """The seller's own alert preferences (C42). Only the columns the app role may write are touched, and a field left out is left as it was.
+    Quiet hours are all-or-nothing: set a start, an end and a timezone together, or clear them together."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    sets = ["updated_by = :updated_by", "updated_at = :now"]
+    cols, vals = ["tenant_id", "updated_by", "updated_at"], [":tenant_id", ":updated_by", ":now"]
+    params: dict[str, object] = {"tenant_id": str(tenant_id), "updated_by": str(updated_by), "now": now}
+    if clear_quiet:
+        sets += ["quiet_hours_start = NULL", "quiet_hours_end = NULL", "quiet_hours_tz = NULL"]  # nothing to clear when no row exists yet
+    elif quiet_start is not None:
+        sets += ["quiet_hours_start = :qs", "quiet_hours_end = :qe", "quiet_hours_tz = :qz"]
+        cols += ["quiet_hours_start", "quiet_hours_end", "quiet_hours_tz"]
+        vals += [":qs", ":qe", ":qz"]
+        params.update(qs=quiet_start, qe=quiet_end, qz=quiet_tz)
+    if price_threshold_pct is not None:
+        sets.append("price_threshold_pct = :pct")
+        cols.append("price_threshold_pct")
+        vals.append(":pct")
+        params["pct"] = price_threshold_pct
+    with tenant_scope(tenant_id) as conn:
+        conn.execute(
+            text(f"INSERT INTO ci_tenant_config ({', '.join(cols)}) VALUES ({', '.join(vals)}) ON CONFLICT (tenant_id) DO UPDATE SET " + ", ".join(sets)),  # noqa: S608 - fixed column names
+            params,
+        )

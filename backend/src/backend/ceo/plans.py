@@ -60,6 +60,8 @@ class ResolvedSlots:
     seller_price_paise: int | None = None
     pi_run_id: UUID | None = None
     product_text: str | None = None
+    product_id: str | None = None  # a seller product resolved by code from the seller's own words (CI)
+    categories: tuple[str, ...] | None = None  # business-profile categories the seller chose for a competitor search
     direct: Mapping[str, Any] | None = None  # slots collected by a guided input session and already parsed by code (spec 6.35): passed to the specialist as they are
 
     def echoes(self) -> tuple[str, ...]:
@@ -113,6 +115,7 @@ def resolve_slots(
     price: int | None = None
     pi_run: UUID | None = None
     product_text: str | None = None
+    product_id: str | None = None
     if "period" in required:
         try:
             period = resolve_period(raw.get("period"), today=today)
@@ -129,6 +132,12 @@ def resolve_slots(
         )
         if found is None:
             found = slot_resolvers.resolve_competitor(tenant_id, raw.get("competitor"))
+            if not isinstance(found, slot_resolvers.CompetitorMatch) and not (raw.get("competitor") or "").strip():
+                from backend.ceo import ci_conversation  # noqa: PLC0415 - the competitor the conversation is about answers "which competitor?" instead of asking again
+
+                fid, flabel = ci_conversation.focus_competitor(tenant_id)
+                if fid:
+                    found = slot_resolvers.CompetitorMatch(UUID(fid), flabel or "that competitor")
         if isinstance(found, slot_resolvers.CompetitorMatch):
             competitor_id, competitor_label = found.url_id, found.label
         elif found.reason == "NONE_TRACKED":
@@ -143,8 +152,32 @@ def resolve_slots(
             return Clarification("amount", SLOT_QUESTIONS["amount"])
     if "product" in required:
         product_text = " ".join((raw.get("product") or "").split())
+        if "category" in resolves:  # a competitor search: the seller's business-profile categories are offered first, and a reply that names some is the answer
+            cats = ceo_reads.business_categories(tenant_id)
+            picked = ceo_reads.resolve_categories(product_text, cats) if product_text else []
+            if picked:
+                return ResolvedSlots(tenant_id=tenant_id, today=today, categories=tuple(picked), product_text="; ".join(picked))
+            if not product_text and cats:
+                return Clarification("product", category_choice_question(cats))
         if not product_text or len(product_text) > MAX_PRODUCT_TEXT_CHARS:
+            if "seller_product" in resolves:  # the seller is shown their own products to pick from, never asked to guess a name
+                return Clarification("product", product_choice_question(tenant_id))
             return Clarification("product", SLOT_QUESTIONS["product"])
+    if "seller_product" in resolves or ("seller_product_if_named" in resolves and (raw.get("product") or "").strip()):
+        found_product = slot_resolvers.resolve_seller_product(tenant_id, raw.get("product"))
+        if isinstance(found_product, slot_resolvers.ProductMatch):
+            product_id = found_product.product_id
+            product_text = found_product.title or found_product.product_id
+        elif found_product.reason == "NONE_KNOWN" and "seller_product" not in resolves:
+            product_id, product_text = None, None  # a read that only filters by product: with none known it simply covers everything
+        elif found_product.reason == "NONE_KNOWN":
+            return Clarification("product", NO_PRODUCTS_TEXT)
+        elif "seller_product" not in resolves and isinstance(slot_resolvers.resolve_competitor(tenant_id, raw.get("product")), slot_resolvers.CompetitorMatch):
+            product_id, product_text = None, None  # "for CASPIAN Astra 1L" named a tracked competitor, not a product: no product filter
+        else:
+            names = ", ".join(found_product.choices)
+            lead = "That matches more than one of your products" if found_product.reason == "AMBIGUOUS" else "I could not find that product"
+            return Clarification("product", f"{lead}. Which do you mean: {names}?" if names else f"{lead}. Which of your products do you mean?")
     if "pi_run" in resolves:
         latest = ceo_reads.latest_pi_run(tenant_id, finished_only=True)
         if latest is None:
@@ -152,11 +185,42 @@ def resolve_slots(
         pi_run = UUID(str(latest["id"]))
     return ResolvedSlots(
         tenant_id=tenant_id, today=today, period=period, marketplace=marketplace, competitor_url_id=competitor_id, competitor_label=competitor_label,
-        seller_price_paise=price, pi_run_id=pi_run, product_text=product_text,
+        seller_price_paise=price, pi_run_id=pi_run, product_text=product_text, product_id=product_id,
     )
 
 
 # ------------------------------------------------------------------------------------------------ slot builders
+CATEGORY_MARKER = "Which category should I find competitors for?"
+
+
+def category_choice_question(categories: list[str]) -> str:
+    """The competitor-search question when the seller's business profile lists categories: pick one or more (numbers, names or ALL)."""
+    lines = [f"{CATEGORY_MARKER} Your categories:"] + [f"{i}. {c}" for i, c in enumerate(categories, start=1)]
+    lines.append("Reply with one or more numbers (for example “1 and 2”), a category name, or ALL. You can also name one of your products instead.")
+    return "\n".join(lines)
+
+
+def discovery_question(tenant_id: UUID) -> str:
+    """The question for a competitor search that names nothing: the seller's business-profile categories when they gave some, else their products."""
+    cats = ceo_reads.business_categories(tenant_id)
+    return category_choice_question(cats) if cats else product_choice_question(tenant_id)
+
+
+def product_choice_question(tenant_id: UUID) -> str:
+    """The question for a request that needs one of the seller's own products and was not told which: it lists their products, or says there are none."""
+    known = ceo_reads.list_seller_products(tenant_id)
+    if not known:
+        return NO_PRODUCTS_TEXT
+    names = "; ".join(f"“{title or pid}”" for pid, title in known[: slot_resolvers.MAX_COMPETITOR_CHOICES])
+    return f"Which of your products is this for? Your products: {names}. Tell me which one."
+
+
+NO_PRODUCTS_TEXT = (
+    "I do not have any of your products yet, so I cannot link competitors to one. Upload a sales report so your products appear, or add a product profile, then ask me again. "
+    "Nothing was searched or added."
+)
+
+
 def _dates(s: ResolvedSlots) -> dict[str, str]:
     assert s.period is not None
     return {"period_start": s.period.start.isoformat(), "period_end": s.period.end.isoformat(), "as_of_date": s.period.as_of.isoformat()}
@@ -188,6 +252,27 @@ def _gst_lookup(s: ResolvedSlots) -> dict[str, object]:
 def _price_scenario(s: ResolvedSlots) -> dict[str, object]:
     assert s.competitor_url_id is not None and s.seller_price_paise is not None
     return {"competitor_url_id": str(s.competitor_url_id), "seller_price_paise": s.seller_price_paise}
+
+
+def _discover(s: ResolvedSlots) -> dict[str, object]:
+    if s.categories:
+        return {"categories": list(s.categories)}
+    assert s.product_id is not None
+    return {"product_id": s.product_id}
+
+
+def _no_slots(s: ResolvedSlots) -> dict[str, object]:
+    return {}
+
+
+def _optional_product(s: ResolvedSlots) -> dict[str, object]:
+    # CI spec C33: a dashboard shortcut or the seller's own words may name the product; with none named, every product with tracked competitors is covered.
+    return {"product_id": s.product_id} if s.product_id else {}
+
+
+def _competitor_remove(s: ResolvedSlots) -> dict[str, object]:
+    assert s.competitor_url_id is not None
+    return {"competitor_url_id": str(s.competitor_url_id)}
 
 
 def _direct(s: ResolvedSlots) -> dict[str, object]:
@@ -243,6 +328,21 @@ ACTIONS: Mapping[str, ActionPlan] = {
             ("competitor", "amount"), _price_scenario,
         ),
         ActionPlan(
+            "ci.discover_competitors",
+            "Find competitors for ONE of the seller's own products by searching the marketplaces (Competitor Intelligence). The results are leads to review, not verified prices",
+            ("product",), _discover, resolves=("seller_product", "category"),
+        ),
+        ActionPlan(
+            "ci.monitor_competitors",
+            "Re-check the tracked competitors from the evidence already saved: how fresh it is and any verified price or stock change. It does not watch or fetch anything live",
+            (), _optional_product, resolves=("seller_product_if_named",),
+        ),
+        ActionPlan(
+            "ci.review_findings", "What the saved competitor review evidence says: recurring complaints and strengths, with how many reviews were sampled", (), _optional_product,
+            resolves=("seller_product_if_named",),
+        ),
+        ActionPlan("ci.competitor_remove", "Stop tracking ONE named competitor (its history is kept)", ("competitor",), _competitor_remove),
+        ActionPlan(
             GST_KEY,
             "Which GST rate likely applies to a product, from its name (a provisional lookup from a cited public source, never a ruling)",
             ("product",), _gst_lookup,
@@ -256,10 +356,29 @@ ACTIONS: Mapping[str, ActionPlan] = {
         ActionPlan("cmo.generate_hashtags", "Suggest hashtags for a product (CMO). The CEO asks the seller for the product details", (), _direct, session=True),
         ActionPlan("cmo.generate_description", "Write a product description for a marketplace from the seller's own title (CMO). The CEO asks for the details", (), _direct, session=True),
         ActionPlan("cmo.generate_keywords", "Suggest search keywords for a product on a marketplace from the seller's own title (CMO). The CEO asks for the details", (), _direct, session=True),
+        ActionPlan("cmo.generate_bullets", "Write the five bullet points of a listing for a marketplace from the seller's own title (CMO). The CEO asks for the details", (), _direct, session=True),
+        ActionPlan("cmo.generate_backend_terms", "Write Amazon backend search terms for a product from the seller's own title (CMO). The CEO asks for the details", (), _direct, session=True),
+        ActionPlan("cmo.generate_listing_copy", "Write the full listing copy pack (description, bullet points and keywords) for a marketplace from the seller's own title (CMO). The CEO asks for the details", (), _direct, session=True),
         ActionPlan("cmo.market_trends", "Research current market trends for the seller's niche (marketplace news, tactics sellers report, new product buzz) from public web search (CMO). The CEO first shows the exact searches and asks the seller to confirm", (), _direct, session=True),
         ActionPlan("cmo.market_trends_preview", "Preview the exact web searches a market-trends run would send; nothing is sent and nothing is used up", (), _preview_defaults),
         ActionPlan("cfo.cash_reconciliation", "Cash reconciliation: is the marketplace paying what it owes, for a marketplace and period", ("marketplace", "period"), _period_marketplace),
     )
+}
+
+
+# Actions the CEO runs ITSELF in the course of a delegated task, never offered to the classifier (not in ACTIONS, so a model can neither pick nor name one): the seller reaches
+# them only through the CEO flow that builds their slots from validated references.
+INTERNAL_ACTIONS: Mapping[str, ActionPlan] = {
+    "cmo.analyze_attachment": ActionPlan("cmo.analyze_attachment", "CMO reads an attached product photo (by reference; internal)", (), _direct),
+    # CI: id-bearing steps of the CEO's own CI flows (CI spec 6.21.3). Slots are ids the CEO validated, never text a model supplied.
+    "ci.evidence_intake": ActionPlan("ci.evidence_intake", "CI reads an attached competitor screenshot (by reference; internal)", (), _direct),
+    "ci.confirm_field": ActionPlan("ci.confirm_field", "CI records the seller's answers to its confirmation questions (internal)", (), _direct),
+    "ci.competitor_add": ActionPlan("ci.competitor_add", "Track a competitor from a marketplace link the seller gave (internal)", (), _direct),
+    "ci.competitor_approve": ActionPlan("ci.competitor_approve", "Approve a discovered competitor candidate (internal)", (), _direct),
+    "ci.competitor_reject": ActionPlan("ci.competitor_reject", "Reject a discovered competitor candidate (internal)", (), _direct),
+    "ci.alert_settings_set": ActionPlan("ci.alert_settings_set", "Save the seller's own competitor alert preferences (internal; the CEO parses the seller's words itself)", (), _direct),
+    "ci.explain_finding": ActionPlan("ci.explain_finding", "Re-read one stored CI finding and its evidence (internal; the id comes from a dashboard control)", (), _direct),
+    "ci.review_intake": ActionPlan("ci.review_intake", "CI reads an attached competitor reviews screenshot (by reference; internal)", (), _direct),
 }
 
 

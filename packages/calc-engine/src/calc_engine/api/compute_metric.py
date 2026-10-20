@@ -792,7 +792,8 @@ def compute_price_positioning(
                 calculation_basis=(
                     f"PricePositioning vs {gap.reference.value} "
                     f"(reference_price_paise={gap.reference_price_paise.value}, "
-                    f"gap_pct={_format_pct(gap.gap_pct)}%) — deterministic-engine.md §5.15"
+                    f"gap_pct={_format_pct(gap.gap_pct)}%, "
+                    f"gap_pct_of_seller_price={_format_pct(gap.gap_pct_of_seller) if gap.gap_pct_of_seller is not None else 'UNAVAILABLE'}%) — deterministic-engine.md §5.15"
                 ),
                 formula_version="PRICE_POSITIONING.v1",
                 canonical_data_version="non-canonical",

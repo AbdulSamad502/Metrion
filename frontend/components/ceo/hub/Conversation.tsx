@@ -1,14 +1,21 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "@/components/ui/Icon";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DecisionCard } from "@/components/ceo/hub/DecisionCard";
+import { PickCard } from "@/components/ceo/hub/PickCard";
+import { PlanCard } from "@/components/ceo/hub/PlanCard";
+import { RichText } from "@/components/ceo/hub/RichText";
 import { Welcome } from "@/components/ceo/hub/Welcome";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState, Spinner } from "@/components/ui/LoadingState";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import type { AgentCode, CeoMessage, ClarificationReply, ExplicitPeriod, FindingRow, InvestigationDetail, NeedRow, TurnRow, UiAction } from "@/lib/ceo";
+import { isPickCard } from "@/lib/ceo";
+import type { AgentCode, CeoMessage, ClarificationReply, ExplicitPeriod, FindingRow, InvestigationDetail, NeedRow, PlanView, TurnRow, UiAction } from "@/lib/ceo";
 import { findingLink, investigationTitle, messageView, needStepView, needsByMessage, type HubState } from "@/lib/ceoModel";
 import type { TurnProgress } from "@/lib/useCeoHub";
 
@@ -32,7 +39,14 @@ export function Conversation({
   onArchive,
   onRetry,
   awaiting = false,
+  onApprovePlan,
+  onDeclinePlan,
+  planBusy = null,
 }: {
+  /** the Approve / Decline buttons of a plan card (the only approval there is); absent = the cards are read-only */
+  onApprovePlan?: (planId: string, planHash: string) => void;
+  onDeclinePlan?: (planId: string) => void;
+  planBusy?: string | null;
   /** the stored thread ends with a question that has no answer yet (page reopened mid-run, or the reply was lost) */
   awaiting?: boolean;
   onOpenForm: (form: string) => void;
@@ -101,6 +115,11 @@ export function Conversation({
         onAsk={(text) => onSend(text, null)}
         agents={detail.agents}
         needs={needs}
+        plans={detail.plans ?? []}
+        closed={closed}
+        planBusy={planBusy}
+        onApprovePlan={onApprovePlan}
+        onDeclinePlan={onDeclinePlan}
       />
 
 
@@ -129,13 +148,32 @@ function Banner({ tone, title, children }: { tone: "info" | "neutral"; title: st
 }
 
 function Processing({ question, arrived, stage }: { question: string | null; arrived: number; stage: string | null }) {
+  // The checklist is the live event stream's own stage words, in the order they arrived (nothing is invented: no events, no list). The latest is still running.
+  const [seen, setSeen] = useState<string[]>([]);
+  if (stage && seen[seen.length - 1] !== stage) setSeen([...seen, stage]);
   return (
-    <div role="status" aria-live="polite" data-testid="processing" className="flex items-center gap-3 rounded-xl px-3.5 py-3 t-body-sm" style={{ border: "1px dashed var(--accent-border-default)", color: "var(--text-3)" }}>
-      <Spinner />
-      <span className="min-w-0 flex-1">
-        The CEO is working on {question ? <>&ldquo;{question}&rdquo;</> : "your question"}.{stage ? <span data-testid="stage"> {stage}</span> : null}{" "}
-        {arrived > 0 ? `${arrived} ${arrived === 1 ? "finding has" : "findings have"} arrived so far; see the activity panel.` : "Findings appear in the activity panel as each specialist finishes."}
-      </span>
+    <div role="status" aria-live="polite" data-testid="processing" className="mt-hub-card flex flex-col gap-2.5 px-3.5 py-3 t-body-sm" style={{ borderStyle: "dashed", borderColor: "var(--accent-border-default)", color: "var(--text-3)" }}>
+      <div className="flex items-center gap-3">
+        <Spinner />
+        <span className="min-w-0 flex-1">
+          The CEO is working on {question ? <>&ldquo;{question}&rdquo;</> : "your question"}.{stage ? <span data-testid="stage"> {stage}</span> : null}{" "}
+          {arrived > 0 ? `${arrived} ${arrived === 1 ? "finding has" : "findings have"} arrived so far; see the activity panel.` : "Findings appear in the activity panel as each specialist finishes."}
+        </span>
+      </div>
+      {seen.length > 0 && (
+        <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Progress" data-testid="progress-steps">
+          {seen.map((step, i) => {
+            const running = i === seen.length - 1;
+            return (
+              <li key={`${i}-${step}`} data-state={running ? "running" : "done"} className="flex items-center gap-2 t-meta" style={{ color: "var(--text-3)" }}>
+                {running ? <Spinner size={14} /> : <span aria-hidden style={{ color: "var(--accent)" }}><Icon name="check" size={15} strokeWidth={1.8} /></span>}
+                <span>{step}</span>
+                <span className="sr-only">{running ? " (in progress)" : " (done)"}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -147,8 +185,13 @@ function lastCardId(messages: CeoMessage[]): string | null {
 }
 
 function Thread({
-  messages, findings, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs,
+  messages, findings, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs, plans, closed, planBusy, onApprovePlan, onDeclinePlan,
 }: {
+  plans: PlanView[];
+  closed: boolean;
+  planBusy: string | null;
+  onApprovePlan?: (planId: string, planHash: string) => void;
+  onDeclinePlan?: (planId: string) => void;
   messages: CeoMessage[];
   findings: FindingRow[];
   turnById: Map<string, TurnRow>;
@@ -168,13 +211,19 @@ function Thread({
   }, [messages.length]);
   if (messages.length === 0) return <Welcome agents={agents} onAsk={onAsk} onAction={onSuggest} onOpenForm={onOpenForm} />;
   return (
-    <ol tabIndex={0} className="mt-focus m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto rounded-lg p-0 pr-1" aria-label="Conversation" aria-live="polite">
+    <ol tabIndex={0} className="mt-focus m-0 flex min-h-0 flex-1 list-none flex-col gap-4 overflow-y-auto rounded-lg p-0 pr-1" aria-label="Conversation" aria-live="polite">
       {messages.map((m) => (
         <li key={m.id}>
-          <Bubble message={m} turnById={turnById} />
+          <Bubble message={m} turnById={turnById} findings={findings} />
+          {m.role === "CEO" && m.kind === "PLAN" && (
+            <PlanCard plan={plans.find((p) => p.plannedTurnId === m.turn_id) ?? null} busy={planBusy} closed={closed} onApprove={onApprovePlan} onDecline={onDeclinePlan} />
+          )}
           {m.role === "CEO" && m.kind === "ANSWER" && <ReportButtons links={reportLinks(findings, m.turn_id)} />}
           <NeedSteps needs={placed.byMessage.get(m.id) ?? []} />
-          {m.id === answerableCardId && m.choices && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
+          {m.role === "CEO" && (m.kind === "ANSWER" || m.kind === "CLARIFICATION") && isPickCard(m.choices) && m.id === messages[messages.length - 1]?.id && (
+            <PickCard card={m.choices} disabled={cardDisabled} onSend={onAsk} />
+          )}
+          {m.id === answerableCardId && m.choices && !isPickCard(m.choices) && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
         </li>
       ))}
       {placed.unplaced.length > 0 && <li><NeedSteps needs={placed.unplaced} /></li>}
@@ -231,7 +280,47 @@ const timeOf = (iso: string): string => {
   return d.toString() === "Invalid Date" ? "" : d.toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 
-function Bubble({ message, turnById }: { message: CeoMessage; turnById: Map<string, TurnRow> }) {
+/** "Key Insights": only when this answer's own saved results carry structured facts or figures (the backend's snapshot, verbatim, never re-worded or computed here). */
+function insightsFor(findings: FindingRow[], turnId: string | null | undefined): { key: string; text: string; register?: string }[] {
+  if (!turnId) return [];
+  const out: { key: string; text: string; register?: string }[] = [];
+  for (const f of findings) {
+    if (f.turn_id !== turnId || f.status !== "COMPLETE" || !f.presentation) continue;
+    f.presentation.facts.forEach((x, i) => out.push({ key: `${f.id}-fact-${i}`, text: `${x.label}: ${x.text}` }));
+    f.presentation.figures.forEach((x) => out.push({ key: `${f.id}-fig-${x.ref.kind}-${x.ref.id}-${x.label}`, text: `${x.label}: ${x.value}`, register: x.register }));
+  }
+  return out.slice(0, 5);
+}
+
+function KeyInsights({ items }: { items: { key: string; text: string; register?: string }[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section aria-label="Key insights" data-testid="key-insights" className="mt-3 rounded-xl px-3.5 py-3" style={{ background: "var(--accent-fill-subtle)", border: "1px solid var(--accent-border-subtle)" }}>
+      <h4 className="m-0 mb-1.5 flex items-center gap-1.5 t-meta font-semibold" style={{ color: "var(--accent)" }}>
+        <Icon name="reports" size={14} /> Key Insights
+      </h4>
+      <ul className="m-0 flex list-disc flex-col gap-1 pl-4">
+        {items.map((it) => (
+          <li key={it.key} className="t-body-sm" style={{ color: "var(--text-2)" }}>
+            {it.text} {it.register && <ProvenanceBadge register={it.register} />}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function Avatar({ mine }: { mine: boolean }) {
+  return mine ? (
+    <span aria-hidden className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full" style={{ background: "var(--fill-hover)", border: "1px solid var(--border-default)", color: "var(--text-3)" }}><Icon name="customers" size={17} /></span>
+  ) : (
+    <span aria-hidden className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full" style={{ background: "var(--hub-card-bg)", border: "1px solid var(--accent-border-strong)", boxShadow: "0 0 10px var(--hub-glow-soft)" }}>
+      <Image src="/metrion-mark.png" alt="" width={22} height={14} />
+    </span>
+  );
+}
+
+function Bubble({ message, turnById, findings }: { message: CeoMessage; turnById: Map<string, TurnRow>; findings: FindingRow[] }) {
   const v = messageView(message, turnById);
   if (v.tone === "note") {
     return (
@@ -241,32 +330,36 @@ function Bubble({ message, turnById }: { message: CeoMessage; turnById: Map<stri
     );
   }
   const mine = v.tone === "user";
+  const insights = !mine && message.kind === "ANSWER" ? insightsFor(findings, message.turn_id) : [];
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+    <div
+      data-testid={mine ? "message-user" : "message-ceo"}
+      className={`flex items-start gap-2.5 ${mine ? "flex-row-reverse" : ""}`}
+      style={{ opacity: message.pending ? 0.7 : 1 }}
+    >
+      <Avatar mine={mine} />
       <div
-        data-testid={mine ? "message-user" : "message-ceo"}
-        className={`rounded-2xl px-4 py-3 ${mine ? "max-w-[min(85%,36rem)]" : "max-w-[min(96%,50rem)]"}`}
+        className={`min-w-0 rounded-2xl px-4 py-3 ${mine ? "max-w-[85%] rounded-tr-md" : "flex-1 rounded-tl-md"}`}
         style={{
-          background: mine ? "var(--accent-fill-subtle, rgba(62,207,116,0.10))" : "var(--bg-card)",
+          background: mine ? "var(--accent-fill-default)" : "rgba(255,255,255,0.035)",
           border: `1px solid ${v.tone === "clarify" ? "var(--warning-border)" : mine ? "var(--accent-border-default)" : "var(--border-subtle)"}`,
-          boxShadow: !mine && v.tone !== "clarify" ? "inset 2px 0 0 var(--accent-border-strong)" : undefined,
-          opacity: message.pending ? 0.7 : 1,
         }}
       >
-        <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="t-meta font-bold" style={{ color: mine ? "var(--text-3)" : "var(--accent)" }}>{mine ? "You" : "CEO"}</span>
+        <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="t-meta font-semibold" style={{ color: mine ? "var(--accent)" : "var(--text-2)" }}>{mine ? "You" : "CEO Agent"}</span>
           {v.badge && <StatusBadge tone={v.tone === "clarify" ? "warning" : "neutral"}>{v.badge}</StatusBadge>}
-          <time className="t-meta" dateTime={message.created_at} style={{ color: "var(--text-6)" }}>{message.pending ? "Sending…" : message.failed ? "Not sent" : timeOf(message.created_at)}</time>
+          <time className="ml-auto t-meta" dateTime={message.created_at} style={{ color: "var(--text-6)" }}>{message.pending ? "Sending…" : message.failed ? "Not sent" : timeOf(message.created_at)}</time>
         </div>
         {/* the backend's gated text, shown verbatim: line breaks kept, nothing re-formatted or re-computed here */}
-        <div className="whitespace-pre-wrap break-words t-body" style={{ color: "var(--text-1)", lineHeight: 1.6 }}>
-          {message.content}
+        <div className={`${mine ? "whitespace-pre-wrap " : ""}break-words t-body`} style={{ color: mine ? "var(--text-1)" : "var(--text-3)", lineHeight: 1.65 }}>
+          {mine ? message.content : <RichText text={message.content} />}
         </div>
         {v.footnote && (
           <div className="mt-2 t-meta" style={{ color: "var(--text-6)" }}>
             {v.footnote}
           </div>
         )}
+        <KeyInsights items={insights} />
       </div>
     </div>
   );

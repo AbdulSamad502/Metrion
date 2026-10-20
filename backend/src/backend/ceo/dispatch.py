@@ -33,10 +33,11 @@ from pydantic import BaseModel, ValidationError
 
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_VIEW, has_permission
-from backend.ceo import provenance
+from backend.ceo import profile_context, provenance
 from backend.ceo.approval_gate import gate_leg
 from backend.ceo.contract import (
     ActionSpec,
+    ApprovalGrant,
     Denial,
     InvalidSlots,
     LegContext,
@@ -237,6 +238,7 @@ def dispatch(
     registry: ActionRegistry | None = None,
     attached: frozenset[str] | None = None,
     now: datetime | None = None,
+    approval: ApprovalGrant | None = None,
 ) -> LegResult:
     """Runs ONE registered action as a leg of `turn`. Raises `UnregisteredAction` for a key outside the registry (never
     executed) and `InvalidSlots` for slots outside the declared model (before any row is written for the call itself).
@@ -261,7 +263,9 @@ def dispatch(
     # workflow does not exist yet. A confirmation card or a completed input session is an in-conversation answer, which is NOT approval, so nothing that
     # needs approval is dispatched from here. The refusal is a DENIED leg like any other (no invoke, so no usage and no external call). A registry whose
     # specs carry no effects (an ad hoc test registry) is unchanged; the production registry classifies every action (R1 refuses an unclassified one).
-    if spec.effects is not None and gate_leg(spec.key, effects={spec.key: spec.effects}).requires_approval:
+    # An APPROVED plan's execution carries an `ApprovalGrant` (same tenant, this key frozen in that plan): the only way past this backstop.
+    granted = approval is not None and approval.tenant_id == ctx.tenant_id and spec.key in approval.action_keys
+    if spec.effects is not None and not granted and gate_leg(spec.key, effects={spec.key: spec.effects}).requires_approval:
         return _refuse(
             turn, spec, denial=Denial.APPROVAL_REQUIRED, status=LegStatus.DENIED, permission_check="PASS", entitlement_check="NOT_EVALUATED",
             reason="approval required: this action needs an approved plan, which is not available yet", now=at, registry_agent_id=agent_id,
@@ -305,9 +309,10 @@ def dispatch(
             permission_check="PASS", entitlement_check=ent_text, status="RUNNING", started_at=at,
             parent_run_id=turn.anchor_run_id, investigation_id=turn.investigation_id,
         )
+    profile_note, profile_brief = profile_context.for_leg(ctx.tenant_id)  # fail-soft: (None, None) when absent or unreadable
     leg_ctx = LegContext(
         tenant_id=ctx.tenant_id, requested_by=ctx.app_user_id, investigation_id=turn.investigation_id,
-        turn_run_id=turn.anchor_run_id, leg_run_id=leg_run, now=at,
+        turn_run_id=turn.anchor_run_id, leg_run_id=leg_run, now=at, business_profile=profile_note, business_profile_brief=profile_brief,
     )
 
     def finish(status: str, reason: str | None, refs: tuple[Ref, ...] = ()) -> bool:
@@ -328,7 +333,7 @@ def dispatch(
 
     try:
         assert spec.invoke is not None
-        with agent_run_repo.parent_run_scope(turn.anchor_run_id):
+        with agent_run_repo.parent_run_scope(turn.anchor_run_id), profile_context.for_agents(profile_note, profile_brief):
             payload = spec.invoke(model, ctx, leg_ctx)
     except HTTPException as exc:
         # The specialist's own gate refused (402 entitlement / 403 permission) or rejected the request.

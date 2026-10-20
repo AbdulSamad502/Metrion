@@ -514,10 +514,8 @@ def test_video_with_failed_extraction_still_attaches_to_an_already_extracted_pro
     assert candidates[0].source_diversity == 2
 
 
-def test_youtube_thumbnail_used_as_image_fallback_when_no_tavily_image_matches() -> None:
-    """New 2026-10-01: a YouTube video's own `thumbnail_url` is an unambiguous, directly-
-    linked image for that specific video (no containment heuristic needed, unlike Tavily
-    images) — used as a free fallback when no Tavily image honestly matches this candidate."""
+def test_youtube_thumbnail_is_never_used_as_a_product_image() -> None:
+    """2026-10-14 (reverses the 2026-10-01 fallback): a video frame is not a clear product photo, so with no matching Tavily image the candidate has no image."""
     videos = [
         YoutubeVideo(
             video_id="vid123", title="ASICS GEL-NIMBUS 28 Review", channel_title="RunReviews",
@@ -525,13 +523,10 @@ def test_youtube_thumbnail_used_as_image_fallback_when_no_tavily_image_matches()
             published_at=_NOW, retrieved_at=_NOW,
         )
     ]
-    candidates = synthesize_candidates(
-        tavily_results=[], tavily_images=[], youtube_videos=videos, now=_NOW,
-    )
+    candidates = synthesize_candidates(tavily_results=[], tavily_images=[], youtube_videos=videos, now=_NOW)
 
     assert len(candidates) == 1
-    assert candidates[0].image_url == "https://i.ytimg.com/vi/vid123/hqdefault.jpg"
-    assert candidates[0].image_source_url == "https://www.youtube.com/watch?v=vid123"
+    assert candidates[0].image_url is None and candidates[0].image_source_url is None
 
 
 def test_youtube_thumbnail_fallback_never_overrides_a_real_tavily_match() -> None:

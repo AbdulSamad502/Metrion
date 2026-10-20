@@ -40,6 +40,17 @@ describe("useAppSession", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/sign-in"));
   });
 
+  it("sends an active member whose business details are not complete to the onboarding step, and lets a complete one in", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => reply({ onboardingState: "ACTIVE", role: "OWNER", profileComplete: false })));
+    renderHook(() => useAppSession());
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/onboarding"));
+    replace.mockReset();
+    vi.stubGlobal("fetch", vi.fn(async () => reply({ onboardingState: "ACTIVE", role: "OWNER", profileComplete: true })));
+    const { result } = renderHook(() => useAppSession());
+    await waitFor(() => expect(result.current.session).not.toBeNull());
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it("explains a failure in plain words instead of the raw backend message", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => reply({ code: "PI_NOT_CONFIGURED" }, 503)));
     const { result } = renderHook(() => useAppSession());

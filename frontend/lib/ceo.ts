@@ -26,7 +26,7 @@ export type InvestigationMeta = InvestigationSummary & {
   summary: string | null;
 };
 
-export type MessageKind = "TEXT" | "CLARIFICATION" | "ANSWER" | "BRIEFING" | "SYSTEM_NOTE";
+export type MessageKind = "TEXT" | "CLARIFICATION" | "ANSWER" | "BRIEFING" | "SYSTEM_NOTE" | "PLAN";
 
 /** One real choice on a decision card. Built by the backend from the seller's own data; `reason` is the stated rule behind the recommendation. */
 export type ClarificationOption = { key: string; label: string; kind: "RECOMMENDED" | "ALTERNATIVE" | "OTHER" | "CANCEL" | "BACK"; reason: string; /** set by the backend on an option that records "unknown" on purpose: offered as Skip */ skip?: boolean; /** set on a FORM card option: opens that playbook's run-form instead of answering */ form?: string };
@@ -34,6 +34,21 @@ export type ClarificationOption = { key: string; label: string; kind: "RECOMMEND
 export type ClarificationCard = { version: number; kind: string; slot: string; options: ClarificationOption[] };
 /** The seller answering a card: the card's message id and the chosen option key (null = the free-text "Other", sent as the message text). */
 export type ClarificationReply = { id: string; option: string | null };
+
+/** The CEO's pick card (backend: ci_conversation.pick_card): check boxes or radio buttons plus action buttons that send templated text. */
+export type PickCard = {
+  version: number;
+  kind: "PICK";
+  title: string;
+  subtitle: string;
+  mode: "multi" | "single";
+  maxPick: number;
+  selectAll: boolean;
+  items: { key: string; n?: number; label: string; marketplace?: string | null; url?: string | null; note?: string | null }[];
+  actions: { id: string; label: string; template: string; exactly?: number; noPick?: boolean }[];
+};
+
+export const isPickCard = (c: unknown): c is PickCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "PICK" && Array.isArray((c as { items?: unknown }).items);
 
 export type CeoMessage = {
   id: string;
@@ -43,7 +58,7 @@ export type CeoMessage = {
   turn_id: string | null;
   created_at: string;
   /** Only a CEO CLARIFICATION message that has real candidates to offer. */
-  choices?: ClarificationCard | null;
+  choices?: ClarificationCard | PickCard | null;
   /** Client-only: a message the seller just sent that the server has not echoed back yet. */
   pending?: boolean;
   /** The send failed and the thread could not be refreshed, so the server's copy is unknown: shown as not sent, never as still sending. */
@@ -174,7 +189,24 @@ export type NewProductFormSupport = { quotes: StoredInputRow[]; budget: StoredIn
 /** One seller input saved through the existing CFO expense path (needs the CFO key and financials.adjust). */
 export type SaveInputBody = { target_type: "SKU" | "ACCOUNT"; target_ref: string; field: "cogs_per_unit" | "supplier.quote" | "batch.budget"; value: Record<string, unknown>; supersedes_id?: string | null };
 
+export type PlanStatus = "AWAITING_APPROVAL" | "APPROVED" | "DECLINED" | "EXPIRED" | "SUPERSEDED" | string;
+/** A stored approval plan (ceo-approval-workflow.md). The PLAN message of the thread is rendered from THIS row (matched by `plannedTurnId`), never parsed from text.
+ * `planHash` is what the Approve button sends back with the plan id: the server recomputes it and refuses a mismatch. */
+export type PlanView = {
+  id: string;
+  status: PlanStatus;
+  planHash: string;
+  plan: { summary_text?: string; title?: string; compact_lines?: string[]; details?: string[]; legs?: { action_key: string; meters?: { meter_code: string; units: number }[] }[]; [k: string]: unknown };
+  createdAt: string;
+  expiresAt: string;
+  plannedTurnId: string | null;
+  executionTurnId: string | null;
+  viewerIsRequester: boolean;
+  decisionReason?: string | null;
+};
+
 export type InvestigationDetail = {
+  plans?: PlanView[];
   investigation: InvestigationMeta;
   agents: Partial<Record<AgentCode, boolean>>;
   messages: CeoMessage[];
@@ -237,7 +269,7 @@ export function createCeoClient(getToken: GetToken) {
       form.append("file", file);
       return apiFetchForm<UploadedAttachment>(`${BASE}/investigations/${id}/attachments`, await getToken(), form);
     },
-    postTurn: (id: string, message: string, period?: ExplicitPeriod | null, action?: UiAction | null, clarification?: ClarificationReply | null, attachmentIds?: string[], clientRequestId?: string | null) =>
+    postTurn: (id: string, message: string, period?: ExplicitPeriod | null, action?: UiAction | null, clarification?: ClarificationReply | null, attachmentIds?: string[], clientRequestId?: string | null, ciFindingId?: string | null) =>
       call<TurnResponse>(
         `/investigations/${id}/turns`,
         json("POST", {
@@ -246,9 +278,13 @@ export function createCeoClient(getToken: GetToken) {
           ...(action ? { action: { kind: action.kind, key: action.key ?? null, slots: action.slots ?? {}, ...(action.inputs ? { inputs: action.inputs } : {}) } } : {}),
           ...(clarification ? { clarification: { id: clarification.id, option: clarification.option } } : {}),
           ...(attachmentIds && attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
+          ...(ciFindingId ? { ciFindingId } : {}), // the CI dashboard's Ask CEO: an id only; the server re-reads the stored finding for this tenant (CI spec C46)
           ...(clientRequestId ? { clientRequestId } : {}), // one logical submission = one id: the server answers a retry with the stored outcome instead of running it again
         }),
       ),
+    /** The ONLY way a plan is approved: the plan id and the plan hash the seller was shown. Typing "yes" in the chat never reaches this. */
+    approvePlan: (id: string, planId: string, planHash: string) => call<{ status: string; replayed?: boolean }>(`/investigations/${id}/plans/${planId}/approve`, json("POST", { plan_hash: planHash })),
+    declinePlan: (id: string, planId: string, reason?: string | null) => call<{ status: string }>(`/investigations/${id}/plans/${planId}/decline`, json("POST", { reason: reason ?? null })),
     getHealth: () => call<{ entries: HealthEntry[] }>("/state/health"),
     getMemory: () => call<{ items: MemoryItem[] }>("/memory"),
     forgetMemory: (id: string) => call<{ forgotten: string }>(`/memory/${encodeURIComponent(id)}/forget`, json("POST", {})),

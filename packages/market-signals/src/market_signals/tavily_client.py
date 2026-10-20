@@ -88,6 +88,7 @@ class TavilyClient(Protocol):
         topic: str | None = None,
         days: int | None = None,
         country: str | None = None,
+        include_domains: list[str] | None = None,
     ) -> list[TavilySearchResult]: ...
 
     def images_for(self, query: str, *, max_images: int = 5) -> list[TavilyImage]: ...
@@ -125,8 +126,9 @@ class HttpTavilyClient:
         topic: str | None = None,
         days: int | None = None,
         country: str | None = None,
+        include_domains: list[str] | None = None,
     ) -> list[TavilySearchResult]:
-        # `topic` / `days` / `country` are CMO-only options (market-signals plan 7c-ii). Each is OMITTED from the
+        # `include_domains` (PI supplier lookup, 2026-10-14): restrict a search to given sites, e.g. B2B trade directories. `topic` / `days` / `country` are CMO-only options (market-signals plan 7c-ii). Each is OMITTED from the
         # request when None, so every existing caller (Product Intelligence) sends the byte-identical body it always did.
         retrieved_at = datetime.now(timezone.utc)
         body: dict[str, Any] = {
@@ -141,6 +143,8 @@ class HttpTavilyClient:
             body["days"] = days
         if country is not None:
             body["country"] = country
+        if include_domains:
+            body["include_domains"] = list(include_domains)
         parsed = self._post(body)
         raw_results = parsed.get("results")
         if not isinstance(raw_results, list):

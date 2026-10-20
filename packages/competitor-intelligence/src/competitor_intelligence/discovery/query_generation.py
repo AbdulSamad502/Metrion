@@ -148,6 +148,17 @@ def check_query_privacy(query_text: str, *, internal_identifiers: tuple[str, ...
     return None
 
 
+_NOT_FEATURES = frozenset({"title", "marketplace", "test_fixture"})
+_PARENTHETICAL = re.compile(r"\s*[(\[][^)\]]*[)\]]")
+
+
+def _clean(value: str | None) -> str | None:
+    """A term as a search engine should see it: bracketed side notes such as "(CI TEST)" or "[Pack of 2]" are not part of what the product is, and are left out."""
+    if not value:
+        return value
+    return " ".join(_PARENTHETICAL.sub(" ", value).split()) or None
+
+
 def _compose(parts: list[str]) -> str:
     return " ".join(p.strip() for p in parts if p and p.strip())
 
@@ -163,8 +174,11 @@ def generate_queries(seller_product: SellerProduct) -> QueryGenerationResult:
     An `UNKNOWN` field (absent from `field_source`, C30/AC22) simply yields no query of the
     kind that depends on it — never a default, never an invented placeholder.
     """
-    product_name = seller_product.title
-    category = seller_product.category
+    attributes = [(k, v) for k, v in (seller_product.attributes or ())]
+    # A product the seller described in their own profile has no sales title: its own "title" attribute names it. Neither the title nor the marketplace is a product FEATURE.
+    title_attr = next((v for k, v in attributes if str(k).strip().casefold() == "title" and v), None)
+    product_name = _clean(seller_product.title or title_attr)
+    category = _clean(seller_product.category)
     internal_identifiers = (seller_product.product_id,)
 
     candidates: list[tuple[QueryKind, str]] = []
@@ -175,12 +189,16 @@ def generate_queries(seller_product: SellerProduct) -> QueryGenerationResult:
     if category:
         candidates.append((QueryKind.CATEGORY_TERM, category))
 
-    if seller_product.attributes:
-        for _key, value in seller_product.attributes:
-            if product_name:
-                candidates.append((QueryKind.FEATURE_TERM, _compose([product_name, value])))
-            else:
-                candidates.append((QueryKind.FEATURE_TERM, value))
+    for _key, raw_value in attributes:
+        if str(_key).strip().casefold() in _NOT_FEATURES:
+            continue
+        value = _clean(raw_value)
+        if not value:
+            continue
+        if product_name:
+            candidates.append((QueryKind.FEATURE_TERM, _compose([product_name, value])))
+        else:
+            candidates.append((QueryKind.FEATURE_TERM, value))
 
     if product_name:
         for modifier in _INTENT_MODIFIERS:
@@ -193,7 +211,8 @@ def generate_queries(seller_product: SellerProduct) -> QueryGenerationResult:
 
     if seller_product.keywords:
         for keyword in seller_product.keywords:
-            candidates.append((QueryKind.KEYWORD_TERM, keyword))
+            if cleaned := _clean(keyword):
+                candidates.append((QueryKind.KEYWORD_TERM, cleaned))
 
     sent: list[GeneratedQuery] = []
     dropped: list[DroppedQuery] = []

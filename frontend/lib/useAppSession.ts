@@ -29,8 +29,8 @@ export function useAppSession() {
         const token = await getToken();
         const s = await apiFetch<SessionResponse>("/api/v1/session", token);
         if (!alive) return;
-        if (s.onboardingState !== "ACTIVE") {
-          router.replace("/onboarding");
+        if (s.onboardingState !== "ACTIVE" || s.profileComplete === false) {
+          router.replace("/onboarding"); // not yet a member, or the business-details step is not finished (every field is mandatory)
           return;
         }
         setSession(s);

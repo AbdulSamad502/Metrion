@@ -14,15 +14,17 @@ const STATUS_WORDS: Record<FileStatus, string> = { uploading: "Uploading…", up
 const sizeOf = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${n >> 10} KB` : `${n >> 20} MB`); // a file size, not money: whole units by bit shift (the hub does no number formatting)
 
 export function Composer({
-  disabled, placeholder, onSend, error, fileStatus, fileInfo,
+  disabled, placeholder, onSend, error, fileStatus, fileInfo, initialText,
 }: {
+  /** A draft to start with (from a link in another page). The seller reads it, can edit it, and sends it: nothing is sent by arriving here. */
+  initialText?: string;
   disabled: boolean; placeholder: string; error?: string | null; fileStatus?: (f: File) => FileStatus | undefined;
   /** What the backend reported about a file once it was uploaded (for a spreadsheet: its sheets and size, or why it could not be read as a table). */
   fileInfo?: (f: File) => string | undefined;
   /** May return a promise; resolving to `false` means the message was NOT sent (an upload failed): the text and the files are kept so the seller can retry. */
   onSend: (text: string, files: File[]) => void | boolean | Promise<void | boolean>;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText ?? "");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -48,8 +50,8 @@ export function Composer({
   return (
     <form
       data-testid="composer"
-      className="flex w-full flex-col gap-2 rounded-2xl px-3.5 py-2.5"
-      style={{ background: "var(--bg-card)", border: "1px solid var(--field-edge, var(--border-hover))", boxShadow: "var(--glass-shadow-hover)", outline: dragging ? "2px dashed var(--accent)" : undefined }}
+      className="flex w-full flex-col gap-1.5 rounded-2xl p-2"
+      style={{ background: "var(--hub-card-bg)", border: "1px solid var(--border-default)", boxShadow: "var(--glass-shadow-hover)", outline: dragging ? "2px dashed var(--accent)" : undefined }}
       onSubmit={(e) => { e.preventDefault(); void submit(); }}
       onDragOver={(e) => { if (!disabled && e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); setDragging(true); } }}
       onDragLeave={() => setDragging(false)}
@@ -81,15 +83,15 @@ export function Composer({
       )}
       {files.some((f) => f.type.startsWith("image/")) && (
         <p className="m-0 t-meta" data-testid="image-handoff" style={{ color: "var(--text-4)" }}>
-          Chat only stores an attached image; it does not read it or start any research. If it is a screenshot of a competitor&apos;s listing, add it as evidence on the{" "}
-          <Link href="/dashboard/competitors" className="mt-focus font-semibold underline" style={{ color: "var(--text-2)" }}>Competitors page</Link>, where the price is read and you can correct it.
+          Attach a competitor&apos;s listing or reviews screenshot and say which competitor it shows, for example “this is The Better Home 1L”. The CEO reads it and asks you to confirm the price, discount, delivery and offers before anything is used. A product photo is read only after you approve. Results appear on the{" "}
+          <Link href="/dashboard/competitors" className="mt-focus font-semibold underline" style={{ color: "var(--text-2)" }}>Competitors page</Link>.
         </p>
       )}
       {error && <div role="alert" className="t-meta" style={{ color: "var(--negative)" }}>{error}</div>}
-      <div className="flex items-end gap-2.5">
+      <div className="flex items-end gap-1.5 rounded-2xl py-1.5 pl-1.5 pr-1.5 transition-colors focus-within:[border-color:var(--accent-border-strong)]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border-default)" }}>
         <input ref={picker} type="file" multiple accept={ACCEPT} className="hidden" data-testid="file-input" aria-label="Attach files" onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
-        <button type="button" disabled={disabled || sending} aria-label="Attach a file" title="Attach images, PDFs, CSV or Excel files" onClick={() => picker.current?.click()} className="mt-btn mt-focus flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)", opacity: disabled ? 0.45 : 1 }}>
-          <Icon name="plus" size={16} />
+        <button type="button" disabled={disabled || sending} aria-label="Attach a file" title="Attach images, PDFs, CSV or Excel files" onClick={() => picker.current?.click()} className="mt-btn mt-focus flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" style={{ color: "var(--text-4)", opacity: disabled ? 0.45 : 1 }}>
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.9-8.9a3.7 3.7 0 0 1 5.2 5.2l-8.9 8.9a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2" /></svg>
         </button>
         <textarea
           ref={box}
@@ -106,17 +108,18 @@ export function Composer({
           disabled={disabled}
           aria-label="Ask the CEO"
           placeholder={placeholder}
-          className="mt-focus max-h-40 min-h-[40px] min-w-0 flex-1 resize-none bg-transparent py-2 t-body outline-none"
-          style={{ color: "var(--text-2)" }}
+          className="mt-focus max-h-40 min-h-[40px] min-w-0 flex-1 resize-none bg-transparent px-1 py-2.5 t-body outline-none"
+          style={{ color: "var(--text-1)" }}
         />
         <button
           type="submit" disabled={!canSend} aria-label="Send"
-          className="mt-btn mt-focus flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-          style={{ background: "var(--accent)", color: "var(--accent-on-fill)", opacity: canSend ? 1 : 0.45 }}
+          className="mt-btn mt-focus flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-opacity"
+          style={{ background: "var(--accent)", color: "var(--accent-on-fill)", opacity: canSend ? 1 : 0.35 }}
         >
-          {disabled || sending ? <Spinner /> : <Icon name="arrow" size={16} />}
+          {disabled || sending ? <Spinner /> : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 19V5" /><path d="M5 12l7-7 7 7" /></svg>}
         </button>
       </div>
+      <div className="px-1.5 t-meta" style={{ color: "var(--text-6)" }}>Enter to send · Shift+Enter for a new line · Drop files to attach</div>
     </form>
   );
 }

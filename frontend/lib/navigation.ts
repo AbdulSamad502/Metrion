@@ -20,10 +20,10 @@ export type NavGroup = { label: string; items: NavItem[] };
  * opens can never disagree. Internal role names (CFO, CMO, CEO) belong inside the pages that explain them, not in the menu or the headings. */
 export const PAGE_COPY = {
   overview: { title: "Overview", subtitle: "What is happening, what matters, and what to do next" },
-  "ceo-hub": { title: "Ask Metrion", subtitle: "Ask in plain words. Metrion answers from your data, or hands the question to the right specialist." },
+  "ceo-hub": { title: "CEO Hub", subtitle: "Ask in plain words. Metrion answers from your data, or hands the question to the right specialist." },
   notifications: { title: "Action Center", subtitle: "Competitor price alerts and information Metrion needs from you, each with its next step" },
   products: { title: "Products", subtitle: "Find product ideas, check whether they are worth stocking, and shortlist suppliers" },
-  competitors: { title: "Competitors", subtitle: "Track competitor prices, add your own evidence, and see what changed" },
+  competitors: { title: "Competitors", subtitle: "What the CEO has found about your competitors: prices, changes and what customers say. Ask the CEO to do anything new" },
   "pnl-calculator": { title: "Profit Calculator", subtitle: "Try prices, costs and fees before you commit. A what-if from the numbers you type, never your verified results" },
   cfo: { title: "Profit & Finance", subtitle: "Profit, cash, GST and where money leaks, calculated from the reports you upload" },
   "cfo-expenses": { title: "Expense Tracker", subtitle: "Every expense, where it landed in your profit, and what still needs your review" },

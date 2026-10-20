@@ -12,7 +12,7 @@ Every function takes `tenant_id` first and receives its connection only via `ten
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -66,7 +66,7 @@ def insert_relevance(
                 "recalculated_from": str(recalculated_from) if recalculated_from else None,
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def get_latest_relevance(tenant_id: UUID, candidate_id: UUID) -> dict[str, Any] | None:

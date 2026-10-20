@@ -12,7 +12,7 @@ Every function takes `tenant_id` first and receives its connection only via `ten
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -70,7 +70,7 @@ def create_candidate(
                 "tier": tier,
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def set_identity_resolution(tenant_id: UUID, candidate_id: UUID, resolution: IdentityResolution, *, tier: str) -> None:
@@ -94,6 +94,31 @@ def set_identity_resolution(tenant_id: UUID, candidate_id: UUID, resolution: Ide
                 "identity_match": resolution.identity_match.value,
                 "basis": _basis_to_json(resolution.basis),
                 "tier": tier,
+            },
+        )
+
+
+def set_relationship(
+    tenant_id: UUID, candidate_id: UUID, *, relationship_class: str, basis: dict[str, object], is_provisional: bool
+) -> None:
+    """C43/§6.27.1: records the derived `relationship_class` and the values that drove it."""
+    import json
+
+    with tenant_scope(tenant_id) as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE ci_candidate
+                SET relationship_class = :relationship_class,
+                    relationship_basis = CAST(:basis AS jsonb)
+                WHERE tenant_id = :tenant_id AND id = :id
+                """
+            ),
+            {
+                "tenant_id": str(tenant_id),
+                "id": str(candidate_id),
+                "relationship_class": relationship_class,
+                "basis": json.dumps({**basis, "is_provisional": is_provisional}),
             },
         )
 
@@ -190,3 +215,20 @@ def list_candidates_for_run(tenant_id: UUID, discovery_run_id: UUID, *, tier: st
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(text(query), params).mappings().all()
         return [dict(r) for r in rows]
+
+
+def rejected_urls(tenant_id: UUID, seller_product_ref: str) -> set[str]:
+    """URLs the seller has rejected for this product, across all its discovery runs — a later
+    run must not re-surface them unless the seller asks (§6.24, Q21 recommendation)."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT c.candidate_url FROM ci_candidate c
+                JOIN ci_discovery_run r ON r.id = c.discovery_run_id AND r.tenant_id = c.tenant_id
+                WHERE c.tenant_id = :tenant_id AND r.seller_product_ref = :ref AND c.seller_decision = 'REJECTED'
+                """
+            ),
+            {"tenant_id": str(tenant_id), "ref": seller_product_ref},
+        )
+        return {r[0] for r in rows}

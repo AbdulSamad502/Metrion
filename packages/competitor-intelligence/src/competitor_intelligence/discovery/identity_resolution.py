@@ -126,16 +126,19 @@ class GatingOutcome(str, Enum):
     """`UNCERTAIN` — blocked; requires seller approval before relevance scoring runs
     (`WAITING_FOR_REVIEW`, E24)."""
 
-    REJECTED = "REJECTED"
-    """`NOT_A_MATCH` — rejected automatically; never enters scoring, never shown in the
-    recommended flow (still visible in the raw tier, §6.15)."""
+    PROCEEDS_AS_OTHER_PRODUCT = "PROCEEDS_AS_OTHER_PRODUCT"
+    """`NOT_A_MATCH` — REVISED by C43 (CP2, owner-approved Q20): "not the same product as
+    mine" is exactly what a competitor is, so this no longer stops at the gate. It proceeds to
+    relevance scoring and to relationship classification (`relationship.py`); whether it is
+    recommended is decided by its relationship class, and `UNRELATED`/`UNKNOWN` ones stay out
+    of the Recommended tier (still visible in the other tiers, §6.15)."""
 
 
 _GATING_TABLE: dict[IdentityMatch, GatingOutcome] = {
     IdentityMatch.EXACT_MATCH: GatingOutcome.PROCEEDS,
     IdentityMatch.LIKELY_VARIANT: GatingOutcome.PROCEEDS_WITH_CAVEAT,
     IdentityMatch.UNCERTAIN: GatingOutcome.BLOCKED_FOR_REVIEW,
-    IdentityMatch.NOT_A_MATCH: GatingOutcome.REJECTED,
+    IdentityMatch.NOT_A_MATCH: GatingOutcome.PROCEEDS_AS_OTHER_PRODUCT,
 }
 
 
@@ -146,11 +149,14 @@ def gate(identity_match: IdentityMatch) -> GatingOutcome:
 
 
 def enters_relevance_scoring(identity_match: IdentityMatch) -> bool:
-    """`True` for exactly the two tiers §6.13.2 allows through automatically
-    (`EXACT_MATCH`, `LIKELY_VARIANT`). `UNCERTAIN` is blocked pending seller approval and
-    `NOT_A_MATCH` is rejected — neither may reach `relevance_scoring.py` from this gate."""
+    """`True` for every tier except `UNCERTAIN`, which stays blocked pending seller approval
+    (C43). `NOT_A_MATCH` (a different product — i.e. a candidate competitor) now proceeds."""
     outcome = gate(identity_match)
-    return outcome in (GatingOutcome.PROCEEDS, GatingOutcome.PROCEEDS_WITH_CAVEAT)
+    return outcome in (
+        GatingOutcome.PROCEEDS,
+        GatingOutcome.PROCEEDS_WITH_CAVEAT,
+        GatingOutcome.PROCEEDS_AS_OTHER_PRODUCT,
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -212,14 +218,16 @@ def _extract_brand(title: str | None) -> str | None:
         # cheap heuristic; a licensed provider or a richer catalogue lookup can replace this
         # without touching the resolution/gating logic above.
         if token[0].isupper() and any(c.isalpha() for c in token):
-            return token
-    return tokens[0] if tokens else None
+            return str(token)
+    return str(tokens[0]) if tokens else None
 
 
 def _seller_brand(seller_product: SellerProduct) -> str | None:
     brand = _attr(seller_product, "brand")
     if brand:
         return brand
+    if str(getattr(seller_product.field_source.get("title"), "value", seller_product.field_source.get("title"))) == "SELLER_ENTERED":
+        return None  # a title the seller typed into their profile does not tell which word is the brand: unknown, never guessed from its first word
     return _extract_brand(seller_product.title)
 
 

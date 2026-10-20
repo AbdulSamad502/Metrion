@@ -9,7 +9,7 @@ Status: V1 specified and built 2026-10-10 (owner-directed). Authority for what a
 - The seller can **see, correct and forget** anything remembered. Nothing is remembered silently: the CEO says what it saved, in the same answer.
 
 ## 2. Design decisions requiring review
-- Embeddings and semantic recall are **not** in V1 (kind + key lookup, newest wins). Semantic recall (pgvector, already in the stack) is the V2 option once there is enough memory to need it.
+- Embeddings and semantic recall are **not** part of this ledger (kind + key lookup, newest wins). Semantic recall is specified separately in `rag-knowledge.md` (2026-10-12) as a **read-only derived index** over active SHARED rows only: `agent_memory` stays authoritative, PRIVATE / FORGOTTEN / superseded / `AGENT_NOTE` rows are never indexed, and a hit is re-read from this table before use. The ledger's write rules above are unchanged.
 - Which statements are auto-remembered is a short closed list (§4.3). Anything outside it is not remembered. Widening it is a product decision.
 
 ## 3. Data model — `agent_memory` (append-only, FORCE RLS)

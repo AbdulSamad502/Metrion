@@ -229,7 +229,9 @@ export function groupFindings(findings: FindingRow[], messages: CeoMessage[], tu
 export function findingLink(f: Pick<FindingRow, "source" | "action_key" | "status" | "report_ref">): { href: string; label: string } | null {
   if (f.status === "DENIED" || f.status === "FAILED" || f.status === "UNAVAILABLE") return null;
   const run = f.report_ref?.runId;
-  if (f.source === "PI") return { href: run ? `/dashboard/pi?run=${encodeURIComponent(run)}#discover` : "/dashboard/pi", label: "View the full research report" };
+  // ONE "View Detailed Research" button per research answer, on the saved-report finding only. The run and supplier-lookup findings of the same turn carry no link of their own
+  // (they used to add a second, generic button).
+  if (f.source === "PI") return f.action_key === "pi.report" ? { href: run ? `/dashboard/pi?run=${encodeURIComponent(run)}` : "/dashboard/pi", label: "View Detailed Research" } : null;
   if (f.source === "CFO") return { href: "/dashboard/cfo", label: "Open the full finance analysis" };
   if (f.source === "CI") return { href: "/dashboard/competitors", label: "Open the competitor details" };
   if (f.source === "CMO") return { href: "/dashboard/cmo", label: "Open the written content" };
@@ -370,6 +372,7 @@ export function messageView(message: CeoMessage, turnById: Map<string, TurnRow>)
   if (message.kind === "SYSTEM_NOTE" || message.role === "SYSTEM") return { tone: "note", badge: null, footnote: null };
   if (message.role === "USER") return { tone: "user", badge: null, footnote: null };
   const turn = message.turn_id ? turnById.get(message.turn_id) : undefined;
+  if (message.kind === "PLAN") return { tone: "ceo", badge: "Plan to approve", footnote: null };
   if (message.kind === "CLARIFICATION") return { tone: "clarify", badge: "Needs your input", footnote: null };
   if (turn?.route === "OUT_OF_SCOPE") return { tone: "ceo", badge: "Out of scope", footnote: null };
   if (approvalRefused(turn)) return { tone: "ceo", badge: "Needs an approved plan", footnote: "Approval of a stored plan is not available yet, so nothing was run." };
@@ -384,7 +387,7 @@ export function messageView(message: CeoMessage, turnById: Map<string, TurnRow>)
     badge: null,
     footnote:
       turn?.composition_mode === "TEMPLATE_FALLBACK"
-        ? "Shown from verified data only: the written summary did not pass the safety check."
+        ? "Shown as the saved results only: I did not add a written summary this time."
         : turn?.composition_mode === "TEMPLATE" && !/^(cmo|pi)\./.test(turn.route_key ?? "")
           ? "Read directly from your saved, verified results." // not for written content or web findings: those say what they are in the answer itself
           : null,

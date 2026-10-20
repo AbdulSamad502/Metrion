@@ -59,7 +59,7 @@ def test_long_requests_are_quoted_short():
 @pytest.mark.parametrize(
     "text",
     [
-        "Find competitors and summarize their product reviews",  # neither half is a request the explicit rules recognise
+        "Tell me which rival is the strongest and why",  # no half is a request the explicit rules recognise
         "Compare my price with a rival and then tell me what to do",
     ],
 )

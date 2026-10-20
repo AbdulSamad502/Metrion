@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { apiFetch, type SessionResponse } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
+import { BusinessProfileSteps } from "@/components/profile/BusinessProfileSteps";
 import { useSubmitGuard } from "@/lib/useSubmitGuard";
 
 /** The O1/O2 blocking business-name onboarding step — the one screen Clerk doesn't
@@ -96,7 +97,7 @@ export default function OnboardingPage() {
   }, [session, orgsLoaded, userMemberships.data]);
 
   useEffect(() => {
-    if (session?.onboardingState === "ACTIVE") router.replace("/dashboard");
+    if (session?.onboardingState === "ACTIVE" && session.profileComplete !== false) router.replace("/dashboard");
   }, [session, router]);
 
   if (isLoaded && !isSignedIn) redirect("/sign-in");
@@ -130,7 +131,10 @@ export default function OnboardingPage() {
   const showLoading = !session || (session.onboardingState === "PENDING_ONBOARDING" && checkingExistingOrg);
 
   return (
-    <AuthCard title="One last step" subtitle="Let's set up your workspace">
+    <AuthCard
+      title={session?.onboardingState === "ACTIVE" && session.profileComplete === false ? "Tell us about your business" : "One last step"}
+      subtitle={session?.onboardingState === "ACTIVE" && session.profileComplete === false ? "A few quick questions so Metrion can tailor its advice" : "Let's set up your workspace"}
+    >
       {error && (
         <p className="mb-4 text-sm" style={{ color: "var(--negative)" }}>
           {error}
@@ -163,7 +167,11 @@ export default function OnboardingPage() {
         </form>
       )}
 
-      {session?.onboardingState === "ACTIVE" && <p style={{ color: "var(--text-5)" }}>Taking you in…</p>}
+      {session?.onboardingState === "ACTIVE" && session.profileComplete === false && (
+        <BusinessProfileSteps onSaved={() => void loadSession()} />
+      )}
+
+      {session?.onboardingState === "ACTIVE" && session.profileComplete !== false && <p style={{ color: "var(--text-5)" }}>Taking you in…</p>}
     </AuthCard>
   );
 }

@@ -77,6 +77,9 @@ ACTION_TEXT: dict[str, tuple[str, tuple[str, ...]]] = {
     "pi.report": ("Show a finished product-research run again from saved data", ()),
     "ci.request_price_scenario": ("Competitor price positioning and a repricing scenario for one competitor", ("competitor",)),
     "ci.discover_competitors": ("Find competitors for one of the seller's products", ("product",)),
+    "ci.monitor_competitors": ("Re-check the tracked competitors from saved evidence (freshness, verified changes)", ()),
+    "ci.review_findings": ("What saved competitor review evidence says (recurring complaints, strengths)", ()),
+    "ci.competitor_remove": ("Stop tracking one named competitor", ("competitor",)),
     "cmo.generate_title_sets": ("Write product title options for a product and marketplace (METERED)", ("product", "marketplace")),
     "cmo.approve_title": ("Record the seller's choice of one generated title option", ("option",)),
     "cmo.generate_listing_copy": ("Write a full listing (title, description, bullets) for a product and marketplace (METERED)", ("product", "marketplace")),
@@ -145,12 +148,13 @@ class Catalog:
 def _registry_actions() -> dict[str, tuple[str, bool]]:
     """key -> (owning agent code, metered) for every action CEO may offer in chat: wired, attachable, not the denial surface."""
     from backend.ceo.contract import Effect
+    from backend.ceo.plans import INTERNAL_ACTIONS
     from backend.ceo.registry import get_registry
 
     return {
         s.key: (s.agent.value, s.effect is Effect.GENERATE_METERED)
         for s in get_registry().specs()
-        if s.wired and s.agent is not None and not s.denial_surface
+        if s.wired and s.agent is not None and not s.denial_surface and s.key not in INTERNAL_ACTIONS  # internal hand-offs are never offered to the classifier
     }
 
 

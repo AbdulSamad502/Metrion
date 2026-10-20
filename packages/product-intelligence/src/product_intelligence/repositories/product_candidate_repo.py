@@ -145,6 +145,15 @@ def update_feasibility(
         )
 
 
+def update_image(tenant_id: UUID, candidate_id: UUID, *, image_url: str | None, image_source_url: str | None) -> None:
+    """Sets (or clears) a candidate's image. Used only for the final five (`discovery/top5_images.py`); discovery itself persists no image."""
+    with tenant_scope(tenant_id) as conn:
+        conn.execute(
+            text("UPDATE product_candidate SET image_url = :url, image_source_url = :source WHERE tenant_id = :tenant_id AND id = :id"),
+            {"tenant_id": str(tenant_id), "id": str(candidate_id), "url": image_url, "source": image_source_url},
+        )
+
+
 def get_candidate(tenant_id: UUID, candidate_id: UUID) -> dict[str, Any] | None:
     with tenant_scope(tenant_id) as conn:
         row = conn.execute(

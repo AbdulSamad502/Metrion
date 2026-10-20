@@ -166,3 +166,18 @@ def test_generation_drops_a_query_that_would_leak_forbidden_content() -> None:
     for query in result.sent:
         assert "cogs" not in query.query_text.lower()
     assert any(d.reason.startswith("forbidden term in category MARGIN_OR_COST_DATA") for d in result.dropped)
+
+
+def test_a_profile_only_product_queries_use_its_title_and_features_not_bracketed_notes_or_the_marketplace() -> None:
+    """Regression (manual test 2026-10-18): the title "(CI TEST)" and a marketplace attribute became search terms and pulled in unrelated books."""
+    from competitor_intelligence.discovery.query_generation import generate_queries
+    from competitor_intelligence.seller_product.types import SellerProduct
+
+    sp = SellerProduct(
+        product_id="CI-TEST-BOTTLE-001", title=None, category="Water Bottles",
+        attributes=(("title", "Steel Water Bottle 1L (CI TEST)"), ("material", "Stainless Steel"), ("marketplace", "Amazon India")), keywords=("steel water bottle",),
+        price_paise=39900, fulfillment_type=None, rating=None, review_count=None, field_source={}, last_updated=None,
+    )
+    texts = [q.query_text for q in generate_queries(sp).sent]
+    assert "Steel Water Bottle 1L" in texts and "Steel Water Bottle 1L Stainless Steel" in texts
+    assert not any("CI TEST" in t or "Amazon India" in t for t in texts), texts

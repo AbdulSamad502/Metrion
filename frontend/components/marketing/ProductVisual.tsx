@@ -35,10 +35,6 @@ export function ProductVisual() {
       {/* Mountain silhouette + orbital glow rings — purely decorative, bleeds left under
           the text column so the hero reads as one scene rather than two boxed halves. */}
       <div aria-hidden className="pointer-events-none absolute -inset-x-[55%] -bottom-10 -z-10 h-[560px] overflow-visible sm:-inset-x-[35%]">
-        <svg viewBox="0 0 1200 300" preserveAspectRatio="none" className="absolute bottom-0 h-full w-full opacity-70">
-          <path d="M0 300 L0 190 L140 90 L260 160 L380 60 L520 170 L640 40 L780 150 L900 80 L1040 180 L1200 110 L1200 300 Z" fill="#0d1a10" />
-          <path d="M0 300 L0 230 L180 150 L340 210 L480 130 L620 220 L760 120 L920 210 L1080 150 L1200 200 L1200 300 Z" fill="#0a130c" />
-        </svg>
         <div
           className="mt-orbit-ring absolute top-1/2 left-1/2 h-[640px] w-[640px] -translate-x-1/2 -translate-y-1/2 rounded-full"
           style={{ border: "1px solid rgba(62,207,116,0.12)" }}
@@ -46,11 +42,6 @@ export function ProductVisual() {
         <div
           className="mt-orbit-ring-slow absolute top-1/2 left-1/2 h-[820px] w-[820px] -translate-x-1/2 -translate-y-1/2 rounded-full"
           style={{ border: "1px solid rgba(62,207,116,0.07)" }}
-        />
-        <div
-          aria-hidden
-          className="mt-glow-pulse absolute top-1/2 left-1/2 h-[420px] w-[720px] -translate-x-1/2 -translate-y-1/2"
-          style={{ background: "radial-gradient(ellipse, rgba(62,207,116,0.16), transparent 70%)" }}
         />
       </div>
 

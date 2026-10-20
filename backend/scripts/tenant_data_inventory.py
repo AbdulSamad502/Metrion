@@ -18,18 +18,19 @@ from sqlalchemy import create_engine, make_url, text
 CATEGORY = {
     "CONVERSATION": ("investigation", "investigation_message", "investigation_turn", "investigation_finding", "investigation_agent", "investigation_attachment", "ceo_need"),
     "SELLER_MEMORY_AND_SHARED_FACTS": ("agent_memory", "shared_finding", "seller_fact"),
-    "EXECUTION_RECORD": ("agent_run", "agent_data_request"),
+    "EXECUTION_RECORD": ("agent_run", "agent_data_request", "investigation_plan", "investigation_plan_event"),  # the plans a seller was asked to approve, and their audit events
     "BILLING_AND_AUDIT": ("metered_event", "auth_audit", "cmo_quota_reservation", "tenant_plan", "tenant_cart_item", "member_entitlement_allocation"),
     "UPLOADED_FINANCIAL_DATA": ("report_file", "ingestion_run", "sales_line", "settlement_line", "line_component", "validation_finding", "report_period", "manual_adjustment", "expense_event", "expense_status_event"),
     "DERIVED_FINANCIAL_RESULTS": ("metric_result", "leak_finding", "reconciliation_run", "reconciliation_match", "reconciliation_exception", "gst_lookup_result", "product_feasibility_estimate"),
     "COMPETITOR_AND_PRODUCT_DATA": (
         "competitor_url", "competitor_snapshot", "competitor_snapshot_field", "competitor_evidence", "competitor_price_event", "competitor_listing_insight",
         "competitor_review_insight", "ci_candidate", "ci_candidate_relevance", "ci_capture_run", "ci_discovery_run", "ci_search_query", "ci_search_result",
-        "ci_digest_subscription", "ci_tenant_config", "niche_brief", "pi_research_run", "product_candidate", "product_embedding", "product_review_insight", "supplier_lead",
-        "pi_tenant_config", "seller_product_profile",
+        "ci_digest_subscription", "ci_tenant_config", "niche_brief", "pi_research_run", "pi_research_case", "product_candidate", "product_embedding", "product_review_insight", "supplier_lead",
+        "pi_tenant_config", "seller_product_profile", "ci_finding", "ci_event", "ci_info_request", "ci_alert_state", "ci_held_alert",
     ),
-    "CREATIVE_AND_IMAGES": ("cmo_generation", "cmo_title_approval", "cmo_title_option", "cmo_trend_report", "cmo_niche_term", "product_image_analysis", "seller_image_asset"),
-    "ACCOUNT": ("membership", "whatsapp_binding", "whatsapp_message", "whatsapp_alert_subscription", "whatsapp_pending_action"),
+    "CREATIVE_AND_IMAGES": ("cmo_generation", "cmo_title_approval", "cmo_title_option", "cmo_trend_report", "cmo_niche_term", "product_image_analysis", "seller_image_asset", "cmo_result_usage_event"),
+    "KNOWLEDGE_BASE": ("rag_source", "rag_chunk", "rag_chunk_embedding", "rag_index_event", "rag_retrieval_log", "rag_usage_daily"),
+    "ACCOUNT": ("business_profile", "membership", "whatsapp_binding", "whatsapp_message", "whatsapp_alert_subscription", "whatsapp_pending_action"),
 }
 CONFIG_OR_OTHER = ("anomaly_detection_config", "financial_health_config", "reconciliation_tolerance_config", "severity_config", "discount_bearer_config", "entitlement_cap_config",
                    "capability_entitlement_rule", "metered_event_meter_map", "cmo_platform_config")

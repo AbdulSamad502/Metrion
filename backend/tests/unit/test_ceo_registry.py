@@ -66,7 +66,7 @@ def test_the_expected_v1_catalog(registry):
             "cfo.funding_readiness", "cfo.batch_size", "cfo.reconcile", "cfo.anomaly_check", "cfo.financial_health",
             "cfo.cash_reconciliation", "cfo.strategic_briefing", "cfo.preview"} <= keys
     assert {"pi.discover", "pi.supplier_lookup", "pi.report", "ci.request_price_scenario", "ci.discover_competitors"} <= keys
-    assert len([k for k in keys if k.startswith("cmo.")]) == 14  # the 13 of §6.9 plus the pre-send trend preview
+    assert len([k for k in keys if k.startswith("cmo.")]) == 15  # the 13 of §6.9, the pre-send trend preview, and the photo hand-off by reference (cmo.analyze_attachment)
 
 
 def test_unwired_actions_are_exactly_the_ones_that_need_later_checkpoints(registry):
@@ -126,7 +126,7 @@ def test_cfo_preview_is_the_denial_surface_without_an_entitlement_gate(registry)
 
 def test_specialists_that_write_their_own_run_are_marked(registry):
     own = {s.key for s in registry.specs() if s.writes_own_run}
-    assert {"pi.discover", "pi.supplier_lookup"} <= own and all(k.startswith(("pi.", "cmo.")) for k in own)
+    assert {"pi.discover", "pi.supplier_lookup"} <= own and all(k.startswith(("pi.", "cmo.", "ci.")) for k in own)
     assert not registry.get("cfo.reconcile").writes_own_run  # CFO writes none: the choke point does
 
 

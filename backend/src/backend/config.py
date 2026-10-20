@@ -214,6 +214,25 @@ def recovery_sweep_interval_seconds() -> int | None:
     return value or None
 
 
+def ci_default_watchlist_limit() -> int | None:
+    """`CI_DEFAULT_WATCHLIST_LIMIT`: the most competitors a tenant may track when the tenant has no limit of its own. NO default: unset means no limit. Not a subscription-plan
+    value; plans are not decided, so this is only the hook a future plan resolver sets. Not cached."""
+    return _optional_positive_int("CI_DEFAULT_WATCHLIST_LIMIT") or 5  # the owner's limit: five active tracked competitors per seller (a tenant's own limit overrides it)
+
+
+def ci_scheduler_interval_seconds() -> int | None:
+    """`CI_SCHEDULER_INTERVAL_SECONDS`: how often a running backend runs Competitor Intelligence's housekeeping over its own stored data (default 900; `0` turns it off): expire
+    unanswered confirmation questions, release alerts held for quiet hours (after re-checking their evidence is still fresh), and add evidence-freshness reminders. It makes no outbound
+    request. An invalid value is an error at first use, not a silent default."""
+    raw = (os.environ.get("CI_SCHEDULER_INTERVAL_SECONDS") or "").strip()
+    if not raw:
+        return 900
+    value = int(raw)
+    if value < 0:
+        raise ValueError("CI_SCHEDULER_INTERVAL_SECONDS must be 0 (off) or a positive number of seconds")
+    return value or None
+
+
 def api_docs_enabled() -> bool:
     """`API_DOCS_ENABLED=true` serves the interactive docs and the OpenAPI document (`/docs`, `/redoc`, `/openapi.json`). Default OFF: they are unauthenticated and list every route,
     so a deployment opts in on purpose (a developer machine sets it in its own .env)."""
@@ -304,10 +323,49 @@ def _optional_positive_int(name: str) -> int | None:
     return int(raw)
 
 
+class ConfigInvalid(ValueError):
+    """A setting is present but not usable (`CONFIG_INVALID`). The caller fails CLOSED: it declines to start the work with a plain message and guesses nothing."""
+
+    code = "CONFIG_INVALID"
+
+
+def _positive_int_or_default(name: str, default: int) -> int:
+    """Unset or blank -> `default`. Present -> it must be a positive whole number; anything else (0, negative, 1.5, text) raises `ConfigInvalid`."""
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    if not raw.isdigit() or int(raw) <= 0:
+        raise ConfigInvalid(f"{name} must be a positive integer, got {raw!r}")
+    return int(raw)
+
+
+def cmo_delegation_max_questions() -> int:
+    """`CMO_DELEGATION_MAX_QUESTIONS` (default 8): the most clarification questions the CEO asks for one CMO task, re-asks included (ceo-cmo-delegation.md CD13, 6.3-3).
+    Questions 1-8 are asked; a 9th never is. Server-side only. Not cached."""
+    return _positive_int_or_default("CMO_DELEGATION_MAX_QUESTIONS", 8)
+
+
+def cmo_delegation_max_reasks() -> int:
+    """`CMO_DELEGATION_MAX_REASKS` (default 2): the most times the SAME field is re-asked after an unusable reply; a field is asked at most 1 + this many times. Not cached."""
+    return _positive_int_or_default("CMO_DELEGATION_MAX_REASKS", 2)
+
+
+def cmo_delegation_idle_expiry_seconds() -> int:
+    """`CMO_DELEGATION_IDLE_EXPIRY_SECONDS` (default 86400 = 24 h): a pending CMO task expires when `now - last_activity >= this` (server clock). Not cached."""
+    return _positive_int_or_default("CMO_DELEGATION_IDLE_EXPIRY_SECONDS", 86400)
+
+
 def ceo_leg_timeout_seconds() -> int | None:
     """`CEO_LEG_TIMEOUT_SECONDS`: the per-turn deadline for specialist legs (spec §6.12 rule 5, §6.26 L9). NO default: unset -> None -> any
     investigation with legs refuses with CONFIG_MISSING. Not cached, so a test or operator change takes effect."""
     return _optional_positive_int("CEO_LEG_TIMEOUT_SECONDS")
+
+
+def ceo_pi_research_timeout_seconds() -> int | None:
+    """`CEO_PI_RESEARCH_TIMEOUT_SECONDS`: how long an APPROVED product-research plan waits for the research run before answering "still running" (the run itself keeps going).
+    A real run (30 candidates, local-model extraction and commentary) took about 10 minutes (live run 2026-10-14), far over a normal leg deadline, so this is separate from
+    `CEO_LEG_TIMEOUT_SECONDS`. NO default: unset -> the ordinary leg deadline applies, which will cut a real research run off. Not cached."""
+    return _optional_positive_int("CEO_PI_RESEARCH_TIMEOUT_SECONDS")
 
 
 def ceo_leg_abandon_seconds() -> int | None:
@@ -332,6 +390,19 @@ def ceo_turn_lock_wait_seconds() -> int | None:
 def ceo_playbook_max_legs() -> int | None:
     """`CEO_PLAYBOOK_MAX_LEGS`: the most legs one playbook may fan out to (§6.12 rule 5). NO default; unset -> CONFIG_MISSING for playbooks with legs."""
     return _optional_positive_int("CEO_PLAYBOOK_MAX_LEGS")
+
+
+def ceo_approval_enabled() -> bool:
+    """`CEO_APPROVAL_ENABLED=true|false`: whether a CEO turn that would run an approval-required action (the CEO approval-gate module) PRODUCES A PLAN for the seller to approve
+    (ceo-approval-workflow.md section 6.1). DEFAULT OFF, which keeps the existing behaviour exactly: such a turn is refused with APPROVAL_UNAVAILABLE_TEXT and nothing is run,
+    asked, saved or sent. The plan/approve/decline API works either way (it acts on stored plans only); this switch controls only whether CHAT creates plans. It is the owner's
+    enablement gate (VP-1/VP-2 restatement, ceo-cmo-delegation.md OQ-9): set it only after that is accepted. Not cached, so a test or operator change takes effect."""
+    raw = (os.environ.get("CEO_APPROVAL_ENABLED") or "").strip().lower()
+    if raw in ("", "false", "0", "no"):
+        return False
+    if raw in ("true", "1", "yes"):
+        return True
+    raise ValueError(f"CEO_APPROVAL_ENABLED must be true or false, got {raw!r}")
 
 
 def ceo_needs_max_per_turn() -> int | None:
@@ -427,6 +498,17 @@ def cmo_vision_model() -> str:
 def cmo_vision_ollama_host() -> str:
     """The local Ollama endpoint for photo analysis. REQUIRED, no default (P6; local only - no hosted vision provider)."""
     return verified_llm_endpoint(_required("CMO_VISION_OLLAMA_HOST"), setting="CMO_VISION_OLLAMA_HOST")
+
+
+def cmo_vision_endpoint_verified() -> str:
+    """The vision endpoint, checked NOW and never cached: it must be listed in `LLM_OPERATOR_CONTROLLED_HOSTS` or this raises `LlmEndpointNotVerified` (`MissingConfig` if unset).
+    Used by the plan builder, the approval re-check and the image hand-off, so a seller's photo is never read, let alone sent, towards an endpoint that stopped being attested."""
+    return verified_llm_endpoint(_required("CMO_VISION_OLLAMA_HOST"), setting="CMO_VISION_OLLAMA_HOST")
+
+
+def cmo_vision_model_label() -> str:
+    """The configured vision model name, read now (not cached), for the plan card's endpoint label."""
+    return _required("CMO_VISION_MODEL")
 
 
 @lru_cache
@@ -562,6 +644,22 @@ def tavily_api_key() -> str:
     return os.environ.get("TAVILY_API_KEY", "")
 
 
+def ci_search_provider() -> str:
+    """Which `SearchProvider` CI discovery composes (competitor-intelligence-agent.md C34): `tavily` (the owner-approved default) or `mock` (fixtures only, for tests and
+    local work). Deliberately NOT cached, so a test can switch it per case. An unrecognised value is a configuration error, never a silent fallback to the mock: a
+    mock presented as a real provider would show the seller "no competitors found" for a search that never ran."""
+    value = os.environ.get("CI_SEARCH_PROVIDER", "tavily").strip().lower()
+    if value not in ("tavily", "mock"):
+        raise ConfigInvalid(f"CI_SEARCH_PROVIDER must be 'tavily' or 'mock', got {value!r}")
+    return value
+
+
+def ci_tavily_daily_query_cap() -> int:
+    """`CI_TAVILY_DAILY_QUERY_CAP`: the most Tavily queries one tenant's CI discovery may send in any rolling 24 hours (§6.28.1 cost cap). Tavily credits are shared
+    with PI, so this is a per-tenant guard, not a budget. Provisional default; the real per-tenant ceiling is a commercial decision (V16)."""
+    return _positive_int_or_default("CI_TAVILY_DAILY_QUERY_CAP", 100)
+
+
 @lru_cache
 def youtube_api_key() -> str:
     """`product_intelligence.sources.youtube_client.HttpYoutubeClient` — same "optional at
@@ -627,3 +725,43 @@ def ceo_attachment_max_files() -> int | None:
 def ceo_attachment_max_pages() -> int | None:
     """`CEO_ATTACHMENT_MAX_PAGES`: how many PDF pages are read. NO default: unset -> attachments are refused."""
     return _optional_positive_int("CEO_ATTACHMENT_MAX_PAGES")
+
+
+# --- RAG (rag-knowledge.md). Every value is configuration, never a spec constant. ---------------------------------------------------
+
+
+@lru_cache
+def rag_embedding_model() -> str:
+    """`RAG_EMBEDDING_MODEL`: the embedding model for the shared RAG index. Provisional (rag-knowledge.md §1, §11 P-1): it must be a model registered in
+    `backend.rag.embedding.KNOWN_MODELS`; switching is a re-index, not a config-only change."""
+    return (os.environ.get("RAG_EMBEDDING_MODEL") or "nomic-embed-text").strip()
+
+
+@lru_cache
+def rag_ollama_host() -> str:
+    """`RAG_OLLAMA_HOST`, else the shared local `ollama_host()`. Self-hosted only (rag-knowledge.md §1): no hosted embedding provider without a new decision."""
+    return (os.environ.get("RAG_OLLAMA_HOST") or "").strip() or ollama_host()
+
+
+@lru_cache
+def rag_embed_timeout_seconds() -> float:
+    """`RAG_EMBED_TIMEOUT_SECONDS`: hard timeout of one embedding request (rag-knowledge.md §5.9: 3 s on the chat path; ingestion workers pass their own)."""
+    raw = os.environ.get("RAG_EMBED_TIMEOUT_SECONDS")
+    if raw is None or not raw.strip():
+        return 3.0
+    value = float(raw)
+    if value <= 0:
+        raise ValueError(f"RAG_EMBED_TIMEOUT_SECONDS must be positive, got {raw!r}")
+    return value
+
+
+@lru_cache
+def rag_max_document_bytes() -> int:
+    """`RAG_MAX_DOCUMENT_BYTES`: pilot per-document cap (owner decision Q7: 10 MB)."""
+    return _positive_int_env("RAG_MAX_DOCUMENT_BYTES", 10 * 1024 * 1024)
+
+
+@lru_cache
+def rag_max_documents_per_tenant() -> int:
+    """`RAG_MAX_DOCUMENTS_PER_TENANT`: pilot per-tenant document cap (owner decision Q7: 50)."""
+    return _positive_int_env("RAG_MAX_DOCUMENTS_PER_TENANT", 50)

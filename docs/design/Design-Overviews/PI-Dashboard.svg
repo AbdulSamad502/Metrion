@@ -1,0 +1,447 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1060" width="100%" height="100%">
+  <defs>
+    <!-- Deep Obsidian Radial Canvas Glow -->
+    <radialGradient id="luxCanvasBg" cx="24%" cy="8%" r="65%">
+      <stop offset="0%" stop-color="#07190D" />
+      <stop offset="40%" stop-color="#080A08" />
+      <stop offset="100%" stop-color="#050605" />
+    </radialGradient>
+
+    <!-- Obsidian Primary Glass Panel -->
+    <linearGradient id="primaryPanelGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#121813" stop-opacity="0.88" />
+      <stop offset="100%" stop-color="#090C09" stop-opacity="0.95" />
+    </linearGradient>
+
+    <!-- Elevated Card Glass -->
+    <linearGradient id="elevatedCardGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#182219" stop-opacity="0.80" />
+      <stop offset="100%" stop-color="#0D120E" stop-opacity="0.90" />
+    </linearGradient>
+
+    <!-- Detail Drawer Glass (High Clarity) -->
+    <linearGradient id="drawerPanelGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#172319" stop-opacity="0.94" />
+      <stop offset="100%" stop-color="#0B100C" stop-opacity="0.98" />
+    </linearGradient>
+
+    <!-- Brand Emerald Gradient -->
+    <linearGradient id="brandEmerald" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#52E082" />
+      <stop offset="100%" stop-color="#28C765" />
+    </linearGradient>
+
+    <!-- Subtle Metallic Dial Accent -->
+    <linearGradient id="dialSilverAccent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E2E8F0" />
+      <stop offset="100%" stop-color="#94A3B8" />
+    </linearGradient>
+
+    <!-- Sunray Emerald Dial Radial -->
+    <radialGradient id="sunrayDialGlow" cx="48%" cy="46%" r="52%">
+      <stop offset="0%" stop-color="#1C5E33" />
+      <stop offset="65%" stop-color="#0E331B" />
+      <stop offset="100%" stop-color="#05140A" />
+    </radialGradient>
+
+    <!-- Soft Depth Shadow -->
+    <filter id="softDepthShadow" x="-8%" y="-8%" width="116%" height="116%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.65" />
+    </filter>
+
+    <!-- Active Emerald Laser Glow -->
+    <filter id="emeraldLaserGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <style>
+    .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; }
+    .label-caps { font-size: 9px; font-weight: 700; fill: #6B796D; letter-spacing: 0.09em; text-transform: uppercase; }
+    .title-h1 { font-size: 15.5px; font-weight: 700; fill: #FFFFFF; letter-spacing: -0.01em; }
+    .num-bold { font-family: "Inter", -apple-system, sans-serif; font-weight: 700; fill: #FFFFFF; letter-spacing: -0.02em; }
+    .text-muted { fill: #879488; font-size: 11px; }
+    .border-standard { stroke: rgba(255, 255, 255, 0.08); stroke-width: 1; rx: 12; }
+    .border-active-emerald { stroke: rgba(40, 199, 101, 0.38); stroke-width: 1.2; rx: 12; }
+    .border-sub-panel { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1; rx: 10; }
+  </style>
+
+  <!-- Base Canvas Layer -->
+  <rect width="1440" height="1060" fill="url(#luxCanvasBg)" />
+
+  <!-- ================= LEFT SIDEBAR NAVIGATION ================= -->
+  <g id="sidebar">
+    <rect x="0" y="0" width="248" height="1060" fill="#070907" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+    
+    <!-- Metrion Brand Logo -->
+    <g transform="translate(24, 26)">
+      <path d="M 6 36 Q 16 4 28 6 Q 18 20 22 34 Q 30 14 44 2 Q 40 18 36 34" fill="none" stroke="url(#brandEmerald)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+      <polygon points="43,2 45,4 43,6 41,4" fill="#52E082" />
+      <text x="56" y="22" class="font-sans" font-size="20" font-weight="700" fill="#FFFFFF" letter-spacing="-0.02em">Metrion</text>
+      <text x="56" y="34" class="font-sans label-caps" font-size="7.5" fill="#28C765" letter-spacing="0.14em">ENGINE OF GROWTH</text>
+    </g>
+
+    <!-- Nav Items -->
+    <g transform="translate(14, 98)" class="font-sans">
+      <text x="14" y="0" class="label-caps" font-size="9" fill="#435044">Profit Intelligence</text>
+      
+      <g transform="translate(0, 14)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Overview</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+      <g transform="translate(0, 52)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">CEO Hub</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+
+      <!-- ACTIVE TAB: Products (PI) -->
+      <g transform="translate(0, 90)">
+        <rect x="0" y="4" width="220" height="38" rx="10" fill="rgba(40,199,101,0.12)" stroke="rgba(40,199,101,0.28)" stroke-width="1" />
+        <rect x="0" y="4" width="4" height="38" rx="2" fill="#28C765" />
+        <circle cx="22" cy="23" r="3.5" fill="#28C765" filter="url(#emeraldLaserGlow)" />
+        <text x="36" y="27" font-size="13" font-weight="700" fill="#28C765">Products (PI)</text>
+      </g>
+
+      <g transform="translate(0, 142)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Competitors (CI)</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+      <g transform="translate(0, 180)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Finance (CFO)</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+      <g transform="translate(0, 218)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Marketing (CMO)</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+
+      <text x="14" y="278" class="label-caps" font-size="9" fill="#435044">Autonomous Ops</text>
+      <g transform="translate(0, 292)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">Agent Network</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+      <g transform="translate(0, 330)"><text x="36" y="24" font-size="13" font-weight="500" fill="#879488">WhatsApp Sync</text><circle cx="22" cy="20" r="3" fill="#364237" /></g>
+    </g>
+
+    <!-- Bottom Account Status -->
+    <g transform="translate(16, 986)">
+      <rect x="0" y="0" width="216" height="50" rx="10" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+      <circle cx="25" cy="25" r="14" fill="rgba(40,199,101,0.16)" />
+      <text x="18" y="29" class="font-sans" font-size="11" font-weight="700" fill="#28C765">ZS</text>
+      <text x="48" y="21" class="font-sans" font-size="12" font-weight="600" fill="#FFFFFF">Zyquora Store</text>
+      <text x="48" y="35" class="font-sans" font-size="10" fill="#6B796D">Autonomous PI · Active</text>
+    </g>
+  </g>
+
+  <!-- ================= TOP HEADER BAR ================= -->
+  <g transform="translate(278, 22)">
+    <text x="0" y="22" class="font-sans" font-size="22" font-weight="700" fill="#FFFFFF">Product Intelligence Workspace</text>
+    <text x="0" y="39" class="font-sans text-muted">Opportunity discovery &amp; verified supplier matching · Pure obsidian architecture</text>
+
+    <!-- New Investigation Button -->
+    <g transform="translate(1004, 4)">
+      <rect x="0" y="0" width="134" height="34" rx="8" fill="#28C765" />
+      <text x="16" y="21" class="font-sans" font-size="12" font-weight="700" fill="#041208">+ New Discovery</text>
+    </g>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- 1. TOP CONTAINER: TOP PRODUCTS FROM YOUR OLD INVESTIGATION (3 CARDS)     -->
+  <!-- ========================================================================= -->
+  <g transform="translate(278, 72)">
+    <rect x="0" y="0" width="1138" height="114" rx="12" fill="url(#primaryPanelGrad)" class="border-standard" filter="url(#softDepthShadow)" />
+
+    <!-- Title Header -->
+    <g transform="translate(20, 16)">
+      <circle cx="5" cy="8" r="3" fill="#28C765" filter="url(#emeraldLaserGlow)" />
+      <text x="14" y="11" class="font-sans" font-size="13" font-weight="700" fill="#FFFFFF">Top Products from your Old Investigation</text>
+      <text x="290" y="11" class="font-sans text-muted" font-size="10.5">Historical high-margin picks across past completed niche scans</text>
+    </g>
+
+    <!-- 3 Horizontal Product Cards -->
+    <g transform="translate(20, 38)">
+      <!-- Card 1 -->
+      <g transform="translate(0, 0)">
+        <rect x="0" y="0" width="352" height="62" rx="8" fill="url(#elevatedCardGrad)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <rect x="8" y="8" width="46" height="46" rx="6" fill="#070C08" stroke="rgba(40,199,101,0.25)" stroke-width="1" />
+        <circle cx="31" cy="31" r="11" fill="none" stroke="#28C765" stroke-width="1.8" />
+        <text x="64" y="24" class="font-sans" font-size="11.5" font-weight="700" fill="#FFFFFF">18K PVD Cuban Link Chain</text>
+        <text x="64" y="38" class="font-sans text-muted" font-size="10">Investigation #07 (Jewelry) · Margin: <tspan fill="#28C765" font-weight="700">58%</tspan></text>
+        <text x="64" y="50" class="font-sans text-muted" font-size="9.5">Selling: ₹1,299 · Cost: ₹240</text>
+      </g>
+
+      <!-- Card 2 -->
+      <g transform="translate(372, 0)">
+        <rect x="0" y="0" width="352" height="62" rx="8" fill="url(#elevatedCardGrad)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <rect x="8" y="8" width="46" height="46" rx="6" fill="#070C08" stroke="rgba(40,199,101,0.25)" stroke-width="1" />
+        <circle cx="31" cy="31" r="11" fill="none" stroke="#52E082" stroke-width="1.8" />
+        <text x="64" y="24" class="font-sans" font-size="11.5" font-weight="700" fill="#FFFFFF">11-Piece Tube Fitness Bands</text>
+        <text x="64" y="38" class="font-sans text-muted" font-size="10">Investigation #04 (Fitness) · Margin: <tspan fill="#28C765" font-weight="700">41%</tspan></text>
+        <text x="64" y="50" class="font-sans text-muted" font-size="9.5">Selling: ₹899 · Cost: ₹240</text>
+      </g>
+
+      <!-- Card 3 -->
+      <g transform="translate(744, 0)">
+        <rect x="0" y="0" width="352" height="62" rx="8" fill="url(#elevatedCardGrad)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <rect x="8" y="8" width="46" height="46" rx="6" fill="#070C08" stroke="rgba(40,199,101,0.25)" stroke-width="1" />
+        <circle cx="31" cy="31" r="11" fill="none" stroke="#28C765" stroke-width="1.8" />
+        <text x="64" y="24" class="font-sans" font-size="11.5" font-weight="700" fill="#FFFFFF">High-Power Cordless Vacuum</text>
+        <text x="64" y="38" class="font-sans text-muted" font-size="10">Investigation #03 (Car Care) · Margin: <tspan fill="#28C765" font-weight="700">36%</tspan></text>
+        <text x="64" y="50" class="font-sans text-muted" font-size="9.5">Selling: ₹1,899 · Cost: ₹540</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- 2. MAIN MIDDLE CONTAINER: RECENT INVESTIGATION: MEN'S WATCHES            -->
+  <!-- ========================================================================= -->
+  <g transform="translate(278, 204)">
+    <rect x="0" y="0" width="1138" height="494" rx="14" fill="url(#primaryPanelGrad)" class="border-active-emerald" filter="url(#softDepthShadow)" />
+
+    <!-- Window Header -->
+    <g transform="translate(24, 18)">
+      <circle cx="6" cy="11" r="3.5" fill="#28C765" filter="url(#emeraldLaserGlow)" />
+      <text x="16" y="15" class="font-sans title-h1" font-size="15">Recent Investigation: Men's Watches</text>
+      <rect x="290" y="2" width="66" height="17" rx="4" fill="rgba(40,199,101,0.16)" />
+      <text x="297" y="14" class="font-sans" font-size="8.5" font-weight="700" fill="#28C765">CURRENT</text>
+      <text x="366" y="14" class="font-sans text-muted" font-size="10.5">Budget: ₹3,50,000 · Target Price: ₹1,999 – ₹3,499 · Top 5 Shortlist</text>
+    </g>
+    <line x1="24" y1="44" x2="1114" y2="44" stroke="rgba(255,255,255,0.06)" />
+
+    <!-- ================= CAROUSEL & ATTACHED PRODUCT INFORMATION AREA ================= -->
+    <g transform="translate(24, 56)">
+      
+      <!-- [LEFT BOX]: PREVIOUS PRODUCT PEEK -->
+      <g transform="translate(0, 36)">
+        <rect x="0" y="0" width="76" height="240" rx="10" fill="url(#elevatedCardGrad)" stroke="rgba(255,255,255,0.05)" stroke-width="1" opacity="0.38" />
+        <rect x="10" y="44" width="56" height="110" rx="6" fill="#070C08" />
+        <circle cx="38" cy="99" r="20" fill="none" stroke="#435044" stroke-width="1.6" />
+        <text x="10" y="206" class="font-sans" font-size="9" fill="#879488">Prod #5</text>
+      </g>
+
+      <!-- [CENTER BOX]: MAIN ACTIVE PRODUCT IMAGE CARD (WITH 3 SWIPE DOTS AT BOTTOM) -->
+      <g transform="translate(94, 10)">
+        <rect x="0" y="0" width="316" height="294" rx="12" fill="url(#elevatedCardGrad)" stroke="rgba(40,199,101,0.42)" stroke-width="1.3" filter="url(#softDepthShadow)" />
+
+        <!-- Image Container Inside Center Card -->
+        <g transform="translate(16, 16)">
+          <rect x="0" y="0" width="284" height="224" rx="8" fill="#070C08" stroke="rgba(40,199,101,0.22)" stroke-width="1" />
+          
+          <!-- Stylized Men's Watch Graphic Inside Center Card -->
+          <g transform="translate(142, 108)">
+            <!-- Strap -->
+            <rect x="-18" y="-76" width="36" height="152" rx="4" fill="#141714" stroke="#252E26" stroke-width="1" />
+            <!-- Steel Case -->
+            <circle cx="0" cy="0" r="46" fill="#101410" stroke="url(#dialSilverAccent)" stroke-width="2.6" />
+            <!-- Sunray Emerald Dial -->
+            <circle cx="0" cy="0" r="39" fill="url(#sunrayDialGlow)" />
+            <!-- Dial Markers -->
+            <circle cx="0" cy="-31" r="1.5" fill="#FFFFFF" />
+            <circle cx="31" cy="0" r="1.5" fill="#FFFFFF" />
+            <circle cx="0" cy="31" r="1.5" fill="#FFFFFF" />
+            <circle cx="-31" cy="0" r="1.5" fill="#FFFFFF" />
+            <!-- Hands -->
+            <line x1="0" y1="0" x2="18" y2="-10" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" />
+            <line x1="0" y1="0" x2="-6" y2="-22" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" />
+            <circle cx="0" cy="0" r="3" fill="#28C765" />
+          </g>
+
+          <!-- Badges -->
+          <rect x="10" y="10" width="60" height="16" rx="3" fill="rgba(40,199,101,0.18)" />
+          <text x="16" y="22" class="font-sans" font-size="8.5" font-weight="700" fill="#28C765">RANK #1</text>
+          
+          <rect x="10" y="196" width="264" height="16" rx="3" fill="rgba(0,0,0,0.6)" />
+          <text x="44" y="208" class="font-sans" font-size="8.5" fill="#52E082">Emerald Sunray Chronograph</text>
+        </g>
+
+        <!-- 3 SWIPE DOTS AT BOTTOM -->
+        <g transform="translate(132, 260)">
+          <!-- Dot 1: Active Product Image (Pill/Active Green) -->
+          <rect x="0" y="0" width="18" height="6" rx="3" fill="#28C765" filter="url(#emeraldLaserGlow)" />
+          <!-- Dot 2: Inactive Variant Angle (Circle Muted) -->
+          <circle cx="30" cy="3" r="3" fill="rgba(255,255,255,0.22)" />
+          <!-- Dot 3: Inactive Detail Shot (Circle Muted) -->
+          <circle cx="46" cy="3" r="3" fill="rgba(255,255,255,0.22)" />
+        </g>
+      </g>
+
+      <!-- [RIGHT SIDE PANEL]: PRODUCT INFORMATION (CLOSE ADJACENT) -->
+      <g transform="translate(426, 0)">
+        <rect x="0" y="0" width="664" height="316" rx="12" fill="url(#drawerPanelGrad)" stroke="rgba(40,199,101,0.32)" stroke-width="1.2" filter="url(#softDepthShadow)" />
+
+        <!-- Header -->
+        <g transform="translate(20, 16)" class="font-sans">
+          <text x="0" y="14" class="title-h1" font-size="15.5">Product Information</text>
+          <text x="0" y="28" class="text-muted" font-size="10.5">Emerald Sunray Chronograph (316L Stainless Steel · Sapphire Crystal)</text>
+          <line x1="0" y1="36" x2="624" y2="36" stroke="rgba(255,255,255,0.06)" />
+
+          <!-- 4 Core Financial Metrics Grid -->
+          <g transform="translate(0, 48)">
+            <!-- Selling Price -->
+            <g transform="translate(0, 0)">
+              <text x="0" y="6" class="label-caps">Selling Price</text>
+              <text x="0" y="25" class="num-bold" font-size="19">₹2,899</text>
+              <text x="0" y="38" class="text-muted" font-size="9.5">Ref: ₹2,999</text>
+            </g>
+
+            <!-- Cost Price -->
+            <g transform="translate(156, 0)">
+              <text x="0" y="6" class="label-caps">Cost Price</text>
+              <text x="0" y="25" class="num-bold" font-size="19" fill="#28C765">₹780</text>
+              <text x="0" y="38" class="text-muted" font-size="9.5">Spread: ₹750–₹840</text>
+            </g>
+
+            <!-- Margin -->
+            <g transform="translate(312, 0)">
+              <text x="0" y="6" class="label-caps">Net Margin</text>
+              <text x="0" y="25" class="num-bold" font-size="19" fill="#28C765">44.2%</text>
+              <text x="0" y="38" class="text-muted" font-size="9.5">+₹1,280 / piece</text>
+            </g>
+
+            <!-- Units to Buy -->
+            <g transform="translate(468, 0)">
+              <text x="0" y="6" class="label-caps">Units to Buy</text>
+              <text x="0" y="25" class="num-bold" font-size="19" fill="#52E082">200 Units</text>
+              <text x="0" y="38" class="text-muted" font-size="9.5">PO: ₹1,56,000</text>
+            </g>
+          </g>
+          <line x1="0" y1="94" x2="624" y2="94" stroke="rgba(255,255,255,0.06)" />
+
+          <!-- Reviews: Positive & Negative Commentary -->
+          <g transform="translate(0, 104)">
+            <text x="0" y="6" class="label-caps">Viewer Commentary Insights (Local Ollama Extracted)</text>
+            
+            <g transform="translate(0, 12)">
+              <!-- Pros -->
+              <rect x="0" y="0" width="306" height="34" rx="4" fill="rgba(40,199,101,0.06)" stroke="rgba(40,199,101,0.18)" stroke-width="1" />
+              <text x="8" y="14" font-size="9.5" font-weight="700" fill="#28C765">Positive (4.5/5):</text>
+              <text x="8" y="26" font-size="9" fill="#FFFFFF">• Sunray dial aesthetic &amp; heavy 316L feel</text>
+
+              <!-- Cons -->
+              <g transform="translate(316, 0)">
+                <rect x="0" y="0" width="308" height="34" rx="4" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.12)" stroke-width="1" />
+                <text x="8" y="14" font-size="9.5" font-weight="700" fill="#E2E8F0">Defect to Address:</text>
+                <text x="8" y="26" font-size="9" fill="#879488">• Stiff leather strap; request soft grain QC</text>
+              </g>
+            </g>
+          </g>
+          <line x1="0" y1="158" x2="624" y2="158" stroke="rgba(255,255,255,0.06)" />
+
+          <!-- Supplier Details With Link -->
+          <g transform="translate(0, 168)">
+            <text x="0" y="6" class="label-caps">Appropriate Verified Supplier Details</text>
+            
+            <g transform="translate(0, 12)">
+              <rect x="0" y="0" width="624" height="66" rx="6" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+              
+              <g transform="translate(12, 14)">
+                <text x="0" y="0" font-size="11.5" font-weight="700" fill="#FFFFFF">Siddhi Precision Horology Instruments</text>
+                <text x="0" y="14" class="text-muted" font-size="9">Morbi Industrial Zone, Gujarat · Verified OEM Lead (Google Places)</text>
+                <text x="0" y="26" class="text-muted" font-size="9">Phone: +91 98251 XXXXX · MOQ: 150 pcs · Sample: 4 days dispatch</text>
+                <text x="0" y="38" class="text-muted" font-size="8.5" fill="#52E082">Catalog link: indiamart.com/siddhi-instruments</text>
+              </g>
+
+              <!-- Direct Supplier Contact Link Button -->
+              <g transform="translate(512, 18)">
+                <rect x="0" y="0" width="100" height="28" rx="5" fill="#28C765" />
+                <text x="12" y="18" font-size="10" font-weight="700" fill="#041208">Supplier Link ↗</text>
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+
+    <!-- ================= BOTTOM AI RECOMMENDATION ================= -->
+    <g transform="translate(24, 396)">
+      <rect x="0" y="0" width="1090" height="76" rx="8" fill="rgba(40,199,101,0.05)" stroke="rgba(40,199,101,0.22)" stroke-width="1" />
+      
+      <g transform="translate(16, 12)" class="font-sans">
+        <rect x="0" y="0" width="26" height="16" rx="3" fill="#28C765" />
+        <text x="4" y="12" font-size="9" font-weight="700" fill="#041208">CEO</text>
+        <text x="32" y="13" class="title-h1" font-size="13">AI Recommendation for Recent Investigation (Men's Watches)</text>
+        <text x="760" y="13" class="text-muted" font-size="10.5">Capital Allocation: <tspan fill="#28C765" font-weight="700">₹2,91,000</tspan> of ₹3.50L Budget</text>
+
+        <text x="0" y="33" font-size="11" fill="#FFFFFF">1. Procure <tspan font-weight="700" fill="#52E082">200 units</tspan> of Emerald Sunray Chrono from Siddhi Instruments @ ₹780/u. Capital: ₹1,56,000. Projected Net Profit: +₹2,56,000.</text>
+        <text x="0" y="49" font-size="11" fill="#FFFFFF">2. Procure <tspan font-weight="700" fill="#52E082">250 units</tspan> of Matte Black Ultra-Slim from Apex Horology @ ₹540/u. Capital: ₹1,35,000. Projected Net Profit: +₹1,95,000.</text>
+      </g>
+
+      <!-- Handoff PO CTA -->
+      <g transform="translate(940, 38)">
+        <rect x="0" y="0" width="134" height="26" rx="5" fill="#28C765" />
+        <text x="12" y="17" class="font-sans" font-size="10" font-weight="700" fill="#041208">Handoff PO to CFO →</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- 3. BOTTOM CONTAINER: OLD INVESTIGATION                                    -->
+  <!-- ========================================================================= -->
+  <g transform="translate(278, 718)">
+    <rect x="0" y="0" width="1138" height="294" rx="12" fill="url(#primaryPanelGrad)" class="border-standard" filter="url(#softDepthShadow)" />
+
+    <!-- Window Header -->
+    <g transform="translate(20, 14)">
+      <circle cx="6" cy="11" r="3.5" fill="#435044" />
+      <text x="16" y="15" class="font-sans title-h1" font-size="14">Old Investigation</text>
+      <rect x="134" y="2" width="70" height="17" rx="4" fill="rgba(255,255,255,0.06)" />
+      <text x="141" y="14" class="font-sans" font-size="8.5" font-weight="700" fill="#E2E8F0">HISTORICAL</text>
+      <text x="216" y="14" class="font-sans text-muted" font-size="10.5">Investigation #07: Anti-Tarnish Stainless Steel Jewelry · Concluded Oct 04, 2026</text>
+
+      <g transform="translate(980, -2)">
+        <text x="-86" y="15" class="font-sans" font-size="10.5" fill="#879488">Expand Window</text>
+        <rect x="34" y="0" width="24" height="24" rx="5" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+        <path d="M 42 9 L 46 14 L 50 9" fill="none" stroke="#E2E8F0" stroke-width="1.6" stroke-linecap="round" />
+      </g>
+    </g>
+    <line x1="20" y1="38" x2="1118" y2="38" stroke="rgba(255,255,255,0.06)" />
+
+    <!-- Preview Horizontal Cards -->
+    <g transform="translate(20, 48)">
+      <!-- Item 1 -->
+      <g transform="translate(0, 0)">
+        <rect x="0" y="0" width="344" height="130" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+        <rect x="12" y="12" width="76" height="76" rx="6" fill="#070C08" />
+        <circle cx="50" cy="50" r="18" fill="none" stroke="#28C765" stroke-width="2" />
+        <g transform="translate(34, 96)">
+          <rect x="0" y="0" width="10" height="4" rx="2" fill="#28C765" />
+          <circle cx="16" cy="2" r="2" fill="rgba(255,255,255,0.2)" />
+          <circle cx="24" cy="2" r="2" fill="rgba(255,255,255,0.2)" />
+        </g>
+        <text x="100" y="28" class="font-sans" font-size="12" font-weight="700" fill="#FFFFFF">18K PVD Cuban Link Chain</text>
+        <text x="100" y="46" class="font-sans text-muted" font-size="10.5">Price: ₹1,299 · Cost: ₹240 · Margin: <tspan fill="#28C765" font-weight="700">58%</tspan></text>
+        <text x="100" y="62" class="font-sans text-muted" font-size="10">Supplier: Apex PVD Crafts (Rajkot)</text>
+        <text x="100" y="78" class="font-sans text-muted" font-size="10" fill="#52E082">Recommended: 300 Units</text>
+        <rect x="100" y="90" width="86" height="22" rx="4" fill="rgba(255,255,255,0.04)" />
+        <text x="110" y="105" class="font-sans" font-size="9.5" fill="#E2E8F0">View Details ↗</text>
+      </g>
+
+      <!-- Item 2 -->
+      <g transform="translate(360, 0)">
+        <rect x="0" y="0" width="344" height="130" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+        <rect x="12" y="12" width="76" height="76" rx="6" fill="#070C08" />
+        <circle cx="50" cy="50" r="18" fill="none" stroke="#28C765" stroke-width="2" />
+        <g transform="translate(34, 96)">
+          <rect x="0" y="0" width="10" height="4" rx="2" fill="#28C765" />
+          <circle cx="16" cy="2" r="2" fill="rgba(255,255,255,0.2)" />
+          <circle cx="24" cy="2" r="2" fill="rgba(255,255,255,0.2)" />
+        </g>
+        <text x="100" y="28" class="font-sans" font-size="12" font-weight="700" fill="#FFFFFF">Waterproof Minimalist Cuff</text>
+        <text x="100" y="46" class="font-sans text-muted" font-size="10.5">Price: ₹899 · Cost: ₹180 · Margin: <tspan fill="#28C765" font-weight="700">52%</tspan></text>
+        <text x="100" y="62" class="font-sans text-muted" font-size="10">Supplier: Lotus Metalworks (Mumbai)</text>
+        <text x="100" y="78" class="font-sans text-muted" font-size="10" fill="#52E082">Recommended: 400 Units</text>
+        <rect x="100" y="90" width="86" height="22" rx="4" fill="rgba(255,255,255,0.04)" />
+        <text x="110" y="105" class="font-sans" font-size="9.5" fill="#E2E8F0">View Details ↗</text>
+      </g>
+
+      <!-- Item 3 -->
+      <g transform="translate(720, 0)">
+        <rect x="0" y="0" width="344" height="130" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+        <rect x="12" y="12" width="76" height="76" rx="6" fill="#070C08" />
+        <circle cx="50" cy="50" r="18" fill="none" stroke="#28C765" stroke-width="2" />
+        <g transform="translate(34, 96)">
+          <rect x="0" y="0" width="10" height="4" rx="2" fill="#28C765" />
+          <circle cx="16" cy="2" r="2" fill="rgba(255,255,255,0.2)" />
+          <circle cx="24" cy="2" r="2" fill="rgba(255,255,255,0.2)" />
+        </g>
+        <text x="100" y="28" class="font-sans" font-size="12" font-weight="700" fill="#FFFFFF">Engraved Bar Pendant</text>
+        <text x="100" y="46" class="font-sans text-muted" font-size="10.5">Price: ₹749 · Cost: ₹145 · Margin: <tspan fill="#28C765" font-weight="700">54%</tspan></text>
+        <text x="100" y="62" class="font-sans text-muted" font-size="10">Supplier: Shrinath Laser Works (Jaipur)</text>
+        <text x="100" y="78" class="font-sans text-muted" font-size="10" fill="#52E082">Recommended: 250 Units</text>
+        <rect x="100" y="90" width="86" height="22" rx="4" fill="rgba(255,255,255,0.04)" />
+        <text x="110" y="105" class="font-sans" font-size="9.5" fill="#E2E8F0">View Details ↗</text>
+      </g>
+    </g>
+
+    <!-- Past Window AI Summary -->
+    <g transform="translate(20, 204)">
+      <rect x="0" y="0" width="1098" height="66" rx="6" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.04)" stroke-width="1" />
+      <text x="14" y="22" class="font-sans" font-size="11" font-weight="700" fill="#52E082">AI Recommendation Summary for Old Investigation #07:</text>
+      <text x="14" y="40" class="font-sans" font-size="11" fill="#FFFFFF">Procured 300 Cuban Chains + 400 Minimalist Cuffs. Live listings generated ₹3.42L revenue on Meesho and Flipkart at 54% net margin.</text>
+      <text x="968" y="44" class="font-sans" font-size="10.5" font-weight="700" fill="#28C765">Full Audit Report ↗</text>
+    </g>
+  </g>
+</svg>

@@ -28,11 +28,12 @@ def _cite(structured: Mapping[str, Any]) -> dict[str, Any] | None:
     c = structured.get("constraint")
     if not isinstance(c, dict):
         return None
-    return {"sourceUrl": c.get("source_url"), "verifiedAt": c.get("verified_at"), "version": c.get("version")}
+    return {"sourceUrl": c.get("source_url"), "verifiedAt": c.get("verified_at"), "version": c.get("version"), "ruleKind": c.get("row_kind")}
 
 
 def _rule_fields(structured: Mapping[str, Any]) -> dict[str, Any]:
     return {
+        "thinInput": bool(structured.get("thin_input")),
         "constraint": _cite(structured),
         "unverifiedLimits": _strs(structured.get("unverified_limits")),
         "countRule": structured.get("count_rule"),

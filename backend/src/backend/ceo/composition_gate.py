@@ -21,6 +21,8 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
+from backend.services.ci_conv_data import currency_claims as _ci_currency_claims  # the one list of "claims CI does not have" (CI spec C40, AC47)
+
 MARKER_RE = re.compile(r"\{\{\s*([A-Za-z0-9_:\-]+)\s*\}\}")
 
 _MONTHS = r"(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|jun(e)?|jul(y)?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)"
@@ -75,6 +77,32 @@ def numeral_violations(prose: str) -> list[Violation]:
     return _collapse(out)
 
 
+# CI narration (CI spec C26, C40, C45). Competitor Intelligence states observations from the seller's own evidence; it neither watches competitors nor advises on price or margin
+# (that is the finance side's, from Brain 1 figures). An answer built from CI results is therefore checked for three things on top of the numeral rule:
+#   LIVE_CLAIM                 - it must not claim live / real-time / continuous / "currently priced" knowledge;
+#   UNSUPPORTED_RECOMMENDATION - it must not tell the seller to change their price unless a finance result is part of the evidence;
+#   MARGIN_CLAIM               - it must not say what a competitor move does to margin / profit unless a finance result is part of the evidence.
+_REPRICE_ADVICE = re.compile(
+    r"\b(?:you (?:should|could|might want to|ought to|need to|must|can)|i (?:recommend|suggest|advise)(?: that)? you|consider|try to|best to)\b[^.?!]{0,50}"
+    r"\b(?:lower|raise|reduce|increase|cut|drop|match|beat|undercut|change|adjust|reprice|discount)\w*\b[^.?!]{0,30}\b(?:price|prices|pricing)\b"
+    r"|\b(?:match|beat|undercut) (?:their|the|its) (?:price|pricing)\b|\breprice\b|\b(?:lower|raise|reduce|cut|increase) your price\b",
+    re.IGNORECASE,
+)
+_MARGIN_CLAIM = re.compile(
+    r"\b(?:your|their|the)\b[^.?!]{0,20}\b(?:margin|contribution|break-?even|profit)\b[^.?!]{0,40}\b(?:would|will|could|may|might|is|are|drops?|falls?|improves?|shrinks?|suffers?|stays?|goes?)\b"
+    r"|\b(?:would|will|could|may|might)\b[^.?!]{0,30}\b(?:change|hurt|reduce|improve|affect|erode|squeeze|cut|lift|raise|lower|boost)\b[^.?!]{0,15}\b(?:your |the |their )?(?:margin|profit|contribution)\b",
+    re.IGNORECASE,
+)
+
+
+def ci_narration_violations(prose: str, *, finance_present: bool) -> list[Violation]:
+    out = [Violation("LIVE_CLAIM", name) for name in _ci_currency_claims(prose)]
+    if not finance_present:
+        out += [Violation("UNSUPPORTED_RECOMMENDATION", m.group(0)[:60]) for m in _REPRICE_ADVICE.finditer(prose)]
+        out += [Violation("MARGIN_CLAIM", m.group(0)[:60]) for m in _MARGIN_CLAIM.finditer(prose)]
+    return out
+
+
 def _collapse(items: list[Violation]) -> list[Violation]:
     kept: list[Violation] = []
     for v in items:
@@ -107,6 +135,8 @@ def check_composition(
     other_tokens: Iterable[str] = (),
     required_markers: Iterable[str] = (),
     forbidden_markers: Iterable[str] = (),
+    ci_narration: bool = False,
+    finance_present: bool = False,
 ) -> GateReport:
     """`figure_tokens` maps each figure token to `is_available` (an UNAVAILABLE figure may never be presented as a value).
     `other_tokens` are the remaining legal marker names (G#/V#/D#/O#/A#). Required/forbidden markers are case-level."""
@@ -125,4 +155,6 @@ def check_composition(
         if tok in used:
             violations.append(Violation("FORBIDDEN_MARKER", tok))
     violations.extend(numeral_violations(strip_markers(text)))
+    if ci_narration:
+        violations.extend(ci_narration_violations(strip_markers(text), finance_present=finance_present))
     return GateReport(tuple(violations))

@@ -21,7 +21,7 @@ describe("the Expense Tracker route", () => {
 
   it("leaves the sidebar unchanged and keeps Profit & Finance highlighted on the new route", () => {
     expect(NAV_GROUPS.map((g) => g.items.map((i) => i.label))).toEqual([
-      ["Overview", "Ask Metrion", "Action Center"],
+      ["Overview", "CEO Hub", "Action Center"],
       ["Products", "Competitors", "Profit & Finance", "Profit Calculator", "Listings & Marketing"],
     ]);
     const cfo = allNavItems().find((i) => i.id === "cfo")!;

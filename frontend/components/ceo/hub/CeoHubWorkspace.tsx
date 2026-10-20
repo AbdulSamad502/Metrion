@@ -15,6 +15,7 @@ import { Welcome } from "@/components/ceo/hub/Welcome";
 import { MemoryPanel } from "@/components/ceo/hub/MemoryPanel";
 import { SharedFindingsPanel } from "@/components/ceo/hub/SharedFindingsPanel";
 import { RecentDecisions } from "@/components/ceo/hub/RecentDecisions";
+import { useFrame } from "@/components/dashboard/ShellFrame";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { Icon } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -22,8 +23,8 @@ import { ApiError } from "@/lib/api";
 import { createCeoClient, type AgentCode, type CeoClient, type UiAction } from "@/lib/ceo";
 import { canvasNodes, QUICK_ACTIONS, quickActionState } from "@/lib/ceoModel";
 import type { FeedFactory } from "@/lib/ceoPolling";
+import { draftFromParams } from "@/lib/ciWorkspace";
 import { useCeoHub } from "@/lib/useCeoHub";
-import { useDesktopLayout, useWideLayout } from "@/lib/useDesktopLayout";
 import { useModalFocus } from "@/lib/useModalFocus";
 
 /** The real CEO Hub. Production wiring: the typed client over the signed-in user's Clerk token. */
@@ -31,8 +32,13 @@ export function CeoHub() {
   const { getToken } = useAuth();
   const client = useMemo(() => createCeoClient(getToken), [getToken]);
   // A link from another page can open a decision form directly (e.g. Products → /dashboard/ceo-hub?form=new-product); anything else is ignored.
-  const initialForm = FORM_LINKS[useSearchParams().get("form") ?? ""] ?? null;
-  return <CeoHubWorkspace client={client} initialForm={initialForm} />;
+  const params = useSearchParams();
+  const initialForm = FORM_LINKS[params.get("form") ?? ""] ?? null;
+  // The Competitors page's shortcuts open the hub with a draft message (`?ask=research&about=<product>`); the seller sends it, nothing runs on arrival (CI spec D14).
+  const initialDraft = draftFromParams(params.get("ask"), params.get("about"));
+  const rawFinding = params.get("finding");
+  const initialFindingId = params.get("ask") === "finding" && rawFinding && /^[0-9a-f-]{36}$/i.test(rawFinding) ? rawFinding : null; // an id only; the server validates it for this tenant
+  return <CeoHubWorkspace client={client} initialForm={initialForm} initialDraft={initialDraft} initialFindingId={initialFindingId} />;
 }
 
 const FORM_LINKS: Record<string, DecideKind> = { "new-product": "NEW_PRODUCT_DECISION", "price-impact": "COMPETITOR_PRICE_IMPACT" };
@@ -45,8 +51,10 @@ const workLabel = (action: string) => `Working · ${ACTION_WORDS[action.split(".
  * work behind the answers. Right, and wider: the conversation, with the chat bar fixed at the bottom of its own column. Below the desktop breakpoint the
  * two are tabs, so the conversation is never squeezed. The hub holds no orchestration logic: the backend classifies, validates, runs the specialists,
  * synthesises and safety-gates. */
-export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = null }: { client: CeoClient; feedFactory?: FeedFactory; pollMs?: number; initialForm?: DecideKind | null }) {
+export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = null, initialDraft = null, initialFindingId = null }: { client: CeoClient; feedFactory?: FeedFactory; pollMs?: number; initialForm?: DecideKind | null; initialDraft?: string | null; initialFindingId?: string | null }) {
   const hub = useCeoHub(client, feedFactory, pollMs);
+  const findingForFirstSend = useRef<string | null>(initialFindingId); // carried by the first message only, then dropped
+  const frame = useFrame();
   const [drawer, setDrawer] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
   useModalFocus(drawer, drawerRef, () => setDrawer(false)); // a real modal: focus in, Tab contained, Escape closes, focus back to the opener
@@ -58,12 +66,10 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   const uploadedIds = useRef(new Map<string, string>());
   const fileKey = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
   const setFileState = (f: File, st: FileStatus) => setFileStates((m) => ({ ...m, [fileKey(f)]: st }));
-  /** Below the desktop breakpoint the conversation is full width and the task activity is one tap away; both stay mounted. */
-  const [mobileView, setMobileView] = useState<"chat" | "activity">("chat");
-  const desktop = useDesktopLayout();
-  const wide = useWideLayout();
-  /** Wide screens: the right column has two views, the conversation and the activity / results; both stay mounted. */
+  /** The right panel has two views, the conversation and the activity / results (health, findings, memory, what is running); both stay mounted. */
   const [rightView, setRightView] = useState<"chat" | "results">("chat");
+  /** Wide screens: the right panel can fold away to its header so the canvas gets the room. Its content stays mounted. */
+  const [collapsed, setCollapsed] = useState(false);
   const data = hub.detail.data;
   // before any conversation exists, every agent the member can use is shown as ready (a new conversation attaches them all); locked / no-access ones still show as such
   const nodes = canvasNodes(data?.agents ?? { CI: true, CFO: true, PI: true, CMO: true }, hub.availability, data?.investigation.status ?? "ACTIVE", data?.findings ?? []);
@@ -75,6 +81,11 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   for (const a of hub.turn.working) {
     const code = agentOf(a);
     if (code) workingByAgent[code] = workLabel(a);
+  }
+  // An agent the CEO has routed this turn to is lit from the moment it is chosen, not only while a specialist leg runs (a saved-result read has no leg).
+  for (const a of hub.turn.called ?? []) {
+    const code = agentOf(a);
+    if (code && !workingByAgent[code]) workingByAgent[code] = "Working…";
   }
 
   /** Typing with no conversation open starts one: nobody should have to find a "new" button before asking. */
@@ -115,7 +126,9 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
         return false;
       }
     }
-    void hub.sendTurn(message || "Please read what I attached.", period, action, clarification, ids); // the turn reports its own progress and errors; the composer must not wait for the whole answer
+    const findingId = findingForFirstSend.current;
+    findingForFirstSend.current = null;
+    void hub.sendTurn(message || "Please read what I attached.", period, action, clarification, ids, findingId); // the turn reports its own progress and errors; the composer must not wait for the whole answer
     return true;
   };
   const empty = hub.state === "NO_SELECTION";
@@ -128,8 +141,6 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   const waiting = hub.awaitingAnswer && !closed;
   const ceoTone = needsInput ? "input" : processing || waiting ? "working" : "idle";
   const ceoStatus = needsInput ? "Needs your input" : processing ? hub.turn.stage ?? "Working…" : waiting ? "Answering your last question…" : hub.selectedId ? "Ready" : "Start a conversation";
-  // On a phone the four tall specialist cards would push what is running and what was found a screen and a half down, so there the canvas follows the activity. The
-  // document order changes with it (not CSS `order`), so the keyboard order always matches what is on screen.
   const canvas = (
     <AgentCanvas
       nodes={nodes} busy={hub.busyAgent} onToggle={(c, attach) => void toggleAgent(c, attach)}
@@ -138,8 +149,13 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   );
   const connected = nodes.filter((n) => n.state === "ATTACHED");
   const quick = QUICK_ACTIONS.filter((q) => ["pnl", "research", "competitors"].includes(q.id));
-  const panelH = "h-[calc(100dvh-215px)] min-h-[440px] xl:h-[calc(100dvh-150px)]";
-  const tabs = [["chat", "Conversation"], ["activity", processing ? "Activity · live" : needsInput ? "Activity · waiting" : "Activity"]] as const;
+  const tabBtn = (id: "chat" | "results", label: string) => (
+    <button key={id} type="button" role="tab" aria-selected={rightView === id} data-testid={`right-tab-${id}`} onClick={() => setRightView(id)}
+      className="mt-btn mt-focus min-h-[36px] flex-1 rounded-lg px-3 py-1.5 t-body-sm font-semibold"
+      style={{ border: `1px solid ${rightView === id ? "var(--accent-border-default)" : "var(--border-subtle)"}`, color: rightView === id ? "var(--text-1)" : "var(--text-4)", background: rightView === id ? "var(--accent-fill-subtle)" : "transparent" }}>
+      {label}
+    </button>
+  );
 
   const activity = (
     <>
@@ -161,97 +177,95 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   );
 
   return (
-    <div className="flex flex-col gap-3" data-testid="ceo-hub">
+    <div className="flex flex-col gap-3 xl:h-full" data-testid="ceo-hub">
       {/* The conversation list could never be loaded (nothing is shown from earlier): the backend is unreachable or refused. Said once, here, with a retry, instead of a screen that looks like a normal empty start. When an earlier list is on screen, the existing "could not refresh" notice covers it instead (no second message). */}
       {hub.list.status === "error" && hub.list.items.length === 0 && (
         <div data-testid="hub-unavailable"><ErrorNotice message={`Your conversations could not be loaded. ${hub.list.error ?? ""}`.trim()} onRetry={hub.refreshList} /></div>
       )}
-      <div className="flex gap-1 xl:hidden" role="tablist" aria-label="Conversation or task activity">
-        {tabs.map(([id, label]) => (
-          <button
-            key={id} type="button" role="tab" aria-selected={mobileView === id} data-testid={`mobile-tab-${id}`} onClick={() => setMobileView(id)}
-            className="mt-btn mt-focus min-h-[44px] flex-1 rounded-lg px-3 py-2 t-body-sm font-semibold"
-            style={{ border: "1px solid var(--border-subtle)", color: mobileView === id ? "var(--text-1)" : "var(--text-4)", background: mobileView === id ? "var(--fill-hover)" : "transparent" }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(480px,44%)]">
-        {/* LEFT / "Activity" tab: who the CEO works with, what is running, and what the specialists found. */}
-        <section
-          className={`mt-panel min-w-0 flex-col gap-5 overflow-y-auto p-4 xl:flex ${panelH} ${mobileView === "activity" ? "flex" : "hidden"}`}
-          aria-label="Specialists and task activity" data-testid="work-area"
-        >
-          <header className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <h2 className="m-0 t-card-title font-bold" style={{ color: "var(--text-1)" }}>Your specialists</h2>
-              <p className="m-0 mt-0.5 t-meta" style={{ color: "var(--text-5)" }}>
-                {data ? `Investigation · ${new Date(data.investigation.created_at).toLocaleDateString()}` : "Metrion sends each question to the right specialist. Remove one to stop it being used here; a new conversation starts with all of them."}
-              </p>
+      {/* One grid, in reading order on every screen size: canvas, conversation, chat bar. On a phone that is the stack (the chat bar sticks to the bottom); from xl the
+          canvas and chat bar share the centre column and the conversation is the right-hand panel. */}
+      <div className={`grid grid-cols-1 gap-3 xl:min-h-0 xl:flex-1 xl:grid-rows-[minmax(0,1fr)_auto] ${collapsed ? "xl:grid-cols-[minmax(0,1fr)_64px]" : "xl:grid-cols-[minmax(0,1fr)_minmax(580px,54%)]"}`}>
+        {/* LEFT: the CEO and its specialists on the galaxy canvas, taking all the space the conversation panel leaves. */}
+        <div className="flex min-h-0 min-w-0 flex-col gap-2.5 xl:col-start-1 xl:row-start-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {frame && (
+                <button type="button" onClick={frame.openMenu} aria-label="Open navigation" title="Open navigation" data-testid="hub-menu-button" className="mt-btn mt-focus flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
+                  <Icon name="menu" size={16} />
+                </button>
+              )}
+              <button type="button" onClick={() => setDrawer(true)} aria-label="Conversations and business overview" data-testid="open-drawer" className="mt-btn mt-focus flex min-h-[40px] items-center gap-1.5 rounded-lg px-2.5 py-1.5 t-meta font-bold" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
+                <Icon name="menu" size={14} /> Conversations
+              </button>
+              {data && <StatusBadge tone={data.investigation.status === "ACTIVE" ? "accent" : "neutral"} dot={data.investigation.status === "ACTIVE"}>{data.investigation.status === "ACTIVE" ? "Active" : data.investigation.status.toLowerCase()}</StatusBadge>}
+              <span className="hidden truncate t-meta sm:inline" style={{ color: "var(--text-5)" }}>
+                {data ? `Investigation · ${new Date(data.investigation.created_at).toLocaleDateString()}` : "Remove a specialist to stop it being used here; a new conversation starts with all of them."}
+              </span>
             </div>
-            {data && <StatusBadge tone={data.investigation.status === "ACTIVE" ? "accent" : "neutral"} dot={data.investigation.status === "ACTIVE"}>{data.investigation.status === "ACTIVE" ? "Active" : data.investigation.status.toLowerCase()}</StatusBadge>}
-          </header>
+          </div>
+          <section
+            className="mt-galaxy flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl p-3 sm:p-5"
+            style={{ border: "1px solid var(--border-default)" }}
+            aria-label="Specialists" data-testid="work-area"
+          >
+            <h2 className="sr-only">Your specialists</h2>
+            {canvas}
+          </section>
+        </div>
 
-          {desktop && canvas}
-          {(hub.health.entries.length > 0 || hub.health.status === "error" || hub.list.items.length > 0) && <div className="@container"><div className="grid grid-cols-1 gap-3 @[760px]:grid-cols-2" data-testid="summary-cards">
-            <section aria-labelledby="ceo-health-inline" className="flex min-w-0 flex-col gap-2">
-              <h3 id="ceo-health-inline" className="m-0 mt-eyebrow">Business at a glance</h3>
-              <HealthStrip health={hub.health} onRefresh={() => void hub.refreshHealth()} />
-            </section>
-            <RecentDecisions status={hub.list.status} items={hub.list.items} onOpen={(id) => hub.select(id)} />
-          </div></div>}
-
-          {!desktop && canvas}
-          {!wide && activity}
-        </section>
-
-        {/* RIGHT / "Conversation" tab: the dominant column. Messages scroll; the chat bar stays at the bottom. */}
+        {/* RIGHT: the conversation panel, full height down to the chat bar. Messages scroll; the activity / results (health, findings, memory, what is running) is its second tab. */}
         <section
-          className={`mt-panel min-w-0 flex-col gap-3 p-4 xl:flex ${panelH} ${mobileView === "chat" ? "flex" : "hidden"}`}
+          className="mt-galaxy flex min-h-[420px] min-w-0 flex-col gap-3 rounded-2xl p-3 max-xl:max-h-[78dvh] xl:col-start-2 xl:row-start-1 xl:min-h-0"
+          style={{ border: "1px solid var(--border-default)" }}
           aria-label="CEO conversation" data-testid="chat-column"
         >
-          <header className="flex items-center gap-3 pb-2" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: "var(--fill-hover)", color: "var(--accent)" }}><Icon name="ceo" size={18} /></span>
-            <div className="min-w-0 flex-1">
-              <div className="t-body font-bold" style={{ color: "var(--text-1)" }}>CEO</div>
+          <header className="flex items-center gap-2.5 pb-2" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+            <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center" style={{ color: "var(--accent)" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 5.5h16v10H12l-5 4v-4H4z" /><path d="M8 9.5h8M8 12.5h5" /></svg>
+            </span>
+            <div className={`min-w-0 flex-1 ${collapsed ? "xl:hidden" : ""}`}>
+              <h2 className="m-0 t-body font-semibold" style={{ color: "var(--text-1)" }}>Conversation</h2>
               <div className="truncate t-meta" style={{ color: needsInput ? "var(--warning)" : "var(--text-5)" }} data-testid="chat-status">{ceoStatus}</div>
             </div>
-            <button type="button" onClick={() => setDrawer(true)} aria-label="Conversations and business overview" data-testid="open-drawer" className="mt-btn mt-focus flex min-h-[40px] items-center gap-1.5 rounded-lg px-2.5 py-1.5 t-meta font-bold" style={{ border: "1px solid var(--border-subtle)", color: "var(--text-3)" }}>
-              <Icon name="menu" size={14} /> Conversations
+            <button type="button" data-testid="new-investigation" disabled={processing || empty} onClick={() => hub.select(null)} title={empty ? "You are already on a new investigation: type below to start it." : "Start a new investigation"} className={`mt-btn mt-focus flex min-h-[36px] flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 t-body-sm font-semibold ${collapsed ? "xl:hidden" : ""}`} style={{ background: "var(--accent)", color: "var(--accent-on-fill)", opacity: processing || empty ? 0.5 : 1 }}>
+              <Icon name="plus" size={14} strokeWidth={2} /> New Investigation
+            </button>
+            <button type="button" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed} aria-label={collapsed ? "Expand conversation panel" : "Collapse conversation panel"} data-testid="collapse-conversation" className="mt-btn mt-focus hidden h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg xl:flex" style={{ color: "var(--text-3)" }}>
+              <span style={{ display: "inline-flex", transform: collapsed ? undefined : "rotate(180deg)" }}><Icon name="collapse" size={16} /></span>
             </button>
           </header>
 
-          {wide && (
+          <div className={`flex min-h-0 flex-1 flex-col gap-3 ${collapsed ? "xl:hidden" : ""}`}>
             <div className="flex gap-1" role="tablist" aria-label="Conversation or activity and results">
-              {([["chat", "Conversation"], ["results", processing ? "Activity & results · live" : needsInput ? "Activity & results · waiting" : "Activity & results"]] as const).map(([id, label]) => (
-                <button key={id} type="button" role="tab" aria-selected={rightView === id} data-testid={`right-tab-${id}`} onClick={() => setRightView(id)}
-                  className="mt-btn mt-focus min-h-[36px] flex-1 rounded-lg px-3 py-1.5 t-body-sm font-semibold"
-                  style={{ border: "1px solid var(--border-subtle)", color: rightView === id ? "var(--text-1)" : "var(--text-4)", background: rightView === id ? "var(--fill-hover)" : "transparent" }}>
-                  {label}
-                </button>
-              ))}
+              {tabBtn("chat", "Conversation")}
+              {tabBtn("results", processing ? "Activity & results · live" : needsInput ? "Activity & results · waiting" : "Activity & results")}
             </div>
-          )}
-          {wide && (
             <div className={`min-h-0 flex-1 flex-col gap-5 overflow-y-auto ${rightView === "results" ? "flex" : "hidden"}`} data-testid="results-area" role="tabpanel" aria-label="Activity and results">
+              {(hub.health.entries.length > 0 || hub.health.status === "error" || hub.list.items.length > 0) && <div className="@container"><div className="grid grid-cols-1 gap-3 @[760px]:grid-cols-2" data-testid="summary-cards">
+                <section aria-labelledby="ceo-health-inline" className="flex min-w-0 flex-col gap-2">
+                  <h3 id="ceo-health-inline" className="m-0 mt-eyebrow">Business at a glance</h3>
+                  <HealthStrip health={hub.health} onRefresh={() => void hub.refreshHealth()} />
+                </section>
+                <RecentDecisions status={hub.list.status} items={hub.list.items} onOpen={(id) => hub.select(id)} />
+              </div></div>}
               {activity}
             </div>
-          )}
-
-          <div className={`min-h-0 flex-1 flex-col gap-3 ${wide && rightView === "results" ? "hidden" : "flex"}`}>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {empty ? (
-              <Welcome agents={{ CI: true, CFO: true, PI: true, CMO: true }} onAsk={(t) => void send(t, null)} onAction={(l, a) => void send(l, null, a)} onOpenForm={(f) => setForm(f as DecideKind)} />
-            ) : (
-              <Conversation
-                onOpenForm={(f) => setForm(f as DecideKind)} state={hub.state} detail={data} turn={hub.turn} needs={hub.needs} notice={hub.notice} onDismissNotice={hub.dismissNotice}
-                onSend={hub.sendTurn} awaiting={hub.awaitingAnswer} onResolve={hub.resolve} onReopen={hub.reopen} onArchive={hub.archive} onRetry={() => void hub.retryDetail()}
-              />
-            )}
+            <div className={`min-h-0 flex-1 flex-col overflow-y-auto ${rightView === "results" ? "hidden" : "flex"}`}>
+              {empty ? (
+                <Welcome agents={{ CI: true, CFO: true, PI: true, CMO: true }} onAsk={(t) => void send(t, null)} onAction={(l, a) => void send(l, null, a)} onOpenForm={(f) => setForm(f as DecideKind)} />
+              ) : (
+                <Conversation
+                  onOpenForm={(f) => setForm(f as DecideKind)} state={hub.state} detail={data} turn={hub.turn} needs={hub.needs} notice={hub.notice} onDismissNotice={hub.dismissNotice}
+                  onSend={hub.sendTurn} awaiting={hub.awaitingAnswer} onApprovePlan={(id, h) => void hub.approvePlan(id, h)} onDeclinePlan={(id) => void hub.declinePlan(id)} planBusy={hub.planBusy} onResolve={hub.resolve} onReopen={hub.reopen} onArchive={hub.archive} onRetry={() => void hub.retryDetail()}
+                />
+              )}
+            </div>
           </div>
+        </section>
 
+        {/* CHAT BAR: the full width of the screen under both panels on desktop; stuck to the bottom of the screen on a phone. */}
+        <div className="sticky bottom-0 z-20 flex min-w-0 flex-col gap-2 pb-1 pt-2 max-xl:-mx-1 max-xl:px-1 xl:static xl:col-span-2 xl:col-start-1 xl:row-start-2 xl:pt-0" style={{ background: "linear-gradient(to top, var(--bg-base) 75%, transparent)" }} data-testid="chat-bar">
           {form && (
             <DecidePanel client={client} kind={form} disabled={processing} onClose={() => setForm(null)} onRun={(label, action) => { void send(label, null, action); setForm(null); }} />
           )}
@@ -286,12 +300,11 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
 
           <Composer
             disabled={processing || closed}
-            placeholder={closed ? "This conversation is closed. Reopen it to continue." : needsInput ? "Answer here, or pick an option…" : "Ask the CEO anything…"}
+            placeholder={closed ? "This conversation is closed. Reopen it to continue." : needsInput ? "Answer here, or pick an option…" : "Ask the CEO agent anything…"}
             onSend={(t, files) => send(t, null, null, null, files)} fileStatus={(f) => fileStates[fileKey(f)]} fileInfo={(f) => fileInfos[fileKey(f)]}
-            error={uploadError}
+            error={uploadError} initialText={initialDraft ?? undefined}
           />
-          </div>
-        </section>
+        </div>
       </div>
 
       {drawer && (
@@ -303,7 +316,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
             </div>
             <InvestigationList
               status={hub.list.status} items={hub.list.items} error={hub.list.error} selectedId={hub.selectedId} showArchived={hub.showArchived}
-              onToggleArchived={hub.setShowArchived} onSelect={(id) => { hub.select(id); setDrawer(false); }} onCreate={(t) => { void hub.create(t); setDrawer(false); }} onRetry={hub.refreshList}
+              onToggleArchived={hub.setShowArchived} onDelete={(id) => void hub.removeConversation(id)} onSelect={(id) => { hub.select(id); setDrawer(false); }} onCreate={(t) => { void hub.create(t); setDrawer(false); }} onRetry={hub.refreshList}
             />
           </div>
           <button type="button" aria-label="Close panel" className="flex-1" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setDrawer(false)} />

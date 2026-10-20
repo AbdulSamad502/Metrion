@@ -40,7 +40,7 @@ class _SlowTavilyClient:
     queries run sequentially, a full discovery pass takes >= 3 * _SLEEP_SECONDS; concurrent,
     it takes roughly 1 * _SLEEP_SECONDS."""
 
-    def search(self, query, *, include_images=False, max_results=10):
+    def search(self, query, *, include_images=False, max_results=10, **_):
         time.sleep(_SLEEP_SECONDS)
         return [
             TavilySearchResult(
@@ -100,7 +100,7 @@ class _SlowEmbeddingClient:
 
 
 class _NoopTavily:
-    def search(self, query, *, include_images=False, max_results=10):
+    def search(self, query, *, include_images=False, max_results=10, **_):
         return []
 
     def images_for(self, query, *, max_images=5):
@@ -206,7 +206,7 @@ class _SlowPlaces:
 
 
 class _SlowSupplierTavily:
-    def search(self, query, *, include_images=False, max_results=10):
+    def search(self, query, *, include_images=False, max_results=10, **_):
         time.sleep(_SLEEP_SECONDS)
         return []
 

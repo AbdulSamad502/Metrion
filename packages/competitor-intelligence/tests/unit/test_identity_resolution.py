@@ -155,7 +155,7 @@ def test_identity_resolution_rejects_caveat_on_non_variant_tiers() -> None:
         (IdentityMatch.EXACT_MATCH, GatingOutcome.PROCEEDS, True),
         (IdentityMatch.LIKELY_VARIANT, GatingOutcome.PROCEEDS_WITH_CAVEAT, True),
         (IdentityMatch.UNCERTAIN, GatingOutcome.BLOCKED_FOR_REVIEW, False),
-        (IdentityMatch.NOT_A_MATCH, GatingOutcome.REJECTED, False),
+        (IdentityMatch.NOT_A_MATCH, GatingOutcome.PROCEEDS_AS_OTHER_PRODUCT, True),  # C43: a different product is a candidate competitor
     ],
 )
 def test_gating_table_matches_spec_exactly(identity_match, expected_outcome, expected_enters) -> None:

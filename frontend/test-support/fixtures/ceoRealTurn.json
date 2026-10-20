@@ -9,24 +9,24 @@
   "findings": [
    {
     "action_key": "cfo.financial_health",
-    "agent_run_id": "ddcc0b4b-4817-44ea-aa8b-598142f719cc",
-    "created_at": "2026-10-01T09:00:00.005000+00:00",
+    "agent_run_id": "6d7466b0-7271-4d60-8b21-8d4a5230eb23",
+    "created_at": "2026-10-01T09:00:00.006000+00:00",
     "figure_refs": [
      {
-      "id": "8f4d2ae3-a674-49fc-b012-69c6bb33e5b5",
+      "id": "4c1b22d8-f2f6-4124-b2c9-7aaf31ec857e",
       "kind": "ENGINE_RESULT"
      },
      {
-      "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+      "id": "84c03a8b-3d6f-4827-99f9-e30bfbfd791e",
       "kind": "ENGINE_RESULT"
      },
      {
-      "id": "25139d22-4b74-4e1a-b9b5-da133c32dba9",
+      "id": "9cb798e8-e051-4ff8-b25a-4a46143bcae1",
       "kind": "ENGINE_RESULT"
      }
     ],
     "gap_reason": null,
-    "id": "ea395033-e687-4442-90ea-26942ffe7543",
+    "id": "65258a86-9331-4d1e-b91c-e269122ec19c",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -59,7 +59,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "8f4d2ae3-a674-49fc-b012-69c6bb33e5b5",
+        "id": "4c1b22d8-f2f6-4124-b2c9-7aaf31ec857e",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -71,7 +71,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+        "id": "84c03a8b-3d6f-4827-99f9-e30bfbfd791e",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -83,7 +83,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "25139d22-4b74-4e1a-b9b5-da133c32dba9",
+        "id": "9cb798e8-e051-4ff8-b25a-4a46143bcae1",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -98,15 +98,15 @@
     "report_ref": null,
     "source": "CFO",
     "status": "COMPLETE",
-    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+    "turn_id": "ddc29ecf-cce2-4cfe-806a-4a446324f355"
    },
    {
     "action_key": "cfo.anomaly_check",
-    "agent_run_id": "9dbd67e7-aa3c-417a-ad0e-d90343277362",
-    "created_at": "2026-10-01T09:00:00.006000+00:00",
+    "agent_run_id": "08f46c5a-0eab-4265-a909-d642fe7415e1",
+    "created_at": "2026-10-01T09:00:00.007000+00:00",
     "figure_refs": [],
     "gap_reason": null,
-    "id": "e3e2af23-f89f-4cee-a1e5-8da9196912db",
+    "id": "16062ae4-87c3-412f-8be0-3f1274422295",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -124,20 +124,20 @@
     "report_ref": null,
     "source": "CFO",
     "status": "COMPLETE",
-    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+    "turn_id": "ddc29ecf-cce2-4cfe-806a-4a446324f355"
    },
    {
     "action_key": "cfo.strategic_briefing",
-    "agent_run_id": "c17d2804-75b3-4fa3-9800-4009b9ca6719",
-    "created_at": "2026-10-01T09:00:00.007000+00:00",
+    "agent_run_id": "33b2153b-0da5-4907-b50c-dc99f279c4fa",
+    "created_at": "2026-10-01T09:00:00.008000+00:00",
     "figure_refs": [
      {
-      "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+      "id": "84c03a8b-3d6f-4827-99f9-e30bfbfd791e",
       "kind": "ENGINE_RESULT"
      }
     ],
     "gap_reason": null,
-    "id": "b32b42f0-8b4e-49f6-a467-2e684f3cf3af",
+    "id": "16a0b383-c7e1-45e1-b0f9-184a0d299b8d",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -155,7 +155,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+        "id": "84c03a8b-3d6f-4827-99f9-e30bfbfd791e",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -170,15 +170,15 @@
     "report_ref": null,
     "source": "CFO",
     "status": "COMPLETE",
-    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+    "turn_id": "ddc29ecf-cce2-4cfe-806a-4a446324f355"
    },
    {
     "action_key": "BS_LEAK_OPEN",
     "agent_run_id": null,
-    "created_at": "2026-10-01T09:00:00.011000+00:00",
+    "created_at": "2026-10-01T09:00:00.012000+00:00",
     "figure_refs": [],
     "gap_reason": "No leak findings are recorded \u2014 reconciliation may not have been run, so this is not a clean bill of health.",
-    "id": "99200e5f-689d-49f8-a460-fabbad996713",
+    "id": "e49db591-3c17-49bd-b159-559e19f2f791",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -194,15 +194,15 @@
     "report_ref": null,
     "source": "BUSINESS_STATE",
     "status": "UNAVAILABLE",
-    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+    "turn_id": "ddc29ecf-cce2-4cfe-806a-4a446324f355"
    },
    {
     "action_key": "BS_DATA_GAPS",
     "agent_run_id": null,
-    "created_at": "2026-10-01T09:00:00.012000+00:00",
+    "created_at": "2026-10-01T09:00:00.013000+00:00",
     "figure_refs": [],
     "gap_reason": null,
-    "id": "f9cdaac6-5b52-4989-8350-17dad681401a",
+    "id": "21396dae-277d-4491-b5b4-7475f5c48784",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -222,31 +222,31 @@
     "report_ref": null,
     "source": "BUSINESS_STATE",
     "status": "COMPLETE",
-    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+    "turn_id": "ddc29ecf-cce2-4cfe-806a-4a446324f355"
    },
    {
     "action_key": "BS_PNL_LATEST",
     "agent_run_id": null,
-    "created_at": "2026-10-01T09:00:00.013000+00:00",
+    "created_at": "2026-10-01T09:00:00.014000+00:00",
     "figure_refs": [
      {
       "as_of": "2026-10-01T09:00:00+00:00",
-      "id": "b629b292-3789-4dd7-87a5-48af006e1885",
+      "id": "8e5e1e2c-a477-45de-b046-54f2377f9c8d",
       "kind": "ENGINE_RESULT"
      },
      {
       "as_of": "2026-10-01T09:00:00+00:00",
-      "id": "f4898999-06ca-405d-8c15-31c610319489",
+      "id": "b47ac254-309c-4802-ac99-59ee43932e42",
       "kind": "ENGINE_RESULT"
      },
      {
       "as_of": "2026-10-01T09:00:00+00:00",
-      "id": "4a6bf776-02a0-43f8-bc15-5c4d97be9b65",
+      "id": "c536398a-86a9-4893-8621-05a5e7ee62cc",
       "kind": "ENGINE_RESULT"
      }
     ],
     "gap_reason": null,
-    "id": "e05ea5a7-2f04-4fc1-9866-262b9f5c49fa",
+    "id": "11512c5a-dd0c-469d-ad1c-3d807f37b55f",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -258,7 +258,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "b629b292-3789-4dd7-87a5-48af006e1885",
+        "id": "8e5e1e2c-a477-45de-b046-54f2377f9c8d",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -270,7 +270,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "f4898999-06ca-405d-8c15-31c610319489",
+        "id": "b47ac254-309c-4802-ac99-59ee43932e42",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -282,7 +282,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "4a6bf776-02a0-43f8-bc15-5c4d97be9b65",
+        "id": "c536398a-86a9-4893-8621-05a5e7ee62cc",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -297,14 +297,14 @@
     "report_ref": null,
     "source": "BUSINESS_STATE",
     "status": "COMPLETE",
-    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+    "turn_id": "ddc29ecf-cce2-4cfe-806a-4a446324f355"
    }
   ],
   "investigation": {
    "created_at": "2026-10-01T09:00:00+00:00",
-   "created_by": "b971f37f-31ef-4e6c-84d4-154cf0e700c4",
-   "id": "223287c9-f793-4365-930e-0c3a4a722f52",
-   "last_message_at": "2026-10-01T09:00:00.014000+00:00",
+   "created_by": "7fb3ee11-d803-42af-ae8b-aed22c95d4bd",
+   "id": "778ef21b-9de9-4ff1-9286-2c365d0913f9",
+   "last_message_at": "2026-10-01T09:00:00.015000+00:00",
    "origin": "USER_CHAT",
    "resolution_note": null,
    "resolved_at": null,
@@ -320,29 +320,30 @@
     "agent_run_id": null,
     "choices": null,
     "content": "Why did my profit drop in September?",
-    "created_at": "2026-10-01T09:00:00.003000+00:00",
-    "created_by": "b971f37f-31ef-4e6c-84d4-154cf0e700c4",
-    "id": "b390d121-9049-4295-8025-ee127f693733",
+    "created_at": "2026-10-01T09:00:00.004000+00:00",
+    "created_by": "7fb3ee11-d803-42af-ae8b-aed22c95d4bd",
+    "id": "38189b09-cc40-43a6-849c-2cd5f017daec",
     "kind": "TEXT",
     "role": "USER",
-    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+    "turn_id": "ddc29ecf-cce2-4cfe-806a-4a446324f355"
    },
    {
-    "agent_run_id": "81041805-d388-4ba9-b557-18a09864de6d",
+    "agent_run_id": "4d388537-150a-4b69-ae61-2888887c12e2",
     "choices": null,
     "content": "Here is what we found. 12.5% 30% 4% \u20b9482,150.00 \u20b961,320.00 \u20b971,044.00 The anomaly check (z score) is not configured yet. The anomaly check (percentile threshold) is not configured yet. The anomaly check (period over period delta) is not configured yet. No leak findings are recorded \u2014 reconciliation may not have been run, so this is not a clean bill of health.\n\nFigures as of 2026-10-01.\n\nI read the period 'September' as 2026-09-01 to 2026-09-30.",
-    "created_at": "2026-10-01T09:00:00.014000+00:00",
+    "created_at": "2026-10-01T09:00:00.015000+00:00",
     "created_by": null,
-    "id": "8c9c2539-be15-43a7-915a-647776261d46",
+    "id": "ddbff93e-7388-4525-b6d8-9ded57223cc6",
     "kind": "ANSWER",
     "role": "CEO",
-    "turn_id": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+    "turn_id": "ddc29ecf-cce2-4cfe-806a-4a446324f355"
    }
   ],
+  "plans": [],
   "turns": [
    {
-    "agent_run_id": "81041805-d388-4ba9-b557-18a09864de6d",
-    "ceo_message_id": "8c9c2539-be15-43a7-915a-647776261d46",
+    "agent_run_id": "4d388537-150a-4b69-ae61-2888887c12e2",
+    "ceo_message_id": "ddbff93e-7388-4525-b6d8-9ded57223cc6",
     "classifier_result": {
      "clarifyFor": null,
      "effectiveKey": "PROFIT_DIAGNOSIS",
@@ -360,12 +361,13 @@
       "period": "September"
      }
     },
-    "completed_at": "2026-10-01T09:00:00.017000+00:00",
+    "completed_at": "2026-10-01T09:00:00.018000+00:00",
     "composition_mode": "LLM",
-    "created_at": "2026-10-01T09:00:00.004000+00:00",
-    "id": "fb5df38f-845d-43d6-bae8-64e9ba003cab",
-    "investigation_id": "223287c9-f793-4365-930e-0c3a4a722f52",
+    "created_at": "2026-10-01T09:00:00.005000+00:00",
+    "id": "ddc29ecf-cce2-4cfe-806a-4a446324f355",
+    "investigation_id": "778ef21b-9de9-4ff1-9286-2c365d0913f9",
     "outcome": null,
+    "plan_id": null,
     "route": "PLAYBOOK",
     "route_key": "PROFIT_DIAGNOSIS",
     "route_source": "CLASSIFIER",
@@ -385,55 +387,55 @@
      "legs": [
       {
        "action": "cfo.financial_health",
-       "endMs": 375,
-       "startMs": 248,
+       "endMs": 382,
+       "startMs": 263,
        "status": "COMPLETE"
       },
       {
        "action": "cfo.anomaly_check",
-       "endMs": 368,
-       "startMs": 248,
+       "endMs": 370,
+       "startMs": 264,
        "status": "COMPLETE"
       },
       {
        "action": "cfo.strategic_briefing",
-       "endMs": 382,
-       "startMs": 249,
+       "endMs": 395,
+       "startMs": 265,
        "status": "COMPLETE"
       }
      ],
-     "requestReceivedAt": "2026-10-11T17:43:07.498329+00:00",
+     "requestReceivedAt": "2026-10-13T10:55:41.284719+00:00",
      "stages": {
       "admission": {
-       "endMs": 22,
+       "endMs": 47,
        "startMs": 0
       },
       "capabilities": {
-       "endMs": 200,
-       "startMs": 31
+       "endMs": 221,
+       "startMs": 56
       },
       "classification": {
-       "endMs": 214,
-       "startMs": 214
+       "endMs": 233,
+       "startMs": 233
       },
       "context": {
-       "endMs": 210,
-       "startMs": 200
+       "endMs": 230,
+       "startMs": 221
       },
       "dispatch": {
-       "endMs": 382,
-       "startMs": 247
+       "endMs": 395,
+       "startMs": 263
       },
       "synthesis": {
-       "endMs": 404,
-       "startMs": 403
+       "endMs": 417,
+       "startMs": 416
       }
      },
-     "totalMs": 435
+     "totalMs": 445
     },
     "status": "DELIVERED",
-    "tenant_id": "023d3a28-2f74-4a1f-a078-d19ac29ca6ec",
-    "user_message_id": "b390d121-9049-4295-8025-ee127f693733"
+    "tenant_id": "041ef971-fe08-4b7c-bee5-d996efe409be",
+    "user_message_id": "38189b09-cc40-43a6-849c-2cd5f017daec"
    }
   ]
  },
@@ -450,12 +452,12 @@
     "kind": "TURN_RECEIVED"
    },
    {
-    "atMs": 31,
+    "atMs": 56,
     "data": {},
     "kind": "TURN_ADMITTED"
    },
    {
-    "atMs": 214,
+    "atMs": 233,
     "data": {
      "route": "PLAYBOOK",
      "routeKey": "PROFIT_DIAGNOSIS"
@@ -463,7 +465,7 @@
     "kind": "CLASSIFIED"
    },
    {
-    "atMs": 222,
+    "atMs": 240,
     "data": {
      "route": "PLAYBOOK",
      "routeKey": "PROFIT_DIAGNOSIS"
@@ -471,28 +473,28 @@
     "kind": "PLAN_VALIDATED"
    },
    {
-    "atMs": 248,
+    "atMs": 263,
     "data": {
      "action": "cfo.financial_health"
     },
     "kind": "LEG_STARTED"
    },
    {
-    "atMs": 248,
+    "atMs": 264,
     "data": {
      "action": "cfo.anomaly_check"
     },
     "kind": "LEG_STARTED"
    },
    {
-    "atMs": 249,
+    "atMs": 265,
     "data": {
      "action": "cfo.strategic_briefing"
     },
     "kind": "LEG_STARTED"
    },
    {
-    "atMs": 344,
+    "atMs": 352,
     "data": {
      "entry": "BS_LEAK_OPEN",
      "status": "UNAVAILABLE"
@@ -500,7 +502,7 @@
     "kind": "STATE_READ"
    },
    {
-    "atMs": 347,
+    "atMs": 363,
     "data": {
      "entry": "BS_DATA_GAPS",
      "status": "AVAILABLE"
@@ -508,7 +510,18 @@
     "kind": "STATE_READ"
    },
    {
-    "atMs": 353,
+    "atMs": 370,
+    "data": {
+     "action": "cfo.anomaly_check",
+     "agentRunId": "08f46c5a-0eab-4265-a909-d642fe7415e1",
+     "figureRefs": 0,
+     "findingId": "16062ae4-87c3-412f-8be0-3f1274422295",
+     "status": "COMPLETE"
+    },
+    "kind": "LEG_FINISHED"
+   },
+   {
+    "atMs": 374,
     "data": {
      "entry": "BS_PNL_LATEST",
      "status": "AVAILABLE"
@@ -516,45 +529,34 @@
     "kind": "STATE_READ"
    },
    {
-    "atMs": 368,
-    "data": {
-     "action": "cfo.anomaly_check",
-     "agentRunId": "9dbd67e7-aa3c-417a-ad0e-d90343277362",
-     "figureRefs": 0,
-     "findingId": "e3e2af23-f89f-4cee-a1e5-8da9196912db",
-     "status": "COMPLETE"
-    },
-    "kind": "LEG_FINISHED"
-   },
-   {
-    "atMs": 375,
-    "data": {
-     "action": "cfo.financial_health",
-     "agentRunId": "ddcc0b4b-4817-44ea-aa8b-598142f719cc",
-     "figureRefs": 3,
-     "findingId": "ea395033-e687-4442-90ea-26942ffe7543",
-     "status": "COMPLETE"
-    },
-    "kind": "LEG_FINISHED"
-   },
-   {
     "atMs": 382,
     "data": {
-     "action": "cfo.strategic_briefing",
-     "agentRunId": "c17d2804-75b3-4fa3-9800-4009b9ca6719",
-     "figureRefs": 1,
-     "findingId": "b32b42f0-8b4e-49f6-a467-2e684f3cf3af",
+     "action": "cfo.financial_health",
+     "agentRunId": "6d7466b0-7271-4d60-8b21-8d4a5230eb23",
+     "figureRefs": 3,
+     "findingId": "65258a86-9331-4d1e-b91c-e269122ec19c",
      "status": "COMPLETE"
     },
     "kind": "LEG_FINISHED"
    },
    {
-    "atMs": 403,
+    "atMs": 395,
+    "data": {
+     "action": "cfo.strategic_briefing",
+     "agentRunId": "33b2153b-0da5-4907-b50c-dc99f279c4fa",
+     "figureRefs": 1,
+     "findingId": "16a0b383-c7e1-45e1-b0f9-184a0d299b8d",
+     "status": "COMPLETE"
+    },
+    "kind": "LEG_FINISHED"
+   },
+   {
+    "atMs": 416,
     "data": {},
     "kind": "SYNTHESIS_STARTED"
    },
    {
-    "atMs": 435,
+    "atMs": 445,
     "data": {
      "mode": "LLM",
      "status": "DELIVERED"
@@ -565,24 +567,24 @@
   "findings": [
    {
     "action_key": "cfo.financial_health",
-    "agent_run_id": "ddcc0b4b-4817-44ea-aa8b-598142f719cc",
-    "created_at": "2026-10-01T09:00:00.005000+00:00",
+    "agent_run_id": "6d7466b0-7271-4d60-8b21-8d4a5230eb23",
+    "created_at": "2026-10-01T09:00:00.006000+00:00",
     "figure_refs": [
      {
-      "id": "8f4d2ae3-a674-49fc-b012-69c6bb33e5b5",
+      "id": "4c1b22d8-f2f6-4124-b2c9-7aaf31ec857e",
       "kind": "ENGINE_RESULT"
      },
      {
-      "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+      "id": "84c03a8b-3d6f-4827-99f9-e30bfbfd791e",
       "kind": "ENGINE_RESULT"
      },
      {
-      "id": "25139d22-4b74-4e1a-b9b5-da133c32dba9",
+      "id": "9cb798e8-e051-4ff8-b25a-4a46143bcae1",
       "kind": "ENGINE_RESULT"
      }
     ],
     "gap_reason": null,
-    "id": "ea395033-e687-4442-90ea-26942ffe7543",
+    "id": "65258a86-9331-4d1e-b91c-e269122ec19c",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -615,7 +617,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "8f4d2ae3-a674-49fc-b012-69c6bb33e5b5",
+        "id": "4c1b22d8-f2f6-4124-b2c9-7aaf31ec857e",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -627,7 +629,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+        "id": "84c03a8b-3d6f-4827-99f9-e30bfbfd791e",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -639,7 +641,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "25139d22-4b74-4e1a-b9b5-da133c32dba9",
+        "id": "9cb798e8-e051-4ff8-b25a-4a46143bcae1",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -657,11 +659,11 @@
    },
    {
     "action_key": "cfo.anomaly_check",
-    "agent_run_id": "9dbd67e7-aa3c-417a-ad0e-d90343277362",
-    "created_at": "2026-10-01T09:00:00.006000+00:00",
+    "agent_run_id": "08f46c5a-0eab-4265-a909-d642fe7415e1",
+    "created_at": "2026-10-01T09:00:00.007000+00:00",
     "figure_refs": [],
     "gap_reason": null,
-    "id": "e3e2af23-f89f-4cee-a1e5-8da9196912db",
+    "id": "16062ae4-87c3-412f-8be0-3f1274422295",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -682,16 +684,16 @@
    },
    {
     "action_key": "cfo.strategic_briefing",
-    "agent_run_id": "c17d2804-75b3-4fa3-9800-4009b9ca6719",
-    "created_at": "2026-10-01T09:00:00.007000+00:00",
+    "agent_run_id": "33b2153b-0da5-4907-b50c-dc99f279c4fa",
+    "created_at": "2026-10-01T09:00:00.008000+00:00",
     "figure_refs": [
      {
-      "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+      "id": "84c03a8b-3d6f-4827-99f9-e30bfbfd791e",
       "kind": "ENGINE_RESULT"
      }
     ],
     "gap_reason": null,
-    "id": "b32b42f0-8b4e-49f6-a467-2e684f3cf3af",
+    "id": "16a0b383-c7e1-45e1-b0f9-184a0d299b8d",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -709,7 +711,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "61356d0d-79d3-402f-bdcb-3febc9d48c9c",
+        "id": "84c03a8b-3d6f-4827-99f9-e30bfbfd791e",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -728,10 +730,10 @@
    {
     "action_key": "BS_LEAK_OPEN",
     "agent_run_id": null,
-    "created_at": "2026-10-01T09:00:00.011000+00:00",
+    "created_at": "2026-10-01T09:00:00.012000+00:00",
     "figure_refs": [],
     "gap_reason": "No leak findings are recorded \u2014 reconciliation may not have been run, so this is not a clean bill of health.",
-    "id": "99200e5f-689d-49f8-a460-fabbad996713",
+    "id": "e49db591-3c17-49bd-b159-559e19f2f791",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -751,10 +753,10 @@
    {
     "action_key": "BS_DATA_GAPS",
     "agent_run_id": null,
-    "created_at": "2026-10-01T09:00:00.012000+00:00",
+    "created_at": "2026-10-01T09:00:00.013000+00:00",
     "figure_refs": [],
     "gap_reason": null,
-    "id": "f9cdaac6-5b52-4989-8350-17dad681401a",
+    "id": "21396dae-277d-4491-b5b4-7475f5c48784",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -778,26 +780,26 @@
    {
     "action_key": "BS_PNL_LATEST",
     "agent_run_id": null,
-    "created_at": "2026-10-01T09:00:00.013000+00:00",
+    "created_at": "2026-10-01T09:00:00.014000+00:00",
     "figure_refs": [
      {
       "as_of": "2026-10-01T09:00:00+00:00",
-      "id": "b629b292-3789-4dd7-87a5-48af006e1885",
+      "id": "8e5e1e2c-a477-45de-b046-54f2377f9c8d",
       "kind": "ENGINE_RESULT"
      },
      {
       "as_of": "2026-10-01T09:00:00+00:00",
-      "id": "f4898999-06ca-405d-8c15-31c610319489",
+      "id": "b47ac254-309c-4802-ac99-59ee43932e42",
       "kind": "ENGINE_RESULT"
      },
      {
       "as_of": "2026-10-01T09:00:00+00:00",
-      "id": "4a6bf776-02a0-43f8-bc15-5c4d97be9b65",
+      "id": "c536398a-86a9-4893-8621-05a5e7ee62cc",
       "kind": "ENGINE_RESULT"
      }
     ],
     "gap_reason": null,
-    "id": "e05ea5a7-2f04-4fc1-9866-262b9f5c49fa",
+    "id": "11512c5a-dd0c-469d-ad1c-3d807f37b55f",
     "presentation": {
      "artefacts": [],
      "conflicts": [],
@@ -809,7 +811,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "b629b292-3789-4dd7-87a5-48af006e1885",
+        "id": "8e5e1e2c-a477-45de-b046-54f2377f9c8d",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -821,7 +823,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "f4898999-06ca-405d-8c15-31c610319489",
+        "id": "b47ac254-309c-4802-ac99-59ee43932e42",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -833,7 +835,7 @@
        "note": null,
        "ref": {
         "as_of": "2026-10-01T09:00:00+00:00",
-        "id": "4a6bf776-02a0-43f8-bc15-5c4d97be9b65",
+        "id": "c536398a-86a9-4893-8621-05a5e7ee62cc",
         "kind": "ENGINE_RESULT"
        },
        "register": "DERIVED",
@@ -850,7 +852,7 @@
     "status": "COMPLETE"
    }
   ],
-  "messageId": "8c9c2539-be15-43a7-915a-647776261d46",
+  "messageId": "ddbff93e-7388-4525-b6d8-9ded57223cc6",
   "notes": [
    "I read the period 'September' as 2026-09-01 to 2026-09-30."
   ],
@@ -869,52 +871,52 @@
    "legs": [
     {
      "action": "cfo.financial_health",
-     "endMs": 375,
-     "startMs": 248,
+     "endMs": 382,
+     "startMs": 263,
      "status": "COMPLETE"
     },
     {
      "action": "cfo.anomaly_check",
-     "endMs": 368,
-     "startMs": 248,
+     "endMs": 370,
+     "startMs": 264,
      "status": "COMPLETE"
     },
     {
      "action": "cfo.strategic_briefing",
-     "endMs": 382,
-     "startMs": 249,
+     "endMs": 395,
+     "startMs": 265,
      "status": "COMPLETE"
     }
    ],
-   "requestReceivedAt": "2026-10-11T17:43:07.498329+00:00",
+   "requestReceivedAt": "2026-10-13T10:55:41.284719+00:00",
    "stages": {
     "admission": {
-     "endMs": 22,
+     "endMs": 47,
      "startMs": 0
     },
     "capabilities": {
-     "endMs": 200,
-     "startMs": 31
+     "endMs": 221,
+     "startMs": 56
     },
     "classification": {
-     "endMs": 214,
-     "startMs": 214
+     "endMs": 233,
+     "startMs": 233
     },
     "context": {
-     "endMs": 210,
-     "startMs": 200
+     "endMs": 230,
+     "startMs": 221
     },
     "dispatch": {
-     "endMs": 382,
-     "startMs": 247
+     "endMs": 395,
+     "startMs": 263
     },
     "synthesis": {
-     "endMs": 404,
-     "startMs": 403
+     "endMs": 417,
+     "startMs": 416
     }
    },
-   "totalMs": 435
+   "totalMs": 445
   },
-  "turnId": "fb5df38f-845d-43d6-bae8-64e9ba003cab"
+  "turnId": "ddc29ecf-cce2-4cfe-806a-4a446324f355"
  }
 }

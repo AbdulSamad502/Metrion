@@ -44,6 +44,9 @@ KNOWN_APP_DELETABLE = frozenset({
     "reconciliation_run", "report_file", "report_period", "sales_line",
     "seller_product_profile", "settlement_line", "supplier_lead", "tenant",
     "validation_finding",
+    # RAG (rag-knowledge.md AC6, 20261012_0015): deleting a document must remove its servable content in the same transaction, so the app role holds DELETE on the derived
+    # chunk/embedding tables ONLY. rag_source (tombstone), the retrieval log, usage counters and outbox are not deletable; test_rag_foundation_rls.py pins the full grant matrix.
+    "rag_chunk", "rag_chunk_embedding",
 })
 
 
@@ -126,3 +129,30 @@ def test_no_new_table_silently_becomes_deletable_by_the_app_role(migrate_engine)
     assert deletable - KNOWN_APP_DELETABLE == set(), "new app-deletable table: REVOKE DELETE in its migration (or, if truly required, list it in KNOWN_APP_DELETABLE with a reason)"
     assert KNOWN_APP_DELETABLE - deletable == set(), "KNOWN_APP_DELETABLE is stale: these tables are no longer deletable - remove them"
     assert not (deletable & set(CEO_HISTORY_TABLES))
+
+
+# ---- approval workflow (20261012_0019): the plan is updatable ONLY in its five decision columns; its history is append-only; neither table is deletable ----
+APPROVAL_TABLES = ("investigation_plan", "investigation_plan_event")
+
+
+@pytest.mark.parametrize("table", APPROVAL_TABLES)
+def test_approval_tables_are_force_rls_and_not_deletable_by_the_app_role(migrate_engine, table):
+    with migrate_engine.connect() as conn:
+        rls = conn.execute(text("SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = :t"), {"t": table}).one()
+        quals = conn.execute(text("SELECT qual, with_check FROM pg_policies WHERE tablename = :t"), {"t": table}).all()
+        assert tuple(rls) == (True, True) and quals and all("app.current_tenant_id" in q and "app.current_tenant_id" in (c or "") for q, c in quals)
+        assert not _priv(conn, table, "DELETE") and not _priv(conn, table, "TRUNCATE")
+    assert table not in KNOWN_APP_DELETABLE
+
+
+def test_the_plan_table_grants_update_only_on_its_decision_columns_and_events_are_append_only(migrate_engine):
+    with migrate_engine.connect() as conn:
+        def col(table: str, column: str) -> bool:
+            return bool(conn.execute(text("SELECT has_column_privilege('metrion_app', CAST(:t AS regclass), :c, 'UPDATE')"), {"t": table, "c": column}).scalar_one())
+
+        columns = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'investigation_plan'")).scalars().all()
+        assert {c for c in columns if col("investigation_plan", c)} == {"status", "execution_turn_id", "decided_by", "decided_at", "decision_reason"}
+        assert not _priv(conn, "investigation_plan", "UPDATE")  # a column-only grant is not a table-level UPDATE
+        events = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'investigation_plan_event'")).scalars().all()
+        assert not any(col("investigation_plan_event", c) for c in events)
+        assert _priv(conn, "investigation_plan_event", "SELECT") and _priv(conn, "investigation_plan_event", "INSERT") and not _priv(conn, "investigation_plan_event", "UPDATE")

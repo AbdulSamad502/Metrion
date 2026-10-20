@@ -51,17 +51,19 @@ Respond with ONLY a single JSON object (no other text) with these keys — omit 
 cannot confidently read from the image, do not include it with a null or empty value:
 
 {
-  "title": "the product title, verbatim, if visible",
+  "title": "the title of the MAIN product this page is about, verbatim (the large heading beside the product photos, next to the price and Buy button). IGNORE sponsored banners, ads, 'AD' strips, 'similar products' and recommendation rows: their titles are other products. Omit this key if the main title is not visible",
   "description": "product description text, if visible",
   "bullets": ["bullet point 1", "bullet point 2"],
   "seller_name": "the seller/store name, if visible",
   "observed_category": "the product category as displayed (breadcrumb or label), if visible",
   "listed_price": "the current selling price in rupees, as a plain decimal number, e.g. 999.00",
   "mrp": "the MRP/list price in rupees if a separate strikethrough price is shown",
-  "visible_discount": "the discount amount in rupees if explicitly shown (not the price itself)",
+  "visible_discount": "a discount ONLY when the page states it as a rupee amount, for example 'Save ₹100'. A percentage such as '-39%' is NOT a rupee amount and is already part of the listed price: omit this key for it",
+  "delivery_charge": "the delivery/shipping charge in rupees as a plain number, or the word FREE if free delivery is stated",
+  "offers": [{"kind": "COUPON or BANK_OFFER or OTHER", "amount": "rupees off as a plain number, if stated", "condition": "the condition text if the offer needs one (a card, a first order, a minimum spend)"}],
   "rating": "the star rating out of 5, as a decimal number, e.g. 4.3",
   "rating_count": "the number of ratings/reviews, as a plain integer, e.g. 1234",
-  "availability": "the stock status text exactly as shown, e.g. 'In stock' or 'Currently unavailable'"
+  "availability": "the stock status text exactly as shown for the MAIN product, e.g. 'In stock' or 'Currently unavailable'. A single colour or size marked out of stock does not make the product unavailable. Omit this key if no stock text is shown"
 }
 
 Return ONLY the JSON object."""
@@ -107,6 +109,39 @@ def _single_number(value: object) -> Decimal | None:
 def _parse_rupees_to_paise(value: object) -> int | None:
     rupees = _single_number(value)
     return int((rupees * 100).to_integral_value()) if rupees is not None else None
+
+
+def _parse_delivery(value: object) -> int | None:
+    """A stated delivery charge in paise. "FREE" (or "free delivery") is an observed zero; an absent or unreadable value is None — never zero, because a missing delivery
+    charge is not free delivery (deterministic-engine.md 5.15.2 rule 1)."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str) and re.search(r"(?i)\bfree\b", value):
+        return 0
+    return _parse_rupees_to_paise(value)
+
+
+MAX_OFFERS = 5
+
+
+def _parse_offers(value: object) -> list[dict[str, object]]:
+    """The offers a screenshot showed, as plain records. `amount_paise` is kept only when one number was stated; a `condition` marks the offer as conditional (it is then
+    never subtracted from a price). Anything not a list of objects is absent. The text kept is short and structural, never a copy of the listing's marketing copy."""
+    if not isinstance(value, list):
+        return []
+    out: list[dict[str, object]] = []
+    for item in value[:MAX_OFFERS]:
+        if not isinstance(item, dict):
+            continue
+        kind = str(item.get("kind") or "OTHER").strip().upper()
+        kind = kind if kind in ("COUPON", "BANK_OFFER") else "OTHER"
+        amount = _parse_rupees_to_paise(item.get("amount"))
+        condition = item.get("condition")
+        condition_text = " ".join(str(condition).split())[:120] if isinstance(condition, str) and condition.strip() else None
+        if amount is None and condition_text is None:
+            continue  # nothing usable was read
+        out.append({"kind": kind, "amount_paise": amount if amount and amount > 0 else None, "condition_text": condition_text})
+    return out
 
 
 def _parse_rating(value: object) -> str | None:
@@ -163,6 +198,13 @@ def _fields_from_model_json(parsed: dict[str, object], *, validate: bool = True)
         paise = _parse_rupees_to_paise(parsed.get(model_key))
         if paise is not None:
             fields.append(ExtractedField(field_name, paise))
+
+    delivery = _parse_delivery(parsed.get("delivery_charge"))
+    if delivery is not None:
+        fields.append(ExtractedField("delivery_charge_paise", delivery))
+    offers = _parse_offers(parsed.get("offers"))
+    if offers:
+        fields.append(ExtractedField("offers", offers))
 
     rating = _parse_rating(parsed.get("rating"))
     if rating is not None and Decimal(rating) != 0:  # a printed rating of 0 stars does not exist: the model writes 0 for "not shown" (measured), so it is absent, never stored as a value

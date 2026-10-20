@@ -11,13 +11,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Mapping, Sequence
 from uuid import UUID, uuid4
 
+from competitor_intelligence.alerts.raise_alert import PriceEventFacts, process_price_event
 from competitor_intelligence.delta.compute import compute_price_delta, should_emit_price_event
 from competitor_intelligence.evidence.extraction import ExtractionFailed, ExtractionResult, VisionExtractor
 from competitor_intelligence.evidence.merge import MergedField, apply_manual_entries, merge_extractions
 from competitor_intelligence.evidence.snapshot import SnapshotDraft, build_snapshot_draft
+from competitor_intelligence.intake.policy import CONSEQUENTIAL_FIELDS
 from competitor_intelligence.listing_insight.derive import derive_listing_insight
 from competitor_intelligence.repositories import (
     agent_run_repo,
@@ -75,8 +78,14 @@ def submit_research_session(
     extractor: VisionExtractor,
     now: datetime | None = None,
     parent_run_id: UUID | None = None,
+    require_consequential_confirmation: bool = False,
 ) -> ResearchSessionResult:
-    """`parent_run_id` is set only when this call is dispatched by the CEO Hub (Step 4's
+    """`require_consequential_confirmation` (C37, CEO Hub intake): when a consequential field
+    (price, discount, availability) was read by vision, the snapshot is stored with
+    `price_confirmation = PENDING` and **no price-change detection runs** — the snapshot cannot
+    reach a Brain 1 input, delta or alert until the seller confirms (`confirm_snapshot_fields`).
+
+    `parent_run_id` is set only when this call is dispatched by the CEO Hub (Step 4's
     dummy CEO) — `None` for a pure direct-path invocation, matching `agent_run_repo.
     insert_agent_run`'s contract."""
     now = now or datetime.now(timezone.utc)
@@ -158,15 +167,22 @@ def submit_research_session(
     competitor_snapshot_field_repo.replace_fields(tenant_id, snapshot_id, merged)
     _derive_and_persist_listing_insight(tenant_id, snapshot_id=snapshot_id, draft=draft)
 
-    price_event_id = _detect_and_record_price_change(
-        tenant_id,
-        competitor_url_id=competitor_url_id,
-        ci_run_id=ci_run_id,
-        current_snapshot_id=snapshot_id,
-        draft=draft,
-        now=now,
-        url_row=urls[0],
+    needs_confirmation = require_consequential_confirmation and any(
+        f.field_name in CONSEQUENTIAL_FIELDS and f.source is Confidence.VISION_EXTRACTED and not f.conflict for f in merged
     )
+    price_event_id: UUID | None = None
+    if needs_confirmation:
+        competitor_snapshot_repo.set_price_confirmation(tenant_id, snapshot_id, "PENDING")
+    else:
+        price_event_id = _detect_and_record_price_change(
+            tenant_id,
+            competitor_url_id=competitor_url_id,
+            ci_run_id=ci_run_id,
+            current_snapshot_id=snapshot_id,
+            draft=draft,
+            now=now,
+            url_row=urls[0],
+        )
 
     run_status = _run_status_for(draft.capture_status)
     ci_capture_run_repo.finish_run(tenant_id, ci_run_id, status=run_status, finished_at=now)
@@ -243,7 +259,7 @@ def _detect_and_record_price_change(
     if isinstance(delta, Unavailable) or not should_emit_price_event(delta):
         return None
 
-    return competitor_price_event_repo.insert_event(
+    event_id = competitor_price_event_repo.insert_event(
         tenant_id,
         competitor_url_id=competitor_url_id,
         from_snapshot_id=prior_row["id"],
@@ -251,6 +267,23 @@ def _detect_and_record_price_change(
         ci_capture_run_id=ci_run_id,
         delta=delta,
     )
+    # C42: decide, once, whether this observation becomes an alert the seller sees (dedup, quiet hours).
+    process_price_event(
+        tenant_id,
+        PriceEventFacts(
+            event_id=event_id,
+            competitor_url_id=competitor_url_id,
+            to_snapshot_id=current_snapshot_id,
+            new_value_paise=draft.listed_price_paise,
+            direction=delta.direction.value,
+            price_changed=delta.delta_paise != 0,
+            threshold_breached=delta.threshold_breached,
+            alert_eligible=delta.alert_eligible,
+            threshold_pct=Decimal(price_threshold_pct),
+        ),
+        now=now,
+    )
+    return event_id
 
 
 def _derive_and_persist_listing_insight(tenant_id: UUID, *, snapshot_id: UUID, draft: SnapshotDraft) -> None:
@@ -279,6 +312,28 @@ def _derive_and_persist_listing_insight(tenant_id: UUID, *, snapshot_id: UUID, d
     competitor_listing_insight_repo.insert_insight(
         tenant_id, snapshot_id=snapshot_id, source_url=draft.source_url, fetched_at=draft.captured_at, draft=insight_draft
     )
+
+
+def confirm_snapshot_fields(
+    tenant_id: UUID,
+    snapshot_id: UUID,
+    *,
+    confirmed: Mapping[str, Any],
+    declined: Sequence[str] = (),
+    now: datetime | None = None,
+) -> "ManualCorrectionResult | None":
+    """C37/C38: the seller's answers to the CEO's confirmation questions. `confirmed` maps a
+    consequential field to the value the seller stated or accepted (stored `SELLER_ENTERED`,
+    superseding the vision read, §5.3 rule 4); the snapshot becomes `CONFIRMED` and price-change
+    detection runs for the first time. If any consequential field was `declined` the snapshot
+    becomes `DECLINED` — it stays out of every consequential path — and `None` is returned."""
+    now = now or datetime.now(timezone.utc)
+    if declined:
+        competitor_snapshot_repo.set_price_confirmation(tenant_id, snapshot_id, "DECLINED")
+        return None
+    result = submit_manual_correction(tenant_id, snapshot_id, manual_fields=confirmed, now=now)
+    competitor_snapshot_repo.set_price_confirmation(tenant_id, snapshot_id, "CONFIRMED")
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -336,7 +391,7 @@ def submit_manual_correction(
     )
 
 
-def _row_to_draft_fields(row: dict) -> SnapshotDraft:
+def _row_to_draft_fields(row: dict[str, Any]) -> SnapshotDraft:
     """Adapts a DB row from latest_comparable_snapshot() into the subset of SnapshotDraft
     fields compute_price_delta() actually reads."""
     return SnapshotDraft(

@@ -4,6 +4,7 @@
   "emailVerified": null,
   "membershipStatus": null,
   "onboardingState": null,
+  "profileComplete?": null,
   "role": null,
   "tenantId": null
  },
@@ -13,6 +14,167 @@
   "recentPriceEvents7d": null,
   "staleCompetitors": null,
   "trackedCompetitors": null
+ },
+ "GET /api/v1/ci/workspace": {
+  "asOf": null,
+  "candidates": [
+   {
+    "evidenceStatus": null,
+    "id": null,
+    "identityMatch": null,
+    "identityNote": null,
+    "marketplace": null,
+    "relationshipClass": null,
+    "relevanceBand": null,
+    "relevanceProvisional": null,
+    "relevanceScore": null,
+    "sellerDecision": null,
+    "tier": null,
+    "title": null,
+    "url": null
+   }
+  ],
+  "changes": [
+   {
+    "availabilityChange": null,
+    "competitorId": null,
+    "deltaPaise": null,
+    "deltaPct": null,
+    "direction": null,
+    "evidenceDate": null,
+    "findingId": null,
+    "kind": null,
+    "label": null,
+    "marketplace": null,
+    "occurredAt": null
+   }
+  ],
+  "competitors": [
+   {
+    "availability": null,
+    "deltaDirection": null,
+    "deltaPct": null,
+    "effectivePrice~": {
+     "buyerTotal~": {
+      "engineResultRef": null,
+      "isAvailable": null,
+      "unavailableReason": null,
+      "valuePaise": null
+     },
+     "deliveryChargePaise": null,
+     "effective~": {
+      "engineResultRef": null,
+      "isAvailable": null,
+      "unavailableReason": null,
+      "valuePaise": null
+     },
+     "excludedOffers": [
+      {
+       "kind": null,
+       "reason": null
+      }
+     ],
+     "offers": [
+      {
+       "amountPaise": null,
+       "conditional": null,
+       "kind": null
+      }
+     ]
+    },
+    "evidenceDate": null,
+    "findingId": null,
+    "freshness": null,
+    "id": null,
+    "identityMatch": null,
+    "label": null,
+    "listedPricePaise": null,
+    "marketplace": null,
+    "openQuestions": null,
+    "priceStatus": null,
+    "ratingCount": null,
+    "ratingValue": null,
+    "relationshipClass": null,
+    "relevanceBand": null,
+    "relevanceProvisional": null,
+    "relevanceScore": null
+   }
+  ],
+  "events": [
+   {
+    "detail": null,
+    "id": null,
+    "objectId": null,
+    "objectType": null,
+    "occurredAt": null,
+    "type": null
+   }
+  ],
+  "findings": [
+   {
+    "competitorId": null,
+    "confidence": null,
+    "createdAt": null,
+    "evidenceCount": null,
+    "freshness": null,
+    "id": null,
+    "payload": null,
+    "sampleSize": null,
+    "sellerConfirmation": null,
+    "type": null
+   }
+  ],
+  "kpis": {
+   "importantChangeCount": null,
+   "needsEvidenceCount": null,
+   "pendingQuestionCount": null,
+   "reviewInsightCount": null,
+   "trackedCount": null,
+   "verifiedCount": null
+  },
+  "lastDiscovery~": {
+   "failedReason": null,
+   "finishedAt": null,
+   "partialReason": null,
+   "provider": null,
+   "rawCandidateCount": null,
+   "status": null
+  },
+  "pendingConfirmations": [
+   {
+    "competitorId": null,
+    "createdAt": null,
+    "expiresAt": null,
+    "field": null,
+    "id": null,
+    "reason": null
+   }
+  ],
+  "products": [
+   {
+    "productId": null,
+    "title": null
+   }
+  ],
+  "reviewInsights": [
+   {
+    "competitorId": null,
+    "complaintThemes": null,
+    "confidence": null,
+    "evidenceDate": null,
+    "findingId": null,
+    "insightState": null,
+    "label": null,
+    "positiveThemes": null,
+    "reviewsConsidered": null
+   }
+  ],
+  "selectedProductId": null,
+  "watchlist?": {
+   "free": null,
+   "limit": null,
+   "used": null
+  }
  },
  "GET /api/v1/ceo-hub/agents": [
   {
@@ -909,21 +1071,7 @@
   },
   "messages": [
    {
-    "choices~?": {
-     "kind": null,
-     "options": [
-      {
-       "form?": null,
-       "key": null,
-       "kind": null,
-       "label": null,
-       "reason": null,
-       "skip?": null
-      }
-     ],
-     "slot": null,
-     "version": null
-    },
+    "choices?": null,
     "content": null,
     "created_at": null,
     "failed?": null,
@@ -932,6 +1080,31 @@
     "pending?": null,
     "role": null,
     "turn_id": null
+   }
+  ],
+  "plans?": [
+   {
+    "createdAt": null,
+    "decisionReason?": null,
+    "executionTurnId": null,
+    "expiresAt": null,
+    "id": null,
+    "plan": {
+     "compact_lines?": null,
+     "details?": null,
+     "legs?": [
+      {
+       "action_key": null,
+       "meters?": null
+      }
+     ],
+     "summary_text?": null,
+     "title?": null
+    },
+    "planHash": null,
+    "plannedTurnId": null,
+    "status": null,
+    "viewerIsRequester": null
    }
   ],
   "turns": [

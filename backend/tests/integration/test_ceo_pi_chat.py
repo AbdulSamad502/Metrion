@@ -60,7 +60,7 @@ def test_the_niche_is_taken_from_the_message_and_only_the_rest_is_asked(two_tena
     ctx = ctx_for(a, user_id=app_user)
     rt = rt_for(calls)
     q = orchestrator.run_turn(ctx, rt, start(ctx, rt), ASK)
-    assert q.status == "CLARIFIED" and calls == {} and "budget" in q.answer.lower() and q.answer.startswith("(2 of 6)")  # the niche was already said
+    assert q.status == "CLARIFIED" and calls == {} and "budget" in q.answer.lower() and q.answer.startswith("(2 of 5)")  # the niche was already said
     assert q.choices["pending"]["collected"] == {"category": "mens shoes"} and q.choices["pending"]["key"] == "pi.discover"
 
 
@@ -71,7 +71,7 @@ def test_after_the_seller_confirms_the_brief_is_saved_pi_runs_and_the_ideas_are_
     ctx = ctx_for(a, user_id=app_user)
     rt = rt_for(calls)
     inv = start(ctx, rt)
-    res = run_through(ctx, rt, inv, ["20,000", "Amazon", "skip", "quick"])
+    res = run_through(ctx, rt, inv, ["20,000", "Amazon", "skip"])
     assert res.status == "CLARIFIED" and "Shall I go ahead" in res.answer and "mens shoes" in res.answer and calls == {} and pi_actions.list_niche_briefs(a) == []  # nothing saved or run yet
     done = orchestrator.run_turn(ctx, rt, inv, "yes")
     assert done.status == "DELIVERED" and done.composition_mode == "TEMPLATE"
@@ -94,7 +94,7 @@ def test_cancelling_at_the_summary_saves_and_runs_nothing(two_tenants, app_user)
     ctx = ctx_for(a, user_id=app_user)
     rt = rt_for(calls)
     inv = start(ctx, rt)
-    run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "quick"])
+    run_through(ctx, rt, inv, ["20000", "Amazon", "skip"])
     res = orchestrator.run_turn(ctx, rt, inv, "cancel")
     assert "stopped" in res.answer and calls == {} and pi_actions.list_niche_briefs(a) == []
 
@@ -106,7 +106,7 @@ def test_answering_the_same_confirmation_twice_reuses_the_brief(two_tenants, app
     ctx = ctx_for(a, user_id=app_user)
     rt = rt_for(calls)
     inv = start(ctx, rt)
-    q = run_through(ctx, rt, inv, ["20000", "Amazon", "skip", "quick"])
+    q = run_through(ctx, rt, inv, ["20000", "Amazon", "skip"])
     reply = orchestrator.ClarificationReply(q.message_id, None)
     orchestrator.run_turn(ctx, rt, inv, "yes", clarification=reply)
     orchestrator.run_turn(ctx, rt, inv, "yes", clarification=reply)

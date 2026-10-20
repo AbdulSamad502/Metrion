@@ -4,7 +4,7 @@
    Authoritative visual reference for now (confirmed 2026-09-17). Kept as CSS custom
    properties, not hardcoded into components, so a future rebrand only touches this file. */
 :root {
-  --bg-base: #0A0B0A;
+  --bg-base: #020302;
   --bg-panel: #0D0B08;
   --bg-card: rgba(32, 36, 30, 0.30);
   --bg-card-elevated: rgba(32, 36, 30, 0.40);
@@ -1082,8 +1082,7 @@ aside nav {
    --bg-popover (#14150F) and --bg-panel here; this uses neutral black alpha only. */
 .mt-sidebar {
   background: var(--glass-sidebar-bg);
-  -webkit-backdrop-filter: blur(16px) saturate(110%);
-  backdrop-filter: blur(16px) saturate(110%);
+  /* No backdrop blur: it would smear the 1px starfield behind the sidebar into nothing. */
   border-right: 1px solid var(--glass-border);
 }
 
@@ -1095,8 +1094,7 @@ aside nav {
 
 .mt-topbar {
   background: var(--glass-topbar-bg);
-  -webkit-backdrop-filter: blur(16px) saturate(120%);
-  backdrop-filter: blur(16px) saturate(120%);
+  /* No backdrop blur, same reason as .mt-sidebar. */
   border-bottom: 1px solid var(--glass-border);
 }
 
@@ -1116,11 +1114,41 @@ aside nav {
 /* Ambient depth for the glass to sit on: two very faint, neutral/accent pools on a fixed layer,
    so blur has something to refract. Opaque near-black remains the base. */
 .mt-app-surface {
-  background-color: var(--bg-base);
+  /* Transparent so the fixed body starfield (body::before) shows through; the near-black base is on body. */
+  background-color: transparent;
+}
+
+/* Sparse starfield: pure near-black with a handful of 1px dots, far apart. Each layer tiles a single dot at a
+   different (coprime-ish) tile size, so the pattern never reads as a grid. Fixed, behind content, no pointer events. */
+:root {
+  --star: rgba(255, 255, 255, 0.85);
+  --star-dim: rgba(255, 255, 255, 0.45);
+}
+body {
+  position: relative;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background-image:
-    radial-gradient(1100px 560px at 90% -12%, var(--accent-fill-default), transparent 70%),
-    radial-gradient(900px 640px at 8% 112%, rgba(255, 255, 255, 0.04), transparent 70%);
-  background-attachment: fixed;
+    radial-gradient(1.2px 1.2px at 83px 141px, var(--star), transparent 100%),
+    radial-gradient(1px 1px at 311px 57px, var(--star-dim), transparent 100%),
+    radial-gradient(1px 1px at 197px 389px, var(--star-dim), transparent 100%),
+    radial-gradient(1.4px 1.4px at 421px 263px, var(--star), transparent 100%),
+    radial-gradient(1px 1px at 59px 457px, var(--star-dim), transparent 100%),
+    radial-gradient(1px 1px at 503px 97px, var(--star-dim), transparent 100%),
+    radial-gradient(1px 1px at 149px 233px, var(--star-dim), transparent 100%),
+    radial-gradient(1.2px 1.2px at 367px 421px, var(--star), transparent 100%),
+    radial-gradient(1px 1px at 271px 119px, var(--star-dim), transparent 100%),
+    radial-gradient(1px 1px at 449px 347px, var(--star-dim), transparent 100%),
+    radial-gradient(1.2px 1.2px at 31px 311px, var(--star), transparent 100%),
+    radial-gradient(1px 1px at 577px 499px, var(--star-dim), transparent 100%),
+    radial-gradient(1px 1px at 223px 29px, var(--star-dim), transparent 100%),
+    radial-gradient(1px 1px at 617px 211px, var(--star-dim), transparent 100%);
+  background-size: 467px 509px, 523px 479px, 557px 601px, 619px 577px, 673px 641px, 733px 691px, 587px 563px, 641px 613px, 701px 659px, 751px 719px, 797px 683px, 823px 757px, 859px 733px, 887px 809px;
 }
 
 /* No backdrop-filter: swap translucent surfaces for solid ones so text never sits on a muddy blend. */
@@ -1320,8 +1348,8 @@ aside nav {
   --glass-elevated-border: rgba(255, 255, 255, 0.14);
   --glass-elevated-blur: blur(22px) saturate(150%);
   --glass-input-bg: var(--bg-input);
-  --glass-topbar-bg: rgba(24, 27, 23, 0.34);
-  --glass-sidebar-bg: rgba(14, 16, 13, 0.5);
+  --glass-topbar-bg: rgba(2, 3, 2, 0.12);
+  --glass-sidebar-bg: rgba(2, 3, 2, 0.12);
   --radius-surface: 14px;
 }
 
@@ -1338,14 +1366,10 @@ aside nav {
 
 /* Header and sidebar: the mockup's stronger glass, with a hairline highlight under the header. */
 .mt-app-surface .mt-topbar {
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  backdrop-filter: blur(24px) saturate(180%);
   box-shadow: inset 0 -1px 0 var(--fill-hover);
 }
 @media (min-width: 1024px) {
   .mt-app-surface .mt-sidebar {
-    -webkit-backdrop-filter: blur(24px) saturate(170%);
-    backdrop-filter: blur(24px) saturate(170%);
     box-shadow: inset -1px 0 0 var(--fill-hover);
   }
 }
@@ -1560,4 +1584,85 @@ aside nav {
     line-height: 1.2;
     overflow-wrap: anywhere;
   }
+}
+
+/* ---- CEO Hub "galaxy" canvas (docs/design/design_status.md: look is not final, so every hue below is a token) ----
+   Cheap by construction: layered radial-gradients and one very slow opacity twinkle. No canvas, no images, no layout shift. */
+:root {
+  --hub-space: #020302;
+  --hub-star: rgba(240, 250, 244, 0.95);
+  --hub-glow: rgba(62, 207, 116, 0.42);
+  --hub-glow-soft: rgba(62, 207, 116, 0.14);
+  --hub-card-bg: rgba(5, 14, 9, 0.88);
+  --agent-pi: #F2506B;
+  --agent-ci: #F2C94C;
+  --agent-cfo: #5B8DEF;
+  --agent-cmo: #22D3EE;
+}
+.mt-galaxy {
+  --bg-card: rgba(0, 0, 0, 0.45);
+  --bg-card-elevated: rgba(0, 0, 0, 0.6);
+  --glass-bg: rgba(0, 0, 0, 0.45);
+  --glass-elevated-bg: rgba(0, 0, 0, 0.6);
+  --glass-blur: none;
+  --glass-elevated-blur: none;
+  --hub-card-bg: rgba(0, 0, 0, 0.7);
+  position: relative;
+  isolation: isolate;
+  background-color: transparent; /* the global body starfield shows through */
+}
+
+/* Pure-black scope (Agents page, CEO Hub): surfaces are black alpha only, with no olive/green tint, and no
+   backdrop blur, so the global starfield stays crisp behind them. Set on a wrapper; the --glass-* tokens are
+   overridden directly because .mt-app-surface has already resolved them from --bg-card. */
+.mt-pure-black {
+  --bg-card: rgba(0, 0, 0, 0.45);
+  --bg-card-elevated: rgba(0, 0, 0, 0.6);
+  --bg-card-locked: rgba(0, 0, 0, 0.3);
+  --glass-bg: rgba(0, 0, 0, 0.45);
+  --glass-bg-hover: rgba(10, 10, 10, 0.6);
+  --glass-bg-active: rgba(12, 12, 12, 0.65);
+  --glass-elevated-bg: rgba(0, 0, 0, 0.6);
+  --glass-blur: none;
+  --glass-elevated-blur: none;
+  --hub-card-bg: rgba(0, 0, 0, 0.7);
+}
+
+.mt-glow-card {
+  background: var(--hub-card-bg);
+  border: 1px solid var(--accent-border-strong);
+  box-shadow: 0 0 16px var(--hub-glow-soft), inset 0 0 14px var(--hub-glow-soft);
+  border-color: var(--hub-glow);
+}
+.mt-glow-card.mt-agent-glow {
+  border-color: var(--accent);
+  animation: mt-agent-glow 1.6s ease-in-out infinite;
+}
+@keyframes mt-agent-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(62, 207, 116, 0.35), inset 0 0 10px rgba(62, 207, 116, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(62, 207, 116, 0.8), inset 0 0 16px rgba(62, 207, 116, 0.3);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mt-glow-card.mt-agent-glow {
+    animation: none;
+    box-shadow: 0 0 22px rgba(62, 207, 116, 0.6);
+  }
+}
+.mt-glow-card--off {
+  border-color: var(--connector-inactive);
+  border-style: dashed;
+  box-shadow: none;
+  opacity: 0.8;
+}
+.mt-hub-edge { filter: drop-shadow(0 0 3px var(--hub-glow)); }
+.mt-hub-edge--flow { animation: mt-hub-dash 2.4s linear infinite; }
+@keyframes mt-hub-dash { to { stroke-dashoffset: -16; } }
+.mt-hub-card { background: var(--hub-card-bg); border: 1px solid var(--border-default); border-radius: 14px; }
+@media (prefers-reduced-motion: reduce) {
+  .mt-hub-edge--flow { animation: none; }
 }

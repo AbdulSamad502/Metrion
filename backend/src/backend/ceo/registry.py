@@ -26,7 +26,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.auth.context import AuthContext
 from backend.auth.permissions import (
@@ -233,8 +233,85 @@ class _PriceScenarioSlots(BaseModel):
 
 
 class _DiscoverySlots(BaseModel):
+    """One of the seller's products, OR the categories (from their business profile) to search; exactly one."""
+
     model_config = {"extra": "forbid"}
+    product_id: str | None = Field(default=None, min_length=1)
+    categories: list[str] | None = Field(default=None, min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def _one_of(self) -> "_DiscoverySlots":
+        if (self.product_id is None) == (self.categories is None):
+            raise ValueError("give a product or categories, not both and not neither")
+        return self
+
+
+class _EvidenceIntakeSlots(BaseModel):
+    """A screenshot the seller attached to this conversation, BY REFERENCE (never bytes). `competitor_url_id` is which tracked competitor it shows; absent means
+    the CEO must ask — nothing is stored and nothing is auto-added (CI spec 6.22.3)."""
+
+    model_config = {"extra": "forbid"}
+    attachment_id: UUID
+    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    competitor_url_id: UUID | None = None
+    allow_near_duplicate: bool = False
+
+
+class _ConfirmAnswer(BaseModel):
+    model_config = {"extra": "forbid"}
+    info_request_id: UUID
+    value: int | str | list[dict[str, Any]]  # a price or delivery charge (paise), a stock status, or the offers the seller accepted as read
+
+
+class _ConfirmFieldSlots(BaseModel):
+    model_config = {"extra": "forbid"}
+    answers: list[_ConfirmAnswer] = Field(default_factory=list, max_length=10)
+    declined: list[UUID] = Field(default_factory=list, max_length=10)
+
+
+class _CompetitorAddSlots(BaseModel):
+    model_config = {"extra": "forbid"}
+    url: str = Field(min_length=1, max_length=2048)
     product_id: str = Field(min_length=1)
+    label: str | None = Field(default=None, max_length=120)
+
+
+class _CompetitorRemoveSlots(BaseModel):
+    model_config = {"extra": "forbid"}
+    competitor_url_id: UUID
+    reason: str | None = Field(default=None, max_length=200)
+
+
+class _CandidateSlots(BaseModel):
+    model_config = {"extra": "forbid"}
+    candidate_id: UUID
+
+
+class _AlertSettingsSlots(BaseModel):
+    model_config = {"extra": "forbid"}
+    quiet_start: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    quiet_end: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    quiet_tz: str | None = Field(default=None, max_length=64)
+    clear_quiet: bool = False
+    price_threshold_pct: str | None = Field(default=None, pattern=r"^\d{1,2}(\.\d{1,2})?$")
+
+
+class _FindingSlots(BaseModel):
+    model_config = {"extra": "forbid"}
+    finding_id: UUID
+
+
+class _ReviewIntakeSlots(BaseModel):
+    model_config = {"extra": "forbid"}
+    attachment_id: UUID
+    competitor_url_id: UUID
+
+
+class _ProductSlots(BaseModel):
+    """`product_id` absent means every product that has tracked competitors."""
+
+    model_config = {"extra": "forbid"}
+    product_id: str | None = Field(default=None, min_length=1)
 
 
 def build_default_registry() -> ActionRegistry:
@@ -341,7 +418,7 @@ def build_default_registry() -> ActionRegistry:
         ActionSpec(
             key="ci.discover_competitors", source="CI", agent=AgentCode.CI, effect=Effect.COMPUTE_PERSIST,
             description="CI competitor discovery pipeline", slot_model=_DiscoverySlots,
-            invoke=lambda s, ctx, leg: ci_api.post_discovery_run(StartDiscoveryRunRequest(product_id=s.product_id), ctx),
+            invoke=lambda s, ctx, leg: (ci_api.post_category_discovery(s.categories, ctx) if s.categories else ci_api.post_discovery_run(StartDiscoveryRunRequest(product_id=s.product_id), ctx)),
             entitlement=_ci_entitlement(),
         ),
         ActionSpec(
@@ -378,6 +455,38 @@ def build_default_registry() -> ActionRegistry:
                 writes_own_run=True,
             )
         )
+    # The CEO -> CMO photo hand-off by reference (ceo-cmo-delegation.md DD2). `cmo.image_upload` (raw bytes, a write) stays forbidden; this action's only slots are an attachment id and
+    # the hash the CEO saw, and it always needs its own 0-unit plan card (effects.force_approval).
+    analyze_slots = cmo_api.AnalyzeAttachmentBody
+
+    def _analyze_attachment(slots: Any, ctx: AuthContext, leg: LegContext) -> Mapping[str, Any]:
+        assert leg.investigation_id is not None  # a hand-off only exists inside a conversation: the reference is validated against it
+        return cmo_api.analyze_attachment_for_ceo(slots, ctx, leg.investigation_id)
+
+    specs.append(
+        ActionSpec(
+            key="cmo.analyze_attachment", source="CMO", agent=AgentCode.CMO, effect=Effect.COMPUTE_PERSIST, description="CMO reads an attached product photo (by reference)",
+            slot_model=analyze_slots, invoke=_analyze_attachment, entitlement=None, writes_own_run=True,
+        )
+    )
+    # ---- CI conversational surface (CI spec 6.21.3, C32). Fixed actions; the seller reaches them only through the CEO. ----
+    def _ci(key: str, description: str, slot_model: type[BaseModel], invoke: Any, *, effect: Effect = Effect.COMPUTE_PERSIST, writes_own_run: bool = False) -> ActionSpec:
+        return ActionSpec(key=key, source="CI", agent=AgentCode.CI, effect=effect, description=description, slot_model=slot_model, invoke=invoke,
+                          entitlement=_ci_entitlement(), writes_own_run=writes_own_run)
+
+    specs += [
+        _ci("ci.evidence_intake", "CI reads a competitor screenshot the seller attached (by reference)", _EvidenceIntakeSlots, ci_api.evidence_intake_for_ceo, writes_own_run=True),
+        _ci("ci.confirm_field", "CI records the seller's answers to its confirmation questions", _ConfirmFieldSlots, ci_api.confirm_field_for_ceo),
+        _ci("ci.competitor_add", "Track a competitor the seller named by marketplace link", _CompetitorAddSlots, ci_api.competitor_add_for_ceo),
+        _ci("ci.competitor_remove", "Stop tracking a competitor (history is kept)", _CompetitorRemoveSlots, ci_api.competitor_remove_for_ceo),
+        _ci("ci.competitor_approve", "Approve a discovered competitor candidate", _CandidateSlots, ci_api.competitor_approve_for_ceo),
+        _ci("ci.competitor_reject", "Reject a discovered competitor candidate", _CandidateSlots, ci_api.competitor_reject_for_ceo),
+        _ci("ci.monitor_competitors", "Re-evaluate the stored evidence for a product's tracked competitors", _ProductSlots, ci_api.monitor_competitors_for_ceo, effect=Effect.READ),
+        _ci("ci.alert_settings_set", "Save the seller's own competitor alert preferences (quiet hours, price-change threshold)", _AlertSettingsSlots, ci_api.alert_settings_set_for_ceo),
+        _ci("ci.explain_finding", "Re-read one stored CI finding and the evidence it cites", _FindingSlots, ci_api.explain_finding_for_ceo, effect=Effect.READ),
+        _ci("ci.review_intake", "CI reads a competitor reviews screenshot the seller attached (by reference)", _ReviewIntakeSlots, ci_api.review_intake_for_ceo, writes_own_run=True),
+        _ci("ci.review_findings", "What saved competitor review evidence says (themes with sample sizes)", _ProductSlots, ci_api.review_findings_for_ceo, effect=Effect.READ),
+    ]
     return ActionRegistry(_with_effects(specs))
 
 

@@ -88,8 +88,9 @@ def test_every_registered_action_is_classified_and_anything_with_an_outside_effe
     reg = get_registry()
     by = {s.key: deadlines.classify(s) for s in reg.specs()}
     repeatable = {k for k, v in by.items() if v is deadlines.LegClass.REPEATABLE}
-    assert {"cfo.financial_health", "cfo.anomaly_check", "cfo.strategic_briefing", "pi.report", "ci.discover_competitors"} <= repeatable
-    for k in ("cfo.gst_lookup", "service.gst_lookup", "cfo.period_comparison", "pi.discover", "pi.supplier_lookup", "cmo.market_trends", "cmo.generate_title_sets", "cmo.generate_hashtags"):
+    assert {"cfo.financial_health", "cfo.anomaly_check", "cfo.strategic_briefing", "pi.report"} <= repeatable
+    assert "ci.discover_competitors" not in repeatable  # it sends the seller search terms to Tavily (CI spec C34): an outside call is never assumed repeatable
+    for k in ("ci.discover_competitors", "cfo.gst_lookup", "service.gst_lookup", "cfo.period_comparison", "pi.discover", "pi.supplier_lookup", "cmo.market_trends", "cmo.generate_title_sets", "cmo.generate_hashtags"):
         assert by[k] is deadlines.LegClass.UNCERTAIN, k  # outside call, model call or metered artefact
     for k in ("cmo.approve_title", "cmo.confirm_image_hint", "cmo.confirm_niche_terms"):
         assert by[k] is deadlines.LegClass.UNCERTAIN, k  # records a seller choice: whether it was recorded is exactly what is unknown

@@ -201,6 +201,8 @@ class LegContext:
     turn_run_id: UUID  # the CEO anchor `agent_run` (the leg's parent)
     leg_run_id: UUID | None  # the choke point's own child row, or None when the specialist writes its own
     now: datetime
+    business_profile: str | None = None  # the seller's self-declared profile, one short quoted line built by code (business-profile.md D6): context only, never a figure
+    business_profile_brief: Mapping[str, Any] | None = None  # the same profile as a short structured record (fixed keys, words only) for the specialist being called
 
 
 Invoke = Callable[[Any, Any, LegContext], Mapping[str, Any]]  # (validated slots, AuthContext, LegContext) -> structured payload
@@ -240,6 +242,18 @@ class LegResult:
     figure_refs: tuple[Ref, ...] = ()
     reason: str | None = None
     denial: Denial | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalGrant:
+    """Proof, carried by the execution of an APPROVED plan and by nothing else, that the legs named here may run although the registry says they need approval.
+
+    Only `ceo/approval_run.py` constructs one, after the approve transaction committed (status APPROVED, execution turn created); `dispatch()` honours it only for the
+    same tenant and only for the action keys frozen in that plan. It authorizes nothing else: permission, attachment and entitlement are still checked per leg."""
+
+    plan_id: UUID
+    tenant_id: UUID
+    action_keys: frozenset[str]
 
 
 class UnregisteredAction(KeyError):

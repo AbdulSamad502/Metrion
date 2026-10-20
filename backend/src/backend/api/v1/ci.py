@@ -75,6 +75,22 @@ from sqlalchemy import text
 
 router = APIRouter(prefix="/api/v1/ci")
 
+# The CEO-only CI actions (CI spec 6.21.3, C32). There is deliberately NO HTTP route for any of them: the seller reaches them only through the CEO, which resolves them from
+# the action registry in-process. They live in `services/ci_ceo.py`; these names are how the registry (which may import only `backend.api`) reaches them.
+from backend.services import ci_ceo as _ci_ceo  # noqa: E402
+
+evidence_intake_for_ceo = _ci_ceo.evidence_intake
+confirm_field_for_ceo = _ci_ceo.confirm_field
+competitor_add_for_ceo = _ci_ceo.competitor_add
+competitor_remove_for_ceo = _ci_ceo.competitor_remove
+competitor_approve_for_ceo = _ci_ceo.competitor_approve
+competitor_reject_for_ceo = _ci_ceo.competitor_reject
+monitor_competitors_for_ceo = _ci_ceo.monitor_competitors
+review_findings_for_ceo = _ci_ceo.review_findings
+explain_finding_for_ceo = _ci_ceo.explain_finding
+alert_settings_set_for_ceo = _ci_ceo.alert_settings_set
+review_intake_for_ceo = _ci_ceo.review_intake
+
 
 class CreateCompetitorUrlRequest(BaseModel):
     url: str = Field(min_length=1)
@@ -576,6 +592,8 @@ def _candidate_to_dict(candidate: dict[str, object], relevance: dict[str, object
         "tier": candidate["tier"],
         "identityMatch": candidate["identity_match"],
         "identityMatchBasis": candidate["identity_match_basis"],
+        "relationshipClass": candidate.get("relationship_class", "UNKNOWN"),
+        "relationshipBasis": candidate.get("relationship_basis", {}),
         "sellerDecision": candidate["seller_decision"],
         "evidenceStatus": candidate["evidence_status"],
         "competitorUrlId": str(candidate["competitor_url_id"]) if candidate["competitor_url_id"] else None,
@@ -605,10 +623,9 @@ def post_discovery_run(
     body: StartDiscoveryRunRequest, ctx: AuthContext = require_auth(permission=AGENT_CI)
 ) -> dict[str, object]:
     """§6.10-§6.15 direct execution path (no CEO Hub involvement, matching §6.4/C20's
-    existing direct-path pattern for evidence uploads). Composition root: builds
-    `MockSearchProvider` — per C22's locked build order, no named provider may be selected
-    here until a provider record (§6.10.1) is approved; wiring a real one is a config
-    change behind the same `SearchProvider` interface, not a rewrite of this endpoint."""
+    existing direct-path pattern for evidence uploads). The provider is composed in
+    `services.ci_search.select_search_provider` (Tavily, owner-approved 2026-10-18, C34;
+    `CI_SEARCH_PROVIDER=mock` for tests) — this endpoint knows only the `SearchProvider` interface."""
     assert ctx.tenant_id is not None
     seller_product = load_seller_product(ctx.tenant_id, body.product_id)
     if seller_product is None:
@@ -629,6 +646,20 @@ def post_discovery_run(
         "partialReason": outcome.partial_reason,
         "failedReason": outcome.failed_reason,
     }
+
+
+def post_category_discovery(categories: list[str], ctx: AuthContext) -> dict[str, object]:
+    """The CEO's category search: one discovery run per category the seller chose from their business profile (see `services/ci_categories`)."""
+    from backend.services import ci_categories  # noqa: PLC0415
+
+    assert ctx.tenant_id is not None
+    if entitlement_check_value(resolve_ci_entitlement(ctx.tenant_id)) != "PASS":
+        raise HTTPException(status_code=402, detail="CI entitlement check failed")
+    allowed = ci_categories.business_categories(ctx.tenant_id)
+    chosen = [c for c in categories if c in allowed]  # only categories the seller's own profile lists
+    if not chosen:
+        raise HTTPException(status_code=422, detail="Those categories are not in your business profile.")
+    return ci_categories.discover_categories(ctx.tenant_id, requested_by=ctx.app_user_id, categories=chosen)
 
 
 @router.get("/discovery-runs/{discovery_run_id}")
@@ -821,6 +852,16 @@ def get_competitor_comparison(
         "productWeaknesses": [_comparison_entry_to_dict(e) for e in result.product_weaknesses],
         "differentiationOpportunities": [_comparison_entry_to_dict(e) for e in result.differentiation_opportunities],
     }
+
+
+@router.get("/workspace")
+def get_workspace(product_id: str | None = None, ctx: AuthContext = require_auth(permission=AGENT_CI)) -> dict[str, object]:
+    """The read-only data behind the CI dashboard (CI spec 6.29, C32): everything the CEO-CI investigations produced, nothing that can be written from here. The tenant comes
+    only from the authenticated context; `product_id` only chooses which of the tenant's own products is shown, and an id that is not one of them is ignored."""
+    assert ctx.tenant_id is not None
+    from backend.services.ci_workspace import build_workspace
+
+    return build_workspace(ctx.tenant_id, product_id)
 
 
 @router.get("/summary")

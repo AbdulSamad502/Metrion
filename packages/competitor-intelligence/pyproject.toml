@@ -8,6 +8,7 @@ dependencies = [
     "alembic>=1.13",
     "psycopg[binary]>=3.1",
     "httpx>=0.27",
+    "pillow>=10.0",  # intake/quality.py: image decode, sharpness, perceptual hash (C36)
     # NOTE: `data-foundation` (packages/data-foundation) is a real runtime dependency —
     # `seller_product/derive.py` imports `data_foundation.repositories.tenant_context`
     # directly to read `sales_line` (competitor-intelligence-agent.md §5.5.1) — but it is
@@ -39,3 +40,8 @@ python_version = "3.12"
 strict = true
 mypy_path = "src"
 files = ["src"]
+
+# data-foundation ships no py.typed marker (a sibling package in this monorepo, not a third-party stub gap); only its import is exempted, strict stays on for this package.
+[[tool.mypy.overrides]]
+module = "data_foundation.*"
+follow_untyped_imports = true

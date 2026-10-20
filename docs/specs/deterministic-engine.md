@@ -662,6 +662,7 @@ Named here so no agent delegates to a capability this spec does not define.
 | `compute_price_positioning(sku, seller_price_paise, competitor_prices[], as_of_date)` | `metric_result[]`, `metric_code = PRICE_POSITIONING` | §5.15. Pure price-fact comparison — no COGS, no fee resolution. Competitor prices enter `DERIVED` per the CI boundary |
 | `compute_repricing_scenario(sku, seller_price_paise, competitor_prices[], stance, stance_param, as_of_date)` | `metric_result[]`, `metric_code = REPRICING_SCENARIO` | §5.15. Pure price arithmetic — explicitly not margin-aware; distinct from `margin_curve` |
 | `compute_price_band(product_ref, category, competitor_prices[], as_of_date)` | `metric_result[]`, `metric_code = PRICE_BAND` | §5.15.1. Quartile/IQR distribution over CI-supplied competitor prices. Requires **at least 3** prices, else `UNAVAILABLE` with a named reason. Competitor prices enter `DERIVED` per the CI boundary |
+| `compute_competitor_effective_price(product_ref, competitor_ref, listed_paise, visible_discount_paise, delivery_charge_paise, offers[], as_of_date)` | `metric_result[]`, `metric_code = EFFECTIVE_PRICE`, `BUYER_TOTAL` | §5.15.2. What a buyer pays for ONE observed competitor listing. Not margin-aware. Inputs enter `DERIVED` per the CI boundary |
 
 `metric_code` is extended accordingly: `LANDED_COST_PER_UNIT`, `LEAK_TOTAL`, `LEAK_EXCEPTION_AMOUNT`, `MARGIN_AT_PRICE`, `CASH_EXPECTED`, `CASH_RECEIVED`, `CASH_VARIANCE`, `TCS_COLLECTED`, `TDS_DEDUCTED`, `FINDING_AGE_DAYS`, `FINDING_SEVERITY`, `MARGIN_STABILITY`, `REVENUE_CONCENTRATION`, `CASH_CONVERSION_DAYS`, `PRICE_POSITIONING`, `REPRICING_SCENARIO`, `PRICE_BAND`.
 
@@ -946,7 +947,37 @@ compute_price_band(
 gate, outlier display) and §1a/C-decisions reference this section as the home of the arithmetic.
 Neither spec restates the other: **product/display rules there, arithmetic here.**
 
+### 5.15.2 Competitor effective price and buyer total — `compute_competitor_effective_price` (NEW — CI V3 amendment, 2026-10-18; `competitor-intelligence-agent.md` C44)
+
+A fourth function on the same footing as §5.15/§5.15.1: **what a buyer actually pays for one competitor listing**, from the values a seller's confirmed screenshot showed. CI supplies the observed values as `DERIVED` inputs and renders the returned `metric_result` rows unchanged, citing each `engine_result_ref`. CI never subtracts a discount, adds a delivery charge or sums an offer.
+
+```
+compute_competitor_effective_price(
+  product_ref, competitor_ref,
+  listed_paise,                -- observed listed price (required)
+  visible_discount_paise,      -- observed discount amount; None = the screenshot showed none
+  delivery_charge_paise,       -- observed delivery charge; None = not observed; 0 = observed free
+  offers: [{ kind, amount_paise, condition_text }],
+  as_of_date
+) -> metric_result[]           -- EFFECTIVE_PRICE and BUYER_TOTAL
+```
+
+| Rule | Requirement |
+|---|---|
+| 1 | **A missing input is not zero.** No listed price → both rows `UNAVAILABLE` (`LISTED_PRICE_NOT_OBSERVED`). No delivery charge → `BUYER_TOTAL` is `UNAVAILABLE` (`DELIVERY_CHARGE_NOT_OBSERVED`), never "free delivery"; `EFFECTIVE_PRICE` is still returned. Free delivery is an explicitly observed `0`. |
+| 2 | `visible_discount_paise = None` means no discount was observed; the effective price then equals the listed price and the basis string says so. |
+| 3 | **Only an unconditional offer with a stated positive amount is subtracted.** An offer with any `condition_text` (a bank card, a first order) or with no amount is **excluded and named** (`CONDITIONAL` / `NO_AMOUNT`) in the row's exclusions, never silently applied: whether it applies to a given buyer is not observable from a screenshot. |
+| 4 | `EFFECTIVE_PRICE = listed − visible_discount − Σ unconditional offers`; `BUYER_TOTAL = EFFECTIVE_PRICE + delivery`. Integer paise only; addition and subtraction only; no float. |
+| 5 | An effective price at or below zero, a non-positive listed price, or a negative discount/delivery is `UNAVAILABLE` with a named reason (`DISCOUNTS_EXCEED_LISTED_PRICE`, `LISTED_PRICE_NOT_POSITIVE`, `VISIBLE_DISCOUNT_NEGATIVE`, `DELIVERY_CHARGE_NEGATIVE`), never clamped. |
+| 6 | Confidence is always `DERIVED` (the inputs are competitor observations); the result can never present as `VERIFIED`. Every row cites a standard `engine_result_ref`; it is not an estimate. |
+| 7 | **Not margin-aware.** No COGS, fee or tax enters; the result says nothing about the competitor's margin or the seller's. Formula version `EFFECTIVE_PRICE.v1`. Like §5.15's functions it is not part of `canonical_data_version`. |
+| 8 | Only a seller-**confirmed** snapshot may feed it: a consequential field read by vision and still awaiting the seller's confirmation is held `PENDING` and is never an input (`competitor-intelligence-agent.md` C44, §6.27.3). |
+
+Pinned by `packages/calc-engine/tests/unit/test_effective_price.py`.
+
 ---
+
+**§5.15 amendment (2026-10-20, CI completion P1):** each `PRICE_POSITIONING` row also carries `gap_pct_of_seller_price` = (seller − reference) / **seller** × 100 in its `calculation_basis`, next to the existing `gap_pct` = (seller − reference) / **reference** × 100. Both are exact Fractions rounded once at presentation; the sign is seller minus reference. A zero seller price makes the seller-relative figure `UNAVAILABLE`. The CEO shows the rupee gap first and labels each denominator ("% of your price", "% of the competitor's price"). Nothing else in §5.15 changes.
 
 ### 5.16 Goal progress and deviation — `goal_progress` (NEW — CEO CP1 round 2 amendment, 2026-10-07)
 

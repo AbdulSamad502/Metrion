@@ -391,22 +391,26 @@ def _build_web_price_signal(results: list[TavilySearchResult], *, now: datetime)
     }
 
 
-def match_image_for_candidate(candidate_title: str, images: list[TavilyImage]) -> TavilyImage | None:
-    """The same honest rule `synthesize_candidates` applies to the run-wide image pool, for ONE
-    candidate and a pool of images found by searching for that candidate by name: an image is
-    accepted only if its own title/description names EVERY identity token of the candidate, and
-    the candidate has at least 2 identity tokens (a one-word identity is too generic to claim a
-    match — see `test_image_never_matched_via_a_single_generic_identity_token`). Anything else
-    returns None: no image is better than a misattributed one (build plan §0b)."""
+def match_image_for_candidate_all(candidate_title: str, images: list[TavilyImage]) -> list[TavilyImage]:
+    """Every image whose own title/description names EVERY identity token of the candidate, with at least 2 identity tokens (a one-word identity is too generic
+    to claim a match — see `test_image_never_matched_via_a_single_generic_identity_token`), in the given order. Anything else is excluded: no image is better
+    than a misattributed one (build plan §0b)."""
     identity = _tokens_for_similarity(candidate_title)
     if len(identity) < 2:
-        return None
+        return []
+    matched: list[TavilyImage] = []
     for image in images:
         image_text = " ".join(part for part in (image.title, image.description) if part)
         tokens = _tokens_for_similarity(image_text)
         if tokens and _token_containment(identity, tokens) >= 1.0:
-            return image
-    return None
+            matched.append(image)
+    return matched
+
+
+def match_image_for_candidate(candidate_title: str, images: list[TavilyImage]) -> TavilyImage | None:
+    """The first image `match_image_for_candidate_all` accepts, or None."""
+    matched = match_image_for_candidate_all(candidate_title, images)
+    return matched[0] if matched else None
 
 
 def synthesize_candidates(
@@ -595,20 +599,8 @@ def synthesize_candidates(
         image = image_by_group_id.get(id(group))
         candidate_image_url: str | None = image.url if image else None
         candidate_image_source_url: str | None = image.source_url if image else None
-        if candidate_image_url is None:
-            # YouTube thumbnail fallback (quality pass, 2026-10-01): unlike a Tavily image,
-            # a video's own `thumbnail_url` is an unambiguous, directly-linked official image
-            # for that exact video — no containment heuristic needed, since the video is
-            # already grouped into this candidate (extraction-match or Jaccard-match, same
-            # discipline as every other signal). Zero added cost — `thumbnail_url` is already
-            # fetched as part of the normal YouTube search call, just never used for images
-            # until now. First video with a non-empty thumbnail wins; ties broken by order.
-            # `image_source_url` is the video's own watch URL (not the thumbnail CDN URL), so
-            # the frontend's "image from {domain}" attribution honestly renders "youtube.com".
-            thumb_video = next((v for v in group.youtube_videos if v.thumbnail_url), None)
-            if thumb_video is not None:
-                candidate_image_url = thumb_video.thumbnail_url
-                candidate_image_source_url = f"https://www.youtube.com/watch?v={thumb_video.video_id}"
+        # A YouTube thumbnail is NEVER used as a product image (2026-10-14): it is a video frame, not a clear product photo. The final five get a verified
+        # product image instead (discovery/top5_images.py).
 
         if tavily_degraded and youtube_degraded:
             capture_status = "UNAVAILABLE"

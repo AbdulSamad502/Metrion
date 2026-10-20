@@ -46,11 +46,11 @@ def _count(tenant, table):
 
 # ------------------------------------------------------------------------------------------------ inventory pins
 def test_inventory_is_exactly_what_the_report_states():
-    assert len(REG.specs()) == 36 and len(WIRED) == 35
+    assert len(REG.specs()) == 48 and len(WIRED) == 47
     assert [s.key for s in REG.specs() if not s.wired] == ["ci.research_now"]  # intentionally unwired; must stay so
     assert set(APPROVAL_GATED) == {
-        "pi.discover", "pi.supplier_lookup", "cmo.generate_title_sets", "cmo.generate_listing_copy", "cmo.generate_description", "cmo.generate_bullets",
-        "cmo.generate_keywords", "cmo.generate_backend_terms", "cmo.generate_hashtags", "cmo.catalog_answer", "cmo.market_trends",
+        "pi.discover", "pi.supplier_lookup", "ci.discover_competitors", "cmo.generate_title_sets", "cmo.generate_listing_copy", "cmo.generate_description", "cmo.generate_bullets",
+        "cmo.generate_keywords", "cmo.generate_backend_terms", "cmo.generate_hashtags", "cmo.catalog_answer", "cmo.market_trends", "cmo.analyze_attachment",
     }
 
 
@@ -170,14 +170,16 @@ def test_specialists_with_nothing_to_report_are_unavailable_legs_not_errors(two_
     for key, slots in (
         ("pi.report", {"run_id": str(uuid.uuid4())}),
         ("ci.request_price_scenario", {"competitor_url_id": str(uuid.uuid4()), "seller_price_paise": 49900}),
-        ("ci.discover_competitors", {"product_id": "NO-SUCH-PRODUCT"}),
     ):
         leg = dispatch(turn, key, slots, now=T0)
         assert leg.status is LegStatus.UNAVAILABLE and leg.reason == "unavailable" and leg.payload is None, key
     # every leg left a settled child row (none stuck RUNNING) and a finding
     children = agent_run_repo.list_children(a, turn.anchor_run_id)
-    assert len(children) == 3 and all(c["status"] == "FAILED" and c["finished_at"] is not None for c in children)
-    assert len(repo.list_findings(a, inv, turn_id=turn.turn_id)) == 3
+    assert len(children) == 2 and all(c["status"] == "FAILED" and c["finished_at"] is not None for c in children)
+    assert len(repo.list_findings(a, inv, turn_id=turn.turn_id)) == 2
+    # the competitor search sends the seller's product terms to a search provider, so it is approval-gated: without an approved plan it is refused, never run, never "unavailable"
+    refused = dispatch(turn, "ci.discover_competitors", {"product_id": "NO-SUCH-PRODUCT"}, now=T0)
+    assert refused.status is LegStatus.DENIED and refused.denial is Denial.APPROVAL_REQUIRED and refused.payload is None
 
 
 # ------------------------------------------------------------------------------------------------ cross-tenant / forged ids

@@ -27,10 +27,10 @@ def _playbook(*legs: tuple[str, bool]) -> Playbook:
     return Playbook("TEST", "synthetic", (), tuple(LegPlan(k, r) for k, r in legs))
 
 
-# ------------------------------------------------------------------------------------------------ the 36 registered actions
+# ------------------------------------------------------------------------------------------------ the 37 registered actions
 def test_the_gate_agrees_with_the_registry_metadata_for_every_registered_action():
     specs = get_registry().specs()
-    assert len(specs) == 36
+    assert len(specs) == 48  # CP4: +11 CI conversational actions (CI spec 6.21.3)
     for spec in specs:
         assert spec.effects is not None, spec.key
         decision = gate_leg(spec.key)
@@ -177,7 +177,8 @@ def test_the_gate_is_used_in_exactly_the_three_d8_places_and_the_module_does_no_
     preview), `dispatch()`'s backstop, and the availability endpoint (`chatActions` must not advertise blocked actions). No config, billing or frontend uses it. A fourth importer is a deliberate, reviewed change."""
     src = Path(gate.__file__).resolve().parents[2]  # backend/src
     users = sorted(str(p.relative_to(src)).replace("\\", "/") for p in src.rglob("*.py") if p.name != "approval_gate.py" and re.search(r"\bapproval_gate\b", p.read_text(encoding="utf-8")))
-    assert users == ["backend/api/v1/ceo.py", "backend/ceo/dispatch.py", "backend/ceo/orchestrator.py"], users
+    # ceo/approval.py is the reviewed fourth user (ceo-approval-workflow.md): it re-evaluates the same gate when it freezes a plan, and only reads it.
+    assert users == ["backend/api/v1/ceo.py", "backend/ceo/approval.py", "backend/ceo/dispatch.py", "backend/ceo/orchestrator.py"], users
     forbidden = {"logging", "os", "sqlalchemy", "httpx", "requests", "socket", "subprocess", "datetime", "time", "backend.config"}
     imported = {m for m in re.findall(r"^(?:from|import)\s+([\w.]+)", Path(gate.__file__).read_text(encoding="utf-8"), re.M)}
     assert not (imported & forbidden), imported & forbidden
@@ -186,6 +187,8 @@ def test_the_gate_is_used_in_exactly_the_three_d8_places_and_the_module_does_no_
 # ------------------------------------------------------------------------------------------------ the known conflict, pinned (not blessed)
 CHAT_ACTIONS_NEEDING_APPROVAL_TODAY = frozenset({
     "pi.discover", "cmo.market_trends", "cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords",
+    "cmo.generate_bullets", "cmo.generate_backend_terms", "cmo.generate_listing_copy",
+    "ci.discover_competitors",  # CI spec C34: the seller's product search terms go to Tavily, so it needs a stored approval plan like pi.discover
 })
 WITH_A_CONFIRMATION_CARD = frozenset({"pi.discover", "cmo.market_trends"})
 WITH_NO_CONFIRMATION_STEP = CHAT_ACTIONS_NEEDING_APPROVAL_TODAY - WITH_A_CONFIRMATION_CARD
@@ -208,5 +211,5 @@ def test_regression_guard_approval_required_actions_still_offered_to_chat_and_bl
     assert {k for k in reachable if _has_confirmation_card(k)} == WITH_A_CONFIRMATION_CARD
     assert {k for k in reachable if not _has_confirmation_card(k)} == WITH_NO_CONFIRMATION_STEP
     # they are all guided-input session actions, and no decision playbook leg is among them
-    assert all(ACTIONS[k].session for k in reachable)
+    assert all(ACTIONS[k].session for k in reachable - {"ci.discover_competitors"})  # CI discovery takes one resolved product, not a guided session
     assert all(not evaluate_playbook(pb).plan_required for pb in PLAYBOOKS.values())

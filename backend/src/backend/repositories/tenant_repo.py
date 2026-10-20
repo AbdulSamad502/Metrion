@@ -48,3 +48,10 @@ def delete(tenant_id: UUID) -> None:
     caller determines the overall onboarding transaction must be undone."""
     with engine().begin() as conn:
         conn.execute(_DELETE_SQL, {"id": str(tenant_id)})
+
+
+def get_business_name(tenant_id: UUID) -> str | None:
+    """The workspace name given at account creation (used only to pre-fill the business-profile step)."""
+    with engine().connect() as conn:
+        row = conn.execute(text("SELECT business_name FROM tenant WHERE id = :id"), {"id": str(tenant_id)}).first()
+        return str(row[0]) if row is not None and row[0] else None

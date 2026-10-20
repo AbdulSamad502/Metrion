@@ -1,5 +1,10 @@
 """D-8 (chat execution safety): the six approval-required actions that chat used to reach (pi.discover, cmo.market_trends, cmo.generate_title_sets,
-cmo.generate_hashtags, cmo.generate_description, cmo.generate_keywords) are NOT run, asked about, saved or previewed from chat until a stored approval plan exists.
+cmo.generate_hashtags, cmo.generate_description, cmo.generate_keywords) are NOT run from chat without a stored approval plan.
+
+CHECKPOINT 2 (ceo-cmo-delegation.md) CHANGE: the five CMO actions no longer get the blanket refusal. From chat they are classified, the missing inputs are collected through the
+bounded loop, and a stored approval plan is created for the seller to approve on its card; nothing runs until the approve call (tests/integration/test_ceo_cmo_delegation.py).
+Product Intelligence (`pi.discover`) keeps this refusal exactly as it was while CEO_APPROVAL_ENABLED is off. The `dispatch()` backstop still refuses ALL six when called without
+an approval grant, which is what the last section proves.
 
 A confirmation card (pi.discover, cmo.market_trends) or a completed input session (the four cmo.generate_* actions) is an in-conversation answer; by decision C3 it is
 NOT approval. Two layers are proved here: the orchestrator refuses on the decision, before any question, save, preview or dispatch (every way of arriving at the decision);
@@ -32,8 +37,7 @@ from tests.integration.test_ceo_unit_billing import HEALTH_OK
 pytestmark = [pytest.mark.usefixtures("two_tenants"), pytest.mark.skipif(not os.environ.get("DATABASE_URL_APP") or not os.environ.get("DATABASE_URL"), reason="needs a live Postgres")]
 
 SIX = ("pi.discover", "cmo.market_trends", "cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords")
-WITH_CONFIRMATION_CARD = ("pi.discover", "cmo.market_trends")
-WITHOUT_CONFIRMATION = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords")
+REFUSED_IN_CHAT = ("pi.discover",)  # the CMO five go to a plan card instead (checkpoint 2)
 PREVIEW = {"digest": "a" * 64, "sections": ["MARKET_NEWS"], "marketplaces": ["AMAZON"], "queries": [{"section": "MARKET_NEWS", "provider": "TAVILY", "query": "amazon india seller news"}],
            "unavailableSections": {}, "unresearchedTerms": [], "skippedByBudget": [], "budget": {}}
 
@@ -82,8 +86,8 @@ def refusal_off(monkeypatch):
         yield
 
 
-# ------------------------------------------------------------------------------------------------ every way of arriving at the decision, for all six
-@pytest.mark.parametrize("key", SIX)
+# ------------------------------------------------------------------------------------------------ every way of arriving at the decision (the agents still refused in chat)
+@pytest.mark.parametrize("key", REFUSED_IN_CHAT)
 def test_a_classifier_decision_for_each_of_the_six_is_refused_before_anything_is_asked_or_run(two_tenants, app_user, key):
     a, _ = two_tenants
     calls: dict = {}
@@ -94,7 +98,7 @@ def test_a_classifier_decision_for_each_of_the_six_is_refused_before_anything_is
     assert_refused(orchestrator.run_turn(ctx, rt, inv, text_in), a, inv, calls)
 
 
-@pytest.mark.parametrize("key", SIX)
+@pytest.mark.parametrize("key", REFUSED_IN_CHAT)
 def test_a_chip_or_ui_action_for_each_of_the_six_is_refused_the_same_way(two_tenants, app_user, key):
     a, _ = two_tenants
     calls: dict = {}
@@ -105,9 +109,7 @@ def test_a_chip_or_ui_action_for_each_of_the_six_is_refused_the_same_way(two_ten
     assert_refused(res, a, inv, calls)
 
 
-@pytest.mark.parametrize("text_in", ["give me hashtags for my steel water bottle", "write a product description for my steel water bottle", "write search keywords for my steel water bottle",
-                                     "write listing titles for my steel water bottle", "ok now i want the top trending products to sell my nich is mens shoes",
-                                     "what are the market trends in my niche on Amazon?"])
+@pytest.mark.parametrize("text_in", ["ok now i want the top trending products to sell my nich is mens shoes"])
 def test_the_explicit_intent_rules_are_stopped_too_with_no_model_called(two_tenants, app_user, text_in):
     a, _ = two_tenants
     calls: dict = {}
@@ -128,7 +130,7 @@ def test_pi_discover_the_confirmation_card_is_not_approval_nothing_is_saved_or_r
     ask = "ok now i want the top trending products to sell my nich is mens shoes"
     with refusal_off(monkeypatch):  # a conversation that reached the summary card before this rule
         res = orchestrator.run_turn(ctx, rt, inv, ask)
-        for answer in ("20,000", "Amazon", "skip", "quick"):
+        for answer in ("20,000", "Amazon", "skip"):
             res = orchestrator.run_turn(ctx, rt, inv, answer)
         assert "Shall I go ahead" in res.answer and calls == {} and pi_actions.list_niche_briefs(a) == []
     before = side_effects(a)
@@ -139,44 +141,23 @@ def test_pi_discover_the_confirmation_card_is_not_approval_nothing_is_saved_or_r
     assert "pi.discover" not in runs and "pi.report" not in runs
 
 
-def test_cmo_market_trends_the_preview_confirmation_is_not_approval_nothing_is_sent(two_tenants, app_user, monkeypatch):
-    a, _ = two_tenants
-    calls: dict = {}
-    ctx = ctx_for(a, user_id=app_user)
-    rt = runtime(Scripted({}), Grounded(), registry=recording_registry(calls))
-    inv = start(ctx, rt)
-    with refusal_off(monkeypatch):
-        card = orchestrator.run_turn(ctx, rt, inv, "what are the market trends in my niche on Amazon?")
-        assert card.clarify_for == "confirm" and set(calls) == {"cmo.market_trends_preview"}  # the zero-cost preview, which this task does not touch
-    answered = orchestrator.run_turn(ctx, rt, inv, "yes", clarification=orchestrator.ClarificationReply(card.message_id, None))
-    assert answered.status == "DENIED" and answered.answer == orchestrator.APPROVAL_UNAVAILABLE_TEXT
-    assert "cmo.market_trends" not in calls  # the run, which sends searches and bills two meters, never happened
-    runs, usage, memory, briefs = side_effects(a)
-    assert usage == [] and "cmo.market_trends" not in runs
-
-
-@pytest.mark.parametrize("key,first,answers", [
-    ("cmo.generate_hashtags", "give me hashtags for my steel water bottle", ["Amazon"]),
-    ("cmo.generate_description", "write a product description for my steel water bottle", ["Amazon", "Steel Water Bottle 1L Insulated"]),
-    ("cmo.generate_keywords", "write search keywords for my steel water bottle", ["Amazon", "Steel Water Bottle 1L Insulated"]),
-    ("cmo.generate_title_sets", "write listing titles for my steel water bottle", ["kitchen", "Amazon"]),
+@pytest.mark.parametrize("key,text_in", [
+    ("cmo.generate_hashtags", "give me hashtags for my steel water bottle"), ("cmo.generate_description", "write a product description for my steel water bottle"),
+    ("cmo.generate_keywords", "write search keywords for my steel water bottle"), ("cmo.generate_title_sets", "write listing titles for my steel water bottle"),
+    ("cmo.market_trends", "what are the market trends in my niche on Amazon?"),
 ])
-def test_the_four_cmo_generators_have_no_confirmation_step_and_the_last_answer_is_not_approval(two_tenants, app_user, monkeypatch, key, first, answers):
+def test_the_cmo_actions_are_no_longer_refused_they_start_the_question_loop_and_nothing_runs(two_tenants, app_user, key, text_in):
+    """Checkpoint 2: the seller is ASKED what the CMO needs (no blanket refusal), and asking runs, sends and meters nothing."""
     a, _ = two_tenants
     calls: dict = {}
     ctx = ctx_for(a, user_id=app_user)
     rt = runtime(Scripted({}), Grounded(), registry=recording_registry(calls))
     inv = start(ctx, rt)
-    with refusal_off(monkeypatch):  # a conversation started before this rule: every question but the last is answered
-        q = orchestrator.run_turn(ctx, rt, inv, first)
-        for answer in answers[:-1]:
-            assert q.status == "CLARIFIED" and q.choices["kind"] == "INPUT" and calls == {}
-            q = orchestrator.run_turn(ctx, rt, inv, answer)
-        assert q.status == "CLARIFIED" and q.choices["kind"] == "INPUT" and calls == {}
-    finished = orchestrator.run_turn(ctx, rt, inv, answers[-1])  # answering the last question used to run (and bill) it with no further step
-    assert finished.status == "DENIED" and finished.answer == orchestrator.APPROVAL_UNAVAILABLE_TEXT
+    res = orchestrator.run_turn(ctx, rt, inv, text_in)
+    assert res.status == "CLARIFIED" and res.choices["kind"] == "INPUT" and res.choices["delegation"]["questionCount"] == 1
+    assert res.answer != orchestrator.APPROVAL_UNAVAILABLE_TEXT and calls == {}
     runs, usage, memory, briefs = side_effects(a)
-    assert calls == {} and usage == [] and key not in runs
+    assert usage == [] and key not in runs
 
 
 # ------------------------------------------------------------------------------------------------ the backstop: dispatch() itself

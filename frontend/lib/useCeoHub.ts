@@ -22,6 +22,8 @@ export type TurnProgress = {
   stage: string | null;
   /** registry keys of the specialist actions running right now (from the live LEG_STARTED / LEG_FINISHED events); drives the agent strip only */
   working: string[];
+  /** registry keys the CEO has routed this turn to (from CLASSIFIED / PLAN_VALIDATED / STATE_READ), kept until the turn ends so the agent stays lit while its answer is read and written up */
+  called?: string[];
 };
 
 export type HealthState = { status: "loading" | "ready" | "error"; entries: HealthEntry[] };
@@ -245,7 +247,7 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
   );
 
   const sendTurn = useCallback(
-    async (message: string, period: ExplicitPeriod | null, action: UiAction | null = null, clarification: ClarificationReply | null = null, attachmentIds: string[] = []) => {
+    async (message: string, period: ExplicitPeriod | null, action: UiAction | null = null, clarification: ClarificationReply | null = null, attachmentIds: string[] = [], ciFindingId: string | null = null) => {
       const id = selectedRef.current;
       if (!id) return;
       const text = message.trim();
@@ -282,6 +284,8 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
             const label = stageLabel(e.kind);
             if (label) setTurn((t) => (t.phase === "processing" ? { ...t, stage: label } : t));
             const action = typeof e.data?.action === "string" ? e.data.action : null;
+            const routed = e.kind === "CLASSIFIED" || e.kind === "PLAN_VALIDATED" ? e.data?.routeKey : e.kind === "STATE_READ" ? e.data?.entry : null;
+            if (typeof routed === "string" && routed) setTurn((t) => (t.phase === "processing" && !(t.called ?? []).includes(routed) ? { ...t, called: [...(t.called ?? []), routed] } : t));
             if (action && e.kind === "LEG_STARTED") setTurn((t) => (t.phase === "processing" ? { ...t, working: [...t.working, action] } : t));
             if (action && e.kind === "LEG_FINISHED") setTurn((t) => ({ ...t, working: t.working.filter((a) => a !== action) }));
             if (e.kind === "LEG_FINISHED" || e.kind === "STATE_READ") void client.getFindings(id).then(onFindings, () => undefined);
@@ -293,7 +297,7 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
       let error: string | null = null;
       let last: TurnResponse | null = null;
       try {
-        last = await client.postTurn(id, text, period, action, clarification, attachmentIds, clientRequestId);
+        last = await client.postTurn(id, text, period, action, clarification, attachmentIds, clientRequestId, ciFindingId);
         unansweredRef.current = null; // answered: the next send, even with identical text, is a new submission
       } catch (e) {
         if (isTurnBusy(e)) setNotice(failure(e)); // told once as a notice; the running task keeps its own status
@@ -349,6 +353,31 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
     [client, loadDetail, refreshList],
   );
 
+  // The Approve / Decline buttons of a plan card. Approving is an explicit call bound to the plan id AND the plan hash the seller was shown; the server runs exactly the frozen
+  // plan once. Nothing typed in the chat reaches this. The thread is re-read afterwards: the result (or the refusal) is a stored message, never composed here.
+  const [planBusy, setPlanBusy] = useState<string | null>(null);
+  const decidePlan = useCallback(
+    async (planId: string, act: () => Promise<unknown>) => {
+      const id = selectedRef.current;
+      if (!id || planBusy) return;
+      setPlanBusy(planId);
+      setNotice(null);
+      try {
+        await act();
+      } catch (e) {
+        const detail = e instanceof ApiError && e.detail && typeof e.detail === "object" ? (e.detail as { message?: unknown }).message : null;
+        setNotice(typeof detail === "string" && detail.trim() ? detail : failure(e));
+      } finally {
+        setPlanBusy(null);
+        await Promise.all([loadDetail(id, true), refreshList()]);
+        void refreshHealth();
+      }
+    },
+    [planBusy, loadDetail, refreshList, refreshHealth],
+  );
+  const approvePlan = useCallback((planId: string, planHash: string) => decidePlan(planId, () => client.approvePlan(selectedRef.current as string, planId, planHash)), [client, decidePlan]);
+  const declinePlan = useCallback((planId: string) => decidePlan(planId, () => client.declinePlan(selectedRef.current as string, planId, null)), [client, decidePlan]);
+
   const reopen = useCallback(async () => {
     const id = selectedRef.current;
     if (!id) return;
@@ -371,6 +400,18 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
     }
   }, [client, loadDetail, refreshList]);
 
+  /** "Delete" a conversation from the seller's list. The server keeps conversation history, findings and the audit record permanently (they are never purged), so this hides it
+   * (ARCHIVED) and takes it off the screen; it is the same server call as Archive. */
+  const removeConversation = useCallback(async (id: string) => {
+    try {
+      await client.archive(id);
+      await refreshList();
+      if (selectedRef.current === id) await loadDetail(id, true);
+    } catch (e) {
+      setNotice(failure(e));
+    }
+  }, [client, loadDetail, refreshList]);
+
   // A question the server stored but has not answered (refresh mid-run, lost reply): shown as still being answered and re-read until the answer arrives. The composer stays
   // usable on purpose: a send is how an abandoned turn gets settled and reported, and the server refuses it with a plain notice while a live turn still owns the conversation.
   const awaitingAnswer = turn.phase === "idle" && detail.status === "ready" && isAwaitingAnswer(detail.data?.messages, detail.data?.investigation.status);
@@ -384,6 +425,6 @@ export function useCeoHub(client: CeoClient, feedFactory: FeedFactory = startPol
 
   return {
     awaitingAnswer, state, list, availability, health, memory, needs, forgetMemory, shared, forgetShared, refreshShared, flows, loadFlow, refreshHealth, selectedId, detail, turn, showArchived, setShowArchived, busyAgent, notice, dismissNotice: () => setNotice(null),
-    refreshList, select, create, sendTurn, setAttached, resolve, reopen, archive, retryDetail: () => selectedRef.current && loadDetail(selectedRef.current, false),
+    refreshList, select, create, sendTurn, setAttached, resolve, reopen, archive, removeConversation, approvePlan, declinePlan, planBusy, retryDetail: () => selectedRef.current && loadDetail(selectedRef.current, false),
   };
 }

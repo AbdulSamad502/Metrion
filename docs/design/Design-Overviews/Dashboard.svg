@@ -1,0 +1,388 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 960" width="100%" height="100%">
+  <defs>
+    <!-- Background Atmospheric Radial Glow -->
+    <radialGradient id="luxBg" cx="22%" cy="6%" r="60%">
+      <stop offset="0%" stop-color="#0F2115" />
+      <stop offset="45%" stop-color="#0A0D0A" />
+      <stop offset="100%" stop-color="#070807" />
+    </radialGradient>
+
+    <!-- Elevated Dark Card Gradient -->
+    <linearGradient id="luxCard" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#151A15" stop-opacity="0.92" />
+      <stop offset="100%" stop-color="#0C0E0C" stop-opacity="0.96" />
+    </linearGradient>
+
+    <!-- Metrion Emerald Gradient -->
+    <linearGradient id="metrionBrand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5BDD8B" />
+      <stop offset="100%" stop-color="#3ECF74" />
+    </linearGradient>
+
+    <!-- Sparkline Glow & Area Fill -->
+    <linearGradient id="heroSparkFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3ECF74" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#3ECF74" stop-opacity="0.0" />
+    </linearGradient>
+
+    <!-- Soft Drop Shadows -->
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.6" />
+    </filter>
+
+    <filter id="glowPoint" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <style>
+    .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; }
+    .label-meta { font-size: 10px; font-weight: 700; fill: #7A8177; letter-spacing: 0.08em; text-transform: uppercase; }
+    .card-head { font-size: 14px; font-weight: 700; fill: #F2F4F0; }
+    .num-display { font-family: "Inter", sans-serif; font-weight: 700; fill: #FAFCF8; letter-spacing: -0.02em; }
+    .text-dim { fill: #8A9188; font-size: 11.5px; }
+    .panel-stroke { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1; rx: 12; }
+    .hero-stroke { stroke: rgba(62, 207, 116, 0.32); stroke-width: 1; rx: 14; }
+  </style>
+
+  <!-- Base Canvas Canvas Layer -->
+  <rect width="1440" height="960" fill="url(#luxBg)" />
+
+  <!-- ================= LEFT NAVIGATION SIDEBAR ================= -->
+  <g id="sidebar">
+    <rect x="0" y="0" width="248" height="960" fill="#090A09" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+    
+    <!-- Logo with Metrion Brand Vector -->
+    <g transform="translate(24, 26)">
+      <path d="M 6 36 Q 16 4 28 6 Q 18 20 22 34 Q 30 14 44 2 Q 40 18 36 34" fill="none" stroke="url(#metrionBrand)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+      <polygon points="43,2 45,4 43,6 41,4" fill="#5BDD8B" />
+      <text x="56" y="22" class="font-sans" font-size="20" font-weight="700" fill="#F7FAF6" letter-spacing="-0.02em">Metrion</text>
+      <text x="56" y="34" class="font-sans label-meta" font-size="7.5" fill="#3ECF74" letter-spacing="0.14em">ENGINE OF GROWTH</text>
+    </g>
+
+    <!-- Navigation List -->
+    <g transform="translate(14, 98)" class="font-sans">
+      <text x="14" y="0" class="label-meta" font-size="9" fill="#4E534B">Profit Intelligence</text>
+      
+      <!-- Overview Active Pill -->
+      <rect x="0" y="14" width="220" height="38" rx="10" fill="rgba(62,207,116,0.12)" stroke="rgba(62,207,116,0.25)" stroke-width="1" />
+      <rect x="0" y="14" width="4" height="38" rx="2" fill="#3ECF74" />
+      <circle cx="22" cy="33" r="3" fill="#3ECF74" />
+      <text x="36" y="37" font-size="13" font-weight="600" fill="#3ECF74">Overview</text>
+
+      <!-- Sub-Tabs -->
+      <g transform="translate(0, 58)"><text x="36" y="22" font-size="13" font-weight="500" fill="#8A9188">CEO Hub</text><circle cx="22" cy="18" r="3" fill="#4E534B" /></g>
+      <g transform="translate(0, 94)"><text x="36" y="22" font-size="13" font-weight="500" fill="#8A9188">Products (PI)</text><circle cx="22" cy="18" r="3" fill="#4E534B" /></g>
+      <g transform="translate(0, 130)"><text x="36" y="22" font-size="13" font-weight="500" fill="#8A9188">Competitors (CI)</text><circle cx="22" cy="18" r="3" fill="#4E534B" /></g>
+      <g transform="translate(0, 166)"><text x="36" y="22" font-size="13" font-weight="500" fill="#8A9188">Finance (CFO)</text><circle cx="22" cy="18" r="3" fill="#4E534B" /></g>
+      <g transform="translate(0, 202)"><text x="36" y="22" font-size="13" font-weight="500" fill="#8A9188">Marketing (CMO)</text><circle cx="22" cy="18" r="3" fill="#4E534B" /></g>
+
+      <text x="14" y="262" class="label-meta" font-size="9" fill="#4E534B">Autonomous Ops</text>
+      <g transform="translate(0, 276)"><text x="36" y="22" font-size="13" font-weight="500" fill="#8A9188">Agent Network</text><circle cx="22" cy="18" r="3" fill="#4E534B" /></g>
+      <g transform="translate(0, 312)"><text x="36" y="22" font-size="13" font-weight="500" fill="#8A9188">WhatsApp Alerts</text><circle cx="22" cy="18" r="3" fill="#4E534B" /></g>
+    </g>
+
+    <!-- Bottom Store Identity -->
+    <g transform="translate(16, 886)">
+      <rect x="0" y="0" width="216" height="50" rx="10" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+      <circle cx="25" cy="25" r="14" fill="rgba(62,207,116,0.18)" />
+      <text x="18" y="29" class="font-sans" font-size="11" font-weight="700" fill="#3ECF74">ZS</text>
+      <text x="48" y="21" class="font-sans" font-size="12" font-weight="600" fill="#EAFBF0">Zyquora Store</text>
+      <text x="48" y="35" class="font-sans" font-size="10" fill="#6B7268">Amazon · Flipkart · Meesho</text>
+    </g>
+  </g>
+
+  <!-- ================= TOP EXECUTIVE BAR ================= -->
+  <g transform="translate(278, 24)">
+    <text x="0" y="22" class="font-sans" font-size="22" font-weight="700" fill="#F7FAF6">Command Overview</text>
+    <text x="0" y="40" class="font-sans text-dim">Autonomous financial guard &amp; multi-channel margin reconciliation</text>
+
+    <!-- Real-time Status Badge -->
+    <g transform="translate(680, 4)">
+      <rect x="0" y="0" width="168" height="34" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+      <circle cx="16" cy="17" r="4" fill="#3ECF74" filter="url(#glowPoint)" />
+      <text x="28" y="21" class="font-sans" font-size="11" fill="#DADFD6">Settlements Reconciled</text>
+    </g>
+
+    <!-- Date Range Picker -->
+    <g transform="translate(860, 4)">
+      <rect x="0" y="0" width="134" height="34" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+      <text x="14" y="21" class="font-sans" font-size="11.5" fill="#DADFD6">May 10 – May 16 ▾</text>
+    </g>
+
+    <!-- Ask Metrion Terminal CTA -->
+    <g transform="translate(1006, 4)">
+      <rect x="0" y="0" width="128" height="34" rx="8" fill="#3ECF74" />
+      <text x="18" y="21" class="font-sans" font-size="12" font-weight="700" fill="#062010">Ask Metrion ↗</text>
+    </g>
+  </g>
+
+  <!-- ================= ROW 1: THE CORE FINANCIAL DUALITY ================= -->
+  <g transform="translate(278, 88)">
+    
+    <!-- CARD 1: HERO IN-POCKET PROFIT & HEALTH SCORE -->
+    <g transform="translate(0, 0)">
+      <rect x="0" y="0" width="560" height="206" fill="url(#luxCard)" class="hero-stroke" filter="url(#softShadow)" />
+      
+      <!-- Top Badging -->
+      <text x="24" y="32" class="font-sans label-meta" fill="#7EE3A2">True In-Pocket Cash Profit</text>
+      <rect x="194" y="20" width="80" height="18" rx="5" fill="rgba(62,207,116,0.12)" />
+      <text x="202" y="32" class="font-sans" font-size="9" font-weight="700" fill="#3ECF74">BRAIN 1 AUDITED</text>
+
+      <!-- Giant Net Profit Number -->
+      <text x="24" y="88" class="num-display" font-size="44">₹6,24,000</text>
+      
+      <!-- Granular Metrics Strip -->
+      <g transform="translate(24, 118)" class="font-sans">
+        <text x="0" y="0" font-size="13" font-weight="700" fill="#3ECF74">↑ 15.3%</text>
+        <text x="54" y="0" font-size="12" fill="#6B7268">vs previous cycle</text>
+        <circle cx="156" cy="-4" r="2" fill="#4E534B" />
+        <text x="168" y="0" font-size="12" fill="#DADFD6">Net Margin:</text>
+        <text x="246" y="0" font-size="13" font-weight="700" fill="#FAFCF8">28.4%</text>
+        <text x="290" y="0" font-size="12" font-weight="600" fill="#3ECF74">(+2.6%)</text>
+      </g>
+
+      <line x1="24" y1="142" x2="536" y2="142" stroke="rgba(255,255,255,0.06)" />
+
+      <!-- Business Health & Cash Liquidity -->
+      <g transform="translate(24, 172)" class="font-sans">
+        <text x="0" y="0" font-size="11.5" fill="#8A9188">Liquid Bank Cash: <tspan fill="#F2F4F0" font-weight="600">₹12,65,000</tspan></text>
+        <circle cx="166" cy="-4" r="2" fill="#4E534B" />
+        <text x="178" y="0" font-size="11.5" fill="#8A9188">Business Health: <tspan fill="#3ECF74" font-weight="700">82/100 (Prime)</tspan></text>
+      </g>
+
+      <!-- Sparkline Graphic on Right -->
+      <g transform="translate(360, 24)">
+        <polygon points="0,85 30,78 65,82 100,45 135,58 165,34 185,10 185,105 0,105" fill="url(#heroSparkFill)" />
+        <polyline points="0,85 30,78 65,82 100,45 135,58 165,34 185,10" fill="none" stroke="#3ECF74" stroke-width="2.5" stroke-linecap="round" />
+        <circle cx="185" cy="10" r="3.5" fill="#5BDD8B" filter="url(#glowPoint)" />
+        <text x="105" y="122" class="font-sans" font-size="10" fill="#7A8177">7-Day Profit Curve</text>
+      </g>
+    </g>
+
+    <!-- CARD 2: REVENUE, EXPENSES & NET RECONCILIATION WATERFALL -->
+    <g transform="translate(574, 0)">
+      <rect x="0" y="0" width="560" height="206" fill="url(#luxCard)" class="panel-stroke" filter="url(#softShadow)" />
+      
+      <text x="24" y="30" class="font-sans label-meta">Gross Sales vs Outflows (MTR Reconciled)</text>
+      <text x="396" y="30" class="num-display" font-size="16" fill="#F2F4F0">₹24,85,430 Gross</text>
+
+      <!-- Visual Multi-segment Outflow Bar -->
+      <g transform="translate(24, 48)">
+        <rect x="0" y="0" width="512" height="14" rx="7" fill="rgba(255,255,255,0.06)" />
+        <rect x="0" y="0" width="194" height="14" rx="7" fill="#3ECF74" />
+        <rect x="196" y="0" width="134" height="14" rx="0" fill="#5BA8FF" />
+        <rect x="332" y="0" width="112" height="14" rx="0" fill="#E7AC42" />
+        <rect x="446" y="0" width="66" height="14" rx="7" fill="#8A9188" />
+      </g>
+
+      <!-- Expense Category Breakdown Grid -->
+      <g transform="translate(24, 90)" class="font-sans" font-size="11.5">
+        <circle cx="4" cy="-4" r="4" fill="#3ECF74" />
+        <text x="14" y="0" fill="#DADFD6">Commissions (38%)</text>
+        <text x="14" y="16" fill="#7A8177">₹7.07L</text>
+
+        <circle cx="140" cy="-4" r="4" fill="#5BA8FF" />
+        <text x="150" y="0" fill="#DADFD6">Ad Spend (26%)</text>
+        <text x="150" y="16" fill="#7A8177">₹4.84L (12.5% TACOS)</text>
+
+        <circle cx="286" cy="-4" r="4" fill="#E7AC42" />
+        <text x="296" y="0" fill="#DADFD6">Logistics &amp; RTO (22%)</text>
+        <text x="296" y="16" fill="#E7AC42">₹4.09L (Spike Detected)</text>
+
+        <circle cx="438" cy="-4" r="4" fill="#8A9188" />
+        <text x="448" y="0" fill="#DADFD6">COGS &amp; Pack (14%)</text>
+        <text x="448" y="16" fill="#7A8177">₹2.61L</text>
+      </g>
+
+      <!-- Interactive Mini Action Banner -->
+      <g transform="translate(24, 154)">
+        <rect x="0" y="0" width="512" height="34" rx="8" fill="rgba(231,172,66,0.08)" stroke="rgba(231,172,66,0.22)" stroke-width="1" />
+        <text x="14" y="21" class="font-sans" font-size="11.5" fill="#E7AC42">⚠️ Logistics weight discrepancy on 14 Flipkart parcels (-₹6,840) · <tspan font-weight="700">Autofile Dispute Claim →</tspan></text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ================= ROW 2: LEAK SHIELD PRIORITY ALERT ================= -->
+  <g transform="translate(278, 310)">
+    <rect x="0" y="0" width="1134" height="84" rx="12" fill="rgba(231,172,66,0.06)" stroke="rgba(231,172,66,0.3)" stroke-width="1" filter="url(#softShadow)" />
+    <rect x="0" y="0" width="5" height="84" rx="2" fill="#E7AC42" />
+
+    <g transform="translate(24, 24)">
+      <text x="0" y="0" class="font-sans label-meta" fill="#E7AC42">LEAK SHIELD ACTIVE · ANOMALY ENGINE</text>
+      <text x="0" y="22" class="font-sans" font-size="15" font-weight="600" fill="#F7FAF6">Marketplace referral fee hike silently shrinking margin on 6 high-volume SKUs</text>
+      <text x="0" y="42" class="font-sans" font-size="12" fill="#DADFD6">Estimated bleed: <tspan fill="#F16B61" font-weight="700">-₹18,420 / month</tspan> · Sub-category commission reclassified without notice.</text>
+    </g>
+
+    <!-- Audit Action Trigger -->
+    <g transform="translate(982, 26)">
+      <rect x="0" y="0" width="128" height="32" rx="7" fill="rgba(231,172,66,0.14)" stroke="#E7AC42" stroke-width="1" />
+      <text x="16" y="20" class="font-sans" font-size="11.5" font-weight="700" fill="#E7AC42">Review 6 SKUs →</text>
+    </g>
+  </g>
+
+  <!-- ================= ROW 3: THREE-AGENT EXECUTIVE TILES ================= -->
+  <g transform="translate(278, 410)">
+    
+    <!-- CARD 1: CFO PRICING & BATCH RECOMMENDATION -->
+    <g transform="translate(0, 0)">
+      <rect x="0" y="0" width="364" height="264" fill="url(#luxCard)" class="panel-stroke" filter="url(#softShadow)" />
+      
+      <g transform="translate(20, 22)">
+        <rect x="0" y="0" width="30" height="30" rx="6" fill="rgba(62,207,116,0.12)" />
+        <text x="8" y="20" class="font-sans" font-size="13" font-weight="700" fill="#3ECF74">CFO</text>
+        <text x="38" y="16" class="font-sans card-head">CFO Batch &amp; Price Guard</text>
+        <text x="38" y="30" class="font-sans text-dim">Supplier rates, GST &amp; margins</text>
+      </g>
+
+      <!-- Rec Item 1 -->
+      <g transform="translate(20, 76)">
+        <rect x="0" y="0" width="324" height="74" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <text x="12" y="20" class="font-sans" font-size="12" font-weight="600" fill="#F2F4F0">Reorder: Portable Mini Blender</text>
+        <text x="12" y="38" class="font-sans text-dim">Optimal Batch: <tspan fill="#3ECF74" font-weight="700">400 units</tspan> @ ₹320/u</text>
+        <text x="12" y="54" class="font-sans text-dim" font-size="10.5">Supplier: Vertex Traders (4.8★) · GST Neutral</text>
+        <rect x="236" y="22" width="76" height="26" rx="6" fill="#3ECF74" />
+        <text x="246" y="39" class="font-sans" font-size="11" font-weight="700" fill="#062010">Lock Deal</text>
+      </g>
+
+      <!-- Rec Item 2 -->
+      <g transform="translate(20, 160)">
+        <rect x="0" y="0" width="324" height="74" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <text x="12" y="20" class="font-sans" font-size="12" font-weight="600" fill="#F2F4F0">Reprice: Phone Tripod Stand</text>
+        <text x="12" y="38" class="font-sans text-dim">Recommend: <tspan fill="#3ECF74" font-weight="700">₹899 → ₹949</tspan></text>
+        <text x="12" y="54" class="font-sans text-dim" font-size="10.5">Captures +₹42,000/mo net without rank loss</text>
+        <rect x="236" y="22" width="76" height="26" rx="6" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" stroke-width="1" />
+        <text x="254" y="39" class="font-sans" font-size="11" font-weight="600" fill="#DADFD6">Simulate</text>
+      </g>
+    </g>
+
+    <!-- CARD 2: COMPETITOR INTELLIGENCE (CI) RADAR -->
+    <g transform="translate(384, 0)">
+      <rect x="0" y="0" width="364" height="264" fill="url(#luxCard)" class="panel-stroke" filter="url(#softShadow)" />
+      
+      <g transform="translate(20, 22)">
+        <rect x="0" y="0" width="30" height="30" rx="6" fill="rgba(91,168,255,0.12)" />
+        <text x="10" y="20" class="font-sans" font-size="13" font-weight="700" fill="#5BA8FF">CI</text>
+        <text x="38" y="16" class="font-sans card-head">Competitor Intel (CI)</text>
+        <text x="38" y="30" class="font-sans text-dim">Price wars, stockouts &amp; rank radar</text>
+      </g>
+
+      <!-- Competitor Undercut Threat -->
+      <g transform="translate(20, 76)">
+        <rect x="0" y="0" width="324" height="74" rx="8" fill="rgba(241,107,97,0.04)" stroke="rgba(241,107,97,0.2)" stroke-width="1" />
+        <text x="12" y="20" class="font-sans" font-size="12" font-weight="600" fill="#F2F4F0">Boat Lifestyle Price Undercut</text>
+        <text x="12" y="38" class="font-sans text-dim">Dropped price 9% on 3 matched audio SKUs</text>
+        <text x="12" y="54" class="font-sans" font-size="10.5" fill="#F16B61">Threat: Organic rank drop detected on Flipkart</text>
+        <text x="246" y="40" class="font-sans" font-size="11" font-weight="700" fill="#5BA8FF">Review →</text>
+      </g>
+
+      <!-- Stockout Opportunity -->
+      <g transform="translate(20, 160)">
+        <rect x="0" y="0" width="324" height="74" rx="8" fill="rgba(62,207,116,0.04)" stroke="rgba(62,207,116,0.2)" stroke-width="1" />
+        <text x="12" y="20" class="font-sans" font-size="12" font-weight="600" fill="#F2F4F0">Zebronics Stockout Flagged</text>
+        <text x="12" y="38" class="font-sans text-dim">Primary competitor OOS on Wireless Stand</text>
+        <text x="12" y="54" class="font-sans" font-size="10.5" fill="#3ECF74">Opportunity: Boost bids +15% to grab BSR</text>
+        <text x="246" y="40" class="font-sans" font-size="11" font-weight="700" fill="#3ECF74">Push Ads →</text>
+      </g>
+    </g>
+
+    <!-- CARD 3: SLIM CMO FAST ACTIONS -->
+    <g transform="translate(768, 0)">
+      <rect x="0" y="0" width="366" height="264" fill="url(#luxCard)" class="panel-stroke" filter="url(#softShadow)" />
+      
+      <g transform="translate(20, 22)">
+        <rect x="0" y="0" width="30" height="30" rx="6" fill="rgba(231,172,66,0.12)" />
+        <text x="6" y="20" class="font-sans" font-size="13" font-weight="700" fill="#E7AC42">CMO</text>
+        <text x="38" y="16" class="font-sans card-head">Slim CMO (V1.0)</text>
+        <text x="38" y="30" class="font-sans text-dim">SEO listing titles, bullet points &amp; ads</text>
+      </g>
+
+      <!-- Listing Optimization -->
+      <g transform="translate(20, 76)">
+        <rect x="0" y="0" width="326" height="74" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <text x="12" y="20" class="font-sans" font-size="12" font-weight="600" fill="#F2F4F0">High-Conversion Title Generated</text>
+        <text x="12" y="38" class="font-sans text-dim">Portable Wireless Speaker (Flipkart)</text>
+        <text x="12" y="54" class="font-sans" font-size="10.5" fill="#3ECF74">+3 High-volume keywords inserted</text>
+        <rect x="238" y="22" width="76" height="26" rx="6" fill="#3ECF74" />
+        <text x="252" y="39" class="font-sans" font-size="11" font-weight="700" fill="#062010">Approve</text>
+      </g>
+
+      <!-- Low ROAS Bleed Detection -->
+      <g transform="translate(20, 160)">
+        <rect x="0" y="0" width="326" height="74" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <text x="12" y="20" class="font-sans" font-size="12" font-weight="600" fill="#F2F4F0">Dead Ad Campaign Flagged</text>
+        <text x="12" y="38" class="font-sans text-dim">Flipkart Sponsored: ROAS 0.8x (9 days)</text>
+        <text x="12" y="54" class="font-sans" font-size="10.5" fill="#F16B61">Bleeding ₹4,200/wk without net profit</text>
+        <rect x="238" y="22" width="76" height="26" rx="6" fill="rgba(241,107,97,0.15)" stroke="#F16B61" stroke-width="1" />
+        <text x="250" y="39" class="font-sans" font-size="11" font-weight="700" fill="#F16B61">Kill Ad</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ================= ROW 4: CHANNEL MARGINS & WHATSAPP SYNC ================= -->
+  <g transform="translate(278, 690)">
+    
+    <!-- CHANNEL MARGIN CONTRIBUTIONS -->
+    <g transform="translate(0, 0)">
+      <rect x="0" y="0" width="750" height="240" fill="url(#luxCard)" class="panel-stroke" filter="url(#softShadow)" />
+      
+      <text x="24" y="30" class="font-sans card-head">Channel Realization: Volume Share vs. True Net In-Pocket Margin</text>
+      <text x="24" y="48" class="font-sans text-dim">Proving which marketplace actually yields cash after platform deductions and RTO reversals</text>
+
+      <g transform="translate(24, 76)" class="font-sans">
+        <!-- Amazon -->
+        <text x="0" y="16" font-size="12.5" font-weight="600" fill="#DADFD6">Amazon India</text>
+        <text x="120" y="16" font-size="11" fill="#7A8177">₹10.43L (42% Vol)</text>
+        <rect x="240" y="6" width="360" height="12" rx="4" fill="rgba(255,255,255,0.06)" />
+        <rect x="240" y="6" width="220" height="12" rx="4" fill="#3ECF74" />
+        <text x="618" y="16" font-size="12" font-weight="700" fill="#3ECF74">31.2% Margin</text>
+
+        <!-- Flipkart -->
+        <text x="0" y="52" font-size="12.5" font-weight="600" fill="#DADFD6">Flipkart</text>
+        <text x="120" y="52" font-size="11" fill="#7A8177">₹6.95L (28% Vol)</text>
+        <rect x="240" y="42" width="360" height="12" rx="4" fill="rgba(255,255,255,0.06)" />
+        <rect x="240" y="42" width="144" height="12" rx="4" fill="#5BA8FF" />
+        <text x="618" y="52" font-size="12" font-weight="700" fill="#DADFD6">21.8% Margin</text>
+
+        <!-- Meesho -->
+        <text x="0" y="88" font-size="12.5" font-weight="600" fill="#DADFD6">Meesho</text>
+        <text x="120" y="88" font-size="11" fill="#7A8177">₹4.47L (18% Vol)</text>
+        <rect x="240" y="78" width="360" height="12" rx="4" fill="rgba(255,255,255,0.06)" />
+        <rect x="240" y="78" width="90" height="12" rx="4" fill="#E7AC42" />
+        <text x="618" y="88" font-size="12" font-weight="700" fill="#DADFD6">17.6% Margin</text>
+
+        <!-- D2C Website -->
+        <text x="0" y="124" font-size="12.5" font-weight="600" fill="#DADFD6">Direct Website</text>
+        <text x="120" y="124" font-size="11" fill="#7A8177">₹3.00L (12% Vol)</text>
+        <rect x="240" y="114" width="360" height="12" rx="4" fill="rgba(255,255,255,0.06)" />
+        <rect x="240" y="114" width="62" height="12" rx="4" fill="#7EE3A2" />
+        <text x="618" y="124" font-size="12" font-weight="700" fill="#3ECF74">41.0% Margin</text>
+      </g>
+    </g>
+
+    <!-- WHATSAPP MOBILE SYNC TERMINAL -->
+    <g transform="translate(768, 0)">
+      <rect x="0" y="0" width="366" height="240" fill="url(#luxCard)" class="panel-stroke" filter="url(#softShadow)" />
+      
+      <g transform="translate(20, 22)">
+        <rect x="0" y="0" width="30" height="30" rx="6" fill="rgba(62,207,116,0.15)" />
+        <circle cx="15" cy="15" r="7" fill="#3ECF74" />
+        <text x="38" y="16" class="font-sans card-head">WhatsApp Command Hub</text>
+        <text x="38" y="30" class="font-sans text-dim">Review &amp; approve actions via phone</text>
+      </g>
+
+      <g transform="translate(20, 76)">
+        <rect x="0" y="0" width="326" height="92" rx="8" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+        <text x="12" y="20" class="font-sans label-meta" font-size="9" fill="#3ECF74">LATEST DISPATCHED REPORT</text>
+        <text x="12" y="38" class="font-sans" font-size="12" fill="#F2F4F0">"Today's net profit: ₹14,200. CFO flagged ₹1,400 excess courier weight charges on 2 shipments."</text>
+        <text x="12" y="78" class="font-sans text-dim" font-size="10.5">Dispatched 09:30 AM · Reply 'APPROVE' or 'DISPUTE'</text>
+      </g>
+
+      <g transform="translate(20, 184)">
+        <rect x="0" y="0" width="326" height="36" rx="8" fill="rgba(62,207,116,0.12)" stroke="rgba(62,207,116,0.28)" stroke-width="1" />
+        <text x="76" y="23" class="font-sans" font-size="12" font-weight="700" fill="#3ECF74">Sync Live Alerts to Phone ↗</text>
+      </g>
+    </g>
+  </g>
+</svg>
