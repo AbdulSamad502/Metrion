@@ -70,8 +70,8 @@ cd ..\..\backend; ..\.venv-ci\Scripts\python.exe -m pytest tests\unit -q        
 cd ..\frontend; npx tsc --noEmit; npm run lint; npm test; npm run build
 ```
 
-**The whole backend integration suite** (about 2,400 tests) takes roughly 70 minutes sequentially, and `test_ceo_safety_gate.py` alone takes about 13. Run it file by file so one slow or hung file cannot block the rest; the sharding that was tried (several databases in parallel) did not help because the database is CPU-bound.
-Tests that go through the CEO planner (`test_ceo_cmo_delegation.py`, `test_ceo_cmo_image_handoff.py`) are **intermittent**: a different test fails on some runs and passes on the next. A local Ollama on `localhost:11434` is detected by the harness; stop it, or point `OLLAMA_HOST`/`CEO_OLLAMA_HOST`/`CMO_OLLAMA_HOST` at an unused port, to reproduce CI conditions.
+**The whole backend integration suite** (about 2,400 tests) takes about an hour sequentially, and `test_ceo_safety_gate.py` alone takes about 13. Run it file by file so one slow or hung file cannot block the rest; the sharding that was tried (several databases in parallel) did not help because the database is CPU-bound.
+Tests that go through the CEO planner (`test_ceo_cmo_delegation.py`, `test_ceo_cmo_image_handoff.py`) are **intermittent**: a different test fails on some runs and passes on the next. CI has no Ollama; a local one on `localhost:11434` can change what these paths do, so for CI-like runs stop it or point `OLLAMA_HOST`/`CEO_OLLAMA_HOST`/`CMO_OLLAMA_HOST` at an unused port (one test still flaked once with Ollama unreachable, so this is not the whole story).
 
 ## Run the app for manual testing
 
@@ -109,8 +109,8 @@ To point at the shared dev database instead, run the migrations for your branch 
 ## Manual testing checklist
 
 **Sign-in and navigation**
-1. Sign up / sign in with a development Clerk instance; confirm the dashboard loads and a signed-out visit to `/dashboard` sends you to sign-in.
-2. Sidebar shows Overview, CEO Hub, Action Center, Products, Competitors, Profit & Finance, Profit Calculator, Listings & Marketing, Agents, Settings; Profit & Finance stays highlighted on `/dashboard/cfo/expenses`.
+1. Sign up / sign in with a development Clerk instance and confirm the dashboard loads for the signed-in user (a signed-out visitor should not see tenant data).
+2. Sidebar shows Overview, CEO Hub, Action Center, Products, Competitors, Profit & Finance, Listings & Marketing, Agents, Settings (plus Profit Calculator on the P&L branch); Profit & Finance stays highlighted on `/dashboard/cfo/expenses`.
 
 **CFO (Profit & Finance)**
 3. Upload a settlement/order report; confirm figures show their source, period and status (verified / provisional / estimated / unavailable). A missing input reads "unavailable", never zero.
@@ -118,10 +118,10 @@ To point at the shared dev database instead, run the migrations for your branch 
 
 **Expense Tracker** *(P&L branch only)*
 5. Add an expense; it appears in the list with a status. Correct, refund, void and mark paid on separate expenses: each keeps its history and nothing is deleted.
-6. The summary shows period totals from the ledger and flags unallocated spend; with no expenses it says so rather than showing zero.
+6. The summary shows period totals from the ledger, and unallocated spend is called out rather than hidden; with no expenses it must not invent a figure.
 
 **Profit Calculator (P&L)** *(P&L branch only)*
-7. Enter price, cost and fees; the result is labelled a what-if, never a verified result, and shows how each figure was derived. An empty required input reads "not yet calculable".
+7. Enter price, cost and fees; the result is presented as a what-if, never as a verified result. A missing required input reads as not yet calculable, never as zero.
 8. Advertising spend left blank reads "Not entered in this calculation", not 0.
 
 **Competitor Intelligence (CI V3)**
