@@ -1,4 +1,4 @@
-# Competitor Intelligence V3 — local test setup (worktree `Metrion-ci-upgrade`)
+# Competitor Intelligence V3 — local test setup
 
 Everything below runs against an **isolated scratch Postgres** (container `ci-v3-pg`, port **5544**, database `metrion_ci`). It never touches the shared dev database on 5432.
 Port 5544 is not arbitrary: `packages/competitor-intelligence/tests/integration/owner_db.py` refuses to run owner-role setup against any other port.
@@ -6,7 +6,7 @@ Port 5544 is not arbitrary: `packages/competitor-intelligence/tests/integration/
 ## One-time setup (already done in this worktree)
 
 ```powershell
-cd C:\dev\Metrion-ci-upgrade
+cd C:\dev\Metrion   # your repo root
 & "C:\Users\zaved\AppData\Local\Programs\Python\Python312\python.exe" -m venv .venv-ci   # Python >= 3.12 is required
 foreach ($k in "calc-engine","data-foundation","competitor-intelligence","cfo","market-signals","product-intelligence","slim-cmo") {
   .venv-ci\Scripts\python.exe -m pip install -e "packages/$k[dev]"
@@ -20,7 +20,7 @@ Why the wrong code was imported before: the shared interpreter had `competitor_i
 ## Start the scratch database and migrate
 
 ```powershell
-cd C:\dev\Metrion-ci-upgrade
+cd C:\dev\Metrion   # your repo root
 docker run -d --name ci-v3-pg -e POSTGRES_USER=metrion -e POSTGRES_PASSWORD=ci_scratch_pw -e POSTGRES_DB=metrion_ci -p 5544:5432 `
   -v "${PWD}\docker\postgres-init:/docker-entrypoint-initdb.d:ro" pgvector/pgvector:pg16
 # (if it already exists: docker start ci-v3-pg)
