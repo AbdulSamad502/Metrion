@@ -166,15 +166,15 @@ def pack_repair_prompt(
     )
 
 
-DESCRIPTION_TARGET_LOW = 0.55  # a marketplace description is a full body of text, not a one-liner: aim for this fraction of the allowed length ...
-DESCRIPTION_TARGET_HIGH = 0.85  # ... up to this one (the hard limit stays a validator rule; this is only a writing target)
+DESCRIPTION_TARGET_LOW_PCT = 55  # a marketplace description is a full body of text, not a one-liner: aim for this percentage of the allowed length ...
+DESCRIPTION_TARGET_HIGH_PCT = 85  # ... up to this one (the hard limit stays a validator rule; this is only a writing target). Whole percentages: no floats.
 
 
 def description_target(max_chars: int | None) -> tuple[int, int] | None:
     """(low, high) character target for a description, computed by code from the resolved limit; None when no limit is known."""
     if max_chars is None or max_chars <= 0:
         return None
-    return int(max_chars * DESCRIPTION_TARGET_LOW), int(max_chars * DESCRIPTION_TARGET_HIGH)
+    return max_chars * DESCRIPTION_TARGET_LOW_PCT // 100, max_chars * DESCRIPTION_TARGET_HIGH_PCT // 100
 
 
 def description_guidance(max_chars: int | None) -> str:
