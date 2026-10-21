@@ -916,6 +916,39 @@ Pinned by `packages/calc-engine/tests/unit/test_effective_price.py`.
 
 **Status:** specified; **not built** (the goal registry is V1-later). Reopening the eligible metric set needs a spec amendment, not an ad-hoc addition.
 
+### 5.17 CFO 2.0 metrics and the fast-path consistency contract (NEW — 2026-10-21; owner approval of CFO 2.0)
+
+**Status:** specified; **not built**. Authority for *what a term means* is `cfo-unified-financials.md` §4; this section is the authority for the *formulas*. Every metric below is integer paise or an exact `Fraction`, never a float; every result is a `MetricResult` with provenance (§9); a missing input is `Unavailable` with a reason, never zero. `formula_version` is `<METRIC_CODE>.v1` and joins the `formula_definition` seed.
+
+| Metric | Formula | Unavailable when |
+|---|---|---|
+| `GROSS_SALES` | Σ `gross_order_value` (§5.2) over the scope's order lines, **including** cancelled and returned lines (a volume measure; tax-exclusive per §8.1) | any line's gross amount is NULL and unresolved (line blocked, counted) |
+| `OPERATING_PROFIT` | `ContributionProfit − Σ OverheadExpense`, where OverheadExpense = active `expense.*` manual adjustments whose class (`expense_class_map`) is `OVERHEAD`, by `expense date` in the period. Excludes classes `OWNER_DRAWING`, `INVENTORY_PURCHASE`, `CAPITAL`, `TAX_ASSET`, `OTHER_UNCLASSIFIED`. Labelled "management operating profit — before depreciation, interest and tax". | ContributionProfit unavailable; or Σ `OTHER_UNCLASSIFIED` ≥ the configured materiality threshold (`Unavailable(CONFIG_MISSING)` if no threshold is configured — none seeded, §5.12.1 convention) |
+| `SETTLEMENT_RECEIPTS` | Σ settlement-side net amount by **settlement date** in the period (wraps the existing `CASH_RECEIVED`, §5.13.3) | no settlement lines for the period (then "no settlement data", not zero) |
+| `EXPENSE_BY_CATEGORY` | Σ active `expense.<category>` adjustments grouped by category and class, excluding rows held as `POSSIBLE_DUPLICATE` or unconfirmed `MAY_OVERLAP_MARKETPLACE` (exclusions disclosed with counts and amounts) | n/a — empty scope reports "no entries" |
+| `ROAS`, `ACOS`, `TACOS` | as §1.2.0, sourced from `ad_report_line` or `expense.advertising` per the cost-ownership matrix (`cfo-unified-financials.md` §4.3) | no advertising source, or zero denominator |
+| `PROFIT_BRIDGE(A,B)` | `ΔCP = CP_B − CP_A = ΔNRR − ΔCOGS − ΔFees − ΔLogistics − ΔAds − ΔReturnRTOLoss − ΔOtherAllocated`; each Δ is the engine's own component result for B minus A. Drivers ranked by `|Δ|` (ties by component code). `OTHER = ΔCP − Σ drivers` and **must equal 0**; a nonzero residual is reported as `OTHER` with its amount and fails the identity test. | either period's CP unavailable (the bridge states which; a component unavailable in one period is an unavailable driver, not zero) |
+| `SKU_CONCENTRATION` | `share(sku) = NRR(sku) / Σ NRR(scope)` as exact `Fraction`; top-N by share (ties by SKU); lines with NRR ≤ 0 excluded and counted | NRR unavailable for the scope; Σ NRR ≤ 0 |
+| `MARGIN_STABILITY` | mean absolute deviation of `ContributionMargin%` across the periods of the series: `MAD = (1/n) Σ |m_i − mean(m)|` as `Fraction` (MAD chosen over standard deviation to stay exactly rational) | fewer than the configured minimum periods (no default seeded); any period's margin unavailable |
+| `BREAK_EVEN_PRICE` | Using `margin_at_price` (§5.15 margin curve) over the seller's candidate grid **plus the fee-slab boundary prices**: reported as the bracket `[p_last_negative, p_first_non_negative]` on that grid, never as a point estimate | margin curve unavailable (COGS, fee reference) |
+| `EXPECTED_RECEIPTS(as_of)` | For each sold, unsettled order line with an engine-known settlement-side or net-of-known-fees amount: `expected_date = document_date + L`, L = observed **lower median** of `SETTLEMENT_LAG_DAYS` for the marketplace; amount as known. Aggregated by expected date. Lines lacking an amount are excluded and counted (amount and count disclosed). **No unsold orders are projected.** | observed lag series shorter than the configured minimum (none seeded) |
+| `CASH_SHORTFALL_STATUS` | Sort payables (`payable.supplier`) by due date; for each due date `d`, compare cumulative payables due ≤ `d` with cumulative `EXPECTED_RECEIPTS` dated ≤ `d`: `COVERED` if receipts ≥ payables, `AT_RISK` otherwise; a payable with no due date is `UNKNOWN` and listed | `EXPECTED_RECEIPTS` unavailable. **No bank balance is read or assumed.** |
+
+**Rules.**
+1. **Definition ownership:** `GROSS_SALES`, `NET_REALIZED_REVENUE`, `CONTRIBUTION_PROFIT`, `OPERATING_PROFIT`, `SETTLEMENT_RECEIPTS`, cash movements and tax assets are separate metrics; no surface uses one in place of another (`cfo-unified-financials.md` AC-U1).
+2. **Exclusions from every profit metric:** TCS/TDS (C11), owner drawings, inventory purchases (COGS is on units sold, §5.6), capital items, transfers (§1.2.0).
+3. **Additivity:** `GROSS_SALES`, `NRR`, `CP`, `OPERATING_PROFIT` (when expenses are unscoped), `SETTLEMENT_RECEIPTS` are additive across marketplaces: Σ per-marketplace results equals the consolidated result **exactly** (0 paise). A failure is a defect.
+4. **Allocation** of account-level pools uses §5.10 with largest-remainder; results are `DERIVED`.
+5. **New manual-input registry keys** (§7.2.1 owner): `expense.class`, `cost.owner.<component_code>`, `payable.supplier` (`amount_paise`, `due_date`, optional `supplier_ref`, `po_ref`), `expense.shared_allocation` (basis). All append-only, superseding, `financials.adjust`, confidence `MANUAL`.
+
+**Fast-path consistency contract (set-based SQL vs per-line engine).** For every metric above with a per-line reference implementation (`CONTRIBUTION_PROFIT`, `NET_REALIZED_REVENUE`, `GROSS_SALES`, fee/return components, `SETTLEMENT_RECEIPTS`):
+1. The per-line Python implementation is the **reference definition**. Any set-based SQL implementation must produce the identical `value_paise`, identical `exclusions` (reason, count, amount) and identical `Unavailable` outcomes on the golden dataset and on property-based random datasets (refunds, RTO, cancellations, one-to-many fee rows, missing COGS, negative lines, zero-quantity lines).
+2. SQL uses integer arithmetic only. Ratios are carried as `(numerator, denominator)` bigint pairs and compared/rounded by the same single rounding rule (§5.11, D8) — never `float`, `double precision`, or `numeric` with implicit rounding in an intermediate step.
+3. Largest-remainder allocation is reproduced exactly, including tie-break order.
+4. Divergence is a release blocker; the SQL path is disabled by configuration until the divergence is fixed.
+
+**Tests required (build-time, deterministic):** per-metric golden values; Σ-marketplaces = consolidated; bridge identity (`OTHER = 0` on the golden dataset, nonzero residual surfaced on a constructed gap); `OPERATING_PROFIT` excludes each non-overhead class (one test per class); `SETTLEMENT_RECEIPTS` basis by settlement date vs CP by document date; `EXPECTED_RECEIPTS` never includes unsold or amountless lines; shortfall status boundaries (equality = `COVERED`); `BREAK_EVEN_PRICE` bracket contains the sign change; MAD exactness (`Fraction`); no-float guard; every `Unavailable` path; oracle equality (fast vs reference).
+
 ## 6. Grain and periods
 
 Computable at: `line` → `order` → `sku` → `marketplace` → `account`.

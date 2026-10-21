@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from uuid import UUID, uuid4
 
-from sqlalchemy import text
+from sqlalchemy import Connection, text
 
 from data_foundation.repositories.tenant_context import tenant_scope
 from data_foundation.validation.severity import Finding
@@ -41,12 +42,8 @@ def insert_findings(tenant_id: UUID, *, ingestion_run_id: UUID, sales_line_id: U
             )
 
 
-def insert_findings_bulk(tenant_id: UUID, *, ingestion_run_id: UUID, findings: tuple[Finding, ...]) -> int:
-    """Run-level / not-yet-linked findings (`sales_line_id` NULL), written with one statement and one transaction for the whole batch — a rejected row has no sales_line to
-    link to, so its finding is identified by `source_row_number`. Returns how many were written."""
-    if not findings:
-        return 0
-    rows = [
+def _finding_rows(tenant_id: UUID, ingestion_run_id: UUID, findings: Sequence[Finding]) -> list[dict[str, object]]:
+    return [
         {
             "id": str(uuid4()),
             "tenant_id": str(tenant_id),
@@ -59,9 +56,24 @@ def insert_findings_bulk(tenant_id: UUID, *, ingestion_run_id: UUID, findings: t
         }
         for f in findings
     ]
-    with tenant_scope(tenant_id) as conn:
-        conn.execute(_INSERT_SQL, rows)
+
+
+def insert_findings_bulk_on(conn: Connection, tenant_id: UUID, *, ingestion_run_id: UUID, findings: Sequence[Finding]) -> int:
+    """Run-level findings written on an already-open `tenant_scope()` connection (streaming ingestion)."""
+    if not findings:
+        return 0
+    rows = _finding_rows(tenant_id, ingestion_run_id, findings)
+    conn.execute(_INSERT_SQL, rows)
     return len(rows)
+
+
+def insert_findings_bulk(tenant_id: UUID, *, ingestion_run_id: UUID, findings: tuple[Finding, ...]) -> int:
+    """Run-level / not-yet-linked findings (`sales_line_id` NULL), written with one statement and one transaction for the whole batch —
+    link to, so its finding is identified by `source_row_number`. Returns how many were written."""
+    if not findings:
+        return 0
+    with tenant_scope(tenant_id) as conn:
+        return insert_findings_bulk_on(conn, tenant_id, ingestion_run_id=ingestion_run_id, findings=findings)
 
 
 def counts_by_severity(tenant_id: UUID, ingestion_run_id: UUID) -> dict[str, int]:

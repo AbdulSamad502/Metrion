@@ -6,7 +6,7 @@ import json
 from collections.abc import Collection, Sequence
 from uuid import UUID, uuid4
 
-from sqlalchemy import text
+from sqlalchemy import Connection, text
 
 from data_foundation.repositories import line_component_repo
 from data_foundation.repositories.tenant_context import tenant_scope
@@ -99,6 +99,35 @@ def insert_sales_line(
     return new_id
 
 
+def insert_sales_lines_with_components_on(
+    conn: Connection,
+    tenant_id: UUID,
+    *,
+    ingestion_run_id: UUID,
+    marketplace: str,
+    confidence: str,
+    rows: Sequence[ParsedRow],
+) -> list[UUID]:
+    """Same bulk write as `insert_sales_lines_with_components`, on an ALREADY-OPEN `tenant_scope()`
+    connection, so a streaming ingestion can write chunk after chunk inside ONE transaction
+    (all-or-nothing for the file) without holding more than a chunk of rows in memory."""
+    ids = [uuid4() for _ in rows]
+    line_params = [
+        _sales_params(
+            line_id, tenant_id, ingestion_run_id=ingestion_run_id, marketplace=marketplace,
+            canonical_fields=r.canonical_fields, source_row_number=r.source_row_number,
+            source_row_json=r.source_row_json, confidence=confidence,
+        )
+        for line_id, r in zip(ids, rows)
+    ]
+    if line_params:
+        conn.execute(_INSERT_SQL, line_params)
+    line_component_repo.insert_components_on(
+        conn, tenant_id, parent_key="sales_line_id", items=[(i, r.components) for i, r in zip(ids, rows)]
+    )
+    return ids
+
+
 def insert_sales_lines_with_components(
     tenant_id: UUID,
     *,
@@ -111,22 +140,10 @@ def insert_sales_lines_with_components(
     executemany round trips, instead of two transactions + one round trip per component per
     row. All-or-nothing for the file: a failure part-way persists none of it (the per-row
     path used to leave a partial file behind). Returns the new ids in `rows` order."""
-    ids = [uuid4() for _ in rows]
-    line_params = [
-        _sales_params(
-            line_id, tenant_id, ingestion_run_id=ingestion_run_id, marketplace=marketplace,
-            canonical_fields=r.canonical_fields, source_row_number=r.source_row_number,
-            source_row_json=r.source_row_json, confidence=confidence,
-        )
-        for line_id, r in zip(ids, rows)
-    ]
     with tenant_scope(tenant_id) as conn:
-        if line_params:
-            conn.execute(_INSERT_SQL, line_params)
-        line_component_repo.insert_components_on(
-            conn, tenant_id, parent_key="sales_line_id", items=[(i, r.components) for i, r in zip(ids, rows)]
+        return insert_sales_lines_with_components_on(
+            conn, tenant_id, ingestion_run_id=ingestion_run_id, marketplace=marketplace, confidence=confidence, rows=rows
         )
-    return ids
 
 
 _EXISTING_KEYS_FOR_ORDERS_SQL = text(

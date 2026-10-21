@@ -567,6 +567,26 @@ rows into a real local Postgres, calls `compute_period_pnl_for_tenant` with zero
   known simplification; would need a join to `ingestion_run` this pass did not build. Zero
   correctness impact (no formula consults it), disclosed rather than silently guessed.
 
+### 6.17 CFO 2.0 — pointer and status (2026-10-21)
+
+**Status: specified; implementation in progress on branch `feat/cfo-2`.** CFO 2.0 extends this spec without changing any decision above (C1–C14 stand; the hard rule stands). Authority is split across four new specs, none of which restates this spec's rules:
+
+| Concern | Spec |
+|---|---|
+| Streaming CSV/XLSX ingestion, background jobs, semantic column mapping, data-quality reports, expense and advertising ingestion | `cfo-data-intelligence.md` |
+| AI Financial Query Planner, deterministic validator, catalog, cache, evidence packets, stage streaming | `cfo-query-planner.md` |
+| Definitions (gross sales / net revenue / contribution profit / operating profit / settlement receipts / cash movements), cost ownership, expense classes, consolidation, cash forecast, inventory finance, CA export, Leak Shield 2.0, proactive CFO | `cfo-unified-financials.md` (formulas: `deterministic-engine.md` §5.17) |
+| Dashboard | `cfo-dashboard.md` |
+
+**Amendments to this spec:**
+- C14 and §6.13 funding readiness are unchanged. §6.10's "Bank data is out of scope" is **re-confirmed** (owner decision 2026-10-21); cash forecasts are expected-settlement based, with seller-entered payables, and never assume a bank balance or forecast demand.
+- Q2 (ad-report ingestion) is **answered: yes**, in P3 (`cfo-data-intelligence.md` §6.8).
+- Q3's reduced slice is unchanged.
+- The new dashboard replaces tool-forms-as-landing-page with a trust-annotated overview; the existing tool sections are preserved (`cfo-dashboard.md` UI6).
+- The CFO-only cache and planner results are read-class: no new write path, no new manual-input store (AC17d holds); the new `manual_adjustment` keys are registered in the engine spec.
+
+**Testing and LLM-eval deferral (explicit, owner instruction 2026-10-21).** CFO 2.0 development uses deterministic tests, golden financial tests, exact Brain 1 comparison tests, and **mocked** LLM outputs. **Real-model calls, paid model calls and the LLM narration/extraction evals that CLAUDE.md requires for new Brain-3 surfaces are deferred to a later phase.** The deferral applies to: planner slot-filling, semantic column mapping proposals, bridge/cash/proactive narration. The evals remain **required before any seller sees these surfaces**; this paragraph records the deferral, it does not waive the requirement. The Strategic Briefing's existing unmet eval requirement (§7.5) is deferred under the same decision.
+
 ---
 
 ## 7. AI requirements — brain assignment and compute-intensity characteristics

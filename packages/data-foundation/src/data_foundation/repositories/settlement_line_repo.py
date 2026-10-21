@@ -7,7 +7,7 @@ import json
 from collections.abc import Sequence
 from uuid import UUID, uuid4
 
-from sqlalchemy import text
+from sqlalchemy import Connection, text
 
 from data_foundation.repositories import line_component_repo
 from data_foundation.repositories.tenant_context import tenant_scope
@@ -79,6 +79,33 @@ def insert_settlement_line(
     return new_id
 
 
+def insert_settlement_lines_with_components_on(
+    conn: Connection,
+    tenant_id: UUID,
+    *,
+    ingestion_run_id: UUID,
+    marketplace: str,
+    confidence: str,
+    rows: Sequence[ParsedRow],
+) -> list[UUID]:
+    """Settlement-side twin of `sales_line_repo.insert_sales_lines_with_components_on` (open connection)."""
+    ids = [uuid4() for _ in rows]
+    line_params = [
+        _settlement_params(
+            line_id, tenant_id, ingestion_run_id=ingestion_run_id, marketplace=marketplace,
+            canonical_fields=r.canonical_fields, source_row_number=r.source_row_number,
+            source_row_json=r.source_row_json, confidence=confidence,
+        )
+        for line_id, r in zip(ids, rows)
+    ]
+    if line_params:
+        conn.execute(_INSERT_SQL, line_params)
+    line_component_repo.insert_components_on(
+        conn, tenant_id, parent_key="settlement_line_id", items=[(i, r.components) for i, r in zip(ids, rows)]
+    )
+    return ids
+
+
 def insert_settlement_lines_with_components(
     tenant_id: UUID,
     *,
@@ -89,22 +116,10 @@ def insert_settlement_lines_with_components(
 ) -> list[UUID]:
     """Settlement-side twin of `sales_line_repo.insert_sales_lines_with_components` - one
     transaction, two executemany round trips, all-or-nothing for the file."""
-    ids = [uuid4() for _ in rows]
-    line_params = [
-        _settlement_params(
-            line_id, tenant_id, ingestion_run_id=ingestion_run_id, marketplace=marketplace,
-            canonical_fields=r.canonical_fields, source_row_number=r.source_row_number,
-            source_row_json=r.source_row_json, confidence=confidence,
-        )
-        for line_id, r in zip(ids, rows)
-    ]
     with tenant_scope(tenant_id) as conn:
-        if line_params:
-            conn.execute(_INSERT_SQL, line_params)
-        line_component_repo.insert_components_on(
-            conn, tenant_id, parent_key="settlement_line_id", items=[(i, r.components) for i, r in zip(ids, rows)]
+        return insert_settlement_lines_with_components_on(
+            conn, tenant_id, ingestion_run_id=ingestion_run_id, marketplace=marketplace, confidence=confidence, rows=rows
         )
-    return ids
 
 
 _COUNT_FOR_RUN_SQL = text("SELECT count(*) FROM settlement_line WHERE tenant_id = :tenant_id AND ingestion_run_id = :run_id")
