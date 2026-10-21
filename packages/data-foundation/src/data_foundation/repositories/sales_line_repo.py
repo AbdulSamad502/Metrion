@@ -152,7 +152,8 @@ def insert_sales_lines_with_components(
 
 _EXISTING_ENTRIES_SQL = text(
     """
-    SELECT s.order_ref, s.line_ref, s.invoice_ref, s.sku, s.marketplace_item_id, s.source_row_json, ir.adapter_id, cm.fingerprint
+    SELECT s.order_ref, s.line_ref, s.invoice_ref, s.sku, s.marketplace_item_id, s.document_type, s.transaction_type, s.source_row_json,
+           ir.adapter_id, cm.fingerprint
     FROM sales_line s
     JOIN ingestion_run ir ON ir.id = s.ingestion_run_id
     LEFT JOIN column_mapping cm ON ir.adapter_id LIKE 'mapped.%' AND cm.tenant_id = s.tenant_id AND cm.id::text = substr(ir.adapter_id, 8)

@@ -128,7 +128,8 @@ def insert_settlement_lines_with_components(
 
 _EXISTING_ENTRIES_SQL = text(
     """
-    SELECT s.order_ref, s.line_ref, s.settlement_id, s.settlement_date, s.gross_settlement_amount, s.source_row_json, ir.adapter_id, cm.fingerprint
+    SELECT s.order_ref, s.line_ref, s.settlement_id, s.settlement_date, s.gross_settlement_amount, s.document_type, s.source_row_json,
+           ir.adapter_id, cm.fingerprint
     FROM settlement_line s
     JOIN ingestion_run ir ON ir.id = s.ingestion_run_id
     LEFT JOIN column_mapping cm ON ir.adapter_id LIKE 'mapped.%' AND cm.tenant_id = s.tenant_id AND cm.id::text = substr(ir.adapter_id, 8)

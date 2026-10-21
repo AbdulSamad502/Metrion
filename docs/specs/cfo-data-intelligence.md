@@ -125,6 +125,8 @@ All tenant-owned, `FORCE` RLS. `canonical_fields` produced via a mapping carry `
   | **Amazon** | `Shipment Item ID` (`line_ref`; `ASIN` is the product, not the line) | order id + order-item code + merchant-order-item id + shipment id + settlement id + the melted amount-type / amount-description / amount (one row per fee or principal line) |
   | **Flipkart** | `Line Item ID` (`line_ref`; `FSN` is the product, not the line) | order id + settlement id + settlement date + amount |
 
+**Legitimate financial events that share an order or shipment id are different events** (a sale and its credit note, a shipment and its refund, partial refunds, a replacement shipment, several shipments of one order, one shipment carrying several items or several orders). The identity therefore also carries the event discriminators a row has: `document_type` and `transaction_type` for sales rows, `document_type` for settlement rows, compared case- and separator-insensitively ("Credit Note" = "CREDIT_NOTE"). Today's verified adapters map neither, so for them events are told apart by line id, amounts, dates and descriptions; where that is not enough two rows of one line with different content are a `CONFLICT` and an identical repeat is `AMBIGUOUS`, held with an explanation — never merged, never silently both posted.
+
   A sales row with no line id still gets an identity (order, invoice, and its product ids so two products of one order never merge), but it is *weak*: an identical repeat is held as ambiguous, never skipped. A settlement row is never strong: identical settlement rows cannot be told from a double export, while different amounts or dates on one order (partial settlements, adjustments, reversals) are different identities and post. An unknown marketplace gets the conservative default (nothing strong).
 
   | Class | When | Action |
@@ -159,6 +161,7 @@ Input to the model (masked, bounded): column names, inferred type and format per
 | M-PER | a date column covers a plausible contiguous period; future dates or > 5-year span → WARN |
 | M-STA | settlement status columns map to the engine's settlement states only through a seller-confirmed enum table |
 | M-UNT | rupee vs paise detected: values with ≥ 1 non-zero fractional digit in > 2% of rows → rupees; else ambiguous → seller confirms |
+| M-PCT | percentage units: an ambiguous rate column (all values within (0, 1], no `%`) must be resolved by the seller; `FRACTION_TO_PERCENT` is refused where a value exceeds 1 or carries a `%` (§6.4a) |
 | M-REQ | all fields required by the report kind are mapped, or the missing ones are listed as `agent_data_request`s |
 
 ### 6.4a Value transforms with exact definitions
@@ -174,6 +177,8 @@ Input to the model (masked, bounded): column names, inferred type and format per
 | Rounding | **none**. The exact decimal is kept, normalised to its shortest form ("18.00" becomes "18", "0.00" becomes "0"). |
 | Never | a heuristic: "0.18" is 0.18 points, not 18%. A column of fractions is not guessed at. |
 | Invalid | anything else (`""`, `abc`, `NaN`, `inf`, `1e1`, `1,8`, `18%%`, `-1`, `100.01`, `18.12345`): the row is quarantined by V-MAP-001 naming the value; never defaulted to 0. A blank cell is "not given" (not an error, not 0). |
+| Ambiguity (**mandatory unit-aware validation**) | A column whose non-blank values are all within (0, 1] and none carries a `%` could be percentage points (0.18 = 0.18%) or fractions (0.18 = 18%). Metrion **never decides**: rule **M-PCT** requires the seller to choose the unit explicitly, and auto-accept is impossible even for a recognised header. A column with a value above 1 or any `%` is unambiguously percentage points; an all-zero column is not ambiguous. |
+| `FRACTION_TO_PERCENT` | A **seller-chosen** transform, never a default: the values are fractions of 1 and "0.18" becomes 18. Accepts 0 to 1 inclusive with at most 6 decimals and no `%`; the result is value × 100, exact (at most 4 decimals). Refused (M-PCT) when any value is above 1 or has a `%`; always needs the seller's confirmation. |
 | Tests | `tests/unit/mapping/test_units_percent.py`: valid and invalid tables, a property test that every 4-place value in 0..100 round-trips exactly, a property test that anything above 100 is invalid, the adapter and validator paths. |
 
 **Decision logic.** A field is `AUTO_ACCEPTED_BY_RULES` only when every applicable rule passes *and* the column name matches the closed-vocabulary synonym register or an adapter's own column (so "Item Price"/"Sale Amount"/"Selling Price" never auto-accept as the same thing without validation passing); anything else — including every `tax_inclusion`, `sign_convention`, `unit` and money-bearing field that was not exactly matched — requires **seller confirmation** in the mapping review UI. Seller edits are re-validated. A rejected mapping stays rejected for that fingerprint.
@@ -184,6 +189,8 @@ Input to the model (masked, bounded): column names, inferred type and format per
 Rows ingested via a mapping carry `PROVISIONAL`; metric results cite `mapping_id`/version in provenance; the dashboard shows "Mapped source — confirmed by you on <date>". A verification review (`column_mapping.verified=true`, by a Metrion reviewer, not seller) is the only path to `VERIFIED` and requires comparison against a real export.
 
 ### 6.5a GST-inclusive mapped amounts — current limitation and the specified future workflow (decision R3)
+
+**Scope.** GST-inclusive mapping and India-specific tax reconciliation (GST on sales and fees, TCS/TDS, ITC visibility, CA-ready reconciliation) remain **in the production scope** of CFO 2.0. The limitation below is a *temporary safety refusal*, not a reduction of scope; the future workflow is specified here, with seller confirmation and CA review where required.
 
 **Limitation (in force).** A mapped gross/total amount must be declared **tax-exclusive**. A mapping whose gross or total amount includes GST, or whose GST treatment is unknown, is **refused** (`TAX_INCLUSIVE_UNSUPPORTED_FOR_MAPPED`); nothing is posted. The seller is told plainly and the mapped path stays closed to such files. This is the safe behaviour: posting an inclusive amount as exclusive would overstate revenue.
 
@@ -236,12 +243,14 @@ PV1 Flipkart/Amazon adapters and ad adapters unverified against real exports (cf
 | # | Criterion |
 |---|---|
 | AC-D1 | **Bounded memory.** An upload never loads its file into memory: rows are read in chunks of `CFO_STREAM_CHUNK_ROWS`. Peak memory is bounded by (a) *chunk size × row width* (a row carries one finding per unmapped column) plus (b) one small digest (≈130–230 bytes) per *distinct row identity* in the duplicate index, which grows linearly with rows and is capped by `CFO_STREAM_MAX_ROWS`; it never grows with the file's bytes. A file larger than the old 20 MB cap must ingest within these bounds, with the figures recorded by the benchmark. |
+| AC-D1-status | **Stays PARTIAL** until a committed benchmark with a file above 20 MiB passes the criteria fixed in `tools/benchmarks/cfo_ingest_benchmark.py --large-file` (C1 file above 20 MiB; C2 every row posted and equal to the database count; C3 memory slope ≤ 400 bytes/row between N and 4N rows; C4 peak growth at 4N ≤ 400 MiB at the default chunk and width; C5 throughput recorded), each size run in its own process so freed memory cannot mask growth. The criteria are provisional and fixed before measurement; they are revisited with real exports. |
 | AC-D1-note | *Wording change, shown openly:* the earlier text said memory is "bounded by chunk size". Measurement showed that is incomplete: a 1,000,000-row run grew peak memory by 231 MiB and a wide 75,000-row run by 153 MiB, because of the duplicate index and per-column findings. The requirement is **not weakened**: memory is still independent of file size and the row cap is a hard ceiling; the statement now names what actually bounds it. A spill-to-disk index remains the planned mitigation if a benchmark shows the ceiling is too high (OQ6). |
 | AC-D2 | Known-format files ingest through the existing adapters with results identical to the old path (golden comparison) |
 | AC-D3 | An unfamiliar file yields a proposal; no row is persisted before every ambiguous field is seller-confirmed |
 | AC-D4 | A mapping failing M-VOC/M-TYP/M-TAX/M-SGN/M-UNT cannot auto-accept |
 | AC-D5 | A failed or cancelled job leaves no staged rows and no partial canonical rows |
 | AC-D6 | Re-uploading the same bytes, or an overlapping file, never double-counts |
+| AC-D6c | Legitimate events sharing an order or shipment id post: a sale and its credit note, a shipment and its refund, one order in several shipments, one shipment with several items or orders, a replacement shipment, equal and opposite refund/reversal rows, partial settlements and per-description melted settlement rows. Identical events that cannot be told apart are held with the reason |
 | AC-D6b | Within-file duplicates and cross-file overlap are detected before posting; identical identity with different content, and unexplainable identical repeats, are held with a stated reason; partial settlements and adjustments on one order are posted, not held |
 | AC-D7 | Every canonical row traces to file, row number, ingestion run and (if used) mapping version |
 | AC-D8 | Samples sent to the (mocked) model contain no unmasked PII tokens |

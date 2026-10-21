@@ -19,6 +19,14 @@ report can overlap.
 carry. A product id (SKU, ASIN, FSN) is never a line identity: the same product can appear on several lines of one
 order. Where a row lacks the marketplace's line id, an identical repeat is held as ambiguous, never skipped.
 
+**Legitimate financial events that share an order or shipment id** are different events and must not collide: a sale and its
+credit note, a shipment and its refund, partial refunds, a replacement shipment, several shipments of one order. The identity
+therefore also carries the **event discriminators** the row has: `document_type` (invoice / credit note ...) and
+`transaction_type` (shipment / refund / adjustment ...) for sales rows, and `document_type` for settlement rows. When a report
+does not carry them (today's verified adapters map neither) the rows are told apart by what they do carry (line id, amounts,
+dates, descriptions); where that is not enough, two rows of one line with different content are a CONFLICT and an identical
+repeat is AMBIGUOUS — held and explained, never merged and never silently both posted.
+
 **Held rows are unresolved**: they are not posted, so they are excluded from every authoritative financial figure,
 until the seller resolves them (resolution flow: spec OQ7/OQ10).
 
@@ -131,6 +139,11 @@ def _norm(v: object) -> str:
     return str(v).strip()
 
 
+def _event(v: object) -> str:
+    """An event discriminator (document or transaction type), case/separator-insensitive: 'Credit Note' == 'CREDIT_NOTE'."""
+    return re.sub(r"[\s_\-]+", "_", _norm(v).upper())
+
+
 def _digest(parts: Sequence[str]) -> bytes:
     return hashlib.blake2b("\x1f".join(parts).encode("utf-8"), digest_size=16).digest()
 
@@ -162,7 +175,7 @@ def sales_identity(marketplace: str, family: str, f: Mapping[str, object]) -> Id
     line = _norm(f.get(rule.sales_line_field))
     if not (order_ref or line or invoice_ref):
         return Identity(digest=b"", strong=False, none=True)
-    parts = [SALES, family, marketplace, order_ref, line, invoice_ref]
+    parts = [SALES, family, marketplace, order_ref, line, invoice_ref, _event(f.get("document_type")), _event(f.get("transaction_type"))]
     if not line:
         # No line id: two product lines of one order must still not collapse into one, so the product ids join the digest, but the
         # row is not strong (a product id is not a line id).
@@ -176,7 +189,7 @@ def settlement_identity(marketplace: str, family: str, f: Mapping[str, object]) 
     if not any(_norm(f.get(n)) for n in ("order_ref", "line_ref", "settlement_id")):
         return Identity(digest=b"", strong=False, none=True)
     # A settlement identity is never "strong": identical settlement rows cannot be told from a double export.
-    return Identity(digest=_digest([SETTLEMENT, family, marketplace, *rule.settlement_fields, *values]), strong=False)
+    return Identity(digest=_digest([SETTLEMENT, family, marketplace, *rule.settlement_fields, *values, _event(f.get("document_type"))]), strong=False)
 
 
 def existing_sales_entry(marketplace: str, family: str, row: Mapping[str, object], source_row_json: Mapping[str, str]) -> ExistingEntry | None:

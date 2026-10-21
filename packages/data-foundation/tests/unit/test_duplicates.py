@@ -243,3 +243,135 @@ def test_identity_digests_match_between_incoming_and_stored_forms() -> None:
 def test_unknown_side_rejected() -> None:
     with pytest.raises(ValueError):
         DuplicateTracker("INVENTORY", "MEESHO", "x")
+
+
+
+# =================================================================== LEGITIMATE EVENTS SHARING AN ORDER OR SHIPMENT ID
+# Different financial events of one order or one shipment are not duplicates of each other. Each case below must post (NEW), while the
+# cases that cannot be told apart must still be held with an explanation. Event discriminators: document_type / transaction_type.
+
+def event_row(n: int, order: str, line: str | None, *, doc: str | None = None, txn: str | None = None, invoice: str | None = None, price: str = "100",
+              shipment: str | None = None) -> ParsedRow:
+    raw = {"Order": order, "Line": line or "", "Doc": doc or "", "Txn": txn or "", "Inv": invoice or "", "Price": price, "Ship": shipment or ""}
+    f: dict[str, object] = {"order_ref": order}
+    for k, v in (("line_ref", line), ("document_type", doc), ("transaction_type", txn), ("invoice_ref", invoice)):
+        if v:
+            f[k] = v
+    return row(n, raw, **f)
+
+
+@pytest.mark.parametrize("mp", ["MEESHO", "AMAZON", "FLIPKART"])
+def test_a_sale_and_its_credit_note_for_the_same_line_are_two_events_not_a_duplicate(mp: str) -> None:
+    sale = event_row(1, "O1", "LINE-A", doc="INVOICE", price="100")
+    credit = event_row(2, "O1", "LINE-A", doc="CREDIT_NOTE", price="-100")
+    assert classes(sales_tracker(mp).classify([sale, credit], [])) == [DupClass.NEW, DupClass.NEW]
+    # across files too: the sale was ingested earlier, the credit note arrives in a later report of the same kind
+    assert classes(sales_tracker(mp).classify([credit], [entry_for(sale, mp=mp)])) == [DupClass.NEW]
+
+
+def test_document_type_spelling_does_not_split_one_event_into_several() -> None:
+    """'Credit Note', 'CREDIT_NOTE' and 'credit-note' are ONE event type. They differ as raw text, so the repeats are a conflict held for the
+    seller, but they are recognised as the same event and are never posted as three separate credit notes."""
+    a, b, c = event_row(1, "O1", "L1", doc="Credit Note"), event_row(2, "O1", "L1", doc="CREDIT_NOTE"), event_row(3, "O1", "L1", doc="credit-note")
+    assert classes(sales_tracker().classify([a, b, c], [])) == [DupClass.NEW, DupClass.CONFLICT_IN_FILE, DupClass.CONFLICT_IN_FILE]
+    same_text = [event_row(1, "O1", "L1", doc="CREDIT_NOTE"), event_row(2, "O1", "L1", doc="CREDIT_NOTE")]
+    assert classes(sales_tracker().classify(same_text, [])) == [DupClass.NEW, DupClass.EXACT_DUPLICATE_IN_FILE]
+
+
+def test_a_shipment_and_its_refund_share_ids_but_are_different_transactions() -> None:
+    ship = event_row(1, "O1", "L1", txn="Shipment", shipment="SH-1")
+    refund = event_row(2, "O1", "L1", txn="Refund", shipment="SH-1")
+    assert classes(sales_tracker("AMAZON").classify([ship, refund], [])) == [DupClass.NEW, DupClass.NEW]
+
+
+def test_same_line_same_event_type_different_content_is_still_a_conflict_a_status_change_is_not_a_new_event() -> None:
+    first = event_row(1, "O1", "L1", doc="INVOICE", price="100")
+    changed = event_row(2, "O1", "L1", doc="INVOICE", price="120")
+    out = sales_tracker().classify([first, changed], [])
+    assert classes(out) == [DupClass.NEW, DupClass.CONFLICT_IN_FILE] and out[1].klass.held
+
+
+def test_one_order_shipped_in_two_shipments_posts_every_shipped_item() -> None:
+    items = [event_row(1, "AMZ-1", "SII-1", shipment="SH-1"), event_row(2, "AMZ-1", "SII-2", shipment="SH-2")]  # two Shipment Item IDs, one order
+    assert classes(sales_tracker("AMAZON").classify(items, [])) == [DupClass.NEW, DupClass.NEW]
+
+
+def test_one_shipment_holding_two_items_posts_both_items() -> None:
+    items = [event_row(1, "AMZ-1", "SII-1", shipment="SH-1"), event_row(2, "AMZ-1", "SII-2", shipment="SH-1")]  # same order AND same shipment
+    assert classes(sales_tracker("AMAZON").classify(items, [])) == [DupClass.NEW, DupClass.NEW]
+
+
+def test_one_shipment_consolidating_two_orders_posts_both_orders() -> None:
+    rows = [event_row(1, "AMZ-1", "SII-1", shipment="SH-9"), event_row(2, "AMZ-2", "SII-2", shipment="SH-9")]
+    assert classes(sales_tracker("AMAZON").classify(rows, [])) == [DupClass.NEW, DupClass.NEW]
+
+
+def test_a_replacement_shipment_for_the_same_order_is_a_new_line() -> None:
+    original = event_row(1, "FK-1", "LI-1")
+    replacement = event_row(2, "FK-1", "LI-2", txn="Replacement")
+    assert classes(sales_tracker("FLIPKART").classify([original, replacement], [])) == [DupClass.NEW, DupClass.NEW]
+
+
+def test_two_identical_purchases_of_one_product_on_different_lines_are_two_sales() -> None:
+    rows = [event_row(1, "O1", "LINE-A", price="100"), event_row(2, "O1", "LINE-B", price="100")]  # identical content, different line ids
+    assert classes(sales_tracker().classify(rows, [])) == [DupClass.NEW, DupClass.NEW]
+
+
+def test_an_identical_repeat_with_no_line_id_cannot_be_told_from_a_double_export_and_is_held() -> None:
+    a = event_row(1, "O1", None, invoice="INV-1")
+    b = event_row(2, "O1", None, invoice="INV-1")
+    out = sales_tracker().classify([a, b], [])
+    assert classes(out) == [DupClass.NEW, DupClass.AMBIGUOUS_REPEAT] and out[1].klass.held
+
+
+# ------------------------------------------------------------------------------------------ settlement events on one order
+def amazon_melted(n: int, desc: str, amount: int, *, typ: str = "ItemFees", sid: str = "S9", doc: str | None = None) -> ParsedRow:
+    f: dict[str, object] = dict(order_ref="O1", order_item_code="I1", merchant_order_item_id="M1", shipment_id="SH-1", settlement_id=sid,
+                                settlement_amount_type=typ, settlement_amount_description=desc, settlement_amount_value=amount)
+    if doc:
+        f["document_type"] = doc
+    return row(n, {"d": desc, "a": str(amount), "t": typ, "s": sid, "doc": doc or ""}, **f)
+
+
+def test_amazon_one_item_with_principal_commission_shipping_fee_and_refund_posts_every_line() -> None:
+    rows = [amazon_melted(1, "Principal", 100_00, typ="ItemPrice"), amazon_melted(2, "Commission", -15_00), amazon_melted(3, "ShippingChargeback", -4_00),
+            amazon_melted(4, "FBA fee", -20_00), amazon_melted(5, "Principal", -100_00, typ="ItemPrice", doc="REFUND"), amazon_melted(6, "Commission", 15_00)]
+    assert classes(settle_tracker("AMAZON").classify(rows, [])) == [DupClass.NEW] * 6
+
+
+def test_a_refund_and_its_reversal_of_equal_and_opposite_amounts_are_different_events() -> None:
+    rows = [amazon_melted(1, "Refund", -50_00), amazon_melted(2, "Refund", 50_00)]  # +50 and -50: different identity (the amount differs)
+    assert classes(settle_tracker("AMAZON").classify(rows, [])) == [DupClass.NEW, DupClass.NEW]
+
+
+def test_a_payment_and_a_refund_of_the_same_amount_on_one_order_are_told_apart_by_document_type() -> None:
+    pay = settlement(1, "O1", 50_00, sid="S1", when=date(2026, 10, 1), document_type="PAYMENT")
+    refund = settlement(2, "O1", 50_00, sid="S1", when=date(2026, 10, 1), document_type="REFUND")
+    assert classes(settle_tracker("FLIPKART").classify([pay, refund], [])) == [DupClass.NEW, DupClass.NEW]
+    assert classes(settle_tracker("FLIPKART").classify([pay, pay], [])) == [DupClass.NEW, DupClass.AMBIGUOUS_REPEAT]  # but the same event twice is held
+
+
+def test_two_identical_partial_refunds_on_one_order_cannot_be_told_apart_and_the_repeat_is_held_with_the_reason() -> None:
+    a = settlement(1, "O1", -25_00, sid="S1", when=date(2026, 10, 1))
+    b = settlement(2, "O1", -25_00, sid="S1", when=date(2026, 10, 1))
+    out = settle_tracker("FLIPKART").classify([a, b], [])
+    assert classes(out) == [DupClass.NEW, DupClass.AMBIGUOUS_REPEAT]
+    assert "if both are real" in out[1].finding.message.lower()  # type: ignore[union-attr]
+
+
+def test_the_same_refund_on_a_different_settlement_date_is_a_different_event() -> None:
+    a = settlement(1, "O1", -25_00, sid="S1", when=date(2026, 10, 1))
+    b = settlement(2, "O1", -25_00, sid="S2", when=date(2026, 10, 8))
+    assert classes(settle_tracker("FLIPKART").classify([a, b], [])) == [DupClass.NEW, DupClass.NEW]
+
+
+def test_settlement_rows_of_different_orders_in_one_settlement_batch_are_all_posted() -> None:
+    rows = [settlement(i, f"O{i}", 10_00, sid="BATCH-1", when=date(2026, 10, 1)) for i in range(1, 6)]  # one payout id, five orders
+    assert classes(settle_tracker("FLIPKART").classify(rows, [])) == [DupClass.NEW] * 5
+
+
+@pytest.mark.parametrize("mp", ["MEESHO", "AMAZON", "FLIPKART"])
+def test_the_same_event_arriving_in_a_second_file_of_the_same_report_is_overlap_not_a_new_sale(mp: str) -> None:
+    sale = event_row(1, "O1", "LINE-A", doc="INVOICE")
+    again = event_row(9, "O1", "LINE-A", doc="INVOICE")
+    assert classes(sales_tracker(mp).classify([again], [entry_for(sale, mp=mp)])) == [DupClass.EXACT_DUPLICATE_CROSS_FILE]

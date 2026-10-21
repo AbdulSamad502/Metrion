@@ -30,7 +30,7 @@ from data_foundation.adapters.base import rupees_to_paise
 from data_foundation.component_registry import COMPONENT_KIND_BY_CODE
 from data_foundation.mapping import vocab as V
 from data_foundation.mapping.profile import parse_date_with, parse_decimal
-from data_foundation.mapping.units import format_percent_points, parse_percent_points
+from data_foundation.mapping.units import format_percent_points, parse_fraction_as_percent_points, parse_percent_points
 from data_foundation.types import ColumnBinding, ComponentValue, DetectionResult, FileSample, ParsedRow, RawFile
 
 _RESOLVED = frozenset({"AUTO_ACCEPTED_BY_RULES", "SELLER_CONFIRMED", "SELLER_OVERRIDDEN"})
@@ -157,7 +157,8 @@ class MappedAdapter:
                 if not raw.strip():
                     canonical[fld.canonical_field] = None
                 else:
-                    pct = parse_percent_points(raw)  # exact percentage points; see mapping/units.py for the full definition
+                    # exact percentage points; the unit was chosen explicitly by the seller (mapping/units.py has both definitions)
+                    pct = parse_fraction_as_percent_points(raw) if fld.transform == "FRACTION_TO_PERCENT" else parse_percent_points(raw)
                     if pct is None:
                         errors.append((fld.header, raw))
                     else:

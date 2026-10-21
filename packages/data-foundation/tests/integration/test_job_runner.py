@@ -448,3 +448,131 @@ def test_a_chosen_report_type_must_fit_the_marketplace_and_the_file(tmp_path: Pa
     assert runner().run_job(t, not_this_file) == "FAILED"
     job = jobs.get_job(t, not_this_file)
     assert job["error_code"] == "ADAPTER_MISMATCH" and "missing" in job["error_detail"] and sales_rows(t) == []  # type: ignore[index]
+
+
+
+# ============================================================ legitimate events sharing an order / line, end to end through a mapped file
+EVENT_COLUMNS = ["Order ID", "Line ID", "Doc Type", "Qty", "Selling Price", "Invoice Date"]
+
+
+def event_csv(tmp: Path, rows: list[list[str]], name: str = "events.csv") -> Path:
+    p = tmp / name
+    p.write_text(",".join(EVENT_COLUMNS) + "\n" + "".join(",".join(r) + "\n" for r in rows), encoding="utf-8")
+    return p
+
+
+def event_proposal() -> dict[str, Any]:
+    return {"fields": [
+        {"source_column": "Order ID", "index": 0, "canonical_field": "order_ref", "transform": "IDENTITY"},
+        {"source_column": "Line ID", "index": 1, "canonical_field": "line_ref", "transform": "IDENTITY"},
+        {"source_column": "Doc Type", "index": 2, "canonical_field": "document_type", "transform": "IDENTITY"},
+        {"source_column": "Qty", "index": 3, "canonical_field": "quantity", "transform": "IDENTITY"},
+        {"source_column": "Selling Price", "index": 4, "canonical_field": "gross_item_amount", "transform": "RUPEES_TO_PAISE", "tax_inclusion": "EXCLUSIVE", "sign_convention": "AS_IS"},
+        {"source_column": "Invoice Date", "index": 5, "canonical_field": "invoice_date", "transform": "DATE_DMY"}], "unmapped_columns": []}
+
+
+def confirm_event_mapping(t: uuid.UUID, j: uuid.UUID, p: Path) -> None:
+    job = jobs.get_job(t, j)
+    assert job is not None
+    pinput = collect_profile_input(open_report(p, SLIM, sheet_name=None), profile_rows=2000, sample_rows=20, seed=1)
+    service.confirm(t, job["mapping_id"], confirmed_by=uuid.uuid4(), decisions={i: "SELLER_CONFIRMED" for i in range(6)}, overrides={}, pinput=pinput,
+                    limits=MLIM, as_of=AS_OF, now=NOW)
+    assert jobs.transition(t, j, "QUEUED", mapping_id=job["mapping_id"], now=NOW)
+
+
+def test_a_sale_and_its_credit_note_sharing_an_order_and_line_both_post(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    rows = [["O1", "L1", "INVOICE", "1", "100.00", "05/10/2026"], ["O1", "L1", "CREDIT_NOTE", "1", "-100.00", "07/10/2026"],
+            ["O2", "L2", "INVOICE", "2", "250.00", "06/10/2026"], ["O2", "L2", "INVOICE", "2", "250.00", "06/10/2026"]]  # the last is an exact repeat of the row above
+    p = event_csv(tmp_path, rows)
+    j = upload(t, p)
+    r = runner(proposer=lambda inp: event_proposal())
+    assert r.run_job(t, j) == "AWAITING_MAPPING_CONFIRMATION"
+    confirm_event_mapping(t, j, p)
+    assert r.run_job(t, j) == "DONE"
+    out = jobs.get_job(t, j)["outcome"]  # type: ignore[index]
+    assert out["persisted_row_count"] == 3 and out["duplicates_in_file"] == 1 and out["held_conflicts"] == 0 and out["held_ambiguous"] == 0
+    with tenant_scope(t) as conn:
+        got = [tuple(x) for x in conn.execute(text("SELECT order_ref, document_type, gross_item_amount FROM sales_line WHERE tenant_id = :t ORDER BY order_ref, document_type"), {"t": str(t)})]
+    assert got == [("O1", "CREDIT_NOTE", -10000), ("O1", "INVOICE", 10000), ("O2", "INVOICE", 25000)]  # the credit note is its own event; the repeat was counted once
+
+
+def test_without_an_event_type_the_same_line_with_different_content_is_held_not_merged_and_not_doubled(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    p = tmp_path / "noevent.csv"
+    p.write_text("Order ID,Line ID,Qty,Selling Price,Invoice Date\nO1,L1,1,100.00,05/10/2026\nO1,L1,1,-100.00,07/10/2026\n", encoding="utf-8")
+
+    def proposal(_inp: Any) -> dict[str, Any]:
+        f = event_proposal()["fields"]
+        keep = [x for x in f if x["canonical_field"] != "document_type"]
+        for new_index, x in enumerate(keep):
+            x["index"] = new_index
+        return {"fields": keep, "unmapped_columns": []}
+
+    j = upload(t, p)
+    r = runner(proposer=proposal)
+    assert r.run_job(t, j) == "AWAITING_MAPPING_CONFIRMATION"
+    job = jobs.get_job(t, j)
+    pinput = collect_profile_input(open_csv(p, SLIM), profile_rows=2000, sample_rows=20, seed=1)
+    service.confirm(t, job["mapping_id"], confirmed_by=uuid.uuid4(), decisions={i: "SELLER_CONFIRMED" for i in range(5)}, overrides={}, pinput=pinput, limits=MLIM, as_of=AS_OF, now=NOW)  # type: ignore[index]
+    jobs.transition(t, j, "QUEUED", mapping_id=job["mapping_id"], now=NOW)  # type: ignore[index]
+    assert r.run_job(t, j) == "DONE"
+    out = jobs.get_job(t, j)["outcome"]  # type: ignore[index]
+    assert out["persisted_row_count"] == 1 and out["held_conflicts"] == 1  # nothing says the second row is a credit note, so it is held for the seller, not silently posted
+    assert len(sales_rows(t)) == 1
+
+
+# ============================================================ the unit of a rate is never guessed (decision R2), end to end
+RATE_COLUMNS = ["Order ID", "Line ID", "Qty", "Selling Price", "Invoice Date", "GST Rate"]
+
+
+def rate_file(tmp: Path, rates: list[str], name: str) -> Path:
+    p = tmp / name
+    p.write_text(",".join(RATE_COLUMNS) + "\n" + "".join(f"R-{i},R-{i}-1,1,{100 + i}.00,05/10/2026,{v}\n" for i, v in enumerate(rates)), encoding="utf-8")
+    return p
+
+
+def rate_proposal(transform: str) -> Any:
+    def make(_inp: Any) -> dict[str, Any]:
+        f = mock_proposal()["fields"][:5]
+        f = [x for x in f if x["canonical_field"] != "return_status"]
+        f.append({"source_column": "GST Rate", "index": 5, "canonical_field": "gst_rate", "transform": transform})
+        return {"fields": f, "unmapped_columns": []}
+    return make
+
+
+def test_an_ambiguous_rate_column_is_refused_until_the_seller_chooses_the_unit(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    p = rate_file(tmp_path, ["0.18", "0.05", "0.12", "0.28"] * 10, "ambig.csv")
+    j = upload(t, p)
+    r = runner(proposer=rate_proposal("PERCENT"))
+    assert r.run_job(t, j) == "AWAITING_MAPPING_CONFIRMATION"
+    job = jobs.get_job(t, j)
+    pinput = collect_profile_input(open_csv(p, SLIM), profile_rows=2000, sample_rows=20, seed=1)
+    m = cm.get_mapping(t, job["mapping_id"])  # type: ignore[index]
+    gst = next(f for f in m["fields"] if f["source_column"] == "GST Rate")  # type: ignore[index]
+    assert gst["decision"] == "PENDING" and any("will not guess" in x for x in gst["evidence"]["confirm_reasons"])  # the question is on the mapping the seller sees
+    others = {i: "SELLER_CONFIRMED" for i in range(5)}
+    with pytest.raises(service.MappingRefused) as e:  # every other field decided, the rate unit left unanswered
+        service.confirm(t, job["mapping_id"], confirmed_by=uuid.uuid4(), decisions=others, overrides={}, pinput=pinput, limits=MLIM, as_of=AS_OF, now=NOW)  # type: ignore[index]
+    assert any("GST Rate" in x and "needs your confirmation" in x for x in e.value.reasons)
+    assert cm.get_mapping(t, job["mapping_id"])["status"] == "PROPOSED" and sales_rows(t) == []  # type: ignore[index]
+    # the seller states the unit explicitly: fractions of 1
+    service.confirm(t, job["mapping_id"], confirmed_by=uuid.uuid4(), decisions={**others, 5: "SELLER_CONFIRMED"}, overrides={5: service.FieldOverride(transform="FRACTION_TO_PERCENT")},  # type: ignore[index]
+                    pinput=pinput, limits=MLIM, as_of=AS_OF, now=NOW)
+    jobs.transition(t, j, "QUEUED", mapping_id=job["mapping_id"], now=NOW)  # type: ignore[index]
+    assert r.run_job(t, j) == "DONE" and len(sales_rows(t)) == 40
+
+
+def test_choosing_the_fraction_unit_for_percentage_points_is_refused(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    p = rate_file(tmp_path, ["18", "5", "12", "28"] * 10, "points.csv")
+    j = upload(t, p)
+    r = runner(proposer=rate_proposal("PERCENT"))
+    assert r.run_job(t, j) == "AWAITING_MAPPING_CONFIRMATION"
+    job = jobs.get_job(t, j)
+    pinput = collect_profile_input(open_csv(p, SLIM), profile_rows=2000, sample_rows=20, seed=1)
+    with pytest.raises(service.MappingRefused) as e:
+        service.confirm(t, job["mapping_id"], confirmed_by=uuid.uuid4(), decisions={i: "SELLER_CONFIRMED" for i in range(6)},  # type: ignore[index]
+                        overrides={5: service.FieldOverride(transform="FRACTION_TO_PERCENT")}, pinput=pinput, limits=MLIM, as_of=AS_OF, now=NOW)
+    assert any("M-PCT" in x for x in e.value.reasons)  # values above 1 can only be percentage points

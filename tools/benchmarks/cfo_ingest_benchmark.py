@@ -13,6 +13,17 @@ WHAT THIS MEASURES, HONESTLY
     width of real marketplace exports (every unmapped column becomes a V-COL-001 finding per row), which is the realistic cost.
   * Numbers are for THIS machine and this local, untuned Postgres; they are targets' evidence, not guarantees.
 
+SECOND MODE — AC-D1 LARGE FILE (`--large-file`)
+  Evidence for the bounded-memory requirement with a file ABOVE 20 MiB. One wide Meesho orders file is ingested at N rows and again at 4N rows,
+  each in its OWN subprocess (a Python process keeps freed memory, so a second run in the same process would understate growth). Pass criteria are
+  fixed here, before any result is seen, and are provisional configuration to be revisited with real data:
+    C1  the larger file is above 20 MiB;
+    C2  every row is posted and the database count equals the rows reported;
+    C3  memory slope = (peak growth at 4N - peak growth at N) / (3N rows) <= 400 bytes per row  (the duplicate index is ~130-230 B per distinct row);
+    C4  peak growth at 4N <= 400 MiB at the default chunk size and width;
+    C5  throughput is recorded (no pass/fail).
+  The legacy path needed ~31 x the file size (measured earlier, not re-run here); the report states it only as context.
+
 USAGE (scratch database only — the script refuses anything but port 5544 unless --allow-dev-db)
     bash backend/scripts/scratch_db.sh up
     eval "$(bash backend/scripts/scratch_db.sh env)"
@@ -57,6 +68,10 @@ EXPENSE_ROWS = 5_000
 _MONEY = {"gross_item_amount", "taxable_amount", "total_invoice_amount", "gross_settlement_amount", "total_sale_amount", "settlement_amount_value",
           "component_amount", "_ignored_legacy_tax_column"}
 TARGET_SECONDS = 60
+# AC-D1 LARGE FILE criteria (see the module docstring). Provisional configuration, fixed before measurement.
+LARGE_FILE_MIN_BYTES = 20 * 1024 * 1024
+LARGE_FILE_MAX_SLOPE_BYTES_PER_ROW = 400
+LARGE_FILE_MAX_PEAK_GROWTH_MIB = 400
 
 
 def headers_of(adapter) -> list[str]:  # type: ignore[no-untyped-def]
@@ -210,6 +225,87 @@ def run_shape(shape: str, wide_columns: int, chunk_rows: int, seed: int, scale: 
     return results, {"posted_seconds": posted_total, "expense_validation_seconds": ex_dt, "rss_growth_mib": whole.growth_mib, "db_rows": float(db_posted)}
 
 
+def single_large_run(rows: int, wide_columns: int, chunk_rows: int, seed: int, json_out: Path) -> int:
+    """One wide Meesho orders file ingested in THIS process (called as a subprocess so memory growth is not masked by earlier runs)."""
+    import json
+
+    limits = StreamLimits(chunk_rows=chunk_rows, max_rows=20_000_000, header_scan_rows=30, min_header_fill=Fraction(6, 10),
+                          max_uncompressed_bytes=8 * 1024**3, max_zip_ratio=200, max_zip_members=500, max_sheets=50)
+    mlim = MappingLimits(min_parse_rate=Fraction(98, 100), tax_consistency_rate=Fraction(98, 100), tax_tolerance_paise=1, key_unique_rate=Fraction(98, 100),
+                         mixed_sign_low=Fraction(2, 100), max_date_span_years=5, unit_fraction_share=Fraction(2, 100))
+    runner = JobRunner(config=RunnerConfig(max_workers=1, stale_after_seconds=3600, profile_rows=5000, sample_rows=20), stream_limits=limits,
+                       mapping_limits=mlim, as_of=lambda: date(2026, 10, 21))
+    tenant = uuid.uuid4()
+    with tempfile.TemporaryDirectory(prefix="cfo-bench-large-") as d:
+        path = Path(d) / "large.csv"
+        write_marketplace_file(path, ADAPTER_REGISTRY["meesho.orders.v1"], rows, wide_columns, seed)
+        fid = uuid.uuid4()
+        with tenant_scope(tenant) as conn:
+            conn.execute(text("""INSERT INTO report_file (id, tenant_id, marketplace, report_category, content_sha256, original_filename, byte_size, storage_uri, uploaded_by, uploaded_at)
+                                 VALUES (:id,:t,'MEESHO','ORDER_STATUS',:sha,:n,:b,:u,:by,:at)"""),
+                         {"id": str(fid), "t": str(tenant), "sha": uuid.uuid4().hex * 2, "n": path.name, "b": path.stat().st_size,
+                          "u": f"file://{path}", "by": str(uuid.uuid4()), "at": datetime.now(timezone.utc)})
+        job = jobs.create_job(tenant, report_file_id=fid, report_kind="SALES", created_by=uuid.uuid4(), adapter_id="meesho.orders.v1")
+        with PeakRss() as m:
+            t0 = time.perf_counter()
+            status = runner.run_job(tenant, job)
+            seconds = time.perf_counter() - t0
+        out = (jobs.get_job(tenant, job) or {}).get("outcome") or {}
+        with tenant_scope(tenant) as conn:
+            db_rows = conn.execute(text("SELECT count(*) FROM sales_line WHERE tenant_id = :t"), {"t": str(tenant)}).scalar_one()
+        json_out.write_text(json.dumps({"rows": rows, "file_bytes": path.stat().st_size, "status": status, "seconds": seconds, "posted": int(out.get("persisted_row_count", 0)),
+                                        "chunks": out.get("chunks"), "db_rows": int(db_rows), "rss_growth_bytes": int(m.peak - m.base)}), encoding="utf-8")
+    return 0
+
+
+def run_large_file_mode(args: argparse.Namespace) -> list[dict]:  # type: ignore[type-arg]
+    import json
+
+    results = []
+    for factor in (1, 4):
+        rows = args.large_base_rows * factor
+        with tempfile.TemporaryDirectory(prefix="cfo-bench-out-") as d:
+            out = Path(d) / "r.json"
+            subprocess.run([sys.executable, str(Path(__file__).resolve()), "--internal-single-run", str(rows), "--wide-columns", str(args.wide_columns),
+                            "--chunk-rows", str(args.chunk_rows), "--seed", str(args.seed), "--output", str(out)], check=True)
+            results.append(json.loads(out.read_text(encoding="utf-8")))
+        print(f"large-file run {rows:,} rows: {results[-1]['file_bytes'] / 2**20:.1f} MiB, {results[-1]['seconds']:.1f}s, growth {results[-1]['rss_growth_bytes'] / 2**20:.0f} MiB", flush=True)
+    return results
+
+
+def render_large(results: list[dict], args: argparse.Namespace, pg_version: str) -> str:  # type: ignore[type-arg]
+    small, big = results
+    extra_rows = big["rows"] - small["rows"]
+    slope = (big["rss_growth_bytes"] - small["rss_growth_bytes"]) / extra_rows
+    crit = [
+        ("C1", f"larger file above {LARGE_FILE_MIN_BYTES // 2**20} MiB", big["file_bytes"] >= LARGE_FILE_MIN_BYTES, f"{big['file_bytes'] / 2**20:.1f} MiB"),
+        ("C2", "every row posted and equal to the database count", all(r["status"] == "DONE" and r["posted"] == r["rows"] == r["db_rows"] for r in results),
+         ", ".join(f"{r['posted']:,}/{r['rows']:,}/{r['db_rows']:,}" for r in results)),
+        ("C3", f"memory slope <= {LARGE_FILE_MAX_SLOPE_BYTES_PER_ROW} bytes/row", slope <= LARGE_FILE_MAX_SLOPE_BYTES_PER_ROW, f"{slope:.0f} bytes/row"),
+        ("C4", f"peak growth at 4N <= {LARGE_FILE_MAX_PEAK_GROWTH_MIB} MiB", big["rss_growth_bytes"] <= LARGE_FILE_MAX_PEAK_GROWTH_MIB * 2**20, f"{big['rss_growth_bytes'] / 2**20:.0f} MiB"),
+    ]
+    L = ["# CFO 2.0 - AC-D1 large-file benchmark", "",
+         f"Generated by `tools/benchmarks/cfo_ingest_benchmark.py --large-file` at {datetime.now(timezone.utc).isoformat(timespec='seconds')}. **Synthetic data**, deterministic from the seed; this machine only.", "",
+         "## Environment", "",
+         f"- Commit: `{git('rev-parse', '--short', 'HEAD')}` (code paths {'clean' if not git('status', '--porcelain', '--untracked-files=no', '--', 'packages', 'backend', 'tools', 'docs/specs') else 'have uncommitted changes'})",
+         f"- OS: {platform.platform()} · Python {platform.python_version()} · CPU: {os.cpu_count()} logical · RAM: {psutil.virtual_memory().total / 2**30:.1f} GiB",
+         f"- Database: {pg_version} (local Docker scratch instance on :5544, no tuning)",
+         f"- Settings: chunk_rows={args.chunk_rows} · workers=1 · seed={args.seed} · wide columns={args.wide_columns} (one finding per unmapped column per row) · each size run in its own subprocess", "",
+         "Reproduce:", "", "```", "bash backend/scripts/scratch_db.sh up", 'eval "$(bash backend/scripts/scratch_db.sh env)"',
+         f"python tools/benchmarks/cfo_ingest_benchmark.py --large-file --large-base-rows {args.large_base_rows} --chunk-rows {args.chunk_rows} --wide-columns {args.wide_columns} --seed {args.seed} --output <report.md>", "```", "",
+         "## Measurements", "", "| Rows | File (MiB) | Status | Seconds | Rows/s | Posted | Database rows | Chunks | Peak memory growth (MiB) |", "|---:|---:|---|---:|---:|---:|---:|---:|---:|"]
+    for r in results:
+        L.append(f"| {r['rows']:,} | {r['file_bytes'] / 2**20:.1f} | {r['status']} | {r['seconds']:.1f} | {r['rows'] / r['seconds']:,.0f} | {r['posted']:,} | {r['db_rows']:,} | {r['chunks']} | {r['rss_growth_bytes'] / 2**20:.0f} |")
+    L += ["", "## Pass criteria (fixed in the script before measurement; provisional)", "", "| # | Criterion | Result | Measured |", "|---|---|---|---|"]
+    for cid, text_, ok, measured in crit:
+        L.append(f"| {cid} | {text_} | **{'PASS' if ok else 'FAIL'}** | {measured} |")
+    L += ["| C5 | throughput recorded (no pass/fail) | recorded | " + ", ".join(f"{r['rows'] / r['seconds']:,.0f} rows/s" for r in results) + " |", "",
+          f"Context only (not re-run here): the legacy whole-file path held ~31 x the file size in memory (measured earlier), i.e. about {31 * big['file_bytes'] / 2**20:,.0f} MiB for the larger file above, against {big['rss_growth_bytes'] / 2**20:,.0f} MiB measured now.", "",
+          "## Verdict", "", f"**AC-D1 large-file evidence: {'ALL CRITERIA PASS' if all(c[2] for c in crit) else 'AT LEAST ONE CRITERION FAILS'}.** "
+          "The criteria are provisional; they must be revisited with real seller exports, and the file is synthetic.", ""]
+    return "\n".join(L)
+
+
 def git(*args: str) -> str:
     try:
         return subprocess.check_output(["git", *args], text=True, stderr=subprocess.DEVNULL).strip()
@@ -264,6 +360,9 @@ def main() -> int:
     ap.add_argument("--scale", type=float, default=1.0, help="multiply every row count (1.0 = the 80,000-row scenario)")
     ap.add_argument("--wide-columns", type=int, default=40, help="unmapped filler columns per row in the WIDE shape")
     ap.add_argument("--output", type=Path, required=True)
+    ap.add_argument("--large-file", action="store_true", help="AC-D1 mode: one wide file at N and 4N rows, each in its own subprocess")
+    ap.add_argument("--large-base-rows", type=int, default=60_000, help="N for --large-file (the larger run uses 4N)")
+    ap.add_argument("--internal-single-run", type=int, default=None, help=argparse.SUPPRESS)
     ap.add_argument("--allow-dev-db", action="store_true", help="run against a database that is not the :5544 scratch instance (never do this)")
     args = ap.parse_args()
 
@@ -274,10 +373,19 @@ def main() -> int:
     if make_url(url).port != 5544 and not args.allow_dev_db:
         print("Refusing to benchmark against anything but the scratch database on port 5544 (pass --allow-dev-db to override).", file=sys.stderr)
         return 2
+    if args.internal_single_run is not None:
+        return single_large_run(args.internal_single_run, args.wide_columns, args.chunk_rows, args.seed, args.output)
     eng = create_engine(os.environ.get("DATABASE_URL", url))
     with eng.connect() as c:
         pg_version = str(c.execute(text("select version()")).scalar_one()).split(" on ")[0]
     eng.dispose()
+
+    if args.large_file:
+        results = run_large_file_mode(args)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(render_large(results, args, pg_version), encoding="utf-8")
+        print(f"report written to {args.output}")
+        return 0
 
     shapes = []
     with tempfile.TemporaryDirectory(prefix="cfo-bench-") as d:

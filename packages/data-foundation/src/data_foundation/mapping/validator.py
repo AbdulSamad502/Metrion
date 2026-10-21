@@ -21,6 +21,7 @@ from data_foundation.component_registry import COMPONENT_KIND_BY_CODE
 from data_foundation.mapping import vocab as V
 from data_foundation.mapping.profile import ColumnProfile, parse_decimal
 from data_foundation.mapping.proposal import FieldProposal, MappingProposal
+from data_foundation.mapping.units import percent_unit_is_ambiguous
 
 _TAX_CODES = frozenset({"CGST", "SGST", "IGST", "UTGST", "CESS"})
 _GROSS_LIKE = ("total_invoice_amount", "gross_item_amount")
@@ -134,8 +135,8 @@ def _check_field(
             errors.append(Issue("M-VOC", f"a money field needs a money transform, not {f.transform}"))
         if vt == "date" and f.transform not in V.DATE_TRANSFORMS:
             errors.append(Issue("M-VOC", f"a date field needs a date transform, not {f.transform}"))
-        if vt == "percent" and f.transform != "PERCENT":
-            errors.append(Issue("M-VOC", "a percentage field needs PERCENT"))
+        if vt == "percent" and f.transform not in V.PERCENT_TRANSFORMS:
+            errors.append(Issue("M-VOC", "a percentage field needs PERCENT or FRACTION_TO_PERCENT"))
         if vt in ("text", "int", "enum") and f.transform != "IDENTITY":
             errors.append(Issue("M-VOC", f"a {vt} field takes the IDENTITY transform"))
     if not is_money and (f.tax_inclusion is not None or f.sign_convention is not None):
@@ -153,7 +154,9 @@ def _check_field(
     if profile.non_null == 0:
         errors.append(Issue("M-TYP", "the column has no values in the sampled rows"))
     elif spec is not None and not any(e.rule == "M-VOC" for e in errors):
-        if vt == "percent":
+        if vt == "percent" and f.transform == "FRACTION_TO_PERCENT":
+            rate, what = profile.fraction_parse_rate, "fractions between 0 and 1 (at most 6 decimals)"
+        elif vt == "percent":
             rate, what = profile.percent_parse_rate, "percentages between 0 and 100 (at most 4 decimals)"
         elif is_money:
             rate, what = profile.numeric_parse_rate, "numbers"
@@ -191,6 +194,17 @@ def _check_field(
             confirm.append("the sign convention (are deductions negative?) was not stated — please confirm")
         elif profile.negative_share >= 1 - limits.mixed_sign_low and f.sign_convention == "AS_IS" and f.canonical_field == V.COMPONENT_FIELD:
             confirm.append("every value is negative — please confirm these are deductions stored as negatives")
+
+    if vt == "percent" and not any(e.rule == "M-VOC" for e in errors) and profile.non_null:
+        # ---- M-PCT: the unit of a rate is never guessed (decision R2, 2026-10-21) ------------------------------------------
+        ambiguous = percent_unit_is_ambiguous(max_value=profile.percent_max, has_percent_sign=profile.percent_has_sign)
+        if f.transform == "PERCENT" and ambiguous:
+            confirm.append("every value is 1 or less, so these could be percentage points (0.18 means 0.18%) or fractions (0.18 means 18%); "
+                           "Metrion will not guess - please choose the unit explicitly")
+        if f.transform == "FRACTION_TO_PERCENT":
+            if profile.percent_has_sign or (profile.percent_max is not None and profile.percent_max > 1):
+                errors.append(Issue("M-PCT", "some values are above 1 or carry a % sign, so they are percentages, not fractions of 1"))
+            confirm.append("you chose to read these values as fractions of 1 (0.18 becomes 18%) - please confirm")
 
     if vt == "date":
         # ---- M-DTE (ambiguity) and M-PER ---------------------------------------------------------

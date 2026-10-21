@@ -15,7 +15,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 
-from data_foundation.mapping.units import parse_percent_points
+from data_foundation.mapping.units import parse_fraction_as_percent_points, parse_percent_points
 from data_foundation.mapping.vocab import normalise_header
 
 _CURRENCY_SYMBOLS = re.compile(r"(?i)^\s*(?:₹|rs\.?|inr)\s*")
@@ -77,6 +77,9 @@ class ColumnProfile:
     date_min: date | None
     date_max: date | None
     percent_parse_rate: Fraction  # share of non-null values that are a valid percentage (mapping/units.py)
+    fraction_parse_rate: Fraction  # share of non-null values that are a valid fraction of 1 (mapping/units.py)
+    percent_max: Decimal | None  # the largest value that parsed as a percentage; None when none did
+    percent_has_sign: bool  # some value carries a % sign (so it is percentage points, not a fraction)
     date_dmy_certain: bool  # some value has a first component > 12
     date_mdy_certain: bool  # some value has a second component > 12
 
@@ -130,6 +133,9 @@ def profile_columns(columns: Sequence[str], rows: Sequence[Sequence[str]]) -> tu
             enum_values=tuple(distinct) if len(distinct) <= 20 else (),
             date_min=min(parsed_dates) if parsed_dates else None, date_max=max(parsed_dates) if parsed_dates else None,
             percent_parse_rate=_share(sum(1 for v in nn if parse_percent_points(v) is not None), n),
+            fraction_parse_rate=_share(sum(1 for v in nn if parse_fraction_as_percent_points(v) is not None), n),
+            percent_max=max((p for p in (parse_percent_points(v) for v in nn) if p is not None), default=None),
+            percent_has_sign=any("%" in v for v in nn),
             date_dmy_certain=dmy, date_mdy_certain=mdy,
         ))
     return tuple(out)

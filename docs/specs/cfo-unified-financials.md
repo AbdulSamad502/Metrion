@@ -20,6 +20,7 @@ This spec defines **what each financial term means**, where each cost may come f
 | U6 | **No demand forecasting.** "Cash forecast" means expected receipts on *already-sold* orders from observed settlement lag, plus seller-entered payables. | owner decision 2026-10-21; cfo-agent §6.5 |
 | U7 | **Ad spend enters through an advertising report adapter** (P3), manual entry remaining the fallback. | owner decision 2026-10-21 |
 | U8 | **Mockup wording corrections accepted:** "discrepancy identified" not "recoverable/recovered"; "Recommended actions" not "Autonomous directives"; "Settlements received" not "cash in bank"; Amazon findings provisional/withheld; "last checked" not "Live"; owner drawings outside P&L; GST due dates "indicative". | owner decision 2026-10-21 |
+| U10 | **Explicit completeness, everywhere.** Every figure carries one completeness state: `COMPLETE`, `PARTIAL` (some inputs excluded and counted), `PROVISIONAL` (rests on unconfirmed seller input), `ESTIMATED` (an estimate, never a measured actual) or `UNAVAILABLE`. Only `COMPLETE` may be presented as a confirmed actual. Held duplicates, unclassified expenses, unknown advertising, and refused mappings each map to a non-COMPLETE state, never to zero. | Owner decision 2026-10-21 |
 | U9 | **Missing or unreliable input → `UNAVAILABLE`**, never zero, never silent assumption. | CLAUDE.md |
 
 ---
@@ -58,7 +59,7 @@ All amounts are signed integer paise. "Basis" is `DOCUMENT_DATE` unless stated.
 | **Gross Sales** | Σ gross item amount of order lines (tax-exclusive), before cancellations, returns, discounts attributed to the seller | NEW `GROSS_SALES` (wraps `gross_order_value`) | A *volume* measure, not revenue |
 | **Net Realized Revenue** | engine §5.5 | existing | After cancellations, returns, seller-borne discounts |
 | **Contribution Profit** | engine §5.8 | existing | Includes ads, packaging, logistics, return/RTO losses, allocated costs |
-| **Operating Profit (management)** | CP − overhead-class expenses (D1) | NEW `OPERATING_PROFIT` | `UNAVAILABLE` only when Contribution Profit is unavailable. Otherwise a value with status `PROVISIONAL` (any unclassified expense in scope; the list and total are exposed with it) or `FINAL` (none). A held duplicate expense is excluded and counted. |
+| **Operating Profit (management)** | CP − overhead-class expenses (D1) | NEW `OPERATING_PROFIT` | `UNAVAILABLE` when Contribution Profit is unavailable, **or when no overhead expense source and no explicit "no overhead expenses" declaration exists for the period** (a missing input is not zero; engine §5.17.1). Otherwise a value with status `PROVISIONAL` (any unclassified expense in scope; the list and total are exposed with it) or `FINAL` (none). A held duplicate expense is excluded and counted. |
 | **Settlement Receipts** | Σ amounts the marketplace *settled* in the period, by settlement date | NEW `SETTLEMENT_RECEIPTS` (wraps `CASH_RECEIVED`) | Receipts ≠ revenue ≠ profit; the gap is timing, returns, fees and levies |
 | **Cash Movements** | Seller-visible cash events derived from settlements (+) and seller-entered payables/expenses paid (−), by cash date | NEW view, not a P&L figure | No bank feed (U5); labelled "from settlements and your entries" |
 | **Tax Assets** | Prepaid TCS/TDS | existing | Never in any profit |
@@ -106,10 +107,13 @@ These restate **existing, confirmed engine rules** (`deterministic-engine.md` §
 | Status | Meaning | May be shown as zero? |
 |---|---|---|
 | `VERIFIED_ZERO` | An advertising source covers the marketplace and period and reports no spend, **or** the seller has explicitly declared "no advertising" for it | Yes — "₹0 (verified)" |
+| `KNOWN_SPEND` | A source covers the whole period and reports spend above zero (the amount is the covered, known spend) | n/a — a real amount |
 | `MISSING_COVERAGE` | An advertising source exists for the marketplace (a report has been ingested) but does not cover this period or scope | **No** — "not covered by your ad reports" |
 | `UNKNOWN` | No advertising source and no declaration at all | **No** — "unknown" |
 
 ROAS/ACOS/TACOS, the proactive scan, the CEO's narration and the dashboard must carry this status with any advertising-dependent figure. Contribution Profit keeps its legacy ₹0 value but exposes `ad_spend_status` alongside, so a seller sees when a profit figure rests on an assumption of no ad spend. The status is derived by Brain 1 from the ad coverage that was ingested or declared, never from the absence of rows alone.
+
+**GST scope.** GST-inclusive amounts, GST on fees, TCS/TDS and the India-specific reconciliation remain in the production scope (`cfo-data-intelligence.md` §6.5a); where a figure rests on a rate or an interpretation that still needs seller confirmation or CA review it is shown `PROVISIONAL`/`ESTIMATED`, never `COMPLETE`.
 
 **Operating profit status.** `PROVISIONAL` while any expense in scope is `OTHER_UNCLASSIFIED` or any expense is held as a possible duplicate; `FINAL` otherwise. The unclassified and held entries and their amounts are returned with every Operating Profit result.
 
