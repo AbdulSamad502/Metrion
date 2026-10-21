@@ -247,3 +247,12 @@ def v_per_001_report_period_consistent(
             )
         ]
     return []
+
+
+def v_map_001_unparseable_cells(row: ParsedRow) -> list[Finding]:
+    """A cell the confirmed mapping could not read (malformed number, unreadable date). ERROR: the row is
+    quarantined with the column and value named, never posted with a guessed or defaulted figure."""
+    return [
+        Finding("V-MAP-001", Severity.ERROR, f"column {col!r}: the value {value!r} could not be read as the type you confirmed", row.source_row_number)
+        for col, value in row.parse_errors
+    ]

@@ -16,7 +16,7 @@ pytestmark = pytest.mark.usefixtures("two_tenants")
 READ_ONLY = (
     "fee_reference", "formula_definition", "hsn_gst_reference", "gst_slab_reference", "plan", "whatsapp_template", "tenant_plan", "member_entitlement_allocation",
     "entitlement_cap_config", "capability_entitlement_rule", "metered_event_meter_map", "anomaly_detection_config", "discount_bearer_config", "financial_health_config",
-    "reconciliation_tolerance_config", "severity_config", "ci_tenant_config", "tenant_cart_item",
+    "reconciliation_tolerance_config", "severity_config", "expense_class_map", "ci_tenant_config", "tenant_cart_item",
     "whatsapp_alert_subscription", "whatsapp_binding", "whatsapp_message", "whatsapp_pending_action",
 )
 APPEND_ONLY = ("auth_audit", "metered_event")

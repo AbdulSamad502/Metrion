@@ -112,3 +112,15 @@ def list_report_files_with_latest_run(tenant_id: UUID, *, limit: int = 100) -> l
     """This tenant's imports, newest first, each joined to its latest ingestion run (if any)."""
     with tenant_scope(tenant_id) as conn:
         return [dict(r) for r in conn.execute(_LIST_SQL, {"tenant_id": str(tenant_id), "limit": limit}).mappings()]
+
+
+def get_report_file_for_ingestion(tenant_id: UUID, report_file_id: UUID) -> dict[str, object] | None:
+    """The stored facts a worker needs to read an upload back: where it is stored and its content hash. Kept apart
+    from `get_report_file` so the seller-facing read never exposes a storage location."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(
+            text("SELECT id, marketplace, report_category, content_sha256, original_filename, storage_uri "
+                 "FROM report_file WHERE tenant_id = :t AND id = :id"),
+            {"t": str(tenant_id), "id": str(report_file_id)},
+        ).mappings().first()
+        return dict(row) if row is not None else None

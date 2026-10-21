@@ -9,6 +9,8 @@ control that fits — not streaming. Oversized files fail fast with a clear 413.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import HTTPException, UploadFile
 
 
@@ -26,3 +28,34 @@ async def read_upload_capped(file: UploadFile, *, max_bytes: int, env_var: str) 
     if len(data) > max_bytes:
         raise HTTPException(status_code=413, detail=detail)
     return data
+
+
+_BLOCK = 1024 * 1024
+
+
+async def save_upload_capped(file: UploadFile, dest: "Path", *, max_bytes: int, env_var: str) -> tuple[str, int]:
+    """Stream an upload to `dest` in 1 MiB blocks while hashing it, so memory never holds more than one block no matter how
+    large the file is. Returns `(sha256 hex, byte size)`. Raises 413 (and removes the partial file) past `max_bytes`."""
+    import hashlib
+
+    detail = f"File is larger than the {_mb(max_bytes)} upload limit (configurable via {env_var})."
+    if file.size is not None and file.size > max_bytes:
+        raise HTTPException(status_code=413, detail=detail)
+    digest = hashlib.sha256()
+    total = 0
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with dest.open("wb") as out:
+            while True:
+                block = await file.read(_BLOCK)
+                if not block:
+                    break
+                total += len(block)
+                if total > max_bytes:
+                    raise HTTPException(status_code=413, detail=detail)
+                digest.update(block)
+                out.write(block)
+    except BaseException:
+        dest.unlink(missing_ok=True)
+        raise
+    return digest.hexdigest(), total

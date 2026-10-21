@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Collection, Sequence
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import Connection, text
@@ -11,6 +12,9 @@ from sqlalchemy import Connection, text
 from data_foundation.repositories import line_component_repo
 from data_foundation.repositories.tenant_context import tenant_scope
 from data_foundation.types import ParsedRow
+
+if TYPE_CHECKING:
+    from data_foundation.ingestion.duplicates import ExistingEntry
 
 _INSERT_SQL = text(
     """
@@ -144,6 +148,39 @@ def insert_sales_lines_with_components(
         return insert_sales_lines_with_components_on(
             conn, tenant_id, ingestion_run_id=ingestion_run_id, marketplace=marketplace, confidence=confidence, rows=rows
         )
+
+
+_EXISTING_ENTRIES_SQL = text(
+    """
+    SELECT order_ref, line_ref, invoice_ref, sku, marketplace_item_id, source_row_json
+    FROM sales_line
+    WHERE tenant_id = :tenant_id AND marketplace = :marketplace
+      AND (order_ref = ANY(CAST(:order_refs AS text[])) OR (:include_null AND order_ref IS NULL))
+    """
+)
+
+
+def existing_entries_for_orders(
+    tenant_id: UUID, marketplace: str, order_refs: Collection[str | None]
+) -> list["ExistingEntry"]:
+    """Identity digest + raw-row hash of every already-ingested sales row that could collide with a chunk
+    carrying these `order_ref`s (cfo-data-intelligence.md §6.3). Cost scales with the chunk, not the history."""
+    from data_foundation.ingestion.duplicates import existing_sales_entry
+
+    wanted = sorted({o for o in order_refs if o is not None})
+    include_null = any(o is None for o in order_refs)
+    if not wanted and not include_null:
+        return []
+    out: list[ExistingEntry] = []
+    with tenant_scope(tenant_id) as conn:
+        for r in conn.execute(
+            _EXISTING_ENTRIES_SQL,
+            {"tenant_id": str(tenant_id), "marketplace": marketplace, "order_refs": wanted, "include_null": include_null},
+        ):
+            entry = existing_sales_entry(marketplace, dict(r._mapping), r._mapping["source_row_json"] or {})
+            if entry is not None:
+                out.append(entry)
+    return out
 
 
 _EXISTING_KEYS_FOR_ORDERS_SQL = text(

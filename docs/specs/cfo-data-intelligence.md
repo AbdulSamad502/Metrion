@@ -83,7 +83,7 @@ column_mapping_field (
   id uuid pk, tenant_id uuid not null, mapping_id uuid not null references column_mapping(id),
   source_column text not null, source_column_index int not null,   -- index disambiguates duplicate headers
   canonical_field text not null, component_code text null,
-  transform text not null,              -- e.g. IDENTITY | RUPEES_TO_PAISE | PERCENT_TO_FRACTION | DATE_DMY | DATE_ISO | STRIP_CURRENCY
+  transform text not null,              -- e.g. IDENTITY | RUPEES_TO_PAISE | PERCENT | DATE_DMY | DATE_ISO | STRIP_CURRENCY
   tax_inclusion text null,              -- INCLUSIVE | EXCLUSIVE | UNKNOWN
   sign_convention text null,            -- AS_IS | NEGATE
   decision text not null,               -- AUTO_ACCEPTED_BY_RULES | SELLER_CONFIRMED | SELLER_OVERRIDDEN | REJECTED
@@ -218,3 +218,33 @@ TD1 golden Meesho orders via old vs streaming path → identical rows · TD2 100
 | OQ5 | Locale handling for dates/numbers (Indian digit grouping handled; others?) |
 | OQ6 | In-file duplicate index memory at 1M+ rows (one digest per identity); spill to disk or a DB-side temp table if the benchmark shows a problem |
 | OQ7 | The **resolution flow** for held duplicates and conflicts (seller confirms supersede / both real / discard) is not specified here; until it exists, held rows stay held |
+
+---
+
+## 14. Phase 1 implementation record (2026-10-21) — what was built, and every place it refined this spec
+
+**Built and tested** (deterministic tests; mocked proposals; no LLM call): streaming CSV/XLSX readers; atomic chunked ingestion; duplicate classification (§6.3); `ingestion_job`, `column_mapping`, `column_mapping_field`, `data_quality_report`, `ad_report_line`, `expense_class_map`, `cfo_read_model_version` tables (migrations `20261021_0003` data-foundation, `20261021_0013` calc-engine); job runner with atomic claim, cancellation, failure messages; mapping propose / confirm with re-validation; a mapped adapter; routes `POST /cfo/uploads`, `GET /cfo/jobs`, `GET /cfo/jobs/{id}`, `POST /cfo/jobs/{id}/cancel`, `GET /cfo/jobs/{id}/mapping`, `POST /cfo/jobs/{id}/mapping/confirm`; the local-model proposer (off unless `CFO_MAPPING_MODEL` is set).
+
+**Refinements to the draft, each a deliberate decision recorded here, none loosening a financial rule:**
+
+| # | Draft said | Built | Why |
+|---|---|---|---|
+| R1 | D1: a startup sweep recovers interrupted jobs | **Lazy, per-tenant** recovery (`recover_stale`) on every job read/list/upload | RLS means no code can read another tenant's jobs; a cross-tenant startup sweep would need a BYPASSRLS role, which `auth.md` §7.3 forbids. A job waiting for the seller (`AWAITING_MAPPING_CONFIRMATION`) is never treated as stale. |
+| R2 | Percent transform `PERCENT_TO_FRACTION` | Renamed **`PERCENT`** (value in percentage points, e.g. 18) | Existing rules (V-TAX-003) compare GST rates in percentage points; a fraction (0.18) would silently break them. The old name implied a conversion that is not performed. |
+| R3 | Mapped sales may be GST-inclusive with `tax_inclusion` recorded | **Refused**: a mapped gross/total amount must be declared tax-exclusive; otherwise the job fails `TAX_INCLUSIVE_UNSUPPORTED_FOR_MAPPED` | The engine's GST normalisation (§8.1) has no path for a mapped, GST-inclusive amount; posting it as tax-exclusive would overstate revenue. Blocking is the only honest behaviour until a GST extraction rule for mapped sources is specified (OQ8). |
+| R4 | Unreadable cell: not specified | New row rule **V-MAP-001** (ERROR): the row is quarantined naming the column and value; never defaulted, never a crash | A malformed number previously raised and would have failed a whole job; a defaulted value would be an invented figure. |
+| R5 | A model proposal is validated | Additionally the proposer is handed **masked profiles** (a profile keeps a column's distinct values; those are masked, and dropped for personal-data columns) | A privacy test found the profile's distinct values would have reached the model unmasked. Fixed at the source and in the prompt builder, with regression tests. |
+| R6 | Mapping confirmation records decisions | Confirmation **re-validates the final mapping against the file** and refuses (changing nothing) on any error, missing required field, undecided field that needs the seller, or an amount without a definite GST treatment; silence is not confirmation | AC-D3/AC-D4 made executable. Needs `financials.adjust` over HTTP. |
+| R7 | `column_mapping` columns | Added `column_mapping.evidence` (global validator issues, missing required fields, set-aside columns) and `ingestion_job_resolution_check` (a job has an adapter **or** a mapping, never both) | The mapping-level validator output had nowhere to be stored. |
+| R8 | One report category per file | New uploads label SALES as `ORDER_STATUS` and SETTLEMENT as `SETTLEMENT` in `report_file.report_category` provisionally | The real category is known only after format resolution; the ingestion run records the adapter. Reconciling the label is OQ9. |
+| R9 | `ingest_and_persist` | Left **unchanged** as the legacy path; `/cfo/ingest` unchanged | Existing callers and tests; the new path is `/cfo/uploads`. The legacy path still has the old duplicate semantics (within-file duplicates are posted twice). |
+| R10 | In-file duplicates: not specified beyond OQ6 | Settlement identity includes settlement id, date and amount; a Meesho payments row carries only `line_ref` and the amount, so an identical repeat there is **held as ambiguous** (never doubled) | Honest consequence of the columns that real export provides. |
+
+**Additional open questions raised by implementation**
+
+| # | Question |
+|---|---|
+| OQ8 | A specified GST-extraction rule for mapped, GST-inclusive amounts (needs a rate source and a CA-reviewed rule), without which such mappings stay refused |
+| OQ9 | Reconcile `report_file.report_category` with the resolved adapter/mapping after the job resolves the format |
+| OQ10 | Held-duplicate resolution flow (OQ7) and a manual-mapping UI when the model proposal fails or the model is off |
+| OQ11 | The `ADVERTISING` and `EXPENSE` ingestion routes (spec §6.7, §6.8) are not built yet; `POST /cfo/uploads` rejects those kinds with a clear 400 |

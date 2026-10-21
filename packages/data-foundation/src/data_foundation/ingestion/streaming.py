@@ -128,6 +128,12 @@ class RowStream:
             return tuple(zip(self.header.columns, padded))
         return dict(zip(self.header.columns, padded))
 
+    def close(self) -> None:
+        """Release the underlying file/workbook if the stream was opened but not (fully) consumed."""
+        closer = getattr(self._rows, "close", None)
+        if closer is not None:
+            closer()
+
     def chunks(self) -> Iterator[RawFile]:
         buf: list[RowData] = []
         for cells in self._rows:

@@ -36,7 +36,7 @@ from datetime import date, datetime, timezone
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -51,7 +51,7 @@ from data_foundation.repositories import report_file_repo
 from calc_engine.formulas.cost_components import CostEntry
 from calc_engine.types import CanonicalLine, ComponentRow, Confidence, Paise, RecognitionState, Unavailable
 
-from backend.uploads import read_upload_capped
+from backend.uploads import read_upload_capped, save_upload_capped
 from backend.agents.ceo_hub import (
     CFO_ANALYZE_GST_LINES,
     CFO_ANOMALY_CHECK,
@@ -68,8 +68,9 @@ from backend.agents.ceo_hub import (
 )
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CFO, FINANCIALS_ADJUST, SERVICE_GST_LOOKUP, has_permission
-from backend.config import cfo_max_upload_bytes, cfo_narration_model, cfo_report_storage_dir, ollama_host
+from backend.config import cfo_max_upload_bytes, cfo_narration_model, cfo_report_storage_dir, cfo_stream_max_upload_bytes, ollama_host
 from backend.entitlement import resolve_cfo_entitlement, resolve_gst_lookup_entitlement
+from backend.services import cfo_ingestion
 from backend.services.cfo_imports import get_import, list_imports
 from backend.services.cfo_actions import (
     AcceptGstLookupRequest,
@@ -254,6 +255,119 @@ async def post_ingest(
         }
 
     return await run_in_threadpool(_ingest_upload)
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------
+# CFO 2.0 streaming uploads and background ingestion jobs (docs/specs/cfo-data-intelligence.md §6). Direct-path, no CEO dispatch (same reasoning as
+# CFO_INGEST). `POST /cfo/ingest` above is the legacy whole-file path and is left unchanged for existing callers.
+
+class MappingFieldOverrideBody(BaseModel):
+    canonical_field: str | None = None
+    component_code: str | None = None
+    transform: str | None = None
+    tax_inclusion: str | None = None
+    sign_convention: str | None = None
+
+
+class ConfirmMappingBody(BaseModel):
+    """`decisions` and `overrides` are keyed by the source column's position, as strings (JSON object keys)."""
+
+    decisions: dict[str, str] = Field(default_factory=dict)
+    overrides: dict[str, MappingFieldOverrideBody] = Field(default_factory=dict)
+
+
+@router.post("/uploads", status_code=202)
+async def post_upload(
+    file: UploadFile,
+    marketplace: str,
+    report_kind: str,
+    sheet_name: str | None = None,
+    ctx: AuthContext = require_auth(permission=AGENT_CFO),
+) -> dict[str, object]:
+    """Stream a CSV/XLSX report to disk (never into memory), then start a background ingestion job. Returns 202 with the job; poll
+    `GET /cfo/jobs/{id}` for progress. A byte-identical re-upload reuses the stored file and returns the existing job (or starts a new
+    attempt if the last one failed or was cancelled)."""
+    assert ctx.tenant_id is not None and ctx.app_user_id is not None
+    tenant_id = ctx.tenant_id
+    _require_cfo_entitlement(tenant_id, direct_action_code=CFO_INGEST)
+    try:
+        ext = cfo_ingestion.validate_upload_request(file.filename or "", marketplace.upper(), report_kind.upper())
+    except cfo_ingestion.UploadRejected as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from None
+
+    storage_dir = Path(cfo_report_storage_dir())
+    tmp = storage_dir / f"upload-{uuid4().hex}{ext}"
+    sha, size = await save_upload_capped(file, tmp, max_bytes=cfo_stream_max_upload_bytes(), env_var="CFO_STREAM_MAX_UPLOAD_BYTES")
+    if size == 0:
+        tmp.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="The file is empty.")
+    return await run_in_threadpool(
+        cfo_ingestion.register_upload, tenant_id, ctx.app_user_id, stored_path=tmp, content_sha256=sha, size=size,
+        original_filename=file.filename or tmp.name, marketplace=marketplace.upper(), report_kind=report_kind.upper(), sheet_name=sheet_name,
+    )
+
+
+@router.get("/jobs")
+def get_jobs(limit: int = 50, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> list[dict[str, object]]:
+    """This tenant's ingestion jobs, newest first. Read-only: `agent.cfo` only, same "viewing is not ingesting" precedent as `/imports`."""
+    assert ctx.tenant_id is not None
+    return cfo_ingestion.list_job_views(ctx.tenant_id, max(1, min(limit, 200)))
+
+
+@router.get("/jobs/{job_id}")
+def get_job_status(job_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """One job's progress, outcome and (once DONE) data-quality report. Another tenant's job id is a plain 404."""
+    assert ctx.tenant_id is not None
+    view = cfo_ingestion.get_job_view(ctx.tenant_id, job_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return view
+
+
+@router.post("/jobs/{job_id}/cancel")
+def post_cancel_job(job_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """Cancel an active job; whatever it had read is rolled back at its next chunk (nothing partial is ever posted)."""
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_INGEST)
+    outcome, view = cfo_ingestion.cancel_job(ctx.tenant_id, job_id)
+    if outcome == "not_found":
+        raise HTTPException(status_code=404, detail="job not found")
+    if outcome == "already_finished":
+        raise HTTPException(status_code=409, detail="this job has already finished")
+    assert view is not None
+    return view
+
+
+@router.get("/jobs/{job_id}/mapping")
+def get_job_mapping(job_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """The proposed column mapping for a job waiting on the seller: each field with the validator's evidence and what it needs confirmed."""
+    assert ctx.tenant_id is not None
+    view = cfo_ingestion.mapping_view(ctx.tenant_id, job_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail="no column mapping for this job")
+    return view
+
+
+@router.post("/jobs/{job_id}/mapping/confirm", status_code=202)
+def post_confirm_job_mapping(job_id: UUID, body: ConfirmMappingBody, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """The seller confirms (and may edit) the proposed mapping. It is re-validated against the file first; any remaining error, missing required
+    field or undecided field refuses with 422 and the reasons, changing nothing. Needs `financials.adjust`: confirming a mapping decides what a
+    seller's columns mean to every figure built from them."""
+    assert ctx.tenant_id is not None and ctx.app_user_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_INGEST)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST):
+        raise HTTPException(status_code=403, detail="financials.adjust permission required")
+    try:
+        decisions = {int(k): v for k, v in body.decisions.items()}
+        overrides = {int(k): cfo_ingestion.mapping_service.FieldOverride(**v.model_dump()) for k, v in body.overrides.items()}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="decision and override keys must be column positions (integers)") from None
+    try:
+        return cfo_ingestion.confirm_mapping(ctx.tenant_id, ctx.app_user_id, job_id, decisions=decisions, overrides=overrides)
+    except cfo_ingestion.UploadRejected as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from None
+    except cfo_ingestion.mapping_service.MappingRefused as exc:
+        raise HTTPException(status_code=422, detail={"message": "The mapping cannot be confirmed yet.", "reasons": list(exc.reasons)}) from None
+
 
 @router.get("/imports")
 def get_imports(limit: int = 100, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> list[dict[str, object]]:

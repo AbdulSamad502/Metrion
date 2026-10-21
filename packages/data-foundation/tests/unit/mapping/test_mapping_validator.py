@@ -318,3 +318,18 @@ def test_fingerprint_is_order_independent_and_sheet_sensitive() -> None:
     assert a == file_fingerprint(["item price", "ORDER ID", "qty"], "sheet1")
     assert a != file_fingerprint(["Order ID", "Qty", "Item Price", "Extra"], "Sheet1")
     assert a != file_fingerprint(["Order ID", "Qty", "Item Price"], "Orders")
+
+
+def test_a_proposer_is_handed_masked_profiles_never_raw_cells() -> None:
+    """Regression: a column profile keeps its distinct values (so a status column can be confirmed). Those raw values must be
+    masked, and dropped entirely for a personal-data column, before any proposer can see them."""
+    from data_foundation.mapping.service import _masked_profiles
+
+    cols = ["Customer Name", "Status", "Notes"]
+    rows = [["Ravi Kumar", "DELIVERED", "mail ravi@example.com"], ["Asha Rao", "RETURNED", "ok"]]
+    masked = _masked_profiles(profile_columns(cols, rows))
+    by_name = {p.name: p for p in masked}
+    assert by_name["Customer Name"].enum_values == ()  # a personal-data column keeps no values at all
+    assert by_name["Status"].enum_values == ("DELIVERED", "RETURNED")  # business values survive
+    assert all("ravi" not in v.lower() and "asha" not in v.lower() for p in masked for v in p.enum_values)
+    assert by_name["Notes"].enum_values == ("<EMAIL>".join(["mail ", ""]).rstrip(), "ok") or "<EMAIL>" in by_name["Notes"].enum_values[0]

@@ -116,3 +116,14 @@ def page_for_run(tenant_id: UUID, ingestion_run_id: UUID, *, limit: int, offset:
                 {"tenant_id": str(tenant_id), "ingestion_run_id": str(ingestion_run_id), "limit": limit, "offset": offset},
             ).mappings()
         ]
+
+
+def counts_by_rule(tenant_id: UUID, ingestion_run_id: UUID) -> list[dict[str, object]]:
+    """Findings of one run grouped by rule and severity — the heart of the data-quality report."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text("SELECT rule_id, severity, count(*) AS n FROM validation_finding WHERE tenant_id = :t AND ingestion_run_id = :r "
+                 "GROUP BY rule_id, severity ORDER BY severity, rule_id"),
+            {"t": str(tenant_id), "r": str(ingestion_run_id)},
+        )
+        return [{"rule": r[0], "severity": r[1], "count": int(r[2])} for r in rows]

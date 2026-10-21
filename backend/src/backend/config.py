@@ -765,3 +765,75 @@ def rag_max_document_bytes() -> int:
 def rag_max_documents_per_tenant() -> int:
     """`RAG_MAX_DOCUMENTS_PER_TENANT`: pilot per-tenant document cap (owner decision Q7: 50)."""
     return _positive_int_env("RAG_MAX_DOCUMENTS_PER_TENANT", 50)
+
+
+# --- CFO 2.0 streaming ingestion (docs/specs/cfo-data-intelligence.md §6, owner decision 2026-10-21). Every value is configuration; the defaults
+# are PROVISIONAL starting points to be set from the recorded benchmark (spec §6.9), not claims about what is right for production. ------------------------
+
+def cfo_stream_max_upload_bytes() -> int:
+    """`CFO_STREAM_MAX_UPLOAD_BYTES`: largest file `POST /cfo/uploads` accepts (default 200 MiB). Unlike the legacy `/cfo/ingest` path, memory does NOT grow
+    with the file (rows are streamed in chunks), so this is bounded by disk and request time, not RAM."""
+    return _positive_int_env("CFO_STREAM_MAX_UPLOAD_BYTES", 200 * 1024 * 1024)
+
+
+def cfo_stream_max_rows() -> int:
+    """`CFO_STREAM_MAX_ROWS`: most data rows one upload may hold (default 2,000,000); beyond it the job fails with `too_large`."""
+    return _positive_int_env("CFO_STREAM_MAX_ROWS", 2_000_000)
+
+
+def cfo_stream_chunk_rows() -> int:
+    """`CFO_STREAM_CHUNK_ROWS`: rows held in memory at once while ingesting (default 5000). Memory is set by this, not by the file size."""
+    return _positive_int_env("CFO_STREAM_CHUNK_ROWS", 5000)
+
+
+def cfo_ingest_workers() -> int:
+    """`CFO_INGEST_WORKERS`: background ingestion jobs run at the same time in this process (default 2). Each holds one file transaction open."""
+    return _positive_int_env("CFO_INGEST_WORKERS", 2)
+
+
+def cfo_job_stale_seconds() -> int:
+    """`CFO_JOB_STALE_SECONDS`: an active job with no heartbeat for this long is treated as interrupted (default 900)."""
+    return _positive_int_env("CFO_JOB_STALE_SECONDS", 900)
+
+
+def cfo_profile_rows() -> int:
+    """`CFO_PROFILE_ROWS`: rows used to profile columns when mapping an unfamiliar file (default 5000)."""
+    return _positive_int_env("CFO_PROFILE_ROWS", 5000)
+
+
+def cfo_mapping_sample_rows() -> int:
+    """`CFO_MAPPING_SAMPLE_ROWS`: masked sample rows a mapping model may see (default 20, drawn across the whole file)."""
+    return _positive_int_env("CFO_MAPPING_SAMPLE_ROWS", 20)
+
+
+def cfo_mapping_model() -> str | None:
+    """`CFO_MAPPING_MODEL`: the LOCAL Ollama model that proposes column mappings for unfamiliar files. Unset (the default) switches automatic
+    mapping OFF: an unrecognised file then fails with a plain message instead of calling any model. The endpoint is `ollama_host()`
+    (operator-attested local only)."""
+    raw = (os.environ.get("CFO_MAPPING_MODEL") or "").strip()
+    return raw or None
+
+
+def _fraction_env(name: str, default: str):  # type: ignore[no-untyped-def]
+    from fractions import Fraction
+
+    raw = (os.environ.get(name) or default).strip()
+    value = Fraction(raw)
+    if not (0 <= value <= 1):
+        raise ValueError(f"{name} must be a fraction between 0 and 1 (for example 98/100), got {raw!r}")
+    return value
+
+
+def cfo_mapping_thresholds() -> dict[str, object]:
+    """Mapping-validator thresholds (cfo-data-intelligence.md §6.4). PROVISIONAL defaults, each overridable:
+    CFO_MAPPING_MIN_PARSE_RATE, CFO_MAPPING_TAX_CONSISTENCY_RATE, CFO_MAPPING_KEY_UNIQUE_RATE, CFO_MAPPING_MIXED_SIGN_LOW,
+    CFO_MAPPING_UNIT_FRACTION_SHARE (fractions such as 98/100), CFO_MAPPING_TAX_TOLERANCE_PAISE, CFO_MAPPING_MAX_DATE_SPAN_YEARS (integers)."""
+    return {
+        "min_parse_rate": _fraction_env("CFO_MAPPING_MIN_PARSE_RATE", "98/100"),
+        "tax_consistency_rate": _fraction_env("CFO_MAPPING_TAX_CONSISTENCY_RATE", "98/100"),
+        "key_unique_rate": _fraction_env("CFO_MAPPING_KEY_UNIQUE_RATE", "98/100"),
+        "mixed_sign_low": _fraction_env("CFO_MAPPING_MIXED_SIGN_LOW", "2/100"),
+        "unit_fraction_share": _fraction_env("CFO_MAPPING_UNIT_FRACTION_SHARE", "2/100"),
+        "tax_tolerance_paise": _positive_int_env("CFO_MAPPING_TAX_TOLERANCE_PAISE", 1),
+        "max_date_span_years": _positive_int_env("CFO_MAPPING_MAX_DATE_SPAN_YEARS", 5),
+    }

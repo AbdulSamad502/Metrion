@@ -19,6 +19,7 @@ from data_foundation.validation.rules import (
     v_fee_001_rate_amount_reconciliation,
     v_fee_002_duplicate_fee_candidates,
     v_id_001_required_identifiers,
+    v_map_001_unparseable_cells,
     v_qty_001_positive_quantity,
     v_sum_001_components_sum_to_total,
     v_tax_001_interstate_tax_head,
@@ -79,6 +80,7 @@ def _validate_row(row: ParsedRow, *, required_fields: tuple[str, ...], plausible
     findings += v_fee_002_duplicate_fee_candidates(row)
     findings += v_sum_001_components_sum_to_total(row)
     findings += v_id_001_required_identifiers(row, required_fields=required_fields)
+    findings += v_map_001_unparseable_cells(row)
     # V-DATE-001/002, V-SETL-001, V-PER-001 operate on already-normalised dates / run-level /
     # settlement-side data respectively — composed by the caller around this function, not
     # inside it (see this module's docstring: pure per-row validation only).

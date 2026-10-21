@@ -21,6 +21,7 @@ from backend.config import (
     ci_max_evidence_bytes,
     cmo_image_max_bytes,
     cfo_max_upload_bytes,
+    cfo_stream_max_upload_bytes,
     clerk_jwt_key,
     clerk_secret_key,
     clerk_webhook_secret,
@@ -159,6 +160,7 @@ def create_app() -> FastAPI:
     # parses/spools it — see request_limits.py; the routes' own exact-size check stays authoritative.
     upload_limits = {
         "/api/v1/cfo/ingest": cfo_max_upload_bytes(),
+        "/api/v1/cfo/uploads": cfo_stream_max_upload_bytes(),
         "/api/v1/ci/evidence": ci_max_evidence_bytes(),
     }
     image_limit = cmo_image_max_bytes()  # no default (P6): unset -> no entry here, and the route itself refuses with 503

@@ -4,7 +4,8 @@ sales_line_repo.insert_sales_line's exact shape/contract."""
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import Connection, text
@@ -12,6 +13,9 @@ from sqlalchemy import Connection, text
 from data_foundation.repositories import line_component_repo
 from data_foundation.repositories.tenant_context import tenant_scope
 from data_foundation.types import ParsedRow
+
+if TYPE_CHECKING:
+    from data_foundation.ingestion.duplicates import ExistingEntry
 
 _INSERT_SQL = text(
     """
@@ -120,6 +124,47 @@ def insert_settlement_lines_with_components(
         return insert_settlement_lines_with_components_on(
             conn, tenant_id, ingestion_run_id=ingestion_run_id, marketplace=marketplace, confidence=confidence, rows=rows
         )
+
+
+_EXISTING_ENTRIES_SQL = text(
+    """
+    SELECT order_ref, line_ref, settlement_id, settlement_date, gross_settlement_amount, source_row_json
+    FROM settlement_line
+    WHERE tenant_id = :tenant_id AND marketplace = :marketplace
+      AND (order_ref = ANY(CAST(:order_refs AS text[]))
+           OR line_ref = ANY(CAST(:line_refs AS text[]))
+           OR settlement_id = ANY(CAST(:settlement_ids AS text[])))
+    """
+)
+
+
+def existing_entries_for(
+    tenant_id: UUID,
+    marketplace: str,
+    *,
+    order_refs: Collection[str | None],
+    line_refs: Collection[str | None],
+    settlement_ids: Collection[str | None],
+) -> list["ExistingEntry"]:
+    """Identity digest + raw-row hash of already-ingested settlement rows that could collide with a chunk
+    (cfo-data-intelligence.md §6.3). A settlement row may be reachable by any of its three references."""
+    from data_foundation.ingestion.duplicates import existing_settlement_entry
+
+    o = sorted({x for x in order_refs if x is not None})
+    l = sorted({x for x in line_refs if x is not None})
+    s_ = sorted({x for x in settlement_ids if x is not None})
+    if not (o or l or s_):
+        return []
+    out: list[ExistingEntry] = []
+    with tenant_scope(tenant_id) as conn:
+        for r in conn.execute(
+            _EXISTING_ENTRIES_SQL,
+            {"tenant_id": str(tenant_id), "marketplace": marketplace, "order_refs": o, "line_refs": l, "settlement_ids": s_},
+        ):
+            entry = existing_settlement_entry(marketplace, dict(r._mapping), r._mapping["source_row_json"] or {})
+            if entry is not None:
+                out.append(entry)
+    return out
 
 
 _COUNT_FOR_RUN_SQL = text("SELECT count(*) FROM settlement_line WHERE tenant_id = :tenant_id AND ingestion_run_id = :run_id")

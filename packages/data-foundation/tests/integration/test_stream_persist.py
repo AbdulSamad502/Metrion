@@ -156,3 +156,103 @@ def test_blank_and_ragged_rows_are_counted_not_dropped_silently(tmp_path: Path) 
     p.write_text(HEADER + "ORD-1,ORD-1_1,DELIVERED,Delivered\n\nORD-2,ORD-2_1\n", encoding="utf-8")
     out = stream_ingest(t, p)
     assert out.row_count_read == 2 and out.blank_rows_skipped == 1 and out.ragged_rows == 1
+
+
+# ===================================================================== duplicate handling (AC-D6b)
+PAY_HEADER = "Sub Order No,Fixed Fee (Incl. GST),Final Settlement Amount,Total Sale Amount (Incl. Shipping & GST)\n"
+
+
+def pay_report_file(tenant_id: uuid.UUID) -> uuid.UUID:
+    fid = uuid.uuid4()
+    with tenant_scope(tenant_id) as conn:
+        conn.execute(text("""INSERT INTO report_file (id, tenant_id, marketplace, report_category, content_sha256, original_filename,
+                              byte_size, storage_uri, uploaded_by, uploaded_at)
+                             VALUES (:id, :t, 'MEESHO', 'SETTLEMENT', :sha, 'pay.csv', 100, 'file://x', :u, :at)"""),
+                     {"id": str(fid), "t": str(tenant_id), "sha": uuid.uuid4().hex + uuid.uuid4().hex, "u": str(uuid.uuid4()),
+                      "at": datetime.now(timezone.utc)})
+    return fid
+
+
+def pay_ingest(tenant_id: uuid.UUID, path: Path):  # type: ignore[no-untyped-def]
+    return ingest_stream_and_persist(tenant_id, report_file_id=pay_report_file(tenant_id), adapter_id="meesho.payments.v1",
+                                     stream=open_csv(path, LIM), started_at=datetime.now(timezone.utc))
+
+
+def settlement_rows(tenant_id: uuid.UUID) -> list[tuple]:
+    with tenant_scope(tenant_id) as conn:
+        return [tuple(r) for r in conn.execute(
+            text("SELECT line_ref, gross_settlement_amount FROM settlement_line WHERE tenant_id = :t ORDER BY line_ref, gross_settlement_amount"),
+            {"t": str(tenant_id)})]
+
+
+def findings(tenant_id: uuid.UUID, run_id: uuid.UUID) -> list[tuple]:
+    with tenant_scope(tenant_id) as conn:
+        return [tuple(r) for r in conn.execute(
+            text("SELECT rule_id, severity, source_row_number, message FROM validation_finding WHERE ingestion_run_id = :r ORDER BY source_row_number"),
+            {"r": str(run_id)})]
+
+
+def test_exact_repeat_inside_a_file_is_posted_once_and_explained(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    p = tmp_path / "d.csv"
+    p.write_text(HEADER + "ORD-1,ORD-1_1,DELIVERED,Delivered\nORD-2,ORD-2_1,DELIVERED,Delivered\nORD-1,ORD-1_1,DELIVERED,Delivered\n", encoding="utf-8")
+    out = stream_ingest(t, p)
+    assert (out.row_count_read, out.persisted_row_count, out.duplicates_in_file, out.held_conflicts, out.held_ambiguous) == (3, 2, 1, 0, 0)
+    assert len(persisted(t)) == 2
+    (f,) = findings(t, out.ingestion_run_id)
+    assert f[0] == "V-DUP-001" and f[1] == "WARNING" and f[2] == 3 and "row 1" in f[3]
+
+
+def test_same_order_line_with_different_values_is_held_not_overwritten(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    first = tmp_path / "a.csv"
+    first.write_text(HEADER + "ORD-1,ORD-1_1,DELIVERED,Delivered\n", encoding="utf-8")
+    stream_ingest(t, first)
+    before = persisted(t)
+    changed = tmp_path / "b.csv"
+    changed.write_text(HEADER + "ORD-1,ORD-1_1,DELIVERED,Returned\nORD-2,ORD-2_1,DELIVERED,Delivered\n", encoding="utf-8")
+    out = stream_ingest(t, changed)
+    assert (out.held_conflicts, out.persisted_row_count) == (1, 1)  # the changed line is held; the new order posts
+    assert [r for r in persisted(t) if r[0] == "ORD-1"] == [r for r in before if r[0] == "ORD-1"]  # earlier data untouched
+    (f,) = findings(t, out.ingestion_run_id)
+    assert f[0] == "V-DUP-003" and f[1] == "ERROR" and "confirmation" in f[3]
+
+
+def test_partial_settlements_and_adjustments_of_one_order_are_all_posted(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    p = tmp_path / "pay.csv"
+    p.write_text(PAY_HEADER + "SUB-1,0.00,400.00,500.00\nSUB-1,0.00,350.00,500.00\nSUB-1,0.00,-50.00,500.00\n", encoding="utf-8")
+    out = pay_ingest(t, p)
+    assert out.persisted_row_count == 3 and out.held_ambiguous == 0 and out.duplicates_in_file == 0
+    assert settlement_rows(t) == [("SUB-1", -5000), ("SUB-1", 35000), ("SUB-1", 40000)]
+
+
+def test_identical_settlement_rows_cannot_be_told_from_a_double_export_so_the_repeat_is_held(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    p = tmp_path / "pay2.csv"
+    p.write_text(PAY_HEADER + "SUB-9,0.00,250.00,300.00\nSUB-9,0.00,250.00,300.00\nSUB-8,0.00,100.00,120.00\n", encoding="utf-8")
+    out = pay_ingest(t, p)
+    assert (out.persisted_row_count, out.held_ambiguous) == (2, 1)
+    assert settlement_rows(t) == [("SUB-8", 10000), ("SUB-9", 25000)]  # counted once, never doubled
+    (f,) = findings(t, out.ingestion_run_id)
+    assert f[0] == "V-DUP-002" and f[1] == "ERROR" and f[2] == 2 and "distinguishing reference" in f[3]
+
+
+def test_reuploading_a_settlement_report_adds_no_money(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    p = tmp_path / "pay3.csv"
+    p.write_text(PAY_HEADER + "SUB-1,0.00,400.00,500.00\nSUB-2,0.00,150.00,200.00\n", encoding="utf-8")
+    pay_ingest(t, p)
+    again = pay_ingest(t, p)  # identical content, different report_file row
+    assert again.duplicates_cross_file == 2 and again.persisted_row_count == 0
+    assert settlement_rows(t) == [("SUB-1", 40000), ("SUB-2", 15000)]
+
+
+def test_held_duplicates_do_not_count_toward_the_quarantine_threshold(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    p = tmp_path / "pay4.csv"
+    body = "SUB-1,0.00,100.00,120.00\n" * 10  # one real row, nine identical repeats: 90% held, 0% invalid
+    p.write_text(PAY_HEADER + body, encoding="utf-8")
+    out = pay_ingest(t, p)
+    assert out.row_count_rejected == 0 and out.held_ambiguous == 9 and out.persisted_row_count == 1
+    assert run_status(t, out.ingestion_run_id) == "VALIDATED"  # a double export is not a "mismatched file"

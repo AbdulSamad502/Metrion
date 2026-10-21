@@ -127,6 +127,10 @@ class ParsedRow:
     # populates this field; only meesho.payments.v1 currently produces rows where it actually
     # differs in content from `source_row_json`.
     source_row_pairs: tuple[tuple[str, str], ...] = ()
+    # (column header, raw value) pairs whose value could not be read under the mapping that produced this row
+    # (a malformed number, an unreadable date). Only mapped (non-verified-adapter) sources populate it; a row with
+    # any entry is quarantined by V-MAP-001 rather than crashing the run or posting a guessed value.
+    parse_errors: tuple[tuple[str, str], ...] = ()
 
 
 class MarketplaceAdapter(Protocol):

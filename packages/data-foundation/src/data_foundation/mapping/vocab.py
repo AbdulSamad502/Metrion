@@ -19,7 +19,7 @@ REPORT_KINDS: tuple[str, ...] = ("SALES", "SETTLEMENT", "EXPENSE", "ADVERTISING"
 
 # transform ids a proposal may name
 TRANSFORMS: frozenset[str] = frozenset(
-    {"IDENTITY", "PAISE_IDENTITY", "RUPEES_TO_PAISE", "DATE_ISO", "DATE_DMY", "DATE_MDY", "PERCENT_TO_FRACTION"}
+    {"IDENTITY", "PAISE_IDENTITY", "RUPEES_TO_PAISE", "DATE_ISO", "DATE_DMY", "DATE_MDY", "PERCENT"}
 )
 MONEY_TRANSFORMS: frozenset[str] = frozenset({"PAISE_IDENTITY", "RUPEES_TO_PAISE"})
 DATE_TRANSFORMS: frozenset[str] = frozenset({"DATE_ISO", "DATE_DMY", "DATE_MDY"})

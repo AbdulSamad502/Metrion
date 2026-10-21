@@ -134,8 +134,8 @@ def _check_field(
             errors.append(Issue("M-VOC", f"a money field needs a money transform, not {f.transform}"))
         if vt == "date" and f.transform not in V.DATE_TRANSFORMS:
             errors.append(Issue("M-VOC", f"a date field needs a date transform, not {f.transform}"))
-        if vt == "percent" and f.transform != "PERCENT_TO_FRACTION":
-            errors.append(Issue("M-VOC", "a percentage field needs PERCENT_TO_FRACTION"))
+        if vt == "percent" and f.transform != "PERCENT":
+            errors.append(Issue("M-VOC", "a percentage field needs PERCENT"))
         if vt in ("text", "int", "enum") and f.transform != "IDENTITY":
             errors.append(Issue("M-VOC", f"a {vt} field takes the IDENTITY transform"))
     if not is_money and (f.tax_inclusion is not None or f.sign_convention is not None):
