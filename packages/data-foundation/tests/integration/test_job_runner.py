@@ -482,8 +482,9 @@ def confirm_event_mapping(t: uuid.UUID, j: uuid.UUID, p: Path) -> None:
 
 def test_a_sale_and_its_credit_note_sharing_an_order_and_line_both_post(tmp_path: Path) -> None:
     t = uuid.uuid4()
-    rows = [["O1", "L1", "INVOICE", "1", "100.00", "05/10/2026"], ["O1", "L1", "CREDIT_NOTE", "1", "-100.00", "07/10/2026"],
-            ["O2", "L2", "INVOICE", "2", "250.00", "06/10/2026"], ["O2", "L2", "INVOICE", "2", "250.00", "06/10/2026"]]  # the last is an exact repeat of the row above
+    rows = [[f"B{i}", f"BL{i}", "INVOICE", "1", f"{50 + i}.00", "04/10/2026"] for i in range(60)]  # 60 ordinary lines, so the one repeat below is a small share
+    rows += [["O1", "L1", "INVOICE", "1", "100.00", "05/10/2026"], ["O1", "L1", "CREDIT_NOTE", "1", "-100.00", "07/10/2026"],
+             ["O2", "L2", "INVOICE", "2", "250.00", "06/10/2026"], ["O2", "L2", "INVOICE", "2", "250.00", "06/10/2026"]]  # the last row exactly repeats the one above it
     p = event_csv(tmp_path, rows)
     j = upload(t, p)
     r = runner(proposer=lambda inp: event_proposal())
@@ -491,16 +492,18 @@ def test_a_sale_and_its_credit_note_sharing_an_order_and_line_both_post(tmp_path
     confirm_event_mapping(t, j, p)
     assert r.run_job(t, j) == "DONE"
     out = jobs.get_job(t, j)["outcome"]  # type: ignore[index]
-    assert out["persisted_row_count"] == 3 and out["duplicates_in_file"] == 1 and out["held_conflicts"] == 0 and out["held_ambiguous"] == 0
+    assert out["persisted_row_count"] == 63 and out["duplicates_in_file"] == 1 and out["held_conflicts"] == 0 and out["held_ambiguous"] == 0
     with tenant_scope(t) as conn:
-        got = [tuple(x) for x in conn.execute(text("SELECT order_ref, document_type, gross_item_amount FROM sales_line WHERE tenant_id = :t ORDER BY order_ref, document_type"), {"t": str(t)})]
+        got = [tuple(x) for x in conn.execute(text("SELECT order_ref, document_type, gross_item_amount FROM sales_line WHERE tenant_id = :t AND order_ref IN ('O1','O2') ORDER BY order_ref, document_type"), {"t": str(t)})]
     assert got == [("O1", "CREDIT_NOTE", -10000), ("O1", "INVOICE", 10000), ("O2", "INVOICE", 25000)]  # the credit note is its own event; the repeat was counted once
 
 
 def test_without_an_event_type_the_same_line_with_different_content_is_held_not_merged_and_not_doubled(tmp_path: Path) -> None:
     t = uuid.uuid4()
     p = tmp_path / "noevent.csv"
-    p.write_text("Order ID,Line ID,Qty,Selling Price,Invoice Date\nO1,L1,1,100.00,05/10/2026\nO1,L1,1,-100.00,07/10/2026\n", encoding="utf-8")
+    body = "".join(f"O{i},L{i},1,{100 + i}.00,05/10/2026\n" for i in range(60))  # 60 distinct lines
+    body += "O7,L7,1,-107.00,07/10/2026\n"  # one more row for line L7 with different content and nothing saying it is a credit note
+    p.write_text("Order ID,Line ID,Qty,Selling Price,Invoice Date\n" + body, encoding="utf-8")
 
     def proposal(_inp: Any) -> dict[str, Any]:
         f = event_proposal()["fields"]
@@ -518,8 +521,24 @@ def test_without_an_event_type_the_same_line_with_different_content_is_held_not_
     jobs.transition(t, j, "QUEUED", mapping_id=job["mapping_id"], now=NOW)  # type: ignore[index]
     assert r.run_job(t, j) == "DONE"
     out = jobs.get_job(t, j)["outcome"]  # type: ignore[index]
-    assert out["persisted_row_count"] == 1 and out["held_conflicts"] == 1  # nothing says the second row is a credit note, so it is held for the seller, not silently posted
-    assert len(sales_rows(t)) == 1
+    assert out["persisted_row_count"] == 60 and out["held_conflicts"] == 1  # nothing says the extra row is a credit note, so it is held for the seller, not silently posted
+    assert len(sales_rows(t)) == 60
+
+
+def test_a_normal_share_of_credit_notes_does_not_make_the_mapping_look_aggregated(tmp_path: Path) -> None:
+    """Regression: the grain check counted a sale and its credit note as duplicates, refusing a valid mapping once returns were a normal share of rows."""
+    t = uuid.uuid4()
+    rows = []
+    for i in range(40):
+        rows.append([f"O{i}", f"L{i}", "INVOICE", "1", f"{100 + i}.00", "05/10/2026"])
+        if i % 4 == 0:  # 25% of the lines were later credited
+            rows.append([f"O{i}", f"L{i}", "CREDIT_NOTE", "1", f"-{100 + i}.00", "09/10/2026"])
+    p = event_csv(tmp_path, rows, "returns.csv")
+    j = upload(t, p)
+    r = runner(proposer=lambda inp: event_proposal())
+    assert r.run_job(t, j) == "AWAITING_MAPPING_CONFIRMATION"
+    confirm_event_mapping(t, j, p)  # must not raise M-GRN
+    assert r.run_job(t, j) == "DONE" and len(sales_rows(t)) == 50
 
 
 # ============================================================ the unit of a rate is never guessed (decision R2), end to end

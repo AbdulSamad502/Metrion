@@ -178,6 +178,13 @@ def upgrade() -> None:
     )
     op.execute(_TENANT_RLS_SQL.format(table="ad_report_line"))
 
+    # --- least privilege (the project rule: the app role is never given a privilege nothing needs) ------------------------
+    # Nothing in the application deletes any of these rows: jobs and mappings are append-and-supersede, reports are upserted, and erasure is an
+    # operator action. (`column_mapping_field` is removed only by the FK cascade, which does not need the app role's DELETE.)
+    op.execute("REVOKE DELETE, TRUNCATE ON ingestion_job, column_mapping, column_mapping_field, data_quality_report, ad_report_line FROM metrion_app;")
+    # advertising report lines are written once at ingestion and never changed
+    op.execute("REVOKE UPDATE ON ad_report_line FROM metrion_app;")
+
     # --- duplicate-classifier lookups on settlement_line -----------------------------------------
     op.execute(
         """

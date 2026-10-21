@@ -115,6 +115,20 @@
    ],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/jobs": {
+   "query": [
+    "limit"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/jobs/{job_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/jobs/{job_id}/mapping": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/line-status-override": {
    "query": [
     "sales_line_id"
@@ -462,6 +476,17 @@
     "marketplace"
    ]
   },
+  "POST /api/v1/cfo/jobs/{job_id}/cancel": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/jobs/{job_id}/mapping/confirm": {
+   "body": {
+    "$ref": "#/components/schemas/ConfirmMappingBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/landed-cost": {
    "body": {
     "$ref": "#/components/schemas/LandedCostHttpRequest"
@@ -524,6 +549,19 @@
    },
    "query": [],
    "requiredQuery": []
+  },
+  "POST /api/v1/cfo/uploads": {
+   "multipart": true,
+   "query": [
+    "adapter_id",
+    "marketplace",
+    "report_kind",
+    "sheet_name"
+   ],
+   "requiredQuery": [
+    "marketplace",
+    "report_kind"
+   ]
   },
   "POST /api/v1/ci/competitor-urls": {
    "body": {
@@ -1437,6 +1475,27 @@
     "sku"
    ],
    "title": "ConfirmHintBody",
+   "type": "object"
+  },
+  "ConfirmMappingBody": {
+   "description": "`decisions` and `overrides` are keyed by the source column's position, as strings (JSON object keys).",
+   "properties": {
+    "decisions": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "title": "Decisions",
+     "type": "object"
+    },
+    "overrides": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/MappingFieldOverrideBody"
+     },
+     "title": "Overrides",
+     "type": "object"
+    }
+   },
+   "title": "ConfirmMappingBody",
    "type": "object"
   },
   "CostEntryHttpRequest": {
@@ -2468,6 +2527,67 @@
     "quantity"
    ],
    "title": "LandedCostHttpRequest",
+   "type": "object"
+  },
+  "MappingFieldOverrideBody": {
+   "properties": {
+    "canonical_field": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Canonical Field"
+    },
+    "component_code": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Component Code"
+    },
+    "sign_convention": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sign Convention"
+    },
+    "tax_inclusion": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Tax Inclusion"
+    },
+    "transform": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Transform"
+    }
+   },
+   "title": "MappingFieldOverrideBody",
    "type": "object"
   },
   "Marketplace": {

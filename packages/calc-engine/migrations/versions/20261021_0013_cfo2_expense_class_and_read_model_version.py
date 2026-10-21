@@ -86,6 +86,8 @@ def upgrade() -> None:
         """
     )
     op.execute(_TENANT_RLS_SQL.format(table="cfo_read_model_version"))
+    # the counter is only ever incremented (upsert); nothing deletes it
+    op.execute("REVOKE DELETE, TRUNCATE ON cfo_read_model_version FROM metrion_app;")
 
 
 def downgrade() -> None:

@@ -333,3 +333,30 @@ def test_a_proposer_is_handed_masked_profiles_never_raw_cells() -> None:
     assert by_name["Status"].enum_values == ("DELIVERED", "RETURNED")  # business values survive
     assert all("ravi" not in v.lower() and "asha" not in v.lower() for p in masked for v in p.enum_values)
     assert by_name["Notes"].enum_values == ("<EMAIL>".join(["mail ", ""]).rstrip(), "ok") or "<EMAIL>" in by_name["Notes"].enum_values[0]
+
+
+
+def test_grain_check_treats_a_sale_and_its_credit_note_as_different_events() -> None:
+    cols = ["Order ID", "Line ID", "Doc Type", "Qty", "Price", "Invoice Date"]
+    rows = []
+    for i in range(40):
+        rows.append([f"O{i}", f"L{i}", "INVOICE", "1", f"{100 + i}.00", "05/10/2026"])
+        if i % 3 == 0:
+            rows.append([f"O{i}", f"L{i}", "CREDIT_NOTE", "1", f"-{100 + i}.00", "09/10/2026"])
+
+    def fields(with_doc_type: bool) -> dict[str, Any]:
+        f = [{"source_column": "Order ID", "index": 0, "canonical_field": "order_ref", "transform": "IDENTITY"},
+             {"source_column": "Line ID", "index": 1, "canonical_field": "line_ref", "transform": "IDENTITY"},
+             {"source_column": "Qty", "index": 3, "canonical_field": "quantity", "transform": "IDENTITY"},
+             {"source_column": "Price", "index": 4, "canonical_field": "gross_item_amount", "transform": "RUPEES_TO_PAISE", "tax_inclusion": "EXCLUSIVE", "sign_convention": "AS_IS"},
+             {"source_column": "Invoice Date", "index": 5, "canonical_field": "invoice_date", "transform": "DATE_DMY"}]
+        if with_doc_type:
+            f.append({"source_column": "Doc Type", "index": 2, "canonical_field": "document_type", "transform": "IDENTITY"})
+        return {"fields": f, "unmapped_columns": [] if with_doc_type else ["Doc Type"]}
+
+    def run_grain(with_doc_type: bool) -> Any:
+        return validate_mapping(parse_proposal(fields(with_doc_type)), report_kind="SALES", columns=cols, rows=rows, profiles=profile_columns(cols, rows),
+                                limits=LIMITS, as_of=AS_OF)
+
+    assert "M-GRN" not in run_grain(True).rules()  # the document type distinguishes the credit notes: one row per line event
+    assert "M-GRN" in run_grain(False).rules()  # without it the same lines repeat: this really does look order-level or aggregated

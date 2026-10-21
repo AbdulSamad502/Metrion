@@ -337,10 +337,16 @@ def validate_mapping(
             exact_register_match=v.exact_register_match,
         ))
 
-    # ---- M-GRN (sales: one row per order line) --------------------------------------------------
+    # ---- M-GRN (sales: one row per order line *event*) ------------------------------------------------------------------
+    # A sale and its credit note legitimately share an order and a line, so the event discriminators (document type, transaction type) are part of
+    # the key — the same rule the duplicate classifier uses (ingestion/duplicates.py). Otherwise a seller whose report has a normal share of
+    # returns would have a valid mapping refused as "not one row per line".
     if report_kind == "SALES":
-        key_cols = [f.index for f in proposal.fields if V.CANONICAL_FIELDS.get(f.canonical_field) and V.CANONICAL_FIELDS[f.canonical_field].is_key]
-        if not key_cols:
+        key_cols = [f.index for f in proposal.fields
+                    if (V.CANONICAL_FIELDS.get(f.canonical_field) and V.CANONICAL_FIELDS[f.canonical_field].is_key)
+                    or f.canonical_field in ("document_type", "transaction_type")]
+        identity_cols = [f.index for f in proposal.fields if V.CANONICAL_FIELDS.get(f.canonical_field) and V.CANONICAL_FIELDS[f.canonical_field].is_key]
+        if not identity_cols:
             g_issues.append(Issue("M-GRN", "no identity column (order/line/invoice reference) is mapped, so the row grain cannot be established"))
         elif rows:
             keys = [tuple((r[i] if i < len(r) else "") for i in key_cols) for r in rows]
