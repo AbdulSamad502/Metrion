@@ -152,20 +152,23 @@ def insert_sales_lines_with_components(
 
 _EXISTING_ENTRIES_SQL = text(
     """
-    SELECT order_ref, line_ref, invoice_ref, sku, marketplace_item_id, source_row_json
-    FROM sales_line
-    WHERE tenant_id = :tenant_id AND marketplace = :marketplace
-      AND (order_ref = ANY(CAST(:order_refs AS text[])) OR (:include_null AND order_ref IS NULL))
+    SELECT s.order_ref, s.line_ref, s.invoice_ref, s.sku, s.marketplace_item_id, s.source_row_json, ir.adapter_id, cm.fingerprint
+    FROM sales_line s
+    JOIN ingestion_run ir ON ir.id = s.ingestion_run_id
+    LEFT JOIN column_mapping cm ON ir.adapter_id LIKE 'mapped.%' AND cm.tenant_id = s.tenant_id AND cm.id::text = substr(ir.adapter_id, 8)
+    WHERE s.tenant_id = :tenant_id AND s.marketplace = :marketplace
+      AND (s.order_ref = ANY(CAST(:order_refs AS text[])) OR (:include_null AND s.order_ref IS NULL))
     """
 )
 
 
 def existing_entries_for_orders(
-    tenant_id: UUID, marketplace: str, order_refs: Collection[str | None]
+    tenant_id: UUID, marketplace: str, family: str, order_refs: Collection[str | None]
 ) -> list["ExistingEntry"]:
-    """Identity digest + raw-row hash of every already-ingested sales row that could collide with a chunk
-    carrying these `order_ref`s (cfo-data-intelligence.md §6.3). Cost scales with the chunk, not the history."""
-    from data_foundation.ingestion.duplicates import existing_sales_entry
+    """Identity digest + raw-row hash of already-ingested sales rows **of the same report family** that could collide with a chunk
+    carrying these `order_ref`s (cfo-data-intelligence.md §6.3). Rows from a different kind of report (an orders report vs a TCS
+    report on the same sub-order) are not candidates. Cost scales with the chunk, not the history."""
+    from data_foundation.ingestion.duplicates import existing_sales_entry, report_family
 
     wanted = sorted({o for o in order_refs if o is not None})
     include_null = any(o is None for o in order_refs)
@@ -177,7 +180,12 @@ def existing_entries_for_orders(
             _EXISTING_ENTRIES_SQL,
             {"tenant_id": str(tenant_id), "marketplace": marketplace, "order_refs": wanted, "include_null": include_null},
         ):
-            entry = existing_sales_entry(marketplace, dict(r._mapping), r._mapping["source_row_json"] or {})
+            m = r._mapping
+            if m["adapter_id"].startswith("mapped.") and not m["fingerprint"]:
+                continue  # a mapping that no longer exists cannot be matched to a family; never guess
+            if report_family(m["adapter_id"], m["fingerprint"]) != family:
+                continue
+            entry = existing_sales_entry(marketplace, family, dict(m), m["source_row_json"] or {})
             if entry is not None:
                 out.append(entry)
     return out

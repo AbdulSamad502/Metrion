@@ -281,16 +281,18 @@ async def post_upload(
     marketplace: str,
     report_kind: str,
     sheet_name: str | None = None,
+    adapter_id: str | None = None,
     ctx: AuthContext = require_auth(permission=AGENT_CFO),
 ) -> dict[str, object]:
     """Stream a CSV/XLSX report to disk (never into memory), then start a background ingestion job. Returns 202 with the job; poll
-    `GET /cfo/jobs/{id}` for progress. A byte-identical re-upload reuses the stored file and returns the existing job (or starts a new
+    `GET /cfo/jobs/{id}` for progress. `adapter_id` (optional) names the report type when a file's columns fit several (for example Amazon's
+    B2B and B2C MTR reports, which have identical headers). A byte-identical re-upload reuses the stored file and returns the existing job (or starts a new
     attempt if the last one failed or was cancelled)."""
     assert ctx.tenant_id is not None and ctx.app_user_id is not None
     tenant_id = ctx.tenant_id
     _require_cfo_entitlement(tenant_id, direct_action_code=CFO_INGEST)
     try:
-        ext = cfo_ingestion.validate_upload_request(file.filename or "", marketplace.upper(), report_kind.upper())
+        ext = cfo_ingestion.validate_upload_request(file.filename or "", marketplace.upper(), report_kind.upper(), adapter_id)
     except cfo_ingestion.UploadRejected as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from None
 
@@ -302,7 +304,7 @@ async def post_upload(
         raise HTTPException(status_code=400, detail="The file is empty.")
     return await run_in_threadpool(
         cfo_ingestion.register_upload, tenant_id, ctx.app_user_id, stored_path=tmp, content_sha256=sha, size=size,
-        original_filename=file.filename or tmp.name, marketplace=marketplace.upper(), report_kind=report_kind.upper(), sheet_name=sheet_name,
+        original_filename=file.filename or tmp.name, marketplace=marketplace.upper(), report_kind=report_kind.upper(), sheet_name=sheet_name, adapter_id=adapter_id,
     )
 
 

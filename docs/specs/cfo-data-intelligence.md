@@ -115,21 +115,28 @@ All tenant-owned, `FORCE` RLS. `canonical_fields` produced via a mapping carry `
 - Chunked read (CSV via incremental reader; XLSX via read-only worksheet iterator); per chunk: apply adapter/mapping → existing row validation rules → stage accepted rows, collect findings.
 - **Duplicate handling (amended 2026-10-21, owner requirement 4).** Every incoming row is classified *before* financial posting, within the file and against previously ingested data, using two measurements: an **identity** (who the row claims to be) and a **raw-row hash** (what the row says: a digest of the row's source columns, order-independent). Classification is a pure function over those two, tested without a database.
 
-  | Identity | Definition |
-  |---|---|
-  | Sales row | `(marketplace, order_ref, line_ref, invoice_ref)`; when `line_ref` is absent the identity is extended with `(sku, marketplace_item_id)` so that two different items of one order are never mistaken for one. A row with no line identity at all (no `line_ref`, no `sku`, no `marketplace_item_id`) is *identity-weak*. |
-  | Settlement row | `(marketplace, order_ref, line_ref, settlement_id, settlement_date, gross_settlement_amount)`. Different amounts or dates on the same order are *different* identities: partial settlements, adjustments and reversals are legitimate repeats and are never treated as duplicates. |
+  **Report family.** Identity includes the *kind of report* a row came from (the adapter id without its version suffix, or the file shape of a confirmed mapping). A Meesho orders report and a Meesho TCS report both carry rows for one Sub Order No: different facts about it, not duplicates of each other. Only a re-upload of the same kind of report can overlap.
+
+  **Strong identity, defined per marketplace** (from the columns each marketplace's reports really carry; `MARKETPLACE_IDENTITY` in code). A row is *identity-strong* only when it carries the marketplace's own unique **line id**. A product id (SKU, ASIN, FSN) is never a line id: the same product can sit on several lines of one order.
+
+  | Marketplace | Strong sales identity (the line id) | Settlement row identity (never strong) |
+  |---|---|---|
+  | **Meesho** | `Sub Order No` (`line_ref`; the verified unique sub-order key, data-foundation §5.1) | `Sub Order No` + final settlement amount (the Payments export carries nothing more) |
+  | **Amazon** | `Shipment Item ID` (`line_ref`; `ASIN` is the product, not the line) | order id + order-item code + merchant-order-item id + shipment id + settlement id + the melted amount-type / amount-description / amount (one row per fee or principal line) |
+  | **Flipkart** | `Line Item ID` (`line_ref`; `FSN` is the product, not the line) | order id + settlement id + settlement date + amount |
+
+  A sales row with no line id still gets an identity (order, invoice, and its product ids so two products of one order never merge), but it is *weak*: an identical repeat is held as ambiguous, never skipped. A settlement row is never strong: identical settlement rows cannot be told from a double export, while different amounts or dates on one order (partial settlements, adjustments, reversals) are different identities and post. An unknown marketplace gets the conservative default (nothing strong).
 
   | Class | When | Action |
   |---|---|---|
   | `NEW` | identity not seen in the file or in prior data | post |
   | `EXACT_DUPLICATE_CROSS_FILE` | same identity and same raw-row hash as already-ingested data (an overlapping upload) | skip; counted and disclosed as overlap, never silently |
-  | `EXACT_DUPLICATE_IN_FILE` | same identity and same raw-row hash earlier in this file, identity-strong | skip the repeat; `WARNING` finding `V-DUP-001` naming the first row |
+  | `EXACT_DUPLICATE_IN_FILE` | same identity and same raw-row hash earlier in this file, **identity-strong** (the marketplace's own line id present) | skip the repeat; `WARNING` finding `V-DUP-001` naming the first row |
   | `CONFLICT_CROSS_FILE` | same identity, different raw-row hash from already-ingested data (a correction? a status change? a different report version?) | **hold** the incoming row (not posted); `ERROR` finding `V-DUP-003` explaining that an earlier upload has this line with different values and that superseding requires the seller's confirmation |
   | `CONFLICT_IN_FILE` | same identity, different raw-row hash earlier in this file | keep the first, **hold** the later row; `V-DUP-003` |
   | `AMBIGUOUS_REPEAT` | an identical raw row repeated within a file where nothing distinguishes the repeats (identity-weak sales rows, or settlement rows): a double export and two real identical entries cannot be told apart | keep the first, **hold** the repeats; `ERROR` finding `V-DUP-002` explaining that if both entries are real the seller must add a distinguishing reference |
 
-  Held rows are never posted and never silently dropped: each has a finding with its row number and plain-language reason, counts appear in the data-quality report, and the original file is preserved so the seller can resolve and re-upload. **Held-duplicate rows are excluded from the 20% quarantine-threshold ratio**: a heavily overlapping re-upload is not evidence of a mismatched file (data-foundation §7.4 concerns malformed rows). Because the legacy path compared only against *existing* rows, within-file duplicates were previously posted twice; the new behaviour is a deliberate correction, and the legacy path remains unchanged for reference. The in-file index holds a 16-byte digest per distinct identity (about 130 bytes per entry), a stated memory cost at very large files (OQ6).
+  **Held rows are unresolved: they are not posted, and so they are excluded from every authoritative financial figure** until the seller resolves them (resolution flow: OQ7/OQ10). Held rows are never posted and never silently dropped: each has a finding with its row number and plain-language reason, counts appear in the data-quality report, and the original file is preserved so the seller can resolve and re-upload. **Held-duplicate rows are excluded from the 20% quarantine-threshold ratio**: a heavily overlapping re-upload is not evidence of a mismatched file (data-foundation §7.4 concerns malformed rows). Because the legacy path compared only against *existing* rows, within-file duplicates were previously posted twice; the new behaviour is a deliberate correction, and the legacy path remains unchanged for reference. The in-file index holds a 16-byte digest per distinct identity (about 130 bytes per entry), a stated memory cost at very large files (OQ6).
 
 - End of stream: evaluate quarantine threshold; on success one commit moves staged rows into `sales_line`/`settlement_line`/`line_component` and bumps `cfo_read_model_version`; on failure staged rows are discarded, nothing is half-committed.
 - Rejected-row reasons stored as today (`validation_finding`), bounded by the threshold.
@@ -154,6 +161,21 @@ Input to the model (masked, bounded): column names, inferred type and format per
 | M-UNT | rupee vs paise detected: values with ≥ 1 non-zero fractional digit in > 2% of rows → rupees; else ambiguous → seller confirms |
 | M-REQ | all fields required by the report kind are mapped, or the missing ones are listed as `agent_data_request`s |
 
+### 6.4a Value transforms with exact definitions
+
+**`PERCENT` (decision R2 — documented, ready for owner approval).** Implemented once in `data_foundation/mapping/units.py` (`parse_percent_points`) and used by both the validator and the mapped adapter.
+
+| Aspect | Definition |
+|---|---|
+| Meaning | A percentage in **percentage points**: "18" or "18%" is 18 points (an 18% rate). It is **not** converted to a fraction, because every consumer (V-TAX-003, the GST slab references) compares in percentage points, as the verified adapters store it. |
+| Accepts | optional surrounding spaces; digits with an optional decimal part; an optional single trailing `%`. No leading `+`. |
+| Range | `0 ≤ value ≤ 100`, inclusive. Negative or above 100 is invalid; never clamped. |
+| Precision | at most 4 decimal places (the width of `line_component.rate_pct numeric(7,4)`). More than 4 is invalid. |
+| Rounding | **none**. The exact decimal is kept, normalised to its shortest form ("18.00" becomes "18", "0.00" becomes "0"). |
+| Never | a heuristic: "0.18" is 0.18 points, not 18%. A column of fractions is not guessed at. |
+| Invalid | anything else (`""`, `abc`, `NaN`, `inf`, `1e1`, `1,8`, `18%%`, `-1`, `100.01`, `18.12345`): the row is quarantined by V-MAP-001 naming the value; never defaulted to 0. A blank cell is "not given" (not an error, not 0). |
+| Tests | `tests/unit/mapping/test_units_percent.py`: valid and invalid tables, a property test that every 4-place value in 0..100 round-trips exactly, a property test that anything above 100 is invalid, the adapter and validator paths. |
+
 **Decision logic.** A field is `AUTO_ACCEPTED_BY_RULES` only when every applicable rule passes *and* the column name matches the closed-vocabulary synonym register or an adapter's own column (so "Item Price"/"Sale Amount"/"Selling Price" never auto-accept as the same thing without validation passing); anything else — including every `tax_inclusion`, `sign_convention`, `unit` and money-bearing field that was not exactly matched — requires **seller confirmation** in the mapping review UI. Seller edits are re-validated. A rejected mapping stays rejected for that fingerprint.
 
 **Never:** infer a mapping silently, accept a model proposal that fails validation, map a column to a component_code outside the registry, or apply a mapping to a file whose fingerprint differs from the confirmed one.
@@ -161,11 +183,33 @@ Input to the model (masked, bounded): column names, inferred type and format per
 ### 6.5 Mapped data confidence
 Rows ingested via a mapping carry `PROVISIONAL`; metric results cite `mapping_id`/version in provenance; the dashboard shows "Mapped source — confirmed by you on <date>". A verification review (`column_mapping.verified=true`, by a Metrion reviewer, not seller) is the only path to `VERIFIED` and requires comparison against a real export.
 
+### 6.5a GST-inclusive mapped amounts — current limitation and the specified future workflow (decision R3)
+
+**Limitation (in force).** A mapped gross/total amount must be declared **tax-exclusive**. A mapping whose gross or total amount includes GST, or whose GST treatment is unknown, is **refused** (`TAX_INCLUSIVE_UNSUPPORTED_FOR_MAPPED`); nothing is posted. The seller is told plainly and the mapped path stays closed to such files. This is the safe behaviour: posting an inclusive amount as exclusive would overstate revenue.
+
+**Future workflow (specified, not built): GST-exclusive conversion.**
+1. *Source of the base.* Prefer a tax-exclusive column in the file (`taxable_amount`): then no conversion is needed and the mapping is accepted as tax-exclusive by measurement (M-TAX).
+2. *Otherwise convert in Brain 1, never in mapping or by a model.* A new engine formula `gst_exclusive_amount(inclusive_paise, rate_pct)` = `inclusive × 100 / (100 + rate)` rounded once, half-up, to whole paise (`deterministic-engine.md` §5.11, D8), with `rate_pct` in percentage points (the `PERCENT` definition, §6.4a). Integer arithmetic only; `UNAVAILABLE` if the rate is missing; zero or negative inclusive amounts convert by the same rule.
+3. *The rate comes only from the OP13 layered source* (observed in the seller's own report, then the curated HSN reference, then the GST Applicability Lookup **accepted by the seller**). No rate from model knowledge; an unresolved rate leaves the line `UNAVAILABLE`, never defaulted.
+4. *Provenance.* The converted figure is stored beside the source amount (never overwriting it) with the rate, the rate's source, the formula version and confidence `DERIVED`; the original inclusive amount stays visible.
+5. *Gate.* Tax-adjacent conversion is shown as indicative until the formula and rate sources are CA-reviewed (`cfo-unified-financials.md` OQ5).
+6. *Acceptance (when built).* Golden conversions at 0%, 5%, 12%, 18%, 28% including rounding boundaries; a missing or unaccepted rate is `UNAVAILABLE`; the source amount is untouched; conversion reproduces on re-run; a mapped inclusive file posts exactly the converted figures and flags them `DERIVED`.
+
 ### 6.6 Data-quality report
 Per job: rows read/accepted/rejected/duplicate, rejection reasons by rule, date coverage, per-column null rates, enum values unmapped, quarantine ratio, mapping decisions, items needing the seller. Per tenant (rolled up for dashboard trust badges): last updated per source, coverage by marketplace and period, open `agent_data_request`s.
 
 ### 6.7 Expense ingestion
 Expense CSV/XLSX → canonical expense entries via `manual_adjustment` (`expense.<category>`) rows, **not a new store** (cfo-agent AC17d): date, category, amount, description, optional vendor, payment reference. Mapping uses the same machinery (`report_kind=EXPENSE`). Each row: category mapped via `expense_class_map` or `OTHER_UNCLASSIFIED`; duplicate-cost prevention per `cfo-unified-financials.md` §4.3 (exact-row duplicate → skipped, counted; same vendor/amount/date within a file or against existing entries → `POSSIBLE_DUPLICATE` held for confirmation; marketplace-deduction-like categories → `MAY_OVERLAP_MARKETPLACE`). Writes require `financials.adjust` (AC11) and record `entered_by`.
+
+### 6.7a Expense ingestion — design gap found while sizing AC-D11 (2026-10-21), and the proposed deferral
+
+Sizing AC-D11 against the real engine showed that §6.7 as drafted cannot be implemented safely, so it is **not built**:
+
+1. The engine's expense registry (`deterministic-engine.md` §7.2.1) holds **pooled costs** in exactly five categories (`expense.advertising | packaging | storage | logistics | other`), each of which **feeds Contribution Profit** (§5.6). A real expense file has many more kinds (rent, salaries, software, owner drawings, inventory purchases, capital items).
+2. Mapping such rows onto `expense.other` would put owner drawings, purchases and capital items into Contribution Profit as "other allocated costs". That is exactly the contamination the spec forbids (`cfo-unified-financials.md` §4.2, AC-U3), and the engine would have no way to tell afterwards.
+3. The per-transaction ledger (date, vendor, description, payment reference), the class of each category (`OVERHEAD`, `OWNER_DRAWING`, `INVENTORY_PURCHASE`, `CAPITAL`, ...), and the cost-ownership overlap check need a representation the engine does not have. Classification must be **suggest-only until the seller confirms** (decision OQ2), which needs a stored suggestion and a stored confirmation.
+
+**Proposal (needs owner approval): defer AC-D11 to Phase 3 (Expense Intelligence), where the expense model is specified properly first.** The decision to take there: (A) a new engine-owned `expense_entry` ledger (reverses the earlier "no CFO-owned store" decision R6/AC17d, justified by the above), or (B) extend the `manual_adjustment` registry with a ledger field kind plus a confirmed `expense.class`. Until then no expense row is posted anywhere, so none can contaminate a profit figure. The benchmark's expense file is streamed, profiled and mapping-validated only, and labelled so.
 
 ### 6.8 Advertising ingestion (P3)
 Adapter family `{amazon,flipkart,meesho}.ads.*` registered like other adapters (`report_category=ADVERTISING`), landing in `ad_report_line` (cfo-unified-financials §5): spend, attributed sales where reported, date, campaign, SKU where reported. Built from published report formats and marked `is_verified=False` until a real export validates them (PV2). Until then manual ad spend remains available and V-DUP-2 governs which source is authoritative.
@@ -191,7 +235,8 @@ PV1 Flipkart/Amazon adapters and ad adapters unverified against real exports (cf
 
 | # | Criterion |
 |---|---|
-| AC-D1 | A file larger than the old 20 MB cap ingests with memory bounded by chunk size (measured in the benchmark) |
+| AC-D1 | **Bounded memory.** An upload never loads its file into memory: rows are read in chunks of `CFO_STREAM_CHUNK_ROWS`. Peak memory is bounded by (a) *chunk size × row width* (a row carries one finding per unmapped column) plus (b) one small digest (≈130–230 bytes) per *distinct row identity* in the duplicate index, which grows linearly with rows and is capped by `CFO_STREAM_MAX_ROWS`; it never grows with the file's bytes. A file larger than the old 20 MB cap must ingest within these bounds, with the figures recorded by the benchmark. |
+| AC-D1-note | *Wording change, shown openly:* the earlier text said memory is "bounded by chunk size". Measurement showed that is incomplete: a 1,000,000-row run grew peak memory by 231 MiB and a wide 75,000-row run by 153 MiB, because of the duplicate index and per-column findings. The requirement is **not weakened**: memory is still independent of file size and the row cap is a hard ceiling; the statement now names what actually bounds it. A spill-to-disk index remains the planned mitigation if a benchmark shows the ceiling is too high (OQ6). |
 | AC-D2 | Known-format files ingest through the existing adapters with results identical to the old path (golden comparison) |
 | AC-D3 | An unfamiliar file yields a proposal; no row is persisted before every ambiguous field is seller-confirmed |
 | AC-D4 | A mapping failing M-VOC/M-TYP/M-TAX/M-SGN/M-UNT cannot auto-accept |
@@ -202,7 +247,7 @@ PV1 Flipkart/Amazon adapters and ad adapters unverified against real exports (cf
 | AC-D8 | Samples sent to the (mocked) model contain no unmasked PII tokens |
 | AC-D9 | A job without tenant context fails closed; cross-tenant job/mapping reads return nothing |
 | AC-D10 | XLSX with a zip-bomb ratio or macros is rejected/ignored safely |
-| AC-D11 | Expense duplicates and overlap-prone categories are held, not totalled |
+| AC-D11 | Expense duplicates and overlap-prone categories are held, not totalled — **NOT BUILT; deferral proposed, awaiting owner approval (see §6.7a)** |
 | AC-D12 | Benchmark report exists with environment recorded before any performance claim |
 
 ## 12. Test scenarios
@@ -225,20 +270,22 @@ TD1 golden Meesho orders via old vs streaming path → identical rows · TD2 100
 
 **Built and tested** (deterministic tests; mocked proposals; no LLM call): streaming CSV/XLSX readers; atomic chunked ingestion; duplicate classification (§6.3); `ingestion_job`, `column_mapping`, `column_mapping_field`, `data_quality_report`, `ad_report_line`, `expense_class_map`, `cfo_read_model_version` tables (migrations `20261021_0003` data-foundation, `20261021_0013` calc-engine); job runner with atomic claim, cancellation, failure messages; mapping propose / confirm with re-validation; a mapped adapter; routes `POST /cfo/uploads`, `GET /cfo/jobs`, `GET /cfo/jobs/{id}`, `POST /cfo/jobs/{id}/cancel`, `GET /cfo/jobs/{id}/mapping`, `POST /cfo/jobs/{id}/mapping/confirm`; the local-model proposer (off unless `CFO_MAPPING_MODEL` is set).
 
-**Refinements to the draft, each a deliberate decision recorded here, none loosening a financial rule:**
+**Refinements to the draft, shown against what the draft said. Column "Changes a previously stated requirement?" is answered openly; owner decisions of 2026-10-21 are recorded in the last column.**
 
-| # | Draft said | Built | Why |
-|---|---|---|---|
-| R1 | D1: a startup sweep recovers interrupted jobs | **Lazy, per-tenant** recovery (`recover_stale`) on every job read/list/upload | RLS means no code can read another tenant's jobs; a cross-tenant startup sweep would need a BYPASSRLS role, which `auth.md` §7.3 forbids. A job waiting for the seller (`AWAITING_MAPPING_CONFIRMATION`) is never treated as stale. |
-| R2 | Percent transform `PERCENT_TO_FRACTION` | Renamed **`PERCENT`** (value in percentage points, e.g. 18) | Existing rules (V-TAX-003) compare GST rates in percentage points; a fraction (0.18) would silently break them. The old name implied a conversion that is not performed. |
-| R3 | Mapped sales may be GST-inclusive with `tax_inclusion` recorded | **Refused**: a mapped gross/total amount must be declared tax-exclusive; otherwise the job fails `TAX_INCLUSIVE_UNSUPPORTED_FOR_MAPPED` | The engine's GST normalisation (§8.1) has no path for a mapped, GST-inclusive amount; posting it as tax-exclusive would overstate revenue. Blocking is the only honest behaviour until a GST extraction rule for mapped sources is specified (OQ8). |
-| R4 | Unreadable cell: not specified | New row rule **V-MAP-001** (ERROR): the row is quarantined naming the column and value; never defaulted, never a crash | A malformed number previously raised and would have failed a whole job; a defaulted value would be an invented figure. |
-| R5 | A model proposal is validated | Additionally the proposer is handed **masked profiles** (a profile keeps a column's distinct values; those are masked, and dropped for personal-data columns) | A privacy test found the profile's distinct values would have reached the model unmasked. Fixed at the source and in the prompt builder, with regression tests. |
-| R6 | Mapping confirmation records decisions | Confirmation **re-validates the final mapping against the file** and refuses (changing nothing) on any error, missing required field, undecided field that needs the seller, or an amount without a definite GST treatment; silence is not confirmation | AC-D3/AC-D4 made executable. Needs `financials.adjust` over HTTP. |
-| R7 | `column_mapping` columns | Added `column_mapping.evidence` (global validator issues, missing required fields, set-aside columns) and `ingestion_job_resolution_check` (a job has an adapter **or** a mapping, never both) | The mapping-level validator output had nowhere to be stored. |
-| R8 | One report category per file | New uploads label SALES as `ORDER_STATUS` and SETTLEMENT as `SETTLEMENT` in `report_file.report_category` provisionally | The real category is known only after format resolution; the ingestion run records the adapter. Reconciling the label is OQ9. |
-| R9 | `ingest_and_persist` | Left **unchanged** as the legacy path; `/cfo/ingest` unchanged | Existing callers and tests; the new path is `/cfo/uploads`. The legacy path still has the old duplicate semantics (within-file duplicates are posted twice). |
-| R10 | In-file duplicates: not specified beyond OQ6 | Settlement identity includes settlement id, date and amount; a Meesho payments row carries only `line_ref` and the amount, so an identical repeat there is **held as ambiguous** (never doubled) | Honest consequence of the columns that real export provides. |
+| # | Draft said | Built / now says | Changes a previously stated requirement? | Owner decision (2026-10-21) |
+|---|---|---|---|---|
+| R1 | D1: a startup sweep recovers interrupted jobs | Lazy, **per-tenant** recovery on every job read/list/upload; a job waiting for the seller is never stale | **Yes** — mechanism changed (startup sweep to lazy per-tenant) | Accepted with the other refinements. Reason is structural: RLS forbids a cross-tenant sweep |
+| R2 | Percent transform named `PERCENT_TO_FRACTION` | Renamed `PERCENT`, value in percentage points; full definition in §6.4a | **Yes** — name and semantics clarified (it never converted to a fraction) | Approve **after** formula, valid inputs, rounding and tests are documented: **done in §6.4a and `test_units_percent.py`; ready for approval** |
+| R3 | Mapped sales may be GST-inclusive with `tax_inclusion` recorded | **Refused** (`TAX_INCLUSIVE_UNSUPPORTED_FOR_MAPPED`) until a GST-exclusive conversion exists; workflow specified in §6.5a | **Yes** — behaviour tightened (allowed-with-note to refused) | Approved as a temporary limitation; future workflow specified in §6.5a |
+| R4 | Unreadable cell: not specified | New row rule V-MAP-001 quarantines the row, naming column and value | No — gap filled; nothing contradicted | — |
+| R5 | A model proposal is validated | The proposer is also handed **masked profiles** only | No — strengthens the stated rule that no raw value reaches a model | — |
+| R6 | Mapping confirmation records decisions | Confirmation **re-validates** and refuses on any error, missing required field, or undecided field that needs the seller; needs `financials.adjust` | No — makes AC-D3/AC-D4 executable | — |
+| R7 | `column_mapping` columns | + `evidence`; + job "adapter or mapping, never both" check | No — additive schema | — |
+| R8 | One report category per file | New uploads label SALES as `ORDER_STATUS` provisionally | No — provisional label; reconciling it is OQ9 | — |
+| R9 | `ingest_and_persist` | Left unchanged as the legacy path | No | — |
+| R10 | In-file duplicates: not specified beyond OQ6 | Identity now **defined per marketplace** with a report family (§6.3); held rows are unresolved and excluded from authoritative figures | **Yes** — the generic "(sku, item id) makes it strong" rule from the first draft is replaced: a product id is never a line id | "Keep unresolved duplicates held and excluded; define strong identity separately for each marketplace": implemented and tested |
+
+**Also refined during verification (2026-10-21):** an optional `adapter_id` on `POST /cfo/uploads` lets the seller state the report type when a file's columns fit several (Amazon's B2B and B2C MTR reports share every header); the runner never guesses, and fails an ambiguous file with plain guidance.
 
 **Additional open questions raised by implementation**
 

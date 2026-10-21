@@ -23,7 +23,7 @@ from calc_engine.repositories import read_model_version_repo as rmv  # noqa: E40
 
 from data_foundation.ingestion.job_runner import JobRunner, RunnerConfig  # noqa: E402
 from data_foundation.ingestion.profiling import collect_profile_input  # noqa: E402
-from data_foundation.ingestion.streaming import StreamLimits, open_csv  # noqa: E402
+from data_foundation.ingestion.streaming import StreamLimits, open_csv, open_report  # noqa: E402
 from data_foundation.mapping import service  # noqa: E402
 from data_foundation.mapping.validator import MappingLimits  # noqa: E402
 from data_foundation.repositories import column_mapping_repo as cm  # noqa: E402
@@ -48,7 +48,7 @@ def runner(proposer: Any = None, clock: Any = None) -> JobRunner:
     return JobRunner(config=CFG, stream_limits=SLIM, mapping_limits=MLIM, as_of=lambda: AS_OF, proposer=proposer, proposed_by="MODEL:mock", **kw)
 
 
-def upload(tenant: uuid.UUID, path: Path, *, kind: str = "SALES", marketplace: str = "MEESHO") -> uuid.UUID:
+def upload(tenant: uuid.UUID, path: Path, *, kind: str = "SALES", marketplace: str = "MEESHO", sheet_name: str | None = None, adapter_id: str | None = None) -> uuid.UUID:
     """Stand in for the upload route: a stored file, a report_file row and a QUEUED job."""
     fid = uuid.uuid4()
     with tenant_scope(tenant) as conn:
@@ -57,7 +57,7 @@ def upload(tenant: uuid.UUID, path: Path, *, kind: str = "SALES", marketplace: s
                              VALUES (:id, :t, :m, 'ORDER_STATUS', :sha, :n, 10, :uri, :u, :at)"""),
                      {"id": str(fid), "t": str(tenant), "m": marketplace, "sha": uuid.uuid4().hex + uuid.uuid4().hex, "n": path.name,
                       "uri": f"file://{path}", "u": str(uuid.uuid4()), "at": NOW})
-    return jobs.create_job(tenant, report_file_id=fid, report_kind=kind, created_by=uuid.uuid4())
+    return jobs.create_job(tenant, report_file_id=fid, report_kind=kind, created_by=uuid.uuid4(), sheet_name=sheet_name, adapter_id=adapter_id)
 
 
 def known_csv(tmp: Path, n: int, name: str = "known.csv") -> Path:
@@ -100,7 +100,7 @@ def mock_proposal(**override: Any) -> dict[str, Any]:
 def confirm_all(tenant: uuid.UUID, job_id: uuid.UUID, path: Path, **kw: Any) -> None:
     job = jobs.get_job(tenant, job_id)
     assert job is not None and job["mapping_id"] is not None
-    pinput = collect_profile_input(open_csv(path, SLIM), profile_rows=2000, sample_rows=20, seed=1)
+    pinput = collect_profile_input(open_report(path, SLIM, sheet_name=job["sheet_name"]), profile_rows=2000, sample_rows=20, seed=1)
     decisions = {i: "SELLER_CONFIRMED" for i in range(6)}
     service.confirm(tenant, job["mapping_id"], confirmed_by=uuid.uuid4(), decisions=decisions, overrides=kw.get("overrides", {}),
                     pinput=pinput, limits=MLIM, as_of=AS_OF, now=NOW)
@@ -344,3 +344,107 @@ def test_an_unparseable_model_answer_falls_back_to_manual_mapping(tmp_path: Path
     assert runner(proposer=lambda inp: "I think the first column is the order id").run_job(t, j) == "FAILED"
     job = jobs.get_job(t, j)
     assert job["error_code"] == "MAPPING_PROPOSAL_FAILED" and "map the columns manually" in job["error_detail"] and sales_rows(t) == []  # type: ignore[index]
+
+
+
+# ============================================================================== XLSX through the whole job path (AC-D2, AC-D10)
+def make_xlsx(path: Path, sheets: dict[str, list[list[Any]]]) -> Path:
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    for name, rows in sheets.items():
+        ws = wb.create_sheet(name)
+        for r in rows:
+            ws.append(r)
+    wb.save(path)
+    return path
+
+
+KNOWN_COLS = ["Meesho Order Number", "Sub Order No", "Reason for Credit Entry", "Return Status"]
+
+
+def test_xlsx_in_a_known_format_runs_the_job_to_done_with_the_same_rows_as_csv(tmp_path: Path) -> None:
+    rows = [[f"ORD-{i}", f"ORD-{i}_1", "DELIVERED", "Delivered"] for i in range(1200)]
+    a, b = uuid.uuid4(), uuid.uuid4()
+    ja = upload(a, make_xlsx(tmp_path / "k.xlsx", {"Orders": [KNOWN_COLS, *rows]}))
+    jb = upload(b, known_csv(tmp_path, 1200, "k.csv"))
+    assert runner().run_job(a, ja) == "DONE" and runner().run_job(b, jb) == "DONE"
+    out = jobs.get_job(a, ja)["outcome"]  # type: ignore[index]
+    assert out["persisted_row_count"] == 1200 and out["chunks"] == 3
+    with tenant_scope(a) as ca, tenant_scope(b) as cb:
+        q = text("SELECT order_ref, line_ref, source_row_json::text, confidence FROM sales_line ORDER BY order_ref")
+        assert [tuple(r) for r in ca.execute(q)] == [tuple(r) for r in cb.execute(q)]  # an .xlsx and a .csv of the same report post identical rows
+    assert dq.get_for_job(a, ja)["rows"]["posted"] == 1200  # type: ignore[index]
+    assert rmv.get(a) == 1
+
+
+def test_xlsx_sheet_selection_and_a_title_block_above_the_header(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    wb = {"Summary": [["Total orders", 3]],
+          "Orders": [["Seller report"], ["Generated 21 Oct"], [], KNOWN_COLS, ["O1", "O1_1", "DELIVERED", "Delivered"], ["O2", "O2_1", "DELIVERED", "Delivered"]]}
+    p = make_xlsx(tmp_path / "multi.xlsx", wb)
+    right = upload(t, p, sheet_name="Orders")
+    assert runner().run_job(t, right) == "DONE" and jobs.get_job(t, right)["outcome"]["persisted_row_count"] == 2  # type: ignore[index]
+
+
+def test_xlsx_with_no_header_on_the_chosen_sheet_fails_with_a_plain_reason(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    p = make_xlsx(tmp_path / "nohdr.xlsx", {"Summary": [["Total orders", 3]], "Orders": [KNOWN_COLS, ["O1", "O1_1", "DELIVERED", "Delivered"]]})
+    j = upload(t, p)  # defaults to the first visible sheet, which is the summary
+    assert runner().run_job(t, j) == "FAILED"
+    job = jobs.get_job(t, j)
+    assert job["error_code"] == "no_header" and "header row" in job["error_detail"] and sales_rows(t) == []  # type: ignore[index]
+
+
+def test_xlsx_in_an_unfamiliar_format_goes_through_mapping_with_real_excel_dates_and_numbers(tmp_path: Path) -> None:
+    from datetime import datetime as dt
+
+    t = uuid.uuid4()
+    rows = [[f"B-{i}", f"B-{i}-1", 2, 100.5 + i, dt(2026, 10, 1 + i % 28), "DELIVERED" if i % 4 else "RETURNED"] for i in range(40)]
+    p = make_xlsx(tmp_path / "unk.xlsx", {"Sales": [UNKNOWN_COLUMNS, *rows]})
+    j = upload(t, p)
+    r = runner(proposer=lambda inp: mock_proposal(**{"4": {"transform": "DATE_ISO"}}))  # Excel dates reach the mapping as ISO text
+    assert r.run_job(t, j) == "AWAITING_MAPPING_CONFIRMATION" and sales_rows(t) == []
+    confirm_all(t, j, p)
+    assert r.run_job(t, j) == "DONE"
+    got = {x[0]: x for x in sales_rows(t)}
+    assert len(got) == 40
+    assert got["B-0"][3] == 10050 and got["B-3"][3] == 10350  # 100.5 and 103.5 rupees, exactly, as paise (no float artefacts)
+    assert got["B-0"][4] == date(2026, 10, 1) and got["B-0"][2] == 2 and got["B-0"][5] == "PROVISIONAL"
+
+
+# ============================================================================== report types that share headers (Amazon B2B / B2C MTR)
+def amazon_csv(tmp: Path, name: str = "amz.csv") -> Path:
+    from data_foundation.adapters.registry import ADAPTER_REGISTRY
+
+    a = ADAPTER_REGISTRY["amazon.mtr_b2c.v1"]
+    cols = [k[0] if isinstance(k, tuple) else k for k in a.column_map]
+    p = tmp / name
+    p.write_text(",".join(cols) + "\n" + "".join(",".join(f"{c.split()[0]}-{i}" for c in cols) + "\n" for i in range(30)), encoding="utf-8")
+    return p
+
+
+def test_a_file_that_fits_two_report_types_is_never_guessed_the_seller_chooses(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    p = amazon_csv(tmp_path)
+    j = upload(t, p, marketplace="AMAZON")
+    assert runner().run_job(t, j) == "FAILED"
+    job = jobs.get_job(t, j)
+    assert job["error_code"] == "AMBIGUOUS_ADAPTER" and "amazon.mtr_b2b.v1" in job["error_detail"] and "amazon.mtr_b2c.v1" in job["error_detail"]  # type: ignore[index]
+    assert "will not guess" in job["error_detail"] and "Nothing was saved" in job["error_detail"] and sales_rows(t) == []  # type: ignore[index]
+    chosen = upload(t, p, marketplace="AMAZON", adapter_id="amazon.mtr_b2c.v1")  # a second attempt with the choice stated
+    assert runner().run_job(t, chosen) == "DONE"
+    out = jobs.get_job(t, chosen)
+    assert out["adapter_id"] == "amazon.mtr_b2c.v1" and out["outcome"]["persisted_row_count"] == 30  # type: ignore[index]
+
+
+def test_a_chosen_report_type_must_fit_the_marketplace_and_the_file(tmp_path: Path) -> None:
+    t = uuid.uuid4()
+    wrong_marketplace = upload(t, amazon_csv(tmp_path), marketplace="AMAZON", adapter_id="flipkart.sales_report.v1")
+    assert runner().run_job(t, wrong_marketplace) == "FAILED"
+    assert jobs.get_job(t, wrong_marketplace)["error_code"] == "ADAPTER_NOT_APPLICABLE"  # type: ignore[index]
+    not_this_file = upload(t, known_csv(tmp_path, 10, "m.csv"), marketplace="AMAZON", adapter_id="amazon.mtr_b2c.v1")  # a Meesho-shaped file
+    assert runner().run_job(t, not_this_file) == "FAILED"
+    job = jobs.get_job(t, not_this_file)
+    assert job["error_code"] == "ADAPTER_MISMATCH" and "missing" in job["error_detail"] and sales_rows(t) == []  # type: ignore[index]

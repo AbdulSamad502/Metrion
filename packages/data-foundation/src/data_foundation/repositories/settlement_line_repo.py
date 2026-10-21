@@ -128,12 +128,14 @@ def insert_settlement_lines_with_components(
 
 _EXISTING_ENTRIES_SQL = text(
     """
-    SELECT order_ref, line_ref, settlement_id, settlement_date, gross_settlement_amount, source_row_json
-    FROM settlement_line
-    WHERE tenant_id = :tenant_id AND marketplace = :marketplace
-      AND (order_ref = ANY(CAST(:order_refs AS text[]))
-           OR line_ref = ANY(CAST(:line_refs AS text[]))
-           OR settlement_id = ANY(CAST(:settlement_ids AS text[])))
+    SELECT s.order_ref, s.line_ref, s.settlement_id, s.settlement_date, s.gross_settlement_amount, s.source_row_json, ir.adapter_id, cm.fingerprint
+    FROM settlement_line s
+    JOIN ingestion_run ir ON ir.id = s.ingestion_run_id
+    LEFT JOIN column_mapping cm ON ir.adapter_id LIKE 'mapped.%' AND cm.tenant_id = s.tenant_id AND cm.id::text = substr(ir.adapter_id, 8)
+    WHERE s.tenant_id = :tenant_id AND s.marketplace = :marketplace
+      AND (s.order_ref = ANY(CAST(:order_refs AS text[]))
+           OR s.line_ref = ANY(CAST(:line_refs AS text[]))
+           OR s.settlement_id = ANY(CAST(:settlement_ids AS text[])))
     """
 )
 
@@ -141,14 +143,15 @@ _EXISTING_ENTRIES_SQL = text(
 def existing_entries_for(
     tenant_id: UUID,
     marketplace: str,
+    family: str,
     *,
     order_refs: Collection[str | None],
     line_refs: Collection[str | None],
     settlement_ids: Collection[str | None],
 ) -> list["ExistingEntry"]:
-    """Identity digest + raw-row hash of already-ingested settlement rows that could collide with a chunk
-    (cfo-data-intelligence.md §6.3). A settlement row may be reachable by any of its three references."""
-    from data_foundation.ingestion.duplicates import existing_settlement_entry
+    """Identity digest + raw-row hash of already-ingested settlement rows **of the same report family** that could collide with a
+    chunk (cfo-data-intelligence.md §6.3). A settlement row may be reachable by any of its three references."""
+    from data_foundation.ingestion.duplicates import existing_settlement_entry, report_family
 
     o = sorted({x for x in order_refs if x is not None})
     l = sorted({x for x in line_refs if x is not None})
@@ -161,7 +164,12 @@ def existing_entries_for(
             _EXISTING_ENTRIES_SQL,
             {"tenant_id": str(tenant_id), "marketplace": marketplace, "order_refs": o, "line_refs": l, "settlement_ids": s_},
         ):
-            entry = existing_settlement_entry(marketplace, dict(r._mapping), r._mapping["source_row_json"] or {})
+            m = r._mapping
+            if m["adapter_id"].startswith("mapped.") and not m["fingerprint"]:
+                continue
+            if report_family(m["adapter_id"], m["fingerprint"]) != family:
+                continue
+            entry = existing_settlement_entry(marketplace, family, dict(m), m["source_row_json"] or {})
             if entry is not None:
                 out.append(entry)
     return out

@@ -28,7 +28,7 @@ This spec defines **what each financial term means**, where each cost may come f
 
 | # | Decision | Recommendation | Rationale |
 |---|---|---|---|
-| D1 | Operating Profit definition | `Contribution Profit − Σ overhead-class expenses` (§4.2). Excludes depreciation, interest, income tax, owner drawings, inventory purchases, capital items, TCS/TDS, transfers. Labelled "management operating profit — before depreciation, interest and tax". | Engine already excludes overheads from CP; an explicit, bounded definition prevents a third meaning of "profit". CA review required (PV3). |
+| D1 | Operating Profit definition | `Contribution Profit − Σ overhead-class expenses` (§4.2), reported with a **status**: `PROVISIONAL` whenever any expense in scope is unclassified (the unclassified entries and their total are always exposed beside the figure) and `FINAL` only when none is. **No materiality threshold exists or is invented** (decision OQ1). Excludes depreciation, interest, income tax, owner drawings, inventory purchases, capital items, TCS/TDS, transfers. Labelled "management operating profit — before depreciation, interest and tax". | A threshold would be a business judgement Metrion cannot make for a seller. Showing the figure with its exposed unclassified amount lets the seller see how provisional it is. CA review still required (PV3). |
 | D2 | Expense classification | Each expense category carries a fixed `class`: `ALLOCATED_COST` (already inside CP: ads, packaging, logistics), `OVERHEAD` (operating profit only), `OWNER_DRAWING`, `INVENTORY_PURCHASE`, `CAPITAL`, `TAX_ASSET`, `OTHER_UNCLASSIFIED`. Unclassified expenses are shown but excluded from both profits until the seller classifies them. | Prevents silent misclassification. |
 | D3 | Shared expenses | Allocation across marketplaces/SKUs only via engine §5.10 (`NET_REVENUE` default, `UNITS`, `ORDERS`), always `DERIVED`, basis shown. | Existing largest-remainder rule keeps sums exact. |
 | D4 | Consolidation | Consolidated = Σ of per-marketplace results computed *separately first*; never a concatenation of raw reports. Disagreement between Σ and a directly-computed consolidated figure is a defect. | User brief §3. |
@@ -58,7 +58,7 @@ All amounts are signed integer paise. "Basis" is `DOCUMENT_DATE` unless stated.
 | **Gross Sales** | Σ gross item amount of order lines (tax-exclusive), before cancellations, returns, discounts attributed to the seller | NEW `GROSS_SALES` (wraps `gross_order_value`) | A *volume* measure, not revenue |
 | **Net Realized Revenue** | engine §5.5 | existing | After cancellations, returns, seller-borne discounts |
 | **Contribution Profit** | engine §5.8 | existing | Includes ads, packaging, logistics, return/RTO losses, allocated costs |
-| **Operating Profit (management)** | CP − overhead-class expenses (D1) | NEW `OPERATING_PROFIT` | `UNAVAILABLE` if any expense is `OTHER_UNCLASSIFIED` above a materiality threshold (config) — disclosed, not guessed |
+| **Operating Profit (management)** | CP − overhead-class expenses (D1) | NEW `OPERATING_PROFIT` | `UNAVAILABLE` only when Contribution Profit is unavailable. Otherwise a value with status `PROVISIONAL` (any unclassified expense in scope; the list and total are exposed with it) or `FINAL` (none). A held duplicate expense is excluded and counted. |
 | **Settlement Receipts** | Σ amounts the marketplace *settled* in the period, by settlement date | NEW `SETTLEMENT_RECEIPTS` (wraps `CASH_RECEIVED`) | Receipts ≠ revenue ≠ profit; the gap is timing, returns, fees and levies |
 | **Cash Movements** | Seller-visible cash events derived from settlements (+) and seller-entered payables/expenses paid (−), by cash date | NEW view, not a P&L figure | No bank feed (U5); labelled "from settlements and your entries" |
 | **Tax Assets** | Prepaid TCS/TDS | existing | Never in any profit |
@@ -97,7 +97,25 @@ These restate **existing, confirmed engine rules** (`deterministic-engine.md` §
 - not outflows: TCS/TDS (they reduce receipts), COGS (recognised on sale), allocations;
 - every line carries its source (settlement file/row or the seller's entry) and `MANUAL` where seller-entered.
 
+### 4.1c Advertising spend status and operating-profit status (decisions OQ7 and OQ1, 2026-10-21)
+
+**Advertising (compatibility preserved).** The engine rule is unchanged: a scope with no advertising entry resolves to ₹0 inside `AdvertisingCosts` and therefore Contribution Profit (engine §5.6, Category E). Existing figures, tests and callers are unaffected.
+
+**New intelligence outputs distinguish three states of *knowledge*, never the amount alone** (`AD_SPEND_STATUS`, engine §5.17):
+
+| Status | Meaning | May be shown as zero? |
+|---|---|---|
+| `VERIFIED_ZERO` | An advertising source covers the marketplace and period and reports no spend, **or** the seller has explicitly declared "no advertising" for it | Yes — "₹0 (verified)" |
+| `MISSING_COVERAGE` | An advertising source exists for the marketplace (a report has been ingested) but does not cover this period or scope | **No** — "not covered by your ad reports" |
+| `UNKNOWN` | No advertising source and no declaration at all | **No** — "unknown" |
+
+ROAS/ACOS/TACOS, the proactive scan, the CEO's narration and the dashboard must carry this status with any advertising-dependent figure. Contribution Profit keeps its legacy ₹0 value but exposes `ad_spend_status` alongside, so a seller sees when a profit figure rests on an assumption of no ad spend. The status is derived by Brain 1 from the ad coverage that was ingested or declared, never from the absence of rows alone.
+
+**Operating profit status.** `PROVISIONAL` while any expense in scope is `OTHER_UNCLASSIFIED` or any expense is held as a possible duplicate; `FINAL` otherwise. The unclassified and held entries and their amounts are returned with every Operating Profit result.
+
 ### 4.2 Expense classes (D2)
+
+**Classification is suggest-only (decision OQ2).** A suggested class is a hint with a stated reason; it changes no figure. Until the seller confirms (recorded as a `manual_adjustment` `expense.class`), an expense stays `OTHER_UNCLASSIFIED`.
 
 | Class | In Contribution Profit | In Operating Profit | In Cash Movements |
 |---|---|---|---|
@@ -214,10 +232,10 @@ TU1 three marketplaces golden dataset → Σ = consolidated · TU2 one order wit
 ## 13. Explicit open questions
 | # | Question |
 |---|---|
-| OQ1 | Materiality threshold for unclassified expenses blocking Operating Profit |
-| OQ2 | Default expense class per category — suggest-only or pre-applied? (Recommend suggest-only.) |
+| OQ1 | ~~Materiality threshold for unclassified expenses blocking Operating Profit~~ **Resolved 2026-10-21:** no threshold; Operating Profit is `PROVISIONAL` while anything is unclassified and `FINAL` when nothing is, with the unclassified entries exposed |
+| OQ2 | ~~Default expense class per category~~ **Resolved 2026-10-21: suggest-only.** A class is a suggestion (shown with its reason) until the seller confirms it; an unconfirmed expense stays `OTHER_UNCLASSIFIED`, is excluded from both profit figures, and is listed |
 | OQ3 | Minimum settled-order history for lag-based forecasting |
 | OQ4 | Whether receipt evidence needs OCR later (out of scope now) |
 | OQ5 | GST due-date calendar source and CA-review gating wording |
 | OQ6 | Whether inventory ROI estimate is shown before any sell-through input exists (Recommend: no — `UNAVAILABLE` + request.) |
-| OQ7 | Advertising "absent = 0" (engine Category E) vs the new ad-report adapter: should a period inside an ingested ad report's coverage with no rows be a true zero while a period outside coverage is `UNAVAILABLE`? Existing rule preserved until you decide |
+| OQ7 | ~~Advertising "absent = 0" vs the ad-report adapter~~ **Resolved 2026-10-21:** the legacy rule (no advertising entry resolves to ₹0 inside Contribution Profit) is **preserved for compatibility**; new intelligence outputs use the three-state `AD_SPEND_STATUS` of §4.1c and never present an unknown or uncovered amount as a verified zero |

@@ -249,3 +249,29 @@ def test_the_legacy_ingest_route_still_works_unchanged(app_client, fake_clerk, t
     resp = app_client.post("/api/v1/cfo/ingest", params={"marketplace": "MEESHO", "adapter_id": "meesho.orders.v1"},
                            files={"file": ("o.csv", _csv(20), "text/csv")}, headers=headers)
     assert resp.status_code == 200 and resp.json()["rowCountAccepted"] == 20
+
+
+# ============================================================================ choosing the report type (adapter_id)
+def _amazon_bytes(n: int = 20) -> bytes:
+    from data_foundation.adapters.registry import ADAPTER_REGISTRY
+
+    cols = [k[0] if isinstance(k, tuple) else k for k in ADAPTER_REGISTRY["amazon.mtr_b2c.v1"].column_map]
+    return (",".join(cols) + "\n" + "".join(",".join(f"{c.split()[0]}-{i}" for c in cols) + "\n" for i in range(n))).encode()
+
+
+def test_amazon_mtr_needs_the_report_type_chosen_and_the_choice_is_validated_up_front(app_client, fake_clerk, two_tenants, with_runner):
+    a, _ = two_tenants
+    with_runner()
+    headers = _register_owner(fake_clerk, a)
+    first = post_upload(app_client, headers, _amazon_bytes(), marketplace="AMAZON").json()  # B2B and B2C share headers: no guess
+    failed = wait_for(app_client, headers, first["job"]["jobId"])
+    assert failed["status"] == "FAILED" and failed["errorCode"] == "AMBIGUOUS_ADAPTER" and "adapter_id" in failed["errorDetail"]
+
+    for bad, why in (("amazon.nope.v9", "unknown"), ("flipkart.sales_report.v1", "wrong marketplace"), ("amazon.settlement.v2", "wrong kind")):
+        r = post_upload(app_client, headers, _amazon_bytes(), marketplace="AMAZON", adapter_id=bad)
+        assert r.status_code == 400, (why, r.text)
+
+    again = post_upload(app_client, headers, _amazon_bytes(), marketplace="AMAZON", adapter_id="amazon.mtr_b2c.v1").json()
+    assert again["duplicate"] is True and again["job"]["attempt"] == 2  # same bytes: a new attempt, now with the choice
+    done = wait_for(app_client, headers, again["job"]["jobId"])
+    assert done["status"] == "DONE" and done["adapterId"] == "amazon.mtr_b2c.v1" and sales_count(a) == 20

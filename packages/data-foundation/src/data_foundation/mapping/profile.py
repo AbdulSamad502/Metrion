@@ -15,6 +15,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 
+from data_foundation.mapping.units import parse_percent_points
 from data_foundation.mapping.vocab import normalise_header
 
 _CURRENCY_SYMBOLS = re.compile(r"(?i)^\s*(?:₹|rs\.?|inr)\s*")
@@ -75,6 +76,7 @@ class ColumnProfile:
     enum_values: tuple[str, ...]  # distinct values when there are at most 20 (for seller confirmation of statuses)
     date_min: date | None
     date_max: date | None
+    percent_parse_rate: Fraction  # share of non-null values that are a valid percentage (mapping/units.py)
     date_dmy_certain: bool  # some value has a first component > 12
     date_mdy_certain: bool  # some value has a second component > 12
 
@@ -127,6 +129,7 @@ def profile_columns(columns: Sequence[str], rows: Sequence[Sequence[str]]) -> tu
             foreign_currency_share=_share(sum(1 for v in nn if _FOREIGN_CURRENCY.search(v)), n),
             enum_values=tuple(distinct) if len(distinct) <= 20 else (),
             date_min=min(parsed_dates) if parsed_dates else None, date_max=max(parsed_dates) if parsed_dates else None,
+            percent_parse_rate=_share(sum(1 for v in nn if parse_percent_points(v) is not None), n),
             date_dmy_certain=dmy, date_mdy_certain=mdy,
         ))
     return tuple(out)

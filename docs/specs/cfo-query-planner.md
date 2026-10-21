@@ -78,7 +78,7 @@ JoinDef      { id, left, right, key_columns, cardinality: ONE_TO_ONE | MANY_TO_O
                uniqueness_side, control_total_column, validated: bool }
 ```
 
-V1 catalog (all already exist in Brain 1 unless marked NEW; NEW metrics are defined in `cfo-unified-financials.md` §6 and added to `deterministic-engine.md`): `GROSS_SALES` (NEW), `NET_REALIZED_REVENUE`, `MARKETPLACE_FEES`, `FEE_RATIO_PCT`, `RETURN_RATE_PCT`, `RETURN_RTO_LOSSES`, `CONTRIBUTION_PROFIT`, `CONTRIBUTION_MARGIN_PCT`, `OPERATING_PROFIT` (NEW), `SETTLEMENT_RECEIPTS` (NEW), `SETTLEMENT_LAG_DAYS`, `LEAK_AGGREGATE`, `ROAS/ACOS/TACOS` (NEW), `EXPENSE_BY_CATEGORY` (NEW, SET_SUM over `manual_adjustment`), `PROFIT_BRIDGE` (NEW, composite).
+V1 catalog (all already exist in Brain 1 unless marked NEW; NEW metrics are defined in `cfo-unified-financials.md` §6 and added to `deterministic-engine.md`): `GROSS_SALES` (NEW), `NET_REALIZED_REVENUE`, `MARKETPLACE_FEES`, `FEE_RATIO_PCT`, `RETURN_RATE_PCT`, `RETURN_RTO_LOSSES`, `CONTRIBUTION_PROFIT`, `CONTRIBUTION_MARGIN_PCT`, `OPERATING_PROFIT` (NEW; `PROVISIONAL` while any expense is unclassified, `FINAL` otherwise, never blocked by thin expense data: decision OQ1), `SETTLEMENT_RECEIPTS` (NEW), `SETTLEMENT_LAG_DAYS`, `LEAK_AGGREGATE`, `ROAS/ACOS/TACOS` (NEW), `EXPENSE_BY_CATEGORY` (NEW, SET_SUM over `manual_adjustment`), `PROFIT_BRIDGE` (NEW, composite).
 
 Dimensions V1: `marketplace`, `sku`, `period` (day/week/month), `component_code`, `expense_category`, `return_reason` (where reported).
 

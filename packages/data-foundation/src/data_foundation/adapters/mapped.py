@@ -30,6 +30,7 @@ from data_foundation.adapters.base import rupees_to_paise
 from data_foundation.component_registry import COMPONENT_KIND_BY_CODE
 from data_foundation.mapping import vocab as V
 from data_foundation.mapping.profile import parse_date_with, parse_decimal
+from data_foundation.mapping.units import format_percent_points, parse_percent_points
 from data_foundation.types import ColumnBinding, ComponentValue, DetectionResult, FileSample, ParsedRow, RawFile
 
 _RESOLVED = frozenset({"AUTO_ACCEPTED_BY_RULES", "SELLER_CONFIRMED", "SELLER_OVERRIDDEN"})
@@ -81,6 +82,7 @@ class MappedAdapter:
     fields: tuple[MappedField, ...]
     ignored_indexes: frozenset[int] = frozenset()
     source_side: str = "INVOICE"
+    fingerprint: str = ""  # the file shape this mapping was confirmed for (the report family for duplicate detection)
     date_formats: Mapping[str, str] = field(default_factory=dict)
     enum_maps: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
 
@@ -155,11 +157,11 @@ class MappedAdapter:
                 if not raw.strip():
                     canonical[fld.canonical_field] = None
                 else:
-                    d = parse_decimal(raw.replace("%", ""))
-                    if d is None:
+                    pct = parse_percent_points(raw)  # exact percentage points; see mapping/units.py for the full definition
+                    if pct is None:
                         errors.append((fld.header, raw))
                     else:
-                        canonical[fld.canonical_field] = format(d.normalize(), "f")  # percentage points, as verified adapters store it
+                        canonical[fld.canonical_field] = format_percent_points(pct)
             else:  # text / enum
                 value_s = raw.strip()
                 if fld.canonical_field == "currency" and value_s.lower() in {"inr", "rs", "rs.", "₹", "rupee", "rupees"}:
@@ -204,5 +206,5 @@ def adapter_from_mapping(mapping: Mapping[str, Any], columns: Sequence[str], mar
         adapter_id=f"mapped.{mapping['id']}", marketplace=marketplace, report_category=category,
         format_version=f"v{mapping['version']}", columns=tuple(columns), fields=tuple(sorted(fields, key=lambda x: x.index)),
         ignored_indexes=frozenset(i for i in range(len(columns)) if i not in mapped_idx),
-        source_side="SETTLEMENT" if kind == "SETTLEMENT" else "INVOICE",
+        source_side="SETTLEMENT" if kind == "SETTLEMENT" else "INVOICE", fingerprint=str(mapping["fingerprint"]),
     )

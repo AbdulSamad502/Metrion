@@ -122,12 +122,23 @@ class UploadRejected(Exception):
         super().__init__(detail)
 
 
-def validate_upload_request(filename: str, marketplace: str, report_kind: str) -> str:
+def validate_upload_request(filename: str, marketplace: str, report_kind: str, adapter_id: str | None = None) -> str:
     """Returns the lower-cased extension to store the file under; raises `UploadRejected` for anything unsupported."""
     if marketplace not in MARKETPLACES:
         raise UploadRejected(400, f"marketplace must be one of {list(MARKETPLACES)}")
     if report_kind not in UPLOAD_KINDS:
         raise UploadRejected(400, f"report_kind must be one of {list(UPLOAD_KINDS)} (expense and advertising files use their own upload)")
+    if adapter_id is not None:
+        from data_foundation.adapters.registry import ADAPTER_REGISTRY
+
+        adapter = ADAPTER_REGISTRY.get(adapter_id)
+        if adapter is None:
+            raise UploadRejected(400, f"unknown report type {adapter_id!r}; choose one of {sorted(ADAPTER_REGISTRY)}")
+        if adapter.marketplace != marketplace:
+            raise UploadRejected(400, f"{adapter_id!r} is a {adapter.marketplace} report type, not {marketplace}")
+        wanted = ("SETTLEMENT",) if report_kind == "SETTLEMENT" else ("TAX", "ORDER_STATUS")
+        if adapter.report_category not in wanted:
+            raise UploadRejected(400, f"{adapter_id!r} is not a {report_kind} report type")
     ext = Path(filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise UploadRejected(400, "Please upload a .csv or .xlsx file.")
@@ -136,7 +147,7 @@ def validate_upload_request(filename: str, marketplace: str, report_kind: str) -
 
 def register_upload(
     tenant_id: UUID, user_id: UUID, *, stored_path: Path, content_sha256: str, size: int, original_filename: str,
-    marketplace: str, report_kind: str, sheet_name: str | None,
+    marketplace: str, report_kind: str, sheet_name: str | None, adapter_id: str | None = None,
 ) -> dict[str, Any]:
     """Create the report_file + job for an already-stored upload and hand the job to the runner. A byte-identical
     re-upload reuses the stored file: it returns the existing active job, or the finished one, or starts a fresh attempt if
@@ -149,7 +160,7 @@ def register_upload(
         if last is not None and last["status"] in (*jobs.ACTIVE_STATES, "DONE"):
             return {"reportFileId": str(existing), "duplicate": True, "job": job_view(last)}
         attempt = (last["attempt"] + 1) if last else 1
-        job_id = jobs.create_job(tenant_id, report_file_id=existing, report_kind=report_kind, created_by=user_id, sheet_name=sheet_name, attempt=attempt)
+        job_id = jobs.create_job(tenant_id, report_file_id=existing, report_kind=report_kind, created_by=user_id, sheet_name=sheet_name, attempt=attempt, adapter_id=adapter_id)
         get_runner().submit(tenant_id, job_id)
         return {"reportFileId": str(existing), "duplicate": True, "job": job_view(jobs.get_job(tenant_id, job_id) or {})}
 
@@ -161,7 +172,7 @@ def register_upload(
         tenant_id, marketplace=marketplace, report_category=category, content_sha256=content_sha256, original_filename=original_filename,
         byte_size=size, storage_uri=f"file://{stored_path}", uploaded_by=user_id, uploaded_at=datetime.now(timezone.utc),
     )
-    job_id = jobs.create_job(tenant_id, report_file_id=rf, report_kind=report_kind, created_by=user_id, sheet_name=sheet_name)
+    job_id = jobs.create_job(tenant_id, report_file_id=rf, report_kind=report_kind, created_by=user_id, sheet_name=sheet_name, adapter_id=adapter_id)
     get_runner().submit(tenant_id, job_id)
     return {"reportFileId": str(rf), "duplicate": False, "job": job_view(jobs.get_job(tenant_id, job_id) or {})}
 

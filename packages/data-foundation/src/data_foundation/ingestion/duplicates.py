@@ -1,7 +1,7 @@
-"""Duplicate classification before financial posting (cfo-data-intelligence.md §6.3, owner requirement 4).
+"""Duplicate classification before financial posting (cfo-data-intelligence.md §6.3, owner requirements 4 and 2026-10-21 decision).
 
-Every row is classified by two measurements — an *identity* (who the row claims to be) and a *raw-row
-hash* (what the row says) — against rows already seen in this file and rows already ingested:
+Every row is classified by two measurements — an *identity* (who the row claims to be) and a *raw-row hash* (what the
+row says) — against rows already seen in this file and rows already ingested **from the same report family**:
 
     NEW                        post
     EXACT_DUPLICATE_CROSS_FILE overlapping upload: skip, counted and disclosed
@@ -10,11 +10,17 @@ hash* (what the row says) — against rows already seen in this file and rows al
     CONFLICT_IN_FILE           same identity, different content earlier in this file: HOLD, ERROR V-DUP-003
     AMBIGUOUS_REPEAT           identical repeat that cannot be told from a double export: HOLD, ERROR V-DUP-002
 
-Legitimate repeats are preserved by construction: the settlement identity includes the settlement id, date
-and amount, so partial settlements and adjustments of one order are different identities; the sales identity
-adds `(sku, marketplace_item_id)` when there is no `line_ref`, so two items of one order are different
-identities. Where the available columns cannot distinguish two entries, the second is held with a plain
-explanation — never posted twice, never silently dropped.
+**Report family.** A Meesho orders report and a Meesho TCS report both carry rows for the same sub-order; they are
+different facts about it, not duplicates of each other. Identity therefore includes the report family (the adapter
+id without its version suffix, or the confirmed mapping's file shape), so only a re-upload of the *same kind* of
+report can overlap.
+
+**Strong identity is defined per marketplace** (`MARKETPLACE_IDENTITY`), from what each marketplace's reports really
+carry. A product id (SKU, ASIN, FSN) is never a line identity: the same product can appear on several lines of one
+order. Where a row lacks the marketplace's line id, an identical repeat is held as ambiguous, never skipped.
+
+**Held rows are unresolved**: they are not posted, so they are excluded from every authoritative financial figure,
+until the seller resolves them (resolution flow: spec OQ7/OQ10).
 
 Pure: no database, no clock. The caller supplies the existing rows' identity fields and stored raw row.
 """
@@ -23,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -37,6 +44,31 @@ SETTLEMENT = "SETTLEMENT"
 V_DUP_IN_FILE = "V-DUP-001"
 V_DUP_AMBIGUOUS = "V-DUP-002"
 V_DUP_CONFLICT = "V-DUP-003"
+
+
+@dataclass(frozen=True, slots=True)
+class MarketplaceIdentity:
+    """What makes a row *this* row for one marketplace, from the columns its adapters really map."""
+
+    sales_line_field: str  # canonical field holding the marketplace's unique line id — the only strong sales identity
+    sales_line_meaning: str  # the marketplace's own name for it (documentation, and shown in explanations)
+    settlement_fields: tuple[str, ...]  # canonical fields that together identify one settlement row; never strong
+
+
+MARKETPLACE_IDENTITY: dict[str, MarketplaceIdentity] = {
+    # Meesho orders/TCS: `Sub Order No` is the verified unique sub-order key (data-foundation.md §5.1). The Payments export
+    # carries only the sub-order and the final amount — no settlement id or date — so its identity is just those two.
+    "MEESHO": MarketplaceIdentity("line_ref", "Sub Order No", ("line_ref", "gross_settlement_amount")),
+    # Amazon MTR: `Shipment Item ID` is the unique shipped-item id (ASIN is the product, not the line). Settlement V2 rows are
+    # melted (one row per amount-type/description pair), so the identity includes the melted triple, the item codes and the id.
+    "AMAZON": MarketplaceIdentity(
+        "line_ref", "Shipment Item ID",
+        ("order_ref", "order_item_code", "merchant_order_item_id", "shipment_id", "settlement_id", "settlement_amount_type",
+         "settlement_amount_description", "settlement_amount_value"),
+    ),
+    # Flipkart sales report: `Line Item ID` is the unique line id (FSN is the product). Payments rows are identified by order, date, amount.
+    "FLIPKART": MarketplaceIdentity("line_ref", "Line Item ID", ("order_ref", "settlement_id", "settlement_date", "gross_settlement_amount")),
+}
 
 
 class DupClass(str, Enum):
@@ -76,6 +108,19 @@ class ExistingEntry:
     raw_hash: bytes
 
 
+_VERSION_SUFFIX = re.compile(r"\.v\d+$")
+
+
+def report_family(adapter_id: str, mapping_fingerprint: str | None = None) -> str:
+    """The kind of report a row came from. A verified adapter's family is its id without the version suffix (so a v2 of the same
+    report still overlaps its v1); a seller-confirmed mapping's family is the file shape it was confirmed for."""
+    if adapter_id.startswith("mapped."):
+        if not mapping_fingerprint:
+            raise ValueError("a mapped adapter's report family needs the mapping's file fingerprint")
+        return f"mapped:{mapping_fingerprint}"
+    return _VERSION_SUFFIX.sub("", adapter_id)
+
+
 def _norm(v: object) -> str:
     if v is None:
         return ""
@@ -99,55 +144,67 @@ def raw_row_hash(source_row_json: Mapping[str, str]) -> bytes:
 @dataclass(frozen=True, slots=True)
 class Identity:
     digest: bytes
-    strong: bool  # True when the row carries enough to tell it apart from a different row of the same order
+    strong: bool  # True only when the row carries the marketplace's own unique line id
     none: bool = False  # True when the row carries no identity fields at all
 
 
-def sales_identity(marketplace: str, f: Mapping[str, object]) -> Identity:
-    order_ref, line_ref, invoice_ref = _norm(f.get("order_ref")), _norm(f.get("line_ref")), _norm(f.get("invoice_ref"))
-    sku, item_id = _norm(f.get("sku")), _norm(f.get("marketplace_item_id"))
-    if not (order_ref or line_ref or invoice_ref):
+def _rules(marketplace: str) -> MarketplaceIdentity:
+    rule = MARKETPLACE_IDENTITY.get(marketplace)
+    if rule is None:
+        # An unknown marketplace (not Amazon/Flipkart/Meesho) gets the conservative default: nothing is strong.
+        return MarketplaceIdentity("line_ref", "line id", ())
+    return rule
+
+
+def sales_identity(marketplace: str, family: str, f: Mapping[str, object]) -> Identity:
+    rule = _rules(marketplace)
+    order_ref, invoice_ref = _norm(f.get("order_ref")), _norm(f.get("invoice_ref"))
+    line = _norm(f.get(rule.sales_line_field))
+    if not (order_ref or line or invoice_ref):
         return Identity(digest=b"", strong=False, none=True)
-    parts = [SALES, marketplace, order_ref, line_ref, invoice_ref]
-    if not line_ref:
-        parts += [sku, item_id]
-    strong = bool(line_ref or sku or item_id)
-    return Identity(digest=_digest(parts), strong=strong)
+    parts = [SALES, family, marketplace, order_ref, line, invoice_ref]
+    if not line:
+        # No line id: two product lines of one order must still not collapse into one, so the product ids join the digest, but the
+        # row is not strong (a product id is not a line id).
+        parts += [_norm(f.get("marketplace_item_id")), _norm(f.get("sku"))]
+    return Identity(digest=_digest(parts), strong=bool(line))
 
 
-def settlement_identity(marketplace: str, f: Mapping[str, object]) -> Identity:
-    order_ref, line_ref = _norm(f.get("order_ref")), _norm(f.get("line_ref"))
-    sid, sdate, amount = _norm(f.get("settlement_id")), _norm(f.get("settlement_date")), _norm(f.get("gross_settlement_amount"))
-    if not (order_ref or line_ref or sid):
+def settlement_identity(marketplace: str, family: str, f: Mapping[str, object]) -> Identity:
+    rule = _rules(marketplace)
+    values = [_norm(f.get(name)) for name in rule.settlement_fields]
+    if not any(_norm(f.get(n)) for n in ("order_ref", "line_ref", "settlement_id")):
         return Identity(digest=b"", strong=False, none=True)
     # A settlement identity is never "strong": identical settlement rows cannot be told from a double export.
-    return Identity(digest=_digest([SETTLEMENT, marketplace, order_ref, line_ref, sid, sdate, amount]), strong=False)
+    return Identity(digest=_digest([SETTLEMENT, family, marketplace, *rule.settlement_fields, *values]), strong=False)
 
 
-def existing_sales_entry(marketplace: str, row: Mapping[str, object], source_row_json: Mapping[str, str]) -> ExistingEntry | None:
-    ident = sales_identity(marketplace, row)
+def existing_sales_entry(marketplace: str, family: str, row: Mapping[str, object], source_row_json: Mapping[str, str]) -> ExistingEntry | None:
+    ident = sales_identity(marketplace, family, row)
     return None if ident.none else ExistingEntry(ident.digest, raw_row_hash(source_row_json))
 
 
-def existing_settlement_entry(marketplace: str, row: Mapping[str, object], source_row_json: Mapping[str, str]) -> ExistingEntry | None:
-    ident = settlement_identity(marketplace, row)
+def existing_settlement_entry(marketplace: str, family: str, row: Mapping[str, object], source_row_json: Mapping[str, str]) -> ExistingEntry | None:
+    ident = settlement_identity(marketplace, family, row)
     return None if ident.none else ExistingEntry(ident.digest, raw_row_hash(source_row_json))
 
 
 class DuplicateTracker:
-    """Per-file classifier. Feed it chunks in order; it remembers one digest pair per distinct identity
-    (about 130 bytes each — see cfo-data-intelligence.md OQ6 for the very-large-file stance)."""
+    """Per-file classifier. Feed it chunks in order; it remembers one digest pair per distinct identity (about 130 bytes each: the
+    memory cost that grows with the number of distinct rows — see cfo-data-intelligence.md AC-D1 and OQ6)."""
 
-    def __init__(self, side: str, marketplace: str) -> None:
+    def __init__(self, side: str, marketplace: str, family: str) -> None:
         if side not in (SALES, SETTLEMENT):
             raise ValueError(f"unknown side {side!r}")
         self._side = side
         self._marketplace = marketplace
+        self._family = family
         self._seen: dict[bytes, tuple[bytes, int]] = {}  # identity -> (raw hash, first row number)
         self._seen_identityless: dict[bytes, int] = {}  # raw hash -> first row number (rows with no identity fields)
 
     def _identity(self, fields: Mapping[str, object]) -> Identity:
-        return sales_identity(self._marketplace, fields) if self._side == SALES else settlement_identity(self._marketplace, fields)
+        fn = sales_identity if self._side == SALES else settlement_identity
+        return fn(self._marketplace, self._family, fields)
 
     def classify(self, rows: Sequence[ParsedRow], existing: Iterable[ExistingEntry]) -> list[DupDecision]:
         prior: dict[bytes, set[bytes]] = {}
@@ -161,11 +218,11 @@ class DuplicateTracker:
             ident = self._identity(row.canonical_fields)
 
             if ident.none:
-                # No identity at all: it cannot be matched to earlier data (the file-level content hash is the only
-                # guard across files), but an identical repeat inside this file is indistinguishable from a double export.
+                # No identity at all: it cannot be matched to earlier data (the file-level content hash is the only guard across
+                # files), but an identical repeat inside this file is indistinguishable from a double export.
                 first = self._seen_identityless.get(rh)
                 if first is not None:
-                    out.append(DupDecision(n, DupClass.AMBIGUOUS_REPEAT, _ambiguous(n, first), first))
+                    out.append(DupDecision(n, DupClass.AMBIGUOUS_REPEAT, _ambiguous(n, first, self._marketplace), first))
                 else:
                     self._seen_identityless[rh] = n
                     out.append(DupDecision(n, DupClass.NEW))
@@ -178,7 +235,7 @@ class DuplicateTracker:
                     if ident.strong:
                         out.append(DupDecision(n, DupClass.EXACT_DUPLICATE_IN_FILE, _in_file(n, first), first))
                     else:
-                        out.append(DupDecision(n, DupClass.AMBIGUOUS_REPEAT, _ambiguous(n, first), first))
+                        out.append(DupDecision(n, DupClass.AMBIGUOUS_REPEAT, _ambiguous(n, first, self._marketplace), first))
                 else:
                     out.append(DupDecision(n, DupClass.CONFLICT_IN_FILE, _conflict_in_file(n, first), first))
                 continue
@@ -199,11 +256,12 @@ def _in_file(n: int, first: int) -> Finding:
                    f"Row {n} repeats row {first} exactly (same order line, same values). It was counted once and the repeat was skipped.", n)
 
 
-def _ambiguous(n: int, first: int) -> Finding:
+def _ambiguous(n: int, first: int, marketplace: str) -> Finding:
+    rule = _rules(marketplace)
     return Finding(V_DUP_AMBIGUOUS, Severity.ERROR,
-                   f"Row {n} is identical to row {first} and nothing in the file tells them apart, so it cannot be known whether this is a "
-                   f"double export or two genuine identical entries. Row {n} was held and not posted. If both are real, add a distinguishing "
-                   f"reference (for example a settlement id or line id) and upload again.", n)
+                   f"Row {n} is identical to row {first} and nothing in the file tells them apart (this report has no usable {rule.sales_line_meaning} "
+                   f"for the row), so it cannot be known whether this is a double export or two genuine identical entries. Row {n} was held and not "
+                   f"posted. If both are real, add a distinguishing reference (for example a settlement id or line id) and upload again.", n)
 
 
 def _conflict_in_file(n: int, first: int) -> Finding:

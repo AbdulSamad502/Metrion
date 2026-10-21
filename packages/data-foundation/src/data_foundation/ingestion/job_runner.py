@@ -149,13 +149,24 @@ class JobRunner:
             return adapter_from_mapping(mapping, columns, marketplace), UUID(str(mapping["id"]))
 
         sample = FileSample(columns=columns)
+        if job["adapter_id"]:
+            chosen = ADAPTER_REGISTRY.get(str(job["adapter_id"]))
+            if chosen is None or chosen.marketplace != marketplace:
+                raise MappedAdapterUnsupported("ADAPTER_NOT_APPLICABLE", f"the report type {job['adapter_id']!r} does not apply to a {marketplace} upload")
+            detection = chosen.detect(sample)
+            if not detection.matched:
+                raise AdapterMismatchError(detection.missing_columns)
+            return chosen, None
         categories = _SALES_CATEGORIES if kind == "SALES" else ("SETTLEMENT",) if kind == "SETTLEMENT" else ()
         matches = [a for a in ADAPTER_REGISTRY.values()
                    if a.marketplace == marketplace and a.report_category in categories and a.detect(sample).matched]
         if len(matches) == 1:
             return matches[0], None
         if len(matches) > 1:
-            raise MappedAdapterUnsupported("AMBIGUOUS_ADAPTER", "this file matches more than one report type (" + ", ".join(sorted(a.adapter_id for a in matches)) + "); please say which one it is")
+            raise MappedAdapterUnsupported(
+                "AMBIGUOUS_ADAPTER",
+                "This file's columns fit more than one report type (" + ", ".join(sorted(a.adapter_id for a in matches)) + "), and Metrion will not guess which. "
+                "Nothing was saved. Upload it again and choose the report type (the adapter_id option).")
         # no verified adapter: a mapping this seller already confirmed for this exact file shape?
         from data_foundation.mapping.profile import file_fingerprint  # local import keeps the module header light
 

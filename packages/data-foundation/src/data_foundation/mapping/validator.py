@@ -153,7 +153,9 @@ def _check_field(
     if profile.non_null == 0:
         errors.append(Issue("M-TYP", "the column has no values in the sampled rows"))
     elif spec is not None and not any(e.rule == "M-VOC" for e in errors):
-        if is_money or vt == "percent":
+        if vt == "percent":
+            rate, what = profile.percent_parse_rate, "percentages between 0 and 100 (at most 4 decimals)"
+        elif is_money:
             rate, what = profile.numeric_parse_rate, "numbers"
         elif vt == "int":
             rate, what = profile.integer_parse_rate, "whole numbers"

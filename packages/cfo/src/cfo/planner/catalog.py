@@ -142,7 +142,7 @@ METRICS: dict[str, MetricDef] = {
            required_inputs=("sales_lines", "cogs_per_unit", "cancellation_state", "return_status", "rto_status"),
            basis=Basis.DOCUMENT_DATE, unit=Unit.PERCENT_FRACTION, is_pnl_metric=True, additive=False, allocatable=False),
         _m(id="OPERATING_PROFIT", kind=MetricKind.ENGINE_FORMULA, engine_ref="operating_profit", grain=Grain.ACCOUNT,
-           allowed_dimensions=_MKT_PERIOD, required_inputs=("contribution_profit", "expense_entries", "expense_class"),
+           allowed_dimensions=_MKT_PERIOD, required_inputs=("contribution_profit",),  # unclassified expenses make it PROVISIONAL (exposed), never UNAVAILABLE (OQ1)
            basis=Basis.DOCUMENT_DATE, unit=_P, is_pnl_metric=True, additive=True, allocatable=True, is_new=True),
         _m(id="SETTLEMENT_RECEIPTS", kind=MetricKind.ENGINE_FORMULA, engine_ref="cash_reconciliation", grain=Grain.LINE,
            allowed_dimensions=_MKT_PERIOD, required_inputs=("settlement_lines",),

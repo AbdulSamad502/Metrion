@@ -31,7 +31,7 @@ from calc_engine.types import Confidence
 from sqlalchemy import Connection
 
 from data_foundation.adapters.registry import ADAPTER_REGISTRY
-from data_foundation.ingestion.duplicates import SALES, SETTLEMENT, DupClass, DuplicateTracker
+from data_foundation.ingestion.duplicates import SALES, SETTLEMENT, DupClass, DuplicateTracker, report_family
 from data_foundation.ingestion.pipeline import (
     QUARANTINE_THRESHOLD,
     AdapterMismatchError,
@@ -77,16 +77,16 @@ def _offset_finding(f: Finding, by: int) -> Finding:
     return replace(f, source_row_number=f.source_row_number + by) if (by and f.source_row_number is not None) else f
 
 
-def _existing_entries(tenant_id: UUID, marketplace: str, is_settlement: bool, rows: list[ParsedRow]):  # type: ignore[no-untyped-def]
+def _existing_entries(tenant_id: UUID, marketplace: str, family: str, is_settlement: bool, rows: list[ParsedRow]):  # type: ignore[no-untyped-def]
     if is_settlement:
         return settlement_line_repo.existing_entries_for(
-            tenant_id, marketplace,
+            tenant_id, marketplace, family,
             order_refs={r.canonical_fields.get("order_ref") for r in rows},  # type: ignore[misc]
             line_refs={r.canonical_fields.get("line_ref") for r in rows},  # type: ignore[misc]
             settlement_ids={r.canonical_fields.get("settlement_id") for r in rows},  # type: ignore[misc]
         )
     return sales_line_repo.existing_entries_for_orders(
-        tenant_id, marketplace, {r.canonical_fields.get("order_ref") for r in rows}  # type: ignore[misc]
+        tenant_id, marketplace, family, {r.canonical_fields.get("order_ref") for r in rows}  # type: ignore[misc]
     )
 
 
@@ -127,7 +127,8 @@ def ingest_stream_and_persist(
         )
         raise AdapterMismatchError(detection.missing_columns)
 
-    tracker = DuplicateTracker(SETTLEMENT if is_settlement else SALES, adapter.marketplace)
+    family = report_family(adapter.adapter_id, getattr(adapter, "fingerprint", None) or None)
+    tracker = DuplicateTracker(SETTLEMENT if is_settlement else SALES, adapter.marketplace, family)
     read = accepted = rejected = persisted = chunks = 0
     dup_cross = dup_in_file = held_conflicts = held_ambiguous = 0
     try:
@@ -145,7 +146,7 @@ def ingest_stream_and_persist(
                     _offset_finding(f, offset) for r in result.row_results if r.quarantined for f in r.findings
                 ]
 
-                decisions = tracker.classify(ok_rows, _existing_entries(tenant_id, adapter.marketplace, is_settlement, ok_rows))
+                decisions = tracker.classify(ok_rows, _existing_entries(tenant_id, adapter.marketplace, family, is_settlement, ok_rows))
                 to_persist: list[ParsedRow] = []
                 for row, d in zip(ok_rows, decisions):
                     if d.klass is DupClass.NEW:

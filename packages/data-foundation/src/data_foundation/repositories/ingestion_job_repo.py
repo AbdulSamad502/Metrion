@@ -47,17 +47,18 @@ def create_job(
     created_by: UUID,
     sheet_name: str | None = None,
     attempt: int = 1,
+    adapter_id: str | None = None,
 ) -> UUID:
     job_id = uuid4()
     try:
         with tenant_scope(tenant_id) as conn:
             conn.execute(
                 text(
-                    """INSERT INTO ingestion_job (id, tenant_id, report_file_id, report_kind, sheet_name, status, attempt, created_by)
-                       VALUES (:id, :t, :f, :k, :s, 'QUEUED', :a, :u)"""
+                    """INSERT INTO ingestion_job (id, tenant_id, report_file_id, report_kind, sheet_name, status, attempt, created_by, adapter_id)
+                       VALUES (:id, :t, :f, :k, :s, 'QUEUED', :a, :u, :ad)"""
                 ),
                 {"id": str(job_id), "t": str(tenant_id), "f": str(report_file_id), "k": report_kind, "s": sheet_name,
-                 "a": attempt, "u": str(created_by)},
+                 "a": attempt, "u": str(created_by), "ad": adapter_id},
             )
     except IntegrityError as exc:
         if "ingestion_job_one_active_per_file" in str(exc.orig):
