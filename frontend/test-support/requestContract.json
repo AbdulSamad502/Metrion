@@ -101,6 +101,10 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/expense-ledger/templates": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/expense-ledger/{expense_id}": {
    "query": [],
    "requiredQuery": []
@@ -442,6 +446,34 @@
   "POST /api/v1/cfo/expense-ledger/summary": {
    "body": {
     "$ref": "#/components/schemas/SummaryRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/templates": {
+   "body": {
+    "$ref": "#/components/schemas/TemplateRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/templates/materialise": {
+   "body": {
+    "$ref": "#/components/schemas/MaterialiseRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/templates/{template_key}/end": {
+   "body": {
+    "$ref": "#/components/schemas/EndRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/templates/{template_key}/version": {
+   "body": {
+    "$ref": "#/components/schemas/TemplateRequest"
    },
    "query": [],
    "requiredQuery": []
@@ -2180,6 +2212,21 @@
    "title": "DiscoverRequest",
    "type": "object"
   },
+  "EndRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "effective_to": {
+     "format": "date",
+     "title": "Effective To",
+     "type": "string"
+    }
+   },
+   "required": [
+    "effective_to"
+   ],
+   "title": "EndRequest",
+   "type": "object"
+  },
   "EnterExpenseBudgetHttpRequest": {
    "description": "Mirrors `EnterExpenseRequest`'s own shape (deterministic-engine.md \u00a77.2.1's\n`expense.budget` row) \u2014 one category ceiling for one period. No `target_type`/`target_ref`\nfields: `set_expense_budget` fixes both (`ACCOUNT`, `str(tenant_id)`) itself, see that\nfunction's own grain-decision docstring.",
    "properties": {
@@ -3006,6 +3053,21 @@
    "title": "Marketplace",
    "type": "string"
   },
+  "MaterialiseRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "through_month": {
+     "format": "date",
+     "title": "Through Month",
+     "type": "string"
+    }
+   },
+   "required": [
+    "through_month"
+   ],
+   "title": "MaterialiseRequest",
+   "type": "object"
+  },
   "MoneyEntry": {
    "additionalProperties": false,
    "description": "Paise.",
@@ -3589,6 +3651,11 @@
      ],
      "title": "Gst Status",
      "type": "string"
+    },
+    "is_example": {
+     "default": false,
+     "title": "Is Example",
+     "type": "boolean"
     },
     "marketplace": {
      "enum": [
@@ -4561,6 +4628,171 @@
     "kind"
    ],
    "title": "TargetIn",
+   "type": "object"
+  },
+  "TemplateRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "amortization_months": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Amortization Months"
+    },
+    "amount_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Amount Paise"
+    },
+    "category": {
+     "title": "Category",
+     "type": "string"
+    },
+    "channel_scope": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Channel Scope"
+    },
+    "cost_class": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Cost Class"
+    },
+    "description": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Description"
+    },
+    "effective_from": {
+     "format": "date",
+     "title": "Effective From",
+     "type": "string"
+    },
+    "effective_to": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Effective To"
+    },
+    "kind": {
+     "enum": [
+      "MONTHLY",
+      "AMORTIZED",
+      "PER_ORDER",
+      "PER_UNIT"
+     ],
+     "title": "Kind",
+     "type": "string"
+    },
+    "rate_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Rate Paise"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "start_month": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Start Month"
+    },
+    "treatment": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Treatment"
+    },
+    "vendor": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Vendor"
+    }
+   },
+   "required": [
+    "kind",
+    "category",
+    "effective_from"
+   ],
+   "title": "TemplateRequest",
    "type": "object"
   },
   "TitleSetsBody": {
