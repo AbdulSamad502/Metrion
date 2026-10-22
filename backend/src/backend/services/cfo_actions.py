@@ -261,7 +261,9 @@ from cfo.reasoning.signals import (
 from cfo.repositories import agent_data_request_repo, leak_finding_repo
 from cfo.repositories.agent_data_request_repo import insert as insert_data_request
 
+from backend import config
 from backend.config import cfo_narration_model, ollama_host
+from backend.services import expense_ledger_pnl
 
 _PNL_CONFIG_VERSION = "CFO_PERIOD_PNL.v1"
 _PRICING_CURVE_CONFIG_VERSION = "CFO_PRICING_CURVE.v1"
@@ -371,6 +373,12 @@ class PeriodPnlOutcome:
     return_rate_pct: MetricResult
     marketplace_fee_flags: tuple[dict[str, object], ...]
     data_request_id: UUID | None  # set only when COGS or ReturnRTOLosses came back UNAVAILABLE (E2)
+    # ST-01 (display only; docs/specs/expense-tracker.md Appendix D): whether the caller supplied any
+    # advertising entry for THIS calculation, and the total the engine used. An empty list still
+    # resolves to a zero term (engine §5.8, unchanged); these two fields only let the screen say
+    # "not entered" instead of implying an entered 0.00. They never feed any figure.
+    advertising_entered: bool = False
+    advertising_costs_paise: int | None = None
 
 
 def compute_period_pnl(tenant_id: UUID, request: PeriodPnlRequest) -> PeriodPnlOutcome:
@@ -451,6 +459,7 @@ def compute_period_pnl(tenant_id: UUID, request: PeriodPnlRequest) -> PeriodPnlO
 
     shipping_logistics = pnl_inputs.resolve_shipping_logistics(request.lines)
     advertising_costs = pnl_inputs.resolve_expense_pool_total(request.advertising_adjustment_values)
+    advertising_entered = len(request.advertising_adjustment_values) > 0
     other_allocated_costs = pnl_inputs.resolve_expense_pool_total(request.other_adjustment_values)
     return_rto_losses = pnl_inputs.resolve_return_rto_losses(
         request.lines,
@@ -545,6 +554,8 @@ def compute_period_pnl(tenant_id: UUID, request: PeriodPnlRequest) -> PeriodPnlO
         return_rate_pct=return_rate_pct_result,
         marketplace_fee_flags=fee_flags,
         data_request_id=data_request_id,
+        advertising_entered=advertising_entered,
+        advertising_costs_paise=advertising_costs.value if advertising_entered else None,
     )
 
 
@@ -1207,6 +1218,8 @@ class PeriodPnlForTenantOutcome:
     assembled_line_count: int
     blocked_lines: tuple[CanonicalAssemblyBlockedLine, ...]
     data_request_ids: tuple[UUID, ...]
+    # S4a: the expense ledger's contribution, present ONLY when `EXPENSE_LEDGER_FEEDS_PNL` is on (default off: None, and nothing was read).
+    ledger_feed: "expense_ledger_pnl.LedgerPnlFeed | None" = None
 
 
 def compute_period_pnl_for_tenant(tenant_id: UUID, request: PeriodPnlForTenantRequest) -> PeriodPnlForTenantOutcome:
@@ -1221,6 +1234,22 @@ def compute_period_pnl_for_tenant(tenant_id: UUID, request: PeriodPnlForTenantRe
     assembly = assemble_canonical_lines_for_period(
         tenant_id, period_start=request.period_start, period_end=request.period_end
     )
+
+    ledger_feed_result = None
+    advertising_values = request.advertising_adjustment_values
+    other_values = request.other_adjustment_values
+    if config.expense_ledger_feeds_pnl():  # default OFF: while off, nothing below runs and the result is exactly what it was
+        ledger_feed_result = expense_ledger_pnl.build(
+            tenant_id,
+            period_start=request.period_start,
+            period_end=request.period_end,
+            as_of_date=request.as_of_date,
+            request_has_advertising=len(advertising_values) > 0,
+            request_has_other=len(other_values) > 0,
+            computed_at=request.computed_at,
+        )
+        advertising_values = [*advertising_values, *ledger_feed_result.advertising_entries]
+        other_values = [*other_values, *ledger_feed_result.other_entries]
 
     lines_by_reason: dict[tuple[str, ...], list[UUID]] = {}
     for blocked_line in assembly.blocked:
@@ -1242,7 +1271,7 @@ def compute_period_pnl_for_tenant(tenant_id: UUID, request: PeriodPnlForTenantRe
 
     if not assembly.lines:
         return PeriodPnlForTenantOutcome(
-            pnl=None, assembled_line_count=0, blocked_lines=assembly.blocked, data_request_ids=tuple(data_request_ids)
+            pnl=None, assembled_line_count=0, blocked_lines=assembly.blocked, data_request_ids=tuple(data_request_ids), ledger_feed=ledger_feed_result
         )
 
     cost_history_by_sku = resolve_cost_history_for_skus(tenant_id, assembly.sku_by_line.values())
@@ -1261,8 +1290,8 @@ def compute_period_pnl_for_tenant(tenant_id: UUID, request: PeriodPnlForTenantRe
             forward_logistics_codes=request.forward_logistics_codes,
             reverse_logistics_codes=request.reverse_logistics_codes,
             non_refunded_fee_codes=request.non_refunded_fee_codes,
-            advertising_adjustment_values=request.advertising_adjustment_values,
-            other_adjustment_values=request.other_adjustment_values,
+            advertising_adjustment_values=advertising_values,
+            other_adjustment_values=other_values,
             ingestion_run_ids=assembly.ingestion_run_ids,
             adapter_versions=(),
             active_adjustment_ids=assembly.active_adjustment_ids,
@@ -1277,6 +1306,7 @@ def compute_period_pnl_for_tenant(tenant_id: UUID, request: PeriodPnlForTenantRe
         assembled_line_count=len(assembly.lines),
         blocked_lines=assembly.blocked,
         data_request_ids=tuple(data_request_ids),
+        ledger_feed=ledger_feed_result,
     )
 
 

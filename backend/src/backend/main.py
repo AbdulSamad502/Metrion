@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.v1 import business_profile, ceo, ceo_hub, cfo, ci, cmo, cmo_showcase, onboarding, ops, pi, ping, session
+from backend.api.v1 import business_profile, ceo, ceo_hub, cfo, ci, cmo, cmo_showcase, expense_export, expense_import, expense_ledger, expense_templates, onboarding, ops, pi, ping, session
 from backend.config import (
     api_max_body_bytes,
     api_docs_enabled,
@@ -205,6 +205,10 @@ def create_app() -> FastAPI:
     app.include_router(clerk_webhooks.router)
     app.include_router(ci.router)
     app.include_router(cfo.router)
+    app.include_router(expense_export.router)
+    app.include_router(expense_import.router)
+    app.include_router(expense_templates.router)  # before the ledger router: its /templates paths must not be read as an expense id
+    app.include_router(expense_ledger.router)
     app.include_router(pi.router)
     app.include_router(cmo.router)
     app.include_router(cmo_showcase.router)

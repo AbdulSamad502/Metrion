@@ -82,6 +82,43 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/expense-ledger": {
+   "query": [
+    "category",
+    "channel_scope",
+    "cost_class",
+    "date_from",
+    "date_to",
+    "include_voided",
+    "limit",
+    "offset",
+    "payment_status",
+    "review_state"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/expense-ledger/categories": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/expense-ledger/export": {
+   "query": [
+    "history"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/expense-ledger/import/template": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/expense-ledger/templates": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/expense-ledger/{expense_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/expenses": {
    "query": [
     "category",
@@ -409,6 +446,95 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cfo/expense-ledger": {
+   "body": {
+    "$ref": "#/components/schemas/CreateRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/import/commit": {
+   "multipart": true,
+   "query": [
+    "skip_invalid"
+   ],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/import/preview": {
+   "multipart": true,
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/summary": {
+   "body": {
+    "$ref": "#/components/schemas/SummaryRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/templates": {
+   "body": {
+    "$ref": "#/components/schemas/TemplateRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/templates/materialise": {
+   "body": {
+    "$ref": "#/components/schemas/MaterialiseRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/templates/{template_key}/end": {
+   "body": {
+    "$ref": "#/components/schemas/EndRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/templates/{template_key}/version": {
+   "body": {
+    "$ref": "#/components/schemas/TemplateRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/{expense_id}/correct": {
+   "body": {
+    "$ref": "#/components/schemas/CorrectRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/{expense_id}/payment": {
+   "body": {
+    "$ref": "#/components/schemas/PaymentRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/{expense_id}/refund": {
+   "body": {
+    "$ref": "#/components/schemas/RefundRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/{expense_id}/review": {
+   "body": {
+    "$ref": "#/components/schemas/ReviewRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/{expense_id}/void": {
+   "body": {
+    "$ref": "#/components/schemas/VoidRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/financial-health": {
    "body": {
     "$ref": "#/components/schemas/FinancialHealthHttpRequest"
@@ -486,6 +612,20 @@
   "POST /api/v1/cfo/pnl-for-tenant": {
    "body": {
     "$ref": "#/components/schemas/PeriodPnlForTenantHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/pnl-scenario": {
+   "body": {
+    "$ref": "#/components/schemas/PnlScenarioHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/pnl-scenario-compare": {
+   "body": {
+    "$ref": "#/components/schemas/PnlScenarioCompareHttpRequest"
    },
    "query": [],
    "requiredQuery": []
@@ -1028,6 +1168,31 @@
    "title": "AttributePair",
    "type": "object"
   },
+  "BandIn": {
+   "additionalProperties": false,
+   "properties": {
+    "amount": {
+     "title": "Amount",
+     "type": "string"
+    },
+    "up_to": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Up To"
+    }
+   },
+   "required": [
+    "amount"
+   ],
+   "title": "BandIn",
+   "type": "object"
+  },
   "BatchSizeHttpRequest": {
    "description": "One SKU, one chosen `supplier.quote`, one `batch.budget` target, plus already-assembled\nsales history (cfo-agent.md \u00a76.12, `twinkly-mapping-canyon.md` CP B3b). `lines` reuses\n`GstPeriodSummaryLineRequest`'s shape (the same already-assembled-`CanonicalLine` request\nfield convention `POST /cfo/gst/period-summary` already established) \u2014 an empty `lines`\nlist is this route's own way of expressing \"no sales history for this SKU\", exactly \u00a76.12's\nown \"never sold\" case, never a request-validation error.",
    "properties": {
@@ -1104,6 +1269,35 @@
     "as_of_date"
    ],
    "title": "BatchSizeHttpRequest",
+   "type": "object"
+  },
+  "BpsEntry": {
+   "additionalProperties": false,
+   "description": "Basis points, 0..10000.",
+   "properties": {
+    "state": {
+     "default": "empty",
+     "enum": [
+      "empty",
+      "na",
+      "set"
+     ],
+     "title": "State",
+     "type": "string"
+    },
+    "value": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Value"
+    }
+   },
+   "title": "BpsEntry",
    "type": "object"
   },
   "BusinessOnboardingRequest": {
@@ -1439,6 +1633,133 @@
    "title": "ConfirmHintBody",
    "type": "object"
   },
+  "CorrectRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "amount_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      }
+     ],
+     "title": "Amount Paise"
+    },
+    "category": {
+     "title": "Category",
+     "type": "string"
+    },
+    "channel_scope": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Channel Scope"
+    },
+    "cost_class": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Cost Class"
+    },
+    "description": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Description"
+    },
+    "effective_date": {
+     "format": "date",
+     "title": "Effective Date",
+     "type": "string"
+    },
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Reason"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "treatment": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Treatment"
+    },
+    "vendor": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Vendor"
+    }
+   },
+   "required": [
+    "effective_date",
+    "category",
+    "amount_paise"
+   ],
+   "title": "CorrectRequest",
+   "type": "object"
+  },
   "CostEntryHttpRequest": {
    "description": "One `cogs_per_unit` weighted-average-cost data point (\u00a77.2.1) \u2014 `CostEntry`'s own shape.",
    "properties": {
@@ -1457,6 +1778,34 @@
     "effective_from"
    ],
    "title": "CostEntryHttpRequest",
+   "type": "object"
+  },
+  "CountEntry": {
+   "additionalProperties": false,
+   "properties": {
+    "state": {
+     "default": "empty",
+     "enum": [
+      "empty",
+      "na",
+      "set"
+     ],
+     "title": "State",
+     "type": "string"
+    },
+    "value": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Value"
+    }
+   },
+   "title": "CountEntry",
    "type": "object"
   },
   "CreateCompetitorUrlRequest": {
@@ -1569,6 +1918,131 @@
     }
    },
    "title": "CreateNicheBriefRequest",
+   "type": "object"
+  },
+  "CreateRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "amount_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      }
+     ],
+     "title": "Amount Paise"
+    },
+    "category": {
+     "title": "Category",
+     "type": "string"
+    },
+    "channel_scope": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Channel Scope"
+    },
+    "cost_class": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Cost Class"
+    },
+    "description": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Description"
+    },
+    "effective_date": {
+     "format": "date",
+     "title": "Effective Date",
+     "type": "string"
+    },
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "state": {
+     "default": "confirmed",
+     "enum": [
+      "draft",
+      "pending_review",
+      "confirmed"
+     ],
+     "title": "State",
+     "type": "string"
+    },
+    "treatment": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Treatment"
+    },
+    "vendor": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Vendor"
+    }
+   },
+   "required": [
+    "effective_date",
+    "category",
+    "amount_paise"
+   ],
+   "title": "CreateRequest",
    "type": "object"
   },
   "DecisionKind": {
@@ -1767,6 +2241,21 @@
    "title": "DiscoverRequest",
    "type": "object"
   },
+  "EndRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "effective_to": {
+     "format": "date",
+     "title": "Effective To",
+     "type": "string"
+    }
+   },
+   "required": [
+    "effective_to"
+   ],
+   "title": "EndRequest",
+   "type": "object"
+  },
   "EnterExpenseBudgetHttpRequest": {
    "description": "Mirrors `EnterExpenseRequest`'s own shape (deterministic-engine.md \u00a77.2.1's\n`expense.budget` row) \u2014 one category ceiling for one period. No `target_type`/`target_ref`\nfields: `set_expense_budget` fixes both (`ACCOUNT`, `str(tenant_id)`) itself, see that\nfunction's own grain-decision docstring.",
    "properties": {
@@ -1874,6 +2363,120 @@
     "value"
    ],
    "title": "EnterExpenseRequest",
+   "type": "object"
+  },
+  "FeeAmountIn": {
+   "additionalProperties": false,
+   "properties": {
+    "amount": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Amount"
+    },
+    "bands": {
+     "anyOf": [
+      {
+       "items": {
+        "$ref": "#/components/schemas/BandIn"
+       },
+       "maxItems": 12,
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Bands"
+    },
+    "kind": {
+     "enum": [
+      "single",
+      "tiers"
+     ],
+     "title": "Kind",
+     "type": "string"
+    },
+    "mode": {
+     "anyOf": [
+      {
+       "enum": [
+        "whole",
+        "marginal"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Mode"
+    }
+   },
+   "required": [
+    "kind"
+   ],
+   "title": "FeeAmountIn",
+   "type": "object"
+  },
+  "FeeEntryIn": {
+   "additionalProperties": false,
+   "properties": {
+    "state": {
+     "default": "empty",
+     "enum": [
+      "empty",
+      "na",
+      "set"
+     ],
+     "title": "State",
+     "type": "string"
+    },
+    "value": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/FeeAmountIn"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "title": "FeeEntryIn",
+   "type": "object"
+  },
+  "FeeIn": {
+   "additionalProperties": false,
+   "properties": {
+    "amount": {
+     "$ref": "#/components/schemas/FeeEntryIn"
+    },
+    "basis": {
+     "anyOf": [
+      {
+       "enum": [
+        "price_incl_gst",
+        "price_excl_gst"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Basis"
+    },
+    "refund_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    }
+   },
+   "title": "FeeIn",
    "type": "object"
   },
   "FinancialHealthHttpRequest": {
@@ -2479,6 +3082,50 @@
    "title": "Marketplace",
    "type": "string"
   },
+  "MaterialiseRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "through_month": {
+     "format": "date",
+     "title": "Through Month",
+     "type": "string"
+    }
+   },
+   "required": [
+    "through_month"
+   ],
+   "title": "MaterialiseRequest",
+   "type": "object"
+  },
+  "MoneyEntry": {
+   "additionalProperties": false,
+   "description": "Paise.",
+   "properties": {
+    "state": {
+     "default": "empty",
+     "enum": [
+      "empty",
+      "na",
+      "set"
+     ],
+     "title": "State",
+     "type": "string"
+    },
+    "value": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Value"
+    }
+   },
+   "title": "MoneyEntry",
+   "type": "object"
+  },
   "NicheConfirmBody": {
    "additionalProperties": false,
    "properties": {
@@ -2532,6 +3179,54 @@
     "decision"
    ],
    "title": "NicheDecisionBody",
+   "type": "object"
+  },
+  "PaymentRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    },
+    "paid_amount_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Paid Amount Paise"
+    },
+    "status": {
+     "enum": [
+      "unpaid",
+      "partially_paid",
+      "paid",
+      "unknown"
+     ],
+     "title": "Status",
+     "type": "string"
+    }
+   },
+   "required": [
+    "status"
+   ],
+   "title": "PaymentRequest",
    "type": "object"
   },
   "PeriodComparisonHttpRequest": {
@@ -2944,6 +3639,140 @@
    "title": "PeriodPnlLineRequest",
    "type": "object"
   },
+  "PnlScenarioCompareHttpRequest": {
+   "additionalProperties": false,
+   "description": "A base scenario and a what-if variant of it, each a complete scenario request. The page builds the variant from the same form with a few values replaced; the\ndifference between the two results is computed by the engine (`calc_engine.formulas.pnl_scenario.compare`).",
+   "properties": {
+    "base": {
+     "$ref": "#/components/schemas/PnlScenarioHttpRequest"
+    },
+    "what_if": {
+     "$ref": "#/components/schemas/PnlScenarioHttpRequest"
+    }
+   },
+   "required": [
+    "base",
+    "what_if"
+   ],
+   "title": "PnlScenarioCompareHttpRequest",
+   "type": "object"
+  },
+  "PnlScenarioHttpRequest": {
+   "additionalProperties": false,
+   "description": "No `tenant_id` field exists: the tenant is the session's, and `extra=\"forbid\"` rejects any client attempt to supply one.",
+   "properties": {
+    "ad_revenue": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "ad_spend": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "amazon_fulfilment": {
+     "default": "easy_ship",
+     "enum": [
+      "easy_ship",
+      "seller_flex",
+      "fba",
+      "self_ship"
+     ],
+     "title": "Amazon Fulfilment",
+     "type": "string"
+    },
+    "fees": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/FeeIn"
+     },
+     "maxProperties": 12,
+     "title": "Fees",
+     "type": "object"
+    },
+    "gst_rate_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "gst_status": {
+     "default": "registered_itc",
+     "enum": [
+      "registered_itc",
+      "registered_no_itc",
+      "unregistered"
+     ],
+     "title": "Gst Status",
+     "type": "string"
+    },
+    "is_example": {
+     "default": false,
+     "title": "Is Example",
+     "type": "boolean"
+    },
+    "marketplace": {
+     "enum": [
+      "amazon",
+      "flipkart",
+      "meesho"
+     ],
+     "title": "Marketplace",
+     "type": "string"
+    },
+    "mode": {
+     "default": "detailed",
+     "enum": [
+      "quick",
+      "detailed"
+     ],
+     "title": "Mode",
+     "type": "string"
+    },
+    "monthly_orders": {
+     "$ref": "#/components/schemas/CountEntry"
+    },
+    "operating_expenses": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "packaging_cost": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "product_cost": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "purchase_gst_rate_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "return_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "return_recovery": {
+     "$ref": "#/components/schemas/RecoveryIn"
+    },
+    "rto_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "rto_recovery": {
+     "$ref": "#/components/schemas/RecoveryIn"
+    },
+    "salvage_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "selling_price": {
+     "$ref": "#/components/schemas/MoneyEntry"
+    },
+    "services_gst_rate_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "targets": {
+     "items": {
+      "$ref": "#/components/schemas/TargetIn"
+     },
+     "maxItems": 4,
+     "title": "Targets",
+     "type": "array"
+    }
+   },
+   "required": [
+    "marketplace"
+   ],
+   "title": "PnlScenarioHttpRequest",
+   "type": "object"
+  },
   "PreviewHttpRequest": {
    "description": "A marketplace and period range for the free-tier gated preview (D7, cfo-agent.md\n\u00a76.9/\u00a76.8 `cfo.preview`) \u2014 mirrors `ReconcileHttpRequest` exactly, since this route calls\nthe same real reconciliation `POST /cfo/reconcile` does; the preview differs only in what\nit reveals, never in what it computes.",
    "properties": {
@@ -3291,6 +4120,72 @@
    "title": "ReconcileHttpRequest",
    "type": "object"
   },
+  "RecoveryIn": {
+   "additionalProperties": false,
+   "properties": {
+    "damaged_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    },
+    "sellable_bps": {
+     "$ref": "#/components/schemas/BpsEntry"
+    }
+   },
+   "title": "RecoveryIn",
+   "type": "object"
+  },
+  "RefundRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "amount_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      }
+     ],
+     "title": "Amount Paise"
+    },
+    "description": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Description"
+    },
+    "effective_date": {
+     "format": "date",
+     "title": "Effective Date",
+     "type": "string"
+    },
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    }
+   },
+   "required": [
+    "effective_date",
+    "amount_paise"
+   ],
+   "title": "RefundRequest",
+   "type": "object"
+  },
   "RequestPriceScenarioRequest": {
    "properties": {
     "competitor_url_id": {
@@ -3390,6 +4285,38 @@
     "resolution_note"
    ],
    "title": "ResolveBody",
+   "type": "object"
+  },
+  "ReviewRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    },
+    "state": {
+     "enum": [
+      "draft",
+      "pending_review",
+      "confirmed"
+     ],
+     "title": "State",
+     "type": "string"
+    }
+   },
+   "required": [
+    "state"
+   ],
+   "title": "ReviewRequest",
    "type": "object"
   },
   "ReviewResearchRequest": {
@@ -3590,6 +4517,39 @@
    "title": "StrategicBriefingHttpRequest",
    "type": "object"
   },
+  "SummaryRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "as_of_date": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "As Of Date"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    }
+   },
+   "required": [
+    "period_start",
+    "period_end"
+   ],
+   "title": "SummaryRequest",
+   "type": "object"
+  },
   "SupplierLookupRequest": {
    "properties": {
     "candidate_ids": {
@@ -3682,6 +4642,204 @@
     "quantity"
    ],
    "title": "SupplierRankingHttpRequest",
+   "type": "object"
+  },
+  "TargetIn": {
+   "additionalProperties": false,
+   "properties": {
+    "basis": {
+     "default": "contribution",
+     "enum": [
+      "contribution",
+      "operating"
+     ],
+     "title": "Basis",
+     "type": "string"
+    },
+    "bps": {
+     "default": "0",
+     "pattern": "^(0|[1-9][0-9]{0,3})$",
+     "title": "Bps",
+     "type": "string"
+    },
+    "kind": {
+     "enum": [
+      "breakeven",
+      "margin"
+     ],
+     "title": "Kind",
+     "type": "string"
+    }
+   },
+   "required": [
+    "kind"
+   ],
+   "title": "TargetIn",
+   "type": "object"
+  },
+  "TemplateRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "amortization_months": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Amortization Months"
+    },
+    "amount_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Amount Paise"
+    },
+    "category": {
+     "title": "Category",
+     "type": "string"
+    },
+    "channel_scope": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Channel Scope"
+    },
+    "cost_class": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Cost Class"
+    },
+    "description": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Description"
+    },
+    "effective_from": {
+     "format": "date",
+     "title": "Effective From",
+     "type": "string"
+    },
+    "effective_to": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Effective To"
+    },
+    "kind": {
+     "enum": [
+      "MONTHLY",
+      "AMORTIZED",
+      "PER_ORDER",
+      "PER_UNIT"
+     ],
+     "title": "Kind",
+     "type": "string"
+    },
+    "rate_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Rate Paise"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "start_month": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Start Month"
+    },
+    "treatment": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Treatment"
+    },
+    "vendor": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Vendor"
+    }
+   },
+   "required": [
+    "kind",
+    "category",
+    "effective_from"
+   ],
+   "title": "TemplateRequest",
    "type": "object"
   },
   "TitleSetsBody": {
@@ -4300,6 +5458,35 @@
     "surface"
    ],
    "title": "UsageEventBody",
+   "type": "object"
+  },
+  "VoidRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "idempotency_key": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Idempotency Key"
+    },
+    "reason": {
+     "maxLength": 500,
+     "minLength": 1,
+     "title": "Reason",
+     "type": "string"
+    }
+   },
+   "required": [
+    "reason"
+   ],
+   "title": "VoidRequest",
    "type": "object"
   }
  }

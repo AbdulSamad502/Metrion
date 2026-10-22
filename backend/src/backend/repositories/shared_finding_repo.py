@@ -34,12 +34,14 @@ def _exists(conn: Any, table: str, tenant_id: UUID, ref_id: str) -> bool:
     return conn.execute(text(f"SELECT 1 FROM {table} WHERE id = :id AND tenant_id = :t"), {"id": ref_id, "t": str(tenant_id)}).first() is not None  # noqa: S608 - table is a fixed literal
 
 
-def resolve_engine_results(tenant_id: UUID, ids: Sequence[str]) -> set[str]:
-    """Which of these metric_result ids exist for THIS tenant (the same test the database trigger applies)."""
+def resolve_engine_results(tenant_id: UUID, ids: Sequence[str], *, include_trial: bool = False) -> set[str]:
+    """Which of these metric_result ids exist for THIS tenant (the same test the database trigger applies).
+    Trial results (`is_trial`, engine spec §9.2) do not resolve unless `include_trial=True`: a finding may not cite a validation-run figure.
+    (The database trigger itself does not filter `is_trial`; closing that needs a migration, which is out of scope for Step 2.)"""
     if not ids:
         return set()
     with tenant_scope(tenant_id) as conn:
-        return {str(r[0]) for r in conn.execute(text("SELECT id FROM metric_result WHERE tenant_id = :t AND id = ANY(CAST(:ids AS uuid[]))"), {"t": str(tenant_id), "ids": list(ids)})}
+        return {str(r[0]) for r in conn.execute(text("SELECT id FROM metric_result WHERE tenant_id = :t AND id = ANY(CAST(:ids AS uuid[])) AND (CAST(:include_trial AS boolean) OR is_trial = false)"), {"t": str(tenant_id), "ids": list(ids), "include_trial": include_trial})}
 
 
 def insert(

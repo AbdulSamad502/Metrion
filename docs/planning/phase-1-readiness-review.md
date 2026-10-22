@@ -122,7 +122,7 @@ Classification: **[B]** Blocking · **[P]** Important but can be provisional · 
 | 2.5 | ~~Repo layout~~ | **RESOLVED** — monorepo: `packages/calc-engine` (deterministic engine, Brain 1), `backend/` (FastAPI), `frontend/` (Next.js App Router). Enforced by the pre-commit hook at `.claude/hooks/pre-commit` (`core.hooksPath` must be set locally — see `docs/planning/mechanical-setup-log.md`). |
 | 2.6 | ~~Agent topology~~ | **RESOLVED** — star confirmed; CEO brokers all agent-to-agent routing (§1 Agent architecture) |
 | 2.7 | ~~Fast-path vs AI-path router mechanism~~ | **RESOLVED** — structural, not a runtime classifier (`ceo-agent-orchestration.md` C2/R2). *(Row was stale; reconciled 2026-10-07.)* |
-| 2.8 | Expense and cash-flow input path — manual entry, statement upload, or settlement-derived only | **[P]** |
+| 2.8 | Expense and cash-flow input path — manual entry, statement upload, or settlement-derived only | **[P]** — **SUPERSEDED 2026-10-15 by EXP-01…EXP-08 (owner, `docs/decisions/phase1-decisions.md`), as applied to the expense input path** |
 | 2.9 | "User can give the data" for forecasting — additional report upload, or manual numeric entry | **[P]** |
 | 2.10 | Web search provider (Tavily / Brave / Serper) | **[P]** — *note 2026-10-03:* Tavily + YouTube are de facto wired in PI and become the Market Signal Retrieval service's sources (OP17). Formal closure of this item is the seller's/your call, not asserted here |
 | 2.11 | Google Trends source — pytrends vs paid; now load-bearing for Market Outlook | **[P]** — *note 2026-10-03:* dropped from PI (PI C14), **not adopted in CMO V1**; CMO trend reports carry `demand_evidence = UNOBSERVED`. The "Market Outlook" named in §1 is the forecasting-gate fallback and is **not** a PI feature; it is unbuilt and untouched by OP17 |
@@ -173,7 +173,7 @@ Explicitly deferred, not forgotten. Each is specified before the feature that de
 | 2A.10 | ~~GST Lookup as shared service~~ | **RESOLVED** — OP7, OP9: shared service with its own cap | — |
 | 2A.11 | ~~LLM computation access pattern~~ | **RESOLVED** — OP10: fixed tool catalog | — |
 | 2A.12 | ~~Vision model requirement~~ | **RESOLVED** — OP11: external extraction to structured schema, behind a provider slot | — |
-| 2A.13 | **Agent-initiated data request flow** (OP1) — how an agent declares missing data, how the seller is prompted, how the response is validated and stored as a manual input | Orchestration, manual inputs | **[P]** |
+| 2A.13 | **Agent-initiated data request flow** (OP1) — how an agent declares missing data, how the seller is prompted, how the response is validated and stored as a manual input | Orchestration, manual inputs | **[P]** — **SUPERSEDED 2026-10-15 by EXP-01…EXP-08 (owner, `docs/decisions/phase1-decisions.md`), as applied to the expense input path** *Only the expense-input part; OP1 (the general agent-initiated data-request flow) stays locked.* |
 
 ### 2B. Carried-forward architectural constraints (from the planning document)
 
@@ -270,7 +270,7 @@ All of these are already designed to change without architectural rework.
 | 6.3 | Fee-schedule source | True Margin accuracy; the entire value proposition | **[B]** |
 | 6.4 | **A real Amazon export to verify settlement match keys** (the report family is specified) | Amazon reconciliation and Leak Shield execution — a shipped V1 feature | **[B]** before launch |
 | 6.5 | One real export per marketplace | Production ingestion (not spec writing) | **[B]** before production |
-| 6.6 | Expense / cash-flow input path | Those two features only | **[P]** |
+| 6.6 | Expense / cash-flow input path | Those two features only | **[P]** — **SUPERSEDED 2026-10-15 by EXP-01…EXP-08 (owner, `docs/decisions/phase1-decisions.md`), as applied to the expense input path** |
 | 6.7 | Scale targets | Infrastructure sizing | **[P]** |
 | 6.8 | Repo layout | First commit | **[P]** |
 

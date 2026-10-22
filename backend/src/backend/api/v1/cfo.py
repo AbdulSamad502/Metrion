@@ -70,6 +70,16 @@ from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CFO, FINANCIALS_ADJUST, SERVICE_GST_LOOKUP, has_permission
 from backend.config import cfo_max_upload_bytes, cfo_narration_model, cfo_report_storage_dir, ollama_host
 from backend.entitlement import resolve_cfo_entitlement, resolve_gst_lookup_entitlement
+from backend.repositories import agent_run_repo
+from backend.services.pnl_scenario import (
+    ESTIMATE_REF_PREFIX as PNL_ESTIMATE_REF_PREFIX,
+    PnlScenarioHttpRequest,
+    solution_dict as pnl_scenario_solution,
+    to_inputs as pnl_scenario_to_inputs,
+    to_response as pnl_scenario_to_response,
+    to_targets as pnl_scenario_targets,
+)
+from calc_engine.formulas.pnl_scenario import calculate_scenario, solve_price
 from backend.services.cfo_imports import get_import, list_imports
 from backend.services.cfo_actions import (
     AcceptGstLookupRequest,
@@ -327,6 +337,9 @@ CFO_CASH_RECONCILIATION = "cfo.cash_reconciliation"
 # for this — direct-path only, HTTP route below. Read-only (gathers already-computed/persisted
 # outputs, creates no manual input), so needs no `financials.adjust` gate either.
 CFO_STRATEGIC_BRIEFING = "cfo.strategic_briefing"
+
+# Hypothetical P&L workspace (calculator.md §14). Direct-path only: `trigger_type = DIRECT`, one `agent_run`, no `metric_result` row, no data request.
+CFO_PNL_SCENARIO = "cfo.pnl_scenario"
 
 
 def _require_cfo_entitlement(tenant_id: UUID, *, direct_action_code: str) -> None:
@@ -806,6 +819,42 @@ def post_pricing_curve(
     }
 
 
+@router.post("/pnl-scenario")
+def post_pnl_scenario(body: PnlScenarioHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """Hypothetical P&L over seller-typed inputs, with optional break-even / target-margin price solves (calculator.md §14).
+
+    A direct-execution path (`agent.cfo`, entitlement-gated like every CFO direct action) that is deliberately NOT a CFO result: it performs no table
+    write other than ONE `agent_run` audit row (`trigger_type = DIRECT`), no `metric_result`, no `agent_data_request`, and its output carries an
+    `estimateRef` (traceable to that run) and never an `engineResultRef`. The tenant is the session's: the body has no `tenant_id` field and rejects
+    unknown fields. A missing input is excluded and named, never a zero."""
+    assert ctx.tenant_id is not None
+    tenant_id = ctx.tenant_id
+    _require_cfo_entitlement(tenant_id, direct_action_code=CFO_PNL_SCENARIO)  # raises 402 when denied, so reaching the next line means PASS
+    now = datetime.now(timezone.utc)
+    run_id = agent_run_repo.insert_run(
+        tenant_id,
+        agent_id="CFO",
+        trigger_type="DIRECT",
+        trigger_ref=CFO_PNL_SCENARIO,
+        requested_by=ctx.app_user_id,
+        permission_check="PASS",  # real — require_auth(permission=AGENT_CFO) already enforced this
+        entitlement_check="PASS",
+        status="RUNNING",
+        started_at=now,
+    )
+    try:
+        inputs = pnl_scenario_to_inputs(body)
+        result = calculate_scenario(inputs)
+        solutions = [pnl_scenario_solution(t, solve_price(inputs, target, t.basis)) for t, target in pnl_scenario_targets(body)]
+    except Exception as exc:
+        agent_run_repo.finish_run(tenant_id, run_id, status="FAILED", error_reason=type(exc).__name__, finished_at=datetime.now(timezone.utc))
+        raise
+    agent_run_repo.finish_run(
+        tenant_id, run_id, status="COMPLETE" if result.status == "estimate" else "PARTIAL", error_reason=None, finished_at=datetime.now(timezone.utc)
+    )
+    return pnl_scenario_to_response(result, solutions, estimate_ref=f"{PNL_ESTIMATE_REF_PREFIX}{run_id}")
+
+
 class PeriodPnlLineRequest(BaseModel):
     """One full `CanonicalLine` for `cfo.pnl` (cfo-agent.md §6.8 `cfo.pnl`) — deliberately NOT
     `GstPeriodSummaryLineRequest` (the shape `/gst/period-summary` and `/batch-size` already
@@ -924,6 +973,18 @@ def _period_pnl_metric_result_to_dict(result: Any) -> dict[str, object]:
     return base
 
 
+def _period_pnl_advertising_fields(outcome: Any) -> dict[str, object]:
+    """ST-01 (display only): `advertisingEntered` is False when the caller supplied no advertising entry
+    for this calculation (the figure still resolves to a zero term in the engine, unchanged);
+    `advertisingCostsPaise` is the total the engine used, or None when not entered. Rows saved in
+    the legacy expense tracker are not read by this route, so "not entered" means "not entered
+    in this calculation"."""
+    return {
+        "advertisingEntered": outcome.advertising_entered,
+        "advertisingCostsPaise": outcome.advertising_costs_paise,
+    }
+
+
 @router.post("/pnl")
 def post_period_pnl(
     body: PeriodPnlHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)
@@ -976,6 +1037,7 @@ def post_period_pnl(
         "returnRatePct": _period_pnl_metric_result_to_dict(outcome.return_rate_pct),
         "marketplaceFeeFlags": list(outcome.marketplace_fee_flags),
         "dataRequestId": str(outcome.data_request_id) if outcome.data_request_id is not None else None,
+        **_period_pnl_advertising_fields(outcome),
     }
 
 
@@ -1004,6 +1066,21 @@ def _canonical_assembly_blocked_line_to_dict(blocked: Any) -> dict[str, object]:
         "salesLineId": str(blocked.sales_line_id),
         "reason": blocked.reason,
         "missingInputs": list(blocked.missing_inputs),
+    }
+
+
+def _ledger_block(outcome: Any) -> dict[str, object]:
+    """S4a: the expense-ledger part of the response. EMPTY while `EXPENSE_LEDGER_FEEDS_PNL` is off, so the response gains no key at all."""
+    feed = outcome.ledger_feed
+    if feed is None:
+        return {}
+    return {
+        "expenseLedger": {
+            "formulaVersion": feed.formula_version,
+            "watermark": feed.watermark,
+            "unallocated": [{"costClass": u.cost_class, "paise": u.paise, "engineResultRef": u.engine_result_ref} for u in feed.unallocated],
+            "skippedBecauseSuppliedInRequest": list(feed.skipped),
+        }
     }
 
 
@@ -1053,11 +1130,13 @@ def post_period_pnl_for_tenant(
                 "dataRequestId": (
                     str(outcome.pnl.data_request_id) if outcome.pnl.data_request_id is not None else None
                 ),
+                **_period_pnl_advertising_fields(outcome.pnl),
             }
         ),
         "assembledLineCount": outcome.assembled_line_count,
         "blockedLines": [_canonical_assembly_blocked_line_to_dict(b) for b in outcome.blocked_lines],
         "dataRequestIds": [str(i) for i in outcome.data_request_ids],
+        **_ledger_block(outcome),
     }
 
 
