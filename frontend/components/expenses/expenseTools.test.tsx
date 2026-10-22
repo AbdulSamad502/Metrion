@@ -444,3 +444,41 @@ describe("refund of a spread-over-months entry", () => {
     expect(screen.queryByTestId("refund-panel")).toBeNull();
   });
 });
+
+describe("splitting by each SKU's own figures", () => {
+  const RECORD = { id: "e-8", vendor: "Ad Co", categoryLabel: "Advertising", costClass: "ADVERTISING", amountPaise: 100001 } as unknown as ExpenseRecord;
+
+  it.each([["NET_REVENUE", "By each SKU's revenue this period"], ["UNITS", "By each SKU's units kept this period"], ["ORDERS", "By each SKU's orders this period"]])(
+    "sends %s with the SKUs only and no percentage",
+    async (basis, label) => {
+      handlers[`POST ${BASE}/e-8/assign`] = () => json({ expenseId: "e-8", basis, skus: ["A", "B"] }, 201);
+      const user = userEvent.setup();
+      render(<AssignPanel getToken={async () => "t"} record={RECORD} onCancel={() => {}} onDone={async () => {}} />);
+      await user.selectOptions(screen.getByLabelText("Split"), basis);
+      expect(screen.getByRole("option", { name: label })).toBeInTheDocument();
+      expect(screen.queryByLabelText("Share of SKU 1 (%)")).toBeNull();
+      await user.type(screen.getByLabelText("SKU 1"), "A");
+      await user.type(screen.getByLabelText("SKU 2"), "B");
+      await user.click(screen.getByRole("button", { name: "Save the split" }));
+      await waitFor(() => expect(calls).toHaveLength(1));
+      expect(calls[0].body).toEqual({ basis, shares: [{ sku: "A" }, { sku: "B" }] });
+    },
+  );
+
+  it("offers all five ways to split and says what happens when a SKU has no data", () => {
+    render(<AssignPanel getToken={async () => "t"} record={RECORD} onCancel={() => {}} onDone={async () => {}} />);
+    expect(within(screen.getByLabelText("Split")).getAllByRole("option")).toHaveLength(5);
+    expect(screen.getByText(/stays visible as unassigned, never as zero/)).toBeInTheDocument();
+  });
+
+  it("shows the server's reason when the split is refused", async () => {
+    handlers[`POST ${BASE}/e-8/assign`] = () => json({ detail: { code: "INVALID_ASSIGNMENT", detail: "The assignment is not valid." } }, 422);
+    const user = userEvent.setup();
+    render(<AssignPanel getToken={async () => "t"} record={RECORD} onCancel={() => {}} onDone={async () => {}} />);
+    await user.selectOptions(screen.getByLabelText("Split"), "UNITS");
+    await user.type(screen.getByLabelText("SKU 1"), "A");
+    await user.type(screen.getByLabelText("SKU 2"), "A");
+    await user.click(screen.getByRole("button", { name: "Save the split" }));
+    expect(await screen.findByText(/Could not save the split|not valid/)).toBeInTheDocument();
+  });
+});

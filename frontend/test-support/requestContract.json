@@ -1152,7 +1152,10 @@
     "basis": {
      "enum": [
       "EQUAL",
-      "EXPLICIT_SHARES"
+      "EXPLICIT_SHARES",
+      "NET_REVENUE",
+      "UNITS",
+      "ORDERS"
      ],
      "title": "Basis",
      "type": "string"

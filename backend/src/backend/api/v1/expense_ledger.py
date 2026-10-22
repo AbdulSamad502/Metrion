@@ -29,6 +29,7 @@ from backend.api.v1.cfo import _require_cfo_entitlement
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CFO, FINANCIALS_ADJUST, has_permission
 from backend.repositories import agent_run_repo
+from backend.services import expense_assignment_data as assignment_data
 from backend.services import expense_ledger_rules as rules
 
 router = APIRouter(prefix="/api/v1/cfo/expense-ledger")
@@ -325,7 +326,10 @@ def post_summary(body: SummaryRequest, ctx: AuthContext = require_auth(permissio
     now = datetime.now(timezone.utc)
     events = ledger.feed_events(tenant, period_start=body.period_start, period_end=body.period_end)
     catalog = {sku: sku for sku in ledger.known_skus(tenant)}
-    feed = ledger_feed(events, period_start=body.period_start, period_end=body.period_end, channel_scope=None, catalog=catalog)
+    feed = ledger_feed(
+        events, period_start=body.period_start, period_end=body.period_end, channel_scope=None, catalog=catalog,
+        basis_data=assignment_data.basis_data(tenant, period_start=body.period_start, period_end=body.period_end, events=events, as_of=body.as_of_date),
+    )
     minted = mint_ledger_feed_metrics(
         feed, ingestion_run_ids=[], adapter_versions=[], active_adjustment_ids=[], computed_at=now, as_of_date=body.as_of_date or now.date()
     )
@@ -465,14 +469,14 @@ class SkuShare(_Strict):
 
 
 class AssignRequest(_Strict):
-    basis: Literal["EQUAL", "EXPLICIT_SHARES"]
+    basis: Literal["EQUAL", "EXPLICIT_SHARES", "NET_REVENUE", "UNITS", "ORDERS"]
     shares: list[SkuShare] = Field(min_length=1, max_length=rules.ASSIGNMENT_SKUS_MAX)
 
 
 @router.post("/{expense_id}/assign", status_code=201)
 def assign_expense_to_skus(expense_id: UUID, body: AssignRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
-    """A seller-chosen split of one advertising or storage record across several SKUs (Q33, engine section 5.18.3): `EQUAL`, or `EXPLICIT_SHARES` in basis points summing to at
-    most 10,000. The split is computed by the engine when the ledger feed is built; this route stores only the choice. Assigned shares are SKU-level but flagged manual, the rest
+    """A seller-chosen split of one advertising or storage record across several SKUs (Q33, engine section 5.18.3): `EQUAL`, `EXPLICIT_SHARES` in basis points summing to at
+    most 10,000, or by the SKUs' own `NET_REVENUE`, `UNITS` or `ORDERS` for the period (no basis points: the data decides, and an unavailable figure leaves the amount unassigned with its reason). The split is computed by the engine when the ledger feed is built; this route stores only the choice. Assigned shares are SKU-level but flagged manual, the rest
     stays visible as an unassigned business-level remainder, and the pool total never changes. Append-only: a new assignment replaces the current one, the old stays as history."""
     tenant = _require_write(ctx)
     current = _existing(tenant, expense_id)

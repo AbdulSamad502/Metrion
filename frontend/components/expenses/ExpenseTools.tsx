@@ -296,12 +296,20 @@ export function ImportExportPanel({ getToken, onChanged }: { getToken: Getter; o
 }
 
 type ShareRow = { sku: string; percent: string };
+type Basis = "EQUAL" | "EXPLICIT_SHARES" | "NET_REVENUE" | "UNITS" | "ORDERS";
+const BASIS_OPTIONS: { value: Basis; label: string }[] = [
+  { value: "EQUAL", label: "Equally" },
+  { value: "EXPLICIT_SHARES", label: "By the percentage I enter" },
+  { value: "NET_REVENUE", label: "By each SKU's revenue this period" },
+  { value: "UNITS", label: "By each SKU's units kept this period" },
+  { value: "ORDERS", label: "By each SKU's orders this period" },
+];
 
 /** Splits one advertising or storage entry across several SKUs. The seller chooses the split (equally, or as a percentage of the entry per SKU); the backend's engine does the
  * arithmetic when totals are built, the part not assigned stays visible as an unassigned business-level amount, and the entry's total never changes. Shares are sent as whole
  * basis points typed as percentages (30 -> 3000); the page adds nothing up. */
 export function AssignPanel({ getToken, record, onCancel, onDone }: { getToken: Getter; record: ExpenseRecord; onCancel: () => void; onDone: () => Promise<void> }) {
-  const [basis, setBasis] = useState<"EQUAL" | "EXPLICIT_SHARES">("EQUAL");
+  const [basis, setBasis] = useState<Basis>("EQUAL");
   const [rows, setRows] = useState<ShareRow[]>([{ sku: "", percent: "" }, { sku: "", percent: "" }]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -312,8 +320,8 @@ export function AssignPanel({ getToken, record, onCancel, onDone }: { getToken: 
     const shares: { sku: string; bp?: number }[] = [];
     for (const [i, r] of rows.entries()) {
       if (!r.sku.trim()) return setError(`Enter the SKU on row ${i + 1}, or remove the row.`);
-      if (basis === "EQUAL") {
-        shares.push({ sku: r.sku.trim() });
+      if (basis !== "EXPLICIT_SHARES") {
+        shares.push({ sku: r.sku.trim() }); // equal, or the SKU's own figures decide: no percentage is sent
         continue;
       }
       const bps = percentToBps(r.percent);
@@ -334,10 +342,10 @@ export function AssignPanel({ getToken, record, onCancel, onDone }: { getToken: 
   };
 
   return (
-    <Section title={`Split across SKUs: ${record.vendor ?? record.categoryLabel}`} hint="You choose the split. Whatever you do not assign stays visible as unassigned, and the entry's total does not change.">
+    <Section title={`Split across SKUs: ${record.vendor ?? record.categoryLabel}`} hint="You choose the split. Whatever cannot be assigned (for example a SKU with no sales data this period) stays visible as unassigned, never as zero, and the entry's total does not change.">
       <div className="flex flex-col gap-3" data-testid="assign-panel">
         <Field label="Split">
-          <SelectInput value={basis} onChange={(v) => setBasis(v === "EXPLICIT_SHARES" ? "EXPLICIT_SHARES" : "EQUAL")} options={[{ value: "EQUAL", label: "Equally" }, { value: "EXPLICIT_SHARES", label: "By the percentage I enter" }]} />
+          <SelectInput value={basis} onChange={(v) => setBasis(BASIS_OPTIONS.find((o) => o.value === v)?.value ?? "EQUAL")} options={BASIS_OPTIONS} />
         </Field>
         {rows.map((r, i) => (
           <div key={i} className="grid grid-cols-1 gap-3 sm:grid-cols-3">

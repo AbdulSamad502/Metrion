@@ -74,3 +74,27 @@ def test_the_watermark_changes_when_the_assignment_changes() -> None:
     a = ledger_watermark([ev(assignment=equal("A", "B"))])
     assert a != ledger_watermark([ev(assignment=equal("A", "C"))]) and a != ledger_watermark([ev()]) and a == ledger_watermark([ev(assignment=equal("A", "B"))])
     assert ledger_watermark([ev()]).startswith("ledger:1:")  # unchanged for records without an assignment
+
+
+def test_ms6_a_data_driven_assignment_changes_where_the_pool_sits_never_its_total() -> None:
+    from calc_engine.formulas.expense_assignment import basis_target
+
+    data = {"A": basis_target("A", units_sold=6, units_returned=0), "B": basis_target("B", units_sold=4, units_returned=0)}
+    plain = ledger_feed([ev(amount=10_001)], catalog=CAT, **P)
+    split = ledger_feed([ev(amount=10_001, assignment=SkuAssignment("UNITS", (("A", None), ("B", None))))], catalog=CAT, basis_data=data, **P)
+    for f in (plain, split):
+        assert f.expense_total.value == 10_001 and f.pools["ADVERTISING"].total.value == 10_001
+    pool = split.pools["ADVERTISING"]
+    assert {k: v.value for k, v in pool.sku_level.items()} == {"A": 6_001, "B": 4_000} and pool.business_level.value == 0 and pool.manual_sku_level.value == 10_001
+
+
+def test_a_data_assignment_without_basis_data_stays_business_level_and_nothing_is_lost() -> None:
+    f = ledger_feed([ev(amount=5_000, assignment=SkuAssignment("ORDERS", (("A", None), ("B", None))))], catalog=CAT, **P)
+    pool = f.pools["ADVERTISING"]
+    assert pool.sku_level == {} and pool.business_level.value == 5_000 and pool.total.value == 5_000  # unavailable data is never read as zero: the amount stays visible
+
+
+def test_the_watermark_changes_with_a_data_assignment() -> None:
+    plain = ledger_feed([ev()], catalog=CAT, **P)
+    split = ledger_feed([ev(assignment=SkuAssignment("UNITS", (("A", None), ("B", None))))], catalog=CAT, **P)
+    assert plain.watermark != split.watermark

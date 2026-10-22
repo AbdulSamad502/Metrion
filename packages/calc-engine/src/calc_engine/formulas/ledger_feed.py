@@ -26,6 +26,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
+from calc_engine.formulas.allocation_outcome import AllocationTarget
 from calc_engine.formulas.expense_assignment import SkuAssignment, assign
 from calc_engine.types import ZERO, Paise
 
@@ -144,6 +145,7 @@ def ledger_feed(
     period_end: date,
     channel_scope: str | None,
     catalog: Mapping[str, str],
+    basis_data: Mapping[str, AllocationTarget] | None = None,
 ) -> LedgerFeedResult:
     events = list(events)
     latest: dict[str, LedgerEvent] = {}
@@ -205,7 +207,7 @@ def ledger_feed(
 
         sku = None
         if cls in _SKU_LEVEL_CLASSES and e.assignment is not None:
-            split = assign(e.amount, e.assignment, catalog)  # §5.18.3: assigned + unassigned = amount, so the pool total is unchanged
+            split = assign(e.amount, e.assignment, catalog, basis_data)  # §5.18.3: assigned + unassigned = amount, so the pool total is unchanged
             for assigned_sku, share in split.assigned.items():
                 sku_level[cls][assigned_sku] = sku_level[cls].get(assigned_sku, ZERO) + share
                 manual_sku[cls] = manual_sku[cls] + share

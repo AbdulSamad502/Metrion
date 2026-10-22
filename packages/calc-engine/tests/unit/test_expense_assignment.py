@@ -39,11 +39,12 @@ def test_explicit_shares_use_largest_remainder_on_the_assigned_part() -> None:
     assert r.assigned_total.value == 100 and r.unassigned.value == 0 and sorted(values(r).values()) == [33, 33, 34] and values(r)["C"] == 34
 
 
-def test_ms3_the_remaining_bases_are_not_offered_here_and_no_basis_assigns_nothing() -> None:
+def test_no_basis_assigns_nothing_and_the_data_bases_take_no_basis_points() -> None:
     r = a.assign(Paise(5_000), a.SkuAssignment(None, (("A", None),)), CAT)
     assert r.assigned == {} and r.unassigned.value == 5_000 and r.reason == "BASIS_NOT_SELECTED"
     for basis in ("UNITS", "ORDERS", "NET_REVENUE"):
-        assert a.validate(a.SkuAssignment(basis, (("A", None),))) == "INVALID_ASSIGNMENT"  # only the two seller-chosen bases exist in this slice
+        assert a.validate(a.SkuAssignment(basis, (("A", None),))) is None  # the data decides the split
+        assert a.validate(a.SkuAssignment(basis, (("A", 5_000),))) == "INVALID_ASSIGNMENT"  # basis points belong to EXPLICIT_SHARES only
 
 
 def test_ms4_no_mapped_sku_leaves_the_whole_amount_unassigned() -> None:
@@ -113,3 +114,82 @@ def test_explicit_splits_always_conserve(amount) -> None:
     assert r.assigned_total.value + r.unassigned.value == amount and r.unassigned.value >= 0
     exact_total = amount * (1_234 + 2_345 + 3_456) // 10_000
     assert r.assigned_total.value == exact_total  # the assigned part is the exact fraction (floor), split by largest remainder
+
+
+# ---- the data-driven bases (section 5.18.3 with 5.10.1): NET_REVENUE, UNITS, ORDERS, restricted to the assigned SKUs ----------------------------------------------
+
+
+def data(basis: str, *skus: str) -> a.SkuAssignment:
+    return a.SkuAssignment(basis, tuple((s, None) for s in skus))
+
+
+def tgt(sku: str, **kw) -> object:
+    return a.basis_target(sku, **kw)
+
+
+def test_net_revenue_splits_in_proportion_to_each_skus_revenue_and_conserves_the_amount() -> None:
+    d = {"A": tgt("A", net_revenue=Paise(60_000)), "B": tgt("B", net_revenue=Paise(40_000))}
+    r = a.assign(Paise(10_001), data("NET_REVENUE", "A", "B"), CAT, d)
+    assert values(r) == {"A": 6_001, "B": 4_000} and r.assigned_total.value + r.unassigned.value == 10_001 and r.unassigned.value == 0 and r.reason is None
+
+
+def test_units_follow_net_units_sold_less_returned_and_rto() -> None:
+    d = {"A": tgt("A", units_sold=10, units_returned=2), "B": tgt("B", units_sold=4, units_returned=0)}  # 8 and 4 net units
+    assert values(a.assign(Paise(1_200), data("UNITS", "A", "B"), CAT, d)) == {"A": 800, "B": 400}
+
+
+def test_orders_follow_distinct_order_counts() -> None:
+    d = {"A": tgt("A", order_ids=frozenset({"1", "2", "3"})), "B": tgt("B", order_ids=frozenset({"9"}))}
+    assert values(a.assign(Paise(4_000), data("ORDERS", "A", "B"), CAT, d)) == {"A": 3_000, "B": 1_000}
+
+
+def test_ms3_a_sku_without_quantity_leaves_the_amount_unassigned_with_the_reason_not_zero() -> None:
+    d = {"A": tgt("A", units_sold=5, units_returned=0), "B": tgt("B", units_sold=None, units_returned=0)}
+    r = a.assign(Paise(9_000), data("UNITS", "A", "B"), CAT, d)
+    assert r.assigned == {} and r.unassigned.value == 9_000 and r.reason == "UNITS_UNAVAILABLE"
+    missing_return = {"A": tgt("A", units_sold=5, units_returned=None), "B": tgt("B", units_sold=5, units_returned=0)}
+    assert a.assign(Paise(9_000), data("UNITS", "A", "B"), CAT, missing_return).reason == "UNITS_UNAVAILABLE"  # an unknown return count is not zero
+    assert a.assign(Paise(9_000), data("ORDERS", "A", "B"), CAT, {"A": tgt("A", order_ids=frozenset({"1"}))}).reason == "ORDERS_UNAVAILABLE"
+    assert a.assign(Paise(9_000), data("NET_REVENUE", "A"), CAT, {}).unassigned.value == 9_000  # no data at all for the SKU
+
+
+def test_ms4_a_zero_denominator_leaves_everything_unassigned() -> None:
+    d = {"A": tgt("A", units_sold=3, units_returned=3), "B": tgt("B", units_sold=0, units_returned=0)}
+    r = a.assign(Paise(5_000), data("UNITS", "A", "B"), CAT, d)
+    assert r.assigned == {} and r.unassigned.value == 5_000 and r.reason == "ZERO_DENOMINATOR"
+
+
+def test_a_sku_with_no_positive_weight_gets_no_share_and_the_rest_share_the_whole_amount() -> None:
+    d = {"A": tgt("A", units_sold=6, units_returned=0), "B": tgt("B", units_sold=2, units_returned=2)}
+    r = a.assign(Paise(900), data("UNITS", "A", "B"), CAT, d)
+    assert values(r) == {"A": 900} and r.unassigned.value == 0
+
+
+def test_ms5_an_unmapped_sku_gets_no_share_under_a_data_basis_too() -> None:
+    d = {"A": tgt("A", net_revenue=Paise(1)), "B": tgt("B", net_revenue=Paise(1))}
+    r = a.assign(Paise(1_000), data("NET_REVENUE", "A", "B", "X"), CAT, d)
+    assert values(r) == {"A": 500, "B": 500} and r.unmapped == ("X",) and r.reason == "UNMAPPED_SKU"
+
+
+def test_a_refund_keeps_its_sign_on_every_data_share_and_conserves() -> None:
+    d = {"A": tgt("A", units_sold=3, units_returned=0), "B": tgt("B", units_sold=1, units_returned=0)}
+    r = a.assign(Paise(-1_001), data("UNITS", "A", "B"), CAT, d)
+    assert all(v < 0 for v in values(r).values()) and r.assigned_total.value + r.unassigned.value == -1_001
+
+
+def test_a_single_sku_under_a_data_basis_takes_the_whole_amount() -> None:
+    assert values(a.assign(Paise(777), data("ORDERS", "A"), CAT, {"A": tgt("A", order_ids=frozenset({"1"}))})) == {"A": 777}
+
+
+@pytest.mark.parametrize("basis", ["NET_REVENUE", "UNITS", "ORDERS"])
+def test_the_split_does_not_depend_on_the_order_the_skus_were_listed(basis) -> None:
+    d = {"A": tgt("A", net_revenue=Paise(70), units_sold=7, units_returned=0, order_ids=frozenset(map(str, range(7)))),
+         "B": tgt("B", net_revenue=Paise(30), units_sold=3, units_returned=0, order_ids=frozenset(map(str, range(3))))}
+    assert a.assign(Paise(1_001), data(basis, "A", "B"), CAT, d) == a.assign(Paise(1_001), data(basis, "B", "A"), CAT, d)
+
+
+@pytest.mark.parametrize("amount", [0, 1, 7, 10_001, -3])
+def test_conservation_holds_for_every_data_basis(amount) -> None:
+    d = {"A": tgt("A", units_sold=5, units_returned=1), "B": tgt("B", units_sold=3, units_returned=0), "C": tgt("C", units_sold=1, units_returned=0)}
+    r = a.assign(Paise(amount), data("UNITS", "A", "B", "C"), CAT, d)
+    assert r.assigned_total.value + r.unassigned.value == amount

@@ -26,6 +26,8 @@ from calc_engine.formulas.ledger_feed import ledger_feed
 from calc_engine.repositories import expense_ledger_repo as ledger
 from calc_engine.repositories import metric_result_repo
 
+from backend.services import expense_assignment_data as assignment_data
+
 FORMULA_VERSION = "CONTRIBUTION_PROFIT.v1"
 CONFIG_VERSION = "EXPENSE_LEDGER_FEED.v1"
 _UNALLOCATED = ("STORAGE", "OVERHEAD")
@@ -60,7 +62,10 @@ def build(
 ) -> LedgerPnlFeed:
     events = ledger.feed_events(tenant_id, period_start=period_start, period_end=period_end)
     catalog = {sku: sku for sku in ledger.known_skus(tenant_id)}
-    feed = ledger_feed(events, period_start=period_start, period_end=period_end, channel_scope=None, catalog=catalog)
+    feed = ledger_feed(
+        events, period_start=period_start, period_end=period_end, channel_scope=None, catalog=catalog,
+        basis_data=assignment_data.basis_data(tenant_id, period_start=period_start, period_end=period_end, events=events, as_of=as_of_date),
+    )
 
     skipped: list[str] = []
     ads: tuple[Mapping[str, object], ...] = ()
