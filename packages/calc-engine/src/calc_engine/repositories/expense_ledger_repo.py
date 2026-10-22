@@ -223,3 +223,22 @@ def known_skus(tenant_id: UUID) -> set[str]:
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(text("SELECT DISTINCT sku FROM sales_line WHERE tenant_id = :tenant AND sku IS NOT NULL"), {"tenant": str(tenant_id)}).fetchall()
     return {str(r[0]) for r in rows}
+
+
+def import_candidates(tenant_id: UUID, *, date_from: date | None, date_to: date | None, source_references: list[str]) -> list[dict[str, Any]]:
+    """The non-voided records an import could duplicate: those dated inside the file's date range, plus any whose `source_reference` is one the file carries
+    (an id can be re-used at another date). Read-only; the matching rules live in the backend import service."""
+    refs = list(source_references)
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                _CURRENT + " AND r.review_state <> 'voided' AND ((CAST(:a AS date) IS NOT NULL AND e.effective_date >= :a AND e.effective_date <= :b) "
+                "OR (cardinality(CAST(:refs AS text[])) > 0 AND e.source_reference = ANY(CAST(:refs AS text[]))))"
+            ),
+            {"tenant": str(tenant_id), "a": date_from, "b": date_to, "refs": refs},
+        ).fetchall()
+    return [
+        {"id": str(r.id), "effective_date": r.effective_date, "vendor": r.vendor, "description": r.description, "amount_paise": int(r.amount_paise),
+         "source_reference": r.source_reference}
+        for r in rows
+    ]

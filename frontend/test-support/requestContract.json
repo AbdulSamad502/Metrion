@@ -101,6 +101,10 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/expense-ledger/import/template": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/expense-ledger/templates": {
    "query": [],
    "requiredQuery": []
@@ -443,6 +447,18 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cfo/expense-ledger/import/commit": {
+   "multipart": true,
+   "query": [
+    "skip_invalid"
+   ],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/expense-ledger/import/preview": {
+   "multipart": true,
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/expense-ledger/summary": {
    "body": {
     "$ref": "#/components/schemas/SummaryRequest"
@@ -597,6 +613,13 @@
   "POST /api/v1/cfo/pnl-scenario": {
    "body": {
     "$ref": "#/components/schemas/PnlScenarioHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/pnl-scenario-compare": {
+   "body": {
+    "$ref": "#/components/schemas/PnlScenarioCompareHttpRequest"
    },
    "query": [],
    "requiredQuery": []
@@ -3608,6 +3631,24 @@
     "components"
    ],
    "title": "PeriodPnlLineRequest",
+   "type": "object"
+  },
+  "PnlScenarioCompareHttpRequest": {
+   "additionalProperties": false,
+   "description": "A base scenario and a what-if variant of it, each a complete scenario request. The page builds the variant from the same form with a few values replaced; the\ndifference between the two results is computed by the engine (`calc_engine.formulas.pnl_scenario.compare`).",
+   "properties": {
+    "base": {
+     "$ref": "#/components/schemas/PnlScenarioHttpRequest"
+    },
+    "what_if": {
+     "$ref": "#/components/schemas/PnlScenarioHttpRequest"
+    }
+   },
+   "required": [
+    "base",
+    "what_if"
+   ],
+   "title": "PnlScenarioCompareHttpRequest",
    "type": "object"
   },
   "PnlScenarioHttpRequest": {
