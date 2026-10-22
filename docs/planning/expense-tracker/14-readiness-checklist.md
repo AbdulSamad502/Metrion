@@ -108,3 +108,17 @@ Status from the repository on `feat/pnl-calculator-and-expense-tracker` (no push
 - **G6:** not passed; nothing built.
 - **G7:** not started; needs 3 to 5 sellers reconciling output.
 - **Not built:** frontend screens for templates, import, export and assignment (API only); `CONTRIBUTION_PROFIT.v2` stays inactive and must not be persisted before the release date.
+
+
+## 8. Update 2026-10-22 (gaps closed; verification status)
+Built and committed on `main` (no push): ledger, review queue, void/correct/refund, summary from the engine feed, the default-OFF P&L feed (S4a), recurring / spread-over-months / per-order and per-unit templates priced from the engine's count (S4b, including AM7), CSV import with a fixed template and safe re-upload (S5a), the accountant export (S5b), multi-SKU assignment with `EQUAL`, `EXPLICIT_SHARES`, `NET_REVENUE`, `UNITS` and `ORDERS` (S5c), and the dashboard with its own sidebar entry. Not built: S5d (gated by G6).
+
+| Gate | Status |
+|---|---|
+| G2 Financial integrity | Engine and API tests exist for the feed, reconciliation (AC17/F7), double-counting and sign mapping, the assignment bases (MS1 to MS7) and the template counts (PT1 to PT8, AM1 to AM9). Still needed: the historical-result demonstration, a reconciliation worked example on real ledger data, the seller-facing release note (AC14/F4). |
+| G3 Security | Route-level 401/403/402, two-tenant isolation, idempotency and append-only grants are tested on the scratch database for every ledger, template, import, export and assignment route. Browser QA on a signed-in session is pending. |
+| G4, G5 | Need legal or the CA (retention, tax wording). Nothing was inferred. |
+| G6 | Not passed: draft-from-chat not built. |
+| G7 | Needs 3 to 5 sellers; not started. |
+
+Open decisions for the owner raised by this pass: the per-order count is a snapshot at the time the entry is made (a late upload needs a void and a manual entry); a data-driven split leaves the whole amount unassigned when any assigned SKU lacks its figure.
