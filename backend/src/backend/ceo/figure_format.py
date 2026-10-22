@@ -58,3 +58,20 @@ def format_percent_number(numerator: int | None, denominator: int | None) -> str
     sign = "-" if value < 0 and scaled else ""
     text = f"{whole}.{frac:02d}".rstrip("0").rstrip(".")
     return f"{sign}{text}%"
+
+
+def format_ratio_x(numerator: int | None, denominator: int | None) -> str:
+    """Display of a stored plain ratio as a multiple (ROAS 5/1 -> "5.00x"): exact `Fraction`, half-up to two decimals, never a float."""
+    if numerator is None or not denominator:
+        return UNAVAILABLE
+    value = Fraction(numerator, denominator)
+    scaled = int(abs(value) * 100 + Fraction(1, 2))
+    whole, frac = divmod(scaled, 100)
+    return f"{'-' if value < 0 and scaled else ''}{whole}.{frac:02d}x"
+
+
+def format_ratio_as_percent(numerator: int | None, denominator: int | None) -> str:
+    """Display of a stored plain ratio as a percentage (ACOS 1/5 -> "20%"). The ratio is converted once, exactly, for display; the stored value is untouched."""
+    if numerator is None or not denominator:
+        return UNAVAILABLE
+    return format_percent_number(numerator * 100, denominator)

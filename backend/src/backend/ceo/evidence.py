@@ -23,7 +23,7 @@ from backend.ceo.composer import WEB_ARTEFACT_TITLE, EvidenceTable, figures_with
 from backend.ceo.contract import (
     BusinessStateEntry, Conflict, Denial, EntryStatus, Fact, Figure, Gap, LegResult, LegStatus, Ref, RefKind, Register,
 )
-from backend.ceo.figure_format import format_paise, format_percent_number, format_units, register_for
+from backend.ceo.figure_format import format_paise, format_percent_number, format_ratio_as_percent, format_ratio_x, format_units, register_for
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,8 @@ _METRIC_LABELS: Mapping[str, str] = {
 }
 # Stored results whose value is a unit COUNT carried in the money slot (shown as units, never as rupees).
 _UNIT_COUNT_METRICS = frozenset({"BATCH_CONSTRAINED_QUANTITY"})
+# Results whose unit this formatter does not render: named as a gap pointing at the dashboard, never shown as rupees.
+_NOT_IN_CHAT = frozenset({"SETTLEMENT_LAG_DAYS", "CASH_SHORTFALL_STATUS"})
 _CANDIDATE_PRICE_RE = re.compile(r"candidate_price_paise=(-?\d+)")
 _SUPPLIER_RE = re.compile(r"supplier=(?:'([^']*)'|\"([^\"]*)\")")
 
@@ -105,6 +107,14 @@ def _trend_sources(finding: Mapping[str, Any]) -> str:
     return " [Source: " + "; ".join(out) + "]" if out else ""
 
 
+_PLANNER_REFUSAL: Mapping[str, str] = {
+    "PLANNER_OFF": "open financial questions are not switched on for this workspace yet",
+    "PLANNER_ERROR": "I could not work out how to answer it right now",
+    "PLAN_MALFORMED": "I could not turn it into a query I can check",
+    "PLAN_INVALID": "it needs something I cannot compute from your saved data yet",
+    "DATA_CHANGED": "your data changed while I was working, so ask again in a moment",
+    "PLAN_CHECK_FAILED": "I could not verify the answer, so I am not giving it",
+}
 _CMO_FAILURE_WHY: Mapping[str, str] = {
     "VALIDATION_FAILED": "it could not be written from the details you confirmed without adding things you did not tell me, so nothing was invented. Add the brand, size or capacity and 1-3 key features, then ask again",
     "UNPARSEABLE_OUTPUT": "the writing service's reply could not be read, so nothing was used. Ask again in a moment",
@@ -217,8 +227,14 @@ def figure_from_metric_row(row: Mapping[str, Any]) -> Figure | Gap:
     ref = Ref(RefKind.ENGINE_RESULT, UUID(str(row["id"])), as_of=row["computed_at"])
     if not available:
         return Gap("UNAVAILABLE_RESULT", f"{label} is unavailable: {row.get('unavailable_reason') or 'a required input is missing'}.", ref.id)
+    if code in _NOT_IN_CHAT:
+        return Gap("UNAVAILABLE_RESULT", f"{label} is shown on the CFO dashboard rather than in chat.", ref.id)
     if code.endswith("_PCT"):
         value = format_percent_number(row.get("value_fraction_numerator"), row.get("value_fraction_denominator"))
+    elif code == "ROAS":
+        value = format_ratio_x(row.get("value_fraction_numerator"), row.get("value_fraction_denominator"))
+    elif code in ("ACOS", "TACOS"):
+        value = format_ratio_as_percent(row.get("value_fraction_numerator"), row.get("value_fraction_denominator"))
     elif code in _UNIT_COUNT_METRICS:
         value = format_units(row.get("value_paise"))
     else:
@@ -410,11 +426,36 @@ class EvidenceCollector:
             pass  # the reading is shown to the seller by the photo-reading step as labelled suggestions; it is not a deliverable and carries no figure
         elif leg.action_key.startswith("cmo."):
             self._cmo_artefacts(payload)
+        elif leg.action_key == "cfo.query":
+            self._planner_result(payload)
         elif leg.action_key == "cfo.strategic_briefing":
             for signal in payload.get("signals") or []:
                 self.add_fact(f"Briefing signal: {str(signal.get('category', 'signal')).replace('_', ' ').lower()}",
                               f"{str(signal.get('severityLabel', 'unrated')).lower()} severity; suggested action type "
                               f"{str(signal.get('recommendedActionType', 'none')).replace('_', ' ').lower()}")
+
+    def _planner_result(self, payload: Mapping[str, Any]) -> None:
+        """An answer from the CFO query planner (cfo-query-planner.md). The figures themselves arrive through their `engineResultRef`s (resolved against the stored result
+        for THIS tenant); this adds only what the seller must also be told, in sentences written here: a refusal, each figure that is unavailable and why in a closed vocabulary,
+        each marketplace left out of a total, and the inputs still needed. Nothing from the planner's free text is copied, and no sentence here carries a digit."""
+        if payload.get("status") == "REFUSED":
+            self.add_gap("That question could not be answered from your saved data: " + _PLANNER_REFUSAL.get(str(payload.get("code")), "it is outside what I can read from your uploaded reports") + ".")
+            return
+        for f in payload.get("figures") or []:
+            metric = str(f.get("metricId") or "")
+            name = _METRIC_LABELS.get(metric, metric.replace("_", " ").lower().capitalize() or "A figure")
+            if f.get("status") == "UNAVAILABLE":
+                self.add_gap(f"{name} is not available: a required input is missing or incomplete, so no number is shown.")
+            elif f.get("status") == "PROVISIONAL" or any(str(x).startswith("PARTIAL") for x in f.get("labels") or []):
+                self.add_fact(f"About {name.lower()}", "it is provisional or covers only part of the data, so treat it as an interim figure", "SOURCE_DERIVED")
+            if f.get("estimateRef"):
+                self.add_fact(f"About {name.lower()}", "it is an estimate from your own history, not a measured actual", "SOURCE_DERIVED")
+        for c in payload.get("coverage") or []:
+            if not c.get("included"):
+                self.add_gap(f"{str(c.get('marketplace', 'A marketplace')).title()} is left out of the {str(c.get('metricId', 'figure')).replace('_', ' ').lower()} because its data is incomplete.")
+        for _ in payload.get("dataRequests") or []:
+            self.add_gap("More information is needed to answer part of this; it is listed on your CFO dashboard.")
+            break
 
     def _ci_monitor(self, payload: Mapping[str, Any]) -> None:
         """A re-check of SAVED competitor evidence (CI spec C40): freshness and verified changes in words. No price is stated here (a price is a figure and reaches the seller only

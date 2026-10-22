@@ -12,7 +12,6 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from fractions import Fraction
 from typing import Any
 from uuid import UUID
 
@@ -20,7 +19,7 @@ from cfo.planner.evidence import EvidencePacket, Figure
 from cfo.planner.pipeline import PlannerAnswer, PlannerRefusal, PlannerRequest
 from cfo.planner.plan import PeriodRef
 
-from backend.ceo.figure_format import format_paise, format_percent_number, format_units
+from backend.ceo.figure_format import format_paise, format_percent_number, format_ratio_as_percent, format_ratio_x, format_units
 from backend.services.cfo_query import answer_financial_query
 
 TAB, CR, CRLF = chr(9), chr(13), chr(13) + chr(10)
@@ -75,12 +74,6 @@ def run(tenant_id: UUID, requested_by: UUID, scope: Scope, steps: list[dict[str,
 
 
 # ------------------------------------------------------------------------------------------------ figure shaping
-def _ratio_x(value: Fraction) -> str:
-    hundredths = int(value * 100 + Fraction(1, 2)) if value >= 0 else -int(-value * 100 + Fraction(1, 2))
-    whole, frac = divmod(abs(hundredths), 100)
-    return f"{'-' if hundredths < 0 else ''}{whole}.{frac:02d}x"
-
-
 def display_for(f: Figure) -> str | None:
     if f.status == "UNAVAILABLE":
         return None
@@ -91,9 +84,9 @@ def display_for(f: Figure) -> str | None:
         if f.metric_id in _PCT_NUMBER_METRICS:
             return format_percent_number(num, den)
         if f.metric_id == "ROAS":
-            return _ratio_x(Fraction(num, den))
+            return format_ratio_x(num, den)
         if f.metric_id in _RATIO_METRICS:  # ACOS, TACOS: a plain ratio shown as a percentage
-            return format_percent_number(num * 100, den)
+            return format_ratio_as_percent(num, den)
         return format_percent_number(num, den)
     if f.value_count is not None:
         return format_units(f.value_count)

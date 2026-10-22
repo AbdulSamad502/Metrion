@@ -198,3 +198,44 @@ def test_a_price_scenario_request_is_not_answered_as_a_price_list(two_tenants, a
     rt, called, _ = build(None)
     res = orchestrator.run_turn(ctx, rt, start(ctx, rt), "Show me the competitor price scenario at 499")
     assert repo.get_turn(a, res.turn_id)["route_key"] != "QT_COMPETITORS_PRICES" and res.status == "CLARIFIED" and called == []
+
+
+# ------------------------------------------------------------------------------------------------ the CFO query planner through the CEO (CP-D)
+def test_an_open_financial_question_reaches_the_planner_with_the_question_and_the_period_the_code_resolved(two_tenants, app_user):
+    a, _ = two_tenants
+    ctx = ctx_for(a, user_id=app_user)
+    seen: list = []
+    registry, _ = spied()
+    from backend.ceo.registry import ActionRegistry
+
+    def capture(slots, c, leg):
+        seen.append(slots.model_dump())
+        return {"status": "REFUSED", "code": "PLANNER_OFF", "message": "x", "ruleIds": []}
+
+    specs = [replace(s, invoke=capture) if s.key == "cfo.query" else s for s in registry.specs()]
+    q = "Which SKU made the most profit in September?"
+    rt = runtime(Scripted({q: verdict("ACTION", "cfo.query", question=q, period="September 2026")}), Grounded(), registry=ActionRegistry(specs), max_legs=5)
+    res = orchestrator.run_turn(ctx, rt, start(ctx, rt), q)
+    turn = repo.get_turn(a, res.turn_id)
+    assert (turn["route"], turn["route_key"]) == ("ACTION", "cfo.query") and res.status == "DELIVERED"
+    assert len(seen) == 1 and seen[0]["question"] == q and seen[0]["period_start"].isoformat() == "2026-09-01" and seen[0]["period_end"].isoformat() == "2026-09-30"  # the period is resolved by code, not typed by a model
+
+
+def test_a_financial_question_without_a_period_asks_for_it_and_runs_nothing(two_tenants, app_user):
+    a, _ = two_tenants
+    ctx = ctx_for(a, user_id=app_user)
+    registry, called = spied()
+    q = "Which SKU made the most profit?"
+    rt = runtime(Scripted({q: verdict("ACTION", "cfo.query", question=q)}), Grounded(), registry=registry, max_legs=5)
+    res = orchestrator.run_turn(ctx, rt, start(ctx, rt), q)
+    assert res.status == "CLARIFIED" and called == [] and "Which period" in res.answer
+
+
+def test_a_question_that_is_too_long_or_empty_is_asked_about_not_truncated(two_tenants, app_user):
+    a, _ = two_tenants
+    ctx = ctx_for(a, user_id=app_user)
+    registry, called = spied()
+    q = "profit?"
+    rt = runtime(Scripted({q: verdict("ACTION", "cfo.query", question="x" * 400, period="September 2026")}), Grounded(), registry=registry, max_legs=5)
+    res = orchestrator.run_turn(ctx, rt, start(ctx, rt), q)
+    assert res.status == "CLARIFIED" and called == [] and "What would you like to know" in res.answer

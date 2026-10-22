@@ -26,8 +26,9 @@ from backend.services import ceo_reads
 
 MARKETPLACES = ("AMAZON", "FLIPKART", "MEESHO")
 SLOT_VOCAB: tuple[str, ...] = (
-    "period", "compare_period", "marketplace", "sku", "product", "quantity", "amount", "competitor", "niche", "option",
+    "period", "compare_period", "marketplace", "sku", "product", "quantity", "amount", "competitor", "niche", "option", "question",
 )
+MAX_QUESTION_CHARS = 300  # the open financial question the planner is asked; longer is asked about, not truncated
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +63,7 @@ class ResolvedSlots:
     product_text: str | None = None
     product_id: str | None = None  # a seller product resolved by code from the seller's own words (CI)
     categories: tuple[str, ...] | None = None  # business-profile categories the seller chose for a competitor search
+    question: str | None = None  # the seller's open financial question, whitespace-normalised by code (cfo.query)
     direct: Mapping[str, Any] | None = None  # slots collected by a guided input session and already parsed by code (spec 6.35): passed to the specialist as they are
 
     def echoes(self) -> tuple[str, ...]:
@@ -99,6 +101,7 @@ SLOT_QUESTIONS: Mapping[str, str] = {
     "amount": "What is your current selling price, in rupees? For example 499 or 1,299.50.",
     "competitor": "Which of your tracked competitors do you mean?",
     "product": "Which product? Tell me its name the way you list it.",
+    "question": "What would you like to know about your finances? Ask it in one sentence, for example “which SKU made the most profit in September?”.",
     "pi_run": "No finished product research run exists yet, so there is no report to show. Start one from the Product Intelligence page first.",
 }
 
@@ -121,6 +124,11 @@ def resolve_slots(
             period = resolve_period(raw.get("period"), today=today)
         except PeriodUnresolvable:
             return Clarification("period", SLOT_QUESTIONS["period"])
+    question: str | None = None
+    if "question" in required:
+        question = " ".join((raw.get("question") or "").split())
+        if len(question) < 3 or len(question) > MAX_QUESTION_CHARS:
+            return Clarification("question", SLOT_QUESTIONS["question"])
     if "marketplace" in required:
         marketplace = normalise_marketplace(raw.get("marketplace"))
         if marketplace is None:
@@ -185,7 +193,7 @@ def resolve_slots(
         pi_run = UUID(str(latest["id"]))
     return ResolvedSlots(
         tenant_id=tenant_id, today=today, period=period, marketplace=marketplace, competitor_url_id=competitor_id, competitor_label=competitor_label,
-        seller_price_paise=price, pi_run_id=pi_run, product_text=product_text, product_id=product_id,
+        seller_price_paise=price, pi_run_id=pi_run, product_text=product_text, product_id=product_id, question=question,
     )
 
 
@@ -247,6 +255,11 @@ MAX_PRODUCT_TEXT_CHARS = 200  # the slot model's own length limit, so an over-lo
 def _gst_lookup(s: ResolvedSlots) -> dict[str, object]:
     assert s.product_text is not None
     return {"product_title": s.product_text}
+
+
+def _financial_query(s: ResolvedSlots) -> dict[str, object]:
+    assert s.question is not None
+    return {"question": s.question, **_dates(s)}
 
 
 def _price_scenario(s: ResolvedSlots) -> dict[str, object]:
@@ -318,6 +331,12 @@ class ActionPlan:
 ACTIONS: Mapping[str, ActionPlan] = {
     p.key: p
     for p in (
+        ActionPlan(
+            "cfo.query",
+            "Answer an open question about the seller's own finances from their uploaded data (profit, revenue, fees, expenses, ad spend, cash, by marketplace or SKU). "
+            "Put the seller's question, as they asked it, in the question slot",
+            ("question", "period"), _financial_query,
+        ),
         ActionPlan("cfo.financial_health", "Financial health bands (good / watch / at-risk) for a period", ("period",), _period_only),
         ActionPlan("cfo.anomaly_check", "Check a period for statistically unusual changes in results", ("period",), _anomaly),
         ActionPlan("cfo.strategic_briefing", "CFO strategic briefing for a period: health, leaks and open data requests ranked", ("period",), _period_only),
