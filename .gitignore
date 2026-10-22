@@ -13,3 +13,9 @@ __pycache__/
 backend/data/
 /data/
 .venv-ci/
+
+# Downloaded design-tool binaries (reinstallable, not source)
+.agents/skills/*/scripts/bin/
+.claude/skills/*/scripts/bin/
+.github/skills/*/scripts/bin/
+.claude/settings.local.json
