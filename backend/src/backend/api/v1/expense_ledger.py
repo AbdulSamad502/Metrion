@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StringConstraints, field_validator, model_validator
 
 from calc_engine.api.expense_metrics import mint_ledger_feed_metrics
+from calc_engine.formulas import expense_assignment as assignment_engine
 from calc_engine.formulas.ledger_feed import ledger_feed
 from calc_engine.repositories import expense_ledger_repo as ledger
 from calc_engine.repositories import metric_result_repo
@@ -370,7 +371,10 @@ def post_summary(body: SummaryRequest, ctx: AuthContext = require_auth(permissio
 def get_expense(expense_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
     assert ctx.tenant_id is not None
     _require_cfo_entitlement(ctx.tenant_id, direct_action_code=READ_CODE)
-    return _record(_existing(ctx.tenant_id, expense_id))
+    out = _record(_existing(ctx.tenant_id, expense_id))
+    current = ledger.get_assignment(ctx.tenant_id, expense_id)
+    out["assignment"] = None if current is None else {"basis": current.basis, "shares": [{"sku": sku, "bp": bp} for sku, bp in current.shares]}
+    return out
 
 
 @router.post("/{expense_id}/correct", status_code=201)
@@ -453,3 +457,33 @@ def set_payment_status(expense_id: UUID, body: PaymentRequest, ctx: AuthContext 
     if not replay:
         _log_write(ctx)
     return {"expenseId": str(expense_id), "changed": not replay}
+
+
+class SkuShare(_Strict):
+    sku: str = Field(min_length=1, max_length=rules.SKU_MAX)
+    bp: StrictInt | None = None  # basis points under EXPLICIT_SHARES; omitted under EQUAL
+
+
+class AssignRequest(_Strict):
+    basis: Literal["EQUAL", "EXPLICIT_SHARES"]
+    shares: list[SkuShare] = Field(min_length=1, max_length=rules.ASSIGNMENT_SKUS_MAX)
+
+
+@router.post("/{expense_id}/assign", status_code=201)
+def assign_expense_to_skus(expense_id: UUID, body: AssignRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """A seller-chosen split of one advertising or storage record across several SKUs (Q33, engine section 5.18.3): `EQUAL`, or `EXPLICIT_SHARES` in basis points summing to at
+    most 10,000. The split is computed by the engine when the ledger feed is built; this route stores only the choice. Assigned shares are SKU-level but flagged manual, the rest
+    stays visible as an unassigned business-level remainder, and the pool total never changes. Append-only: a new assignment replaces the current one, the old stays as history."""
+    tenant = _require_write(ctx)
+    current = _existing(tenant, expense_id)
+    if current["review_state"] == "voided":
+        raise HTTPException(status_code=409, detail="a voided record cannot be assigned")
+    if current["cost_class"] not in ("ADVERTISING", "STORAGE"):
+        raise HTTPException(status_code=422, detail="only advertising and storage records can be assigned to SKUs")
+    assignment = assignment_engine.SkuAssignment(body.basis, tuple((s.sku.strip(), s.bp) for s in body.shares))
+    problem = assignment_engine.validate(assignment)
+    if problem is not None:
+        raise HTTPException(status_code=422, detail={"code": problem, "detail": "Shares must be whole basis points, each at least 1, adding up to at most 10,000." if problem == assignment_engine.SHARES_ABOVE_100_PERCENT else "The assignment is not valid."})
+    ledger.assign_skus(tenant, expense_id, assignment, created_by=ctx.app_user_id)
+    _log_write(ctx)
+    return {"expenseId": str(expense_id), "basis": body.basis, "skus": [s for s, _ in assignment.shares]}

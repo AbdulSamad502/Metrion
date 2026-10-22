@@ -500,6 +500,13 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cfo/expense-ledger/{expense_id}/assign": {
+   "body": {
+    "$ref": "#/components/schemas/AssignRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/expense-ledger/{expense_id}/correct": {
    "body": {
     "$ref": "#/components/schemas/CorrectRequest"
@@ -1130,6 +1137,34 @@
     "plan_hash"
    ],
    "title": "ApproveBody",
+   "type": "object"
+  },
+  "AssignRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "basis": {
+     "enum": [
+      "EQUAL",
+      "EXPLICIT_SHARES"
+     ],
+     "title": "Basis",
+     "type": "string"
+    },
+    "shares": {
+     "items": {
+      "$ref": "#/components/schemas/SkuShare"
+     },
+     "maxItems": 20,
+     "minItems": 1,
+     "title": "Shares",
+     "type": "array"
+    }
+   },
+   "required": [
+    "basis",
+    "shares"
+   ],
+   "title": "AssignRequest",
    "type": "object"
   },
   "AttachBody": {
@@ -4409,6 +4444,33 @@
     "value"
    ],
    "title": "SellerProductAttribute",
+   "type": "object"
+  },
+  "SkuShare": {
+   "additionalProperties": false,
+   "properties": {
+    "bp": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Bp"
+    },
+    "sku": {
+     "maxLength": 120,
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sku"
+   ],
+   "title": "SkuShare",
    "type": "object"
   },
   "StartDiscoveryRunRequest": {

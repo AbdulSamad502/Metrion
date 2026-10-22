@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
+from calc_engine.formulas.expense_assignment import SkuAssignment
 from calc_engine.formulas.ledger_feed import LedgerEvent
 from calc_engine.repositories.tenant_context import tenant_scope
 from calc_engine.types import Paise
@@ -198,6 +199,33 @@ def list_records(
     return [dict(r._mapping) for r in rows], int(total)
 
 
+def _current_assignments(conn: Any, tenant_id: UUID) -> dict[str, SkuAssignment]:
+    rows = conn.execute(
+        text("SELECT DISTINCT ON (expense_id) expense_id, basis, shares FROM expense_assignment WHERE tenant_id = :tenant ORDER BY expense_id, seq DESC"),
+        {"tenant": str(tenant_id)},
+    ).fetchall()
+    return {str(r.expense_id): SkuAssignment(r.basis, tuple((str(x["sku"]), x.get("bp")) for x in r.shares)) for r in rows}
+
+
+def assign_skus(tenant_id: UUID, expense_id: UUID, assignment: SkuAssignment, *, created_by: UUID) -> None:
+    """Records the seller's multi-SKU choice for a record (append-only: the newest row is current). Raises LookupError for an unknown record."""
+    import json
+
+    with tenant_scope(tenant_id) as conn:
+        if conn.execute(_EXISTS, {"tenant": str(tenant_id), "id": str(expense_id)}).first() is None:
+            raise LookupError(f"no ledger record {expense_id} for this tenant")
+        conn.execute(
+            text("INSERT INTO expense_assignment (tenant_id, expense_id, basis, shares, created_by) VALUES (:tenant, :expense, :basis, CAST(:shares AS jsonb), :user)"),
+            {"tenant": str(tenant_id), "expense": str(expense_id), "basis": assignment.basis, "shares": json.dumps([{"sku": s, "bp": bp} for s, bp in assignment.shares]),
+             "user": str(created_by)},
+        )
+
+
+def get_assignment(tenant_id: UUID, expense_id: UUID) -> SkuAssignment | None:
+    with tenant_scope(tenant_id) as conn:
+        return _current_assignments(conn, tenant_id).get(str(expense_id))
+
+
 def feed_events(tenant_id: UUID, *, period_start: date, period_end: date) -> list[LedgerEvent]:
     """The records dated in the window as `LedgerEvent`s for the engine feed: one per record, `seq` = its latest review event, `review_status` = its current
     review state. Selection and every sum stay in `formulas/ledger_feed.py`; nothing is added up here."""
@@ -206,13 +234,14 @@ def feed_events(tenant_id: UUID, *, period_start: date, period_end: date) -> lis
             text(_CURRENT + " AND e.effective_date >= :a AND e.effective_date <= :b ORDER BY e.id"),
             {"tenant": str(tenant_id), "a": period_start, "b": period_end},
         ).fetchall()
+        assignments = _current_assignments(conn, tenant_id)
     return [
         LedgerEvent(
             expense_id=str(r.id), seq=int(r.review_seq), effective_date=r.effective_date, category=r.category, cost_class=r.cost_class, treatment=r.treatment,
             review_status=r.review_state, amount=Paise(int(r.amount_paise)), channel_scope=r.channel_scope, origin=r.origin,
             source_validated=bool(r.source_validated), identifier=r.identifier, sku_tag=r.sku if r.origin == "MANUAL" else None,
             linked_expense_id=str(r.corrects_expense_id or r.refund_of_expense_id) if (r.corrects_expense_id or r.refund_of_expense_id) else None,
-            recurring=bool(r.recurring),
+            recurring=bool(r.recurring), assignment=assignments.get(str(r.id)),
         )
         for r in rows
     ]

@@ -26,6 +26,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
+from calc_engine.formulas.expense_assignment import SkuAssignment, assign
 from calc_engine.types import ZERO, Paise
 
 KNOWN_COST_CLASSES: tuple[str, ...] = ("ADVERTISING", "STORAGE", "OVERHEAD", "DIRECT")
@@ -55,6 +56,7 @@ class LedgerEvent:
     sku_tag: str | None = None  # a SKU the seller tagged on the form
     linked_expense_id: str | None = None  # a refund / credit note links to its original
     recurring: bool = False  # Step 4 defines materialisation; the feed only totals the flag
+    assignment: SkuAssignment | None = None  # §5.18.3: a seller-chosen multi-SKU split (advertising and storage only); shares are SKU-level and flagged manual
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,7 +118,7 @@ def ledger_display_to_signed(display: LedgerDisplay) -> Paise:
 def ledger_watermark(events: Iterable[LedgerEvent]) -> str:
     """Order-independent identity of the event set the feed read: highest sequence plus a hash of every `expense_id:seq`."""
     events = list(events)
-    pairs = sorted(f"{e.expense_id}:{e.seq}" for e in events)
+    pairs = sorted(f"{e.expense_id}:{e.seq}" + (f"|{e.assignment.basis}:{sorted(e.assignment.shares)}" if e.assignment is not None else "") for e in events)
     top = max((e.seq for e in events), default=0)
     return f"ledger:{top}:{hashlib.sha256(chr(10).join(pairs).encode('utf-8')).hexdigest()[:16]}"
 
@@ -202,6 +204,16 @@ def ledger_feed(
             recurring = recurring + e.amount
 
         sku = None
+        if cls in _SKU_LEVEL_CLASSES and e.assignment is not None:
+            split = assign(e.amount, e.assignment, catalog)  # §5.18.3: assigned + unassigned = amount, so the pool total is unchanged
+            for assigned_sku, share in split.assigned.items():
+                sku_level[cls][assigned_sku] = sku_level[cls].get(assigned_sku, ZERO) + share
+                manual_sku[cls] = manual_sku[cls] + share
+            business[cls] = business[cls] + split.unassigned
+            for _ in split.unmapped:
+                queue.append(ReviewItem(eid, "UNMAPPED_IDENTIFIER", e.amount))
+                break  # one queue item per record, whatever number of SKUs are unmapped
+            continue
         if cls in _SKU_LEVEL_CLASSES:
             sku, manual, reason = sku_level_for(e, catalog)
             if reason is not None:
