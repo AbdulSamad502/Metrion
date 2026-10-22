@@ -15,6 +15,7 @@ import { PeriodPnlSection } from "@/components/cfo/sections/PeriodPnlSection";
 import { GstLineAnalysisSection, GstPeriodSummarySection, GstLookupSection } from "@/components/cfo/sections/GstSections";
 import { PricingCurveSection, LandedCostSection, SupplierRankingSection, BatchSizeSection, FundingReadinessSection } from "@/components/cfo/sections/PricingSections";
 import { ReconcileSection, CashReconciliationSection, CfoPreviewSection, AnomalyCheckSection, PeriodComparisonSection, DataRequestsSection } from "@/components/cfo/sections/ReportingSections";
+import { DataImportsTab } from "@/components/cfo/v2/data/DataImportsTab";
 import { IngestUploadSection, SellerGoalSection, FinancialHealthSection, StrategicBriefingSection } from "@/components/cfo/sections/ImportAndGoalSections";
 
 const CFO_TABS = [
@@ -24,6 +25,7 @@ const CFO_TABS = [
   { id: "gst", label: "GST" },
   { id: "anomalies", label: "Anomalies & requests" },
   { id: "import", label: "Import data" },
+  { id: "data", label: "Data & imports" },
 ] as const;
 
 const CFO_TAB_BLURBS: Record<(typeof CFO_TABS)[number]["id"], string> = {
@@ -33,6 +35,7 @@ const CFO_TAB_BLURBS: Record<(typeof CFO_TABS)[number]["id"], string> = {
   gst: "Line-level GST analysis, period summaries and HSN/rate lookup. Informational — not tax advice.",
   anomalies: "Statistical anomaly checks, and the inputs the CFO is asking you for.",
   import: "Upload marketplace reports. Metrion reads files you upload — it never connects to a marketplace account.",
+  data: "Upload sales, settlement, advertising and expense files, follow each upload live, and read what happened to every row.",
 };
 
 /** The CFO workspace. Each tab groups the existing, real direct-execution tools
@@ -138,6 +141,9 @@ function CfoWorkspace() {
           />
           <ImportHistory getToken={getToken} refreshTick={importsTick} lastUpload={lastUpload} />
         </div>
+      </TabPanel>
+      <TabPanel id="data" active={tab} idPrefix="cfo">
+        <DataImportsTab getToken={getToken} />
       </TabPanel>
     </div>
   );

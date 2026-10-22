@@ -17,11 +17,11 @@ beforeEach(() => window.history.replaceState(null, "", "/dashboard/cfo"));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("CFO workspace (after the split into section modules)", () => {
-  it("keeps all six tabs and switches between them with the keyboard", async () => {
+  it("keeps all seven tabs and switches between them with the keyboard", async () => {
     stubAll(200, []);
     render(<CfoPage />);
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(tabs).toEqual(["Overview", "Profitability", "Cash & reconciliation", "GST", "Anomalies & requests", "Import data"]);
+    expect(tabs).toEqual(["Overview", "Profitability", "Cash & reconciliation", "GST", "Anomalies & requests", "Import data", "Data & imports"]);
     const user = userEvent.setup();
     screen.getByRole("tab", { name: "Overview" }).focus();
     await user.keyboard("{ArrowRight}");
