@@ -46,7 +46,7 @@ def _count(tenant, table):
 
 # ------------------------------------------------------------------------------------------------ inventory pins
 def test_inventory_is_exactly_what_the_report_states():
-    assert len(REG.specs()) == 48 and len(WIRED) == 47
+    assert len(REG.specs()) == 49 and len(WIRED) == 48  # +1 cfo.query (CFO 2.0 planner), wired
     assert [s.key for s in REG.specs() if not s.wired] == ["ci.research_now"]  # intentionally unwired; must stay so
     assert set(APPROVAL_GATED) == {
         "pi.discover", "pi.supplier_lookup", "ci.discover_competitors", "cmo.generate_title_sets", "cmo.generate_listing_copy", "cmo.generate_description", "cmo.generate_bullets",

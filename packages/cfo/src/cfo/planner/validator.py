@@ -67,7 +67,8 @@ class JoinFacts:
 @dataclass(frozen=True, slots=True)
 class DataStats:
     joins: Mapping[str, JoinFacts] = field(default_factory=dict)
-    input_coverage: Mapping[str, Fraction] = field(default_factory=dict)  # input id -> share of lines carrying it
+    input_coverage: Mapping[str, Fraction] = field(default_factory=dict)  # input id -> share of lines carrying it (whole scope; used only when no per-marketplace figures exist)
+    coverage_by_marketplace: Mapping[str, Mapping[str, Fraction]] = field(default_factory=dict)  # marketplace -> input id -> share (a marketplace with lines in scope appears here)
     natural_key_rows: Mapping[str, tuple[int, int]] = field(default_factory=dict)  # source -> (rows, distinct natural keys)
     cost_owners: Mapping[tuple[str, str], frozenset[str]] = field(default_factory=dict)  # (component, scope) -> active owners
     unconfirmed_overlap_expenses: int = 0
@@ -77,9 +78,33 @@ class DataStats:
 
 
 @dataclass(frozen=True, slots=True)
+class CoverageDetail:
+    """One marketplace's standing for one metric (V-CMP-1, applied per marketplace). `share` is the lowest coverage among the metric's required inputs
+    (or the share of the first input that failed); `ok` means every required input met the threshold (equality passes)."""
+
+    marketplace: str  # AMAZON | FLIPKART | MEESHO, or "ALL" when only whole-scope figures exist
+    ok: bool
+    input_id: str | None
+    share: Fraction | None
+    threshold: Fraction | None
+    reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class ValidationReport:
     violations: tuple[Violation, ...]
-    unavailable_metrics: Mapping[str, str]  # metric id -> reason (V-CMP-1); the executor returns UNAVAILABLE + a data request
+    unavailable_metrics: Mapping[str, str]  # metric id -> reason: unavailable for EVERY marketplace in scope (V-CMP-1); the executor returns UNAVAILABLE + a data request
+    coverage: Mapping[str, tuple[CoverageDetail, ...]] = field(default_factory=dict)  # metric id -> per-marketplace standing (empty when nothing was measured)
+
+    def partial_metrics(self) -> Mapping[str, tuple[tuple[str, ...], tuple[CoverageDetail, ...]]]:
+        """Metrics available for some marketplaces and not others: (marketplaces that meet the threshold, those that do not)."""
+        out: dict[str, tuple[tuple[str, ...], tuple[CoverageDetail, ...]]] = {}
+        for mid, details in self.coverage.items():
+            good = tuple(d.marketplace for d in details if d.ok)
+            bad = tuple(d for d in details if not d.ok)
+            if good and bad and not (len(details) == 1 and details[0].marketplace == "ALL"):
+                out[mid] = (good, bad)
+        return out
 
     @property
     def errors(self) -> tuple[Violation, ...]:
@@ -344,27 +369,68 @@ def _check_partial_period(plan: QueryPlan, stats: DataStats) -> list[Violation]:
     return out
 
 
-def _unavailable_by_completeness(plan: QueryPlan, stats: DataStats, limits: ValidatorLimits) -> dict[str, str]:
-    """V-CMP-1: a metric whose required inputs are under-covered, unmeasured or unconfigured is UNAVAILABLE
-    (never defaulted) — and the caller raises a data request (V-CMP-3)."""
-    out: dict[str, str] = {}
+def _pct(f: Fraction) -> str:
+    tenths = (f.numerator * 1000) // f.denominator  # truncated, never rounded up
+    return f"{tenths // 10}.{tenths % 10}"
+
+
+def _plan_marketplaces(plan: QueryPlan) -> frozenset[str] | None:
+    """Marketplaces a plan restricts itself to (None = no restriction)."""
+    allowed: set[str] | None = None
+    for f in plan.steps_of("filter"):
+        if f.get("dimension") == "marketplace":
+            val = f.get("value")
+            vals = (val,) if isinstance(val, str) else tuple(val or ())
+            allowed = (allowed or set()) | {v.upper() for v in vals}
+    return frozenset(allowed) if allowed is not None else None
+
+
+def _coverage_of(m: "cat.MetricDef", cov: Mapping[str, Fraction], limits: ValidatorLimits, marketplace: str) -> CoverageDetail:
+    """The standing of one marketplace for one metric: the first failing required input decides (config missing, not measured, below threshold);
+    otherwise it passes, reported at its weakest input. Equality with the threshold passes."""
+    weakest: tuple[str, Fraction, Fraction] | None = None
+    for inp in m.required_inputs:
+        threshold = limits.min_coverage.get(inp)
+        if threshold is None:
+            return CoverageDetail(marketplace, False, inp, None, None, f"CONFIG_MISSING: no minimum coverage is configured for input '{inp}'")
+        share = cov.get(inp)
+        if share is None:
+            return CoverageDetail(marketplace, False, inp, None, threshold, f"input '{inp}' coverage was not measured")
+        if share < threshold:
+            return CoverageDetail(
+                marketplace, False, inp, share, threshold,
+                f"input '{inp}' is available for {share.numerator}/{share.denominator} of lines, below the required {threshold.numerator}/{threshold.denominator} "
+                f"({_pct(share)}% against {_pct(threshold)}%)")
+        if weakest is None or share < weakest[1]:
+            weakest = (inp, share, threshold)
+    if weakest is None:
+        return CoverageDetail(marketplace, True, None, None, None, None)
+    return CoverageDetail(marketplace, True, weakest[0], weakest[1], weakest[2], None)
+
+
+def _coverage_by_marketplace(plan: QueryPlan, stats: DataStats, limits: ValidatorLimits) -> tuple[dict[str, str], dict[str, tuple[CoverageDetail, ...]]]:
+    """V-CMP-1, applied per marketplace. A metric is unavailable for a marketplace whose inputs are under-covered, unmeasured or unconfigured (never
+    defaulted, never assumed full); the other marketplaces keep their results. It is unavailable as a whole only when no marketplace in scope
+    qualifies. With no per-marketplace figures (a caller that measures the whole scope only) the old whole-scope rule applies, under the name "ALL"."""
+    allowed = _plan_marketplaces(plan)
+    if stats.coverage_by_marketplace:
+        pools: dict[str, Mapping[str, Fraction]] = {mp: c for mp, c in sorted(stats.coverage_by_marketplace.items()) if allowed is None or mp in allowed}
+    else:
+        pools = {"ALL": stats.input_coverage}
+    unavailable: dict[str, str] = {}
+    details_by_metric: dict[str, tuple[CoverageDetail, ...]] = {}
     for mid in plan.metric_ids:
         m = cat.METRICS.get(mid)
-        if m is None:
+        if m is None or not m.required_inputs or not pools:
             continue
-        for inp in m.required_inputs:
-            threshold = limits.min_coverage.get(inp)
-            if threshold is None:
-                out[mid] = f"CONFIG_MISSING: no minimum coverage is configured for input '{inp}'"
-                break
-            coverage = stats.input_coverage.get(inp)
-            if coverage is None:
-                out[mid] = f"input '{inp}' coverage was not measured"
-                break
-            if coverage < threshold:
-                out[mid] = f"input '{inp}' is available for {coverage.numerator}/{coverage.denominator} of lines, below the required {threshold.numerator}/{threshold.denominator}"
-                break
-    return out
+        details = tuple(_coverage_of(m, cov, limits, mp) for mp, cov in pools.items())
+        details_by_metric[mid] = details
+        if not any(d.ok for d in details):
+            if len(details) == 1 and details[0].marketplace == "ALL":
+                unavailable[mid] = details[0].reason or "unavailable"
+            else:
+                unavailable[mid] = "; ".join(f"{d.marketplace}: {d.reason}" for d in details)
+    return unavailable, details_by_metric
 
 
 def validate(plan: QueryPlan, stats: DataStats | None, limits: ValidatorLimits) -> ValidationReport:
@@ -372,6 +438,7 @@ def validate(plan: QueryPlan, stats: DataStats | None, limits: ValidatorLimits) 
     (the executor measures facts only for a plan that is otherwise legal)."""
     violations = validate_static(plan, limits)
     unavailable: dict[str, str] = {}
+    coverage: dict[str, tuple[CoverageDetail, ...]] = {}
     if not any(v.severity is Severity.ERROR for v in violations):
         if stats is None:
             violations.append(_e("V-RES-3", "data facts were not supplied; refusing to execute (fail closed)"))
@@ -383,8 +450,8 @@ def validate(plan: QueryPlan, stats: DataStats | None, limits: ValidatorLimits) 
                 violations.append(_e("V-RES-1", f"estimated rows scanned {stats.estimated_rows} exceeds the cap {limits.max_rows_scanned}"))
             if stats.estimated_groups > limits.max_groups:
                 violations.append(_e("V-RES-1", f"estimated groups {stats.estimated_groups} exceeds the cap {limits.max_groups}; narrow the scope"))
-            unavailable = _unavailable_by_completeness(plan, stats, limits)
-    return ValidationReport(violations=tuple(violations), unavailable_metrics=unavailable)
+            unavailable, coverage = _coverage_by_marketplace(plan, stats, limits)
+    return ValidationReport(violations=tuple(violations), unavailable_metrics=unavailable, coverage=coverage)
 
 
 # ------------------------------------------------------------------------ post-execution checks

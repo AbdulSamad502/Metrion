@@ -30,7 +30,7 @@ def _playbook(*legs: tuple[str, bool]) -> Playbook:
 # ------------------------------------------------------------------------------------------------ the 37 registered actions
 def test_the_gate_agrees_with_the_registry_metadata_for_every_registered_action():
     specs = get_registry().specs()
-    assert len(specs) == 48  # CP4: +11 CI conversational actions (CI spec 6.21.3)
+    assert len(specs) == 49  # CP4: +11 CI conversational actions (CI spec 6.21.3); +1 cfo.query (CFO 2.0 planner)
     for spec in specs:
         assert spec.effects is not None, spec.key
         decision = gate_leg(spec.key)

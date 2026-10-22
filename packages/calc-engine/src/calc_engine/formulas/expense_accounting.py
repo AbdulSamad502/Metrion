@@ -59,6 +59,7 @@ class ExpenseLine:
     suggested_class: ExpenseClass | None = None  # a hint only
     hold: ExpenseHold = ExpenseHold.NONE
     marketplace: str | None = None
+    allocated_component: str | None = None  # ADVERTISING | PACKAGING | STORAGE | LOGISTICS | OTHER — set only for a confirmed ALLOCATED_COST
 
 
 @dataclass(frozen=True, slots=True)

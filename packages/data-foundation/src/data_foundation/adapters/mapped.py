@@ -15,8 +15,8 @@ What it guarantees, and what it refuses:
 * **Refused: GST-inclusive money for mapped sources.** The engine's tax normalisation (§8.1) has no path
   for a mapped, GST-inclusive gross amount yet, and posting it as tax-exclusive would silently overstate
   revenue. Such a mapping raises `MappedAdapterUnsupported` and the job fails with a clear message.
-* Only SALES and SETTLEMENT mappings produce rows here; expense and advertising files have their own
-  ingestion paths.
+* SALES, SETTLEMENT and EXPENSE mappings produce rows here (expense rows are posted to the expense ledger by
+  `ingestion/expense_stream.py`); advertising files have their own ingestion path.
 """
 
 from __future__ import annotations
@@ -184,8 +184,8 @@ def adapter_from_mapping(mapping: Mapping[str, Any], columns: Sequence[str], mar
     if mapping["status"] != "CONFIRMED":
         raise MappedAdapterUnsupported("MAPPING_NOT_CONFIRMED", "this column mapping has not been confirmed by the seller")
     kind = mapping["report_kind"]
-    if kind not in ("SALES", "SETTLEMENT"):
-        raise MappedAdapterUnsupported("MAPPED_KIND_UNSUPPORTED", f"{kind} files are not ingested through the order/settlement path")
+    if kind not in ("SALES", "SETTLEMENT", "EXPENSE", "ADVERTISING"):
+        raise MappedAdapterUnsupported("MAPPED_KIND_UNSUPPORTED", f"{kind} files are not ingested through this path")
     fields: list[MappedField] = []
     for f in mapping["fields"]:
         if f["decision"] not in _RESOLVED:
@@ -202,7 +202,7 @@ def adapter_from_mapping(mapping: Mapping[str, Any], columns: Sequence[str], mar
         fields.append(MappedField(idx, f["source_column"], f["canonical_field"], f.get("component_code"), f["transform"],
                                   f.get("sign_convention"), f.get("tax_inclusion")))
     mapped_idx = {f.index for f in fields}
-    category = "SETTLEMENT" if kind == "SETTLEMENT" else "TAX"
+    category = {"SETTLEMENT": "SETTLEMENT", "EXPENSE": "EXPENSE", "ADVERTISING": "ADVERTISING"}.get(kind, "TAX")
     return MappedAdapter(
         adapter_id=f"mapped.{mapping['id']}", marketplace=marketplace, report_category=category,
         format_version=f"v{mapping['version']}", columns=tuple(columns), fields=tuple(sorted(fields, key=lambda x: x.index)),

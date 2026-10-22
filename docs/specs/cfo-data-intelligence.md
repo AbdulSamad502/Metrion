@@ -210,6 +210,8 @@ Expense CSV/XLSX → canonical expense entries via `manual_adjustment` (`expense
 
 ### 6.7a Expense ingestion — design gap found while sizing AC-D11 (2026-10-21), and the proposed deferral
 
+> **Resolved 2026-10-21 (Phase 3a):** the owner chose Option C (a dedicated ledger, legacy pools preserved). See `cfo-expense-ledger.md`; the text below records the gap that led to that decision.
+
 Sizing AC-D11 against the real engine showed that §6.7 as drafted cannot be implemented safely, so it is **not built**:
 
 1. The engine's expense registry (`deterministic-engine.md` §7.2.1) holds **pooled costs** in exactly five categories (`expense.advertising | packaging | storage | logistics | other`), each of which **feeds Contribution Profit** (§5.6). A real expense file has many more kinds (rent, salaries, software, owner drawings, inventory purchases, capital items).
@@ -256,7 +258,7 @@ PV1 Flipkart/Amazon adapters and ad adapters unverified against real exports (cf
 | AC-D8 | Samples sent to the (mocked) model contain no unmasked PII tokens |
 | AC-D9 | A job without tenant context fails closed; cross-tenant job/mapping reads return nothing |
 | AC-D10 | XLSX with a zip-bomb ratio or macros is rejected/ignored safely |
-| AC-D11 | Expense duplicates and overlap-prone categories are held, not totalled — **NOT BUILT; deferral proposed, awaiting owner approval (see §6.7a)** |
+| AC-D11 | Expense duplicates and overlap-prone categories are held, not totalled — **BUILT in Phase 3a (2026-10-21)** through the expense ledger (`cfo-expense-ledger.md`, owner decision Option C): an expense file is read through a seller-confirmed mapping, an exact repeat is skipped and counted, a same-day/amount/vendor lookalike and a marketplace-deduction-like category are held and excluded, an unreadable row is rejected with its reason, and the whole file is one transaction. Evidence: `packages/data-foundation/tests/integration/test_expense_ingestion.py` (7 tests) and the four-file 80,000-row run in `docs/evaluation/cfo-2-ingest-benchmark.md`. Limits: GST in an expense file is stored beside the amount with its treatment unconfirmed (amount used as entered); the mapping proposal in tests and the benchmark is a mock; no real seller expense file has been used. |
 | AC-D12 | Benchmark report exists with environment recorded before any performance claim |
 
 ## 12. Test scenarios

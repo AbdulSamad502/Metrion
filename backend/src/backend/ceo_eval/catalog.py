@@ -61,6 +61,7 @@ ACTION_TEXT: dict[str, tuple[str, tuple[str, ...]]] = {
     "cfo.pnl_for_tenant": ("Compute the profit & loss for a period from the seller's reports", ("period",)),
     "cfo.pricing": ("Pricing curve: contribution margin at candidate prices for one SKU on one marketplace", ("sku", "marketplace")),
     "cfo.gst_summary": ("GST summary for a period from the seller's own reports", ("period",)),
+    "cfo.query": ("Answer an open financial question about the seller's own data for a period (planned from a closed catalog)", ("period",)),
     "cfo.period_comparison": ("Compare two periods' results side by side", ("period", "compare_period")),
     "cfo.landed_cost": ("Landed cost of buying a quantity of one SKU from a supplier quote", ("sku", "quantity")),
     "cfo.supplier_ranking": ("Rank supplier quotes for a quantity of one SKU", ("sku", "quantity")),

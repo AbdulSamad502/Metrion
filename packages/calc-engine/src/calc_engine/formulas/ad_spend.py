@@ -125,3 +125,42 @@ def ad_ratios(*, status: AdSpendStatus, spend_paise: int | None, attributed_sale
     got = sum(x is not None for x in (roas, acos, tacos))
     completeness = Completeness.COMPLETE if got == 3 else Completeness.PARTIAL if got else Completeness.UNAVAILABLE
     return AdRatios(status, roas, acos, tacos, unavailable, completeness)
+
+
+# ------------------------------------------------------------------------------------------------ consolidation (docs/specs/cfo-phase3-scope.md 3b)
+@dataclass(frozen=True, slots=True)
+class AdMarketplaceInput:
+    marketplace: str
+    status: AdSpendStatus
+    spend_paise: int | None  # known spend in the period (0 for a verified zero); None when not known
+    attributed_sales_paise: int | None
+    net_revenue_paise: int | None  # the marketplace's Net Realized Revenue, where available
+    reason: str | None = None  # why a marketplace is not included (conflict, account-level pool, gap), for disclosure
+
+
+@dataclass(frozen=True, slots=True)
+class AdConsolidated:
+    included: tuple[str, ...]
+    excluded: tuple[tuple[str, str], ...]  # (marketplace, reason)
+    status: AdSpendStatus
+    spend_paise: int | None
+    attributed_sales_paise: int | None  # None unless EVERY included marketplace with spend reports it
+    total_sales_paise: int | None  # None unless EVERY included marketplace has a Net Realized Revenue
+    completeness: Completeness
+
+
+def consolidate_ads(items: Sequence[AdMarketplaceInput]) -> AdConsolidated:
+    """Σ over the marketplaces whose advertising spend is known (KNOWN_SPEND or VERIFIED_ZERO). A marketplace whose spend is not known is
+    excluded *by name with its reason* and makes the result PARTIAL; it is never summed as zero. With none included the result is UNAVAILABLE."""
+    inc = [i for i in items if i.status in (AdSpendStatus.KNOWN_SPEND, AdSpendStatus.VERIFIED_ZERO) and i.spend_paise is not None]
+    exc = tuple((i.marketplace, i.reason or i.status.value) for i in items if i not in inc)
+    if not inc:
+        worst = AdSpendStatus.UNKNOWN if any(i.status is AdSpendStatus.UNKNOWN for i in items) or not items else AdSpendStatus.MISSING_COVERAGE
+        return AdConsolidated((), exc, worst, None, None, None, Completeness.UNAVAILABLE)
+    spend = sum(i.spend_paise for i in inc if i.spend_paise is not None)
+    spenders = [i for i in inc if i.status is AdSpendStatus.KNOWN_SPEND]
+    attributed = (sum(i.attributed_sales_paise for i in spenders if i.attributed_sales_paise is not None)
+                  if spenders and all(i.attributed_sales_paise is not None for i in spenders) else None)
+    total = sum(i.net_revenue_paise for i in inc if i.net_revenue_paise is not None) if all(i.net_revenue_paise is not None for i in inc) else None
+    status = AdSpendStatus.KNOWN_SPEND if spenders else AdSpendStatus.VERIFIED_ZERO
+    return AdConsolidated(tuple(i.marketplace for i in inc), exc, status, spend, attributed, total, Completeness.PARTIAL if exc else Completeness.COMPLETE)

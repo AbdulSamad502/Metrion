@@ -912,6 +912,8 @@ Pinned by `packages/calc-engine/tests/unit/test_effective_price.py`.
 5. **Provenance.** `GoalProgress` cites the actual's `engine_result_ref` and carries its own; it never carries an `estimate_ref`.
 6. **Confidence** follows the actual: `combine_confidence` of the consumed result (§9); a goal never raises confidence above its input.
 
+**Phase 2b note (2026-10-21).** `GROSS_SALES` as served by the planner's set-based path counts every order line that has both a quantity and a gross item amount, regardless of any return/RTO unit-count override that may block the line elsewhere (a volume measure must not depend on return bookkeeping); lines missing either value are counted and disclosed (`NO_QUANTITY_OR_GROSS_AMOUNT`). Set-based results are given a citable `engine_result_ref` by `compute_metric.mint_set_based_result`, which performs no arithmetic and records the read-model version it ran against.
+
 **Tests required (build-time, deterministic):** boundary equality for both comparators; signed gap for both units; `UNAVAILABLE` and `NOT_YET_MEASURABLE` paths; `CONFIG_MISSING` tolerance path; no-float guard; unit-mismatch rejection; provenance fields present.
 
 **Status:** specified; **not built** (the goal registry is V1-later). Reopening the eligible metric set needs a spec amendment, not an ad-hoc addition.

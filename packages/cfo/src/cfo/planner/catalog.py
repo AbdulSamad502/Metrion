@@ -142,7 +142,7 @@ METRICS: dict[str, MetricDef] = {
            required_inputs=("sales_lines", "cogs_per_unit", "cancellation_state", "return_status", "rto_status"),
            basis=Basis.DOCUMENT_DATE, unit=Unit.PERCENT_FRACTION, is_pnl_metric=True, additive=False, allocatable=False),
         _m(id="OPERATING_PROFIT", kind=MetricKind.ENGINE_FORMULA, engine_ref="operating_profit", grain=Grain.ACCOUNT,
-           allowed_dimensions=_MKT_PERIOD, required_inputs=("contribution_profit",),  # unclassified expenses make it PROVISIONAL (exposed), never UNAVAILABLE (OQ1)
+           allowed_dimensions=_MKT_PERIOD, required_inputs=("sales_lines", "cogs_per_unit", "cancellation_state", "return_status", "rto_status"),  # Contribution Profit's own inputs; the expense side is decided by the engine (no entries and no declaration -> UNAVAILABLE; unclassified or held entries -> PROVISIONAL, exposed: OQ1)
            basis=Basis.DOCUMENT_DATE, unit=_P, is_pnl_metric=True, additive=True, allocatable=True),
         _m(id="SETTLEMENT_RECEIPTS", kind=MetricKind.ENGINE_FORMULA, engine_ref="settlement_receipts", grain=Grain.LINE,
            allowed_dimensions=_MKT_PERIOD, required_inputs=("settlement_lines",),
@@ -154,8 +154,14 @@ METRICS: dict[str, MetricDef] = {
            allowed_dimensions=_MKT_PERIOD, required_inputs=("reconciliation_exceptions",),
            basis=Basis.DOCUMENT_DATE, unit=_P, is_pnl_metric=False, additive=True, allocatable=False),
         _m(id="EXPENSE_BY_CATEGORY", kind=MetricKind.SET_SUM, engine_ref="expense_breakdown", grain=Grain.ACCOUNT,
-           allowed_dimensions=frozenset({"period", "expense_category", "expense_class"}), required_inputs=("expense_entries",),
+           allowed_dimensions=frozenset({"period", "expense_category", "expense_class"}), required_inputs=(),  # the ledger is account-level; with no entries the engine says UNAVAILABLE
            basis=Basis.EXPENSE_DATE, unit=_P, is_pnl_metric=False, additive=True, allocatable=True),
+        _m(id="EXPECTED_RECEIPTS", kind=MetricKind.ENGINE_FORMULA, engine_ref="expected_receipts", grain=Grain.ACCOUNT, allowed_dimensions=frozenset({"period"}),
+           required_inputs=("settlement_history", "sales_lines"), basis=Basis.SETTLEMENT_DATE, unit=_P, is_pnl_metric=False, additive=True, allocatable=False),
+        _m(id="CASH_SHORTFALL_STATUS", kind=MetricKind.ENGINE_FORMULA, engine_ref="cash_shortfall_status", grain=Grain.ACCOUNT, allowed_dimensions=frozenset({"period"}),
+           required_inputs=("settlement_history", "sales_lines"), basis=Basis.SETTLEMENT_DATE, unit=_P, is_pnl_metric=False, additive=False, allocatable=False),
+        _m(id="AD_SPEND", kind=MetricKind.ENGINE_FORMULA, engine_ref="ad_spend_status", grain=Grain.MARKETPLACE, allowed_dimensions=_MKT_PERIOD,
+           required_inputs=("ad_source",), basis=Basis.DOCUMENT_DATE, unit=_P, is_pnl_metric=False, additive=True, allocatable=True),
         _m(id="ROAS", kind=MetricKind.RATIO, engine_ref="ad_ratios", grain=Grain.ACCOUNT, allowed_dimensions=_MKT_PERIOD,
            required_inputs=("ad_source",), basis=Basis.DOCUMENT_DATE, unit=Unit.PERCENT_FRACTION,
            is_pnl_metric=False, additive=False, allocatable=True),

@@ -59,9 +59,10 @@ CANONICAL_FIELDS: dict[str, FieldSpec] = {
         _f("currency", "enum", (_S, _T, _A)),
         # settlement_line
         _f("settlement_id", "text", (_T,)), _f("gross_settlement_amount", "money", (_T,)), _f("settlement_date", "date", (_T,)),
-        # expense (registered through manual_adjustment `expense.<category>`; not a new store)
+        # expense (the expense ledger, cfo-expense-ledger.md)
         _f("expense_date", "date", (_E,)), _f("expense_category", "text", (_E,)), _f("expense_amount", "money", (_E,)),
         _f("expense_description", "text", (_E,)), _f("expense_vendor", "text", (_E,)), _f("expense_payment_ref", "text", (_E,)),
+        _f("expense_paid_date", "date", (_E,)), _f("expense_gst_amount", "money", (_E,)),
         # advertising
         _f("report_date", "date", (_A,)), _f("campaign_ref", "text", (_A,)), _f("spend", "money", (_A,)),
         _f("attributed_sales", "money", (_A,)), _f("impressions", "int", (_A,)), _f("clicks", "int", (_A,)),
@@ -81,7 +82,7 @@ REQUIRED_GROUPS: dict[str, tuple[tuple[str, ...], ...]] = {
 }
 
 # Fields on which a mixed-sign column is legitimate (refunds/reversals settle negative).
-MIXED_SIGN_OK: frozenset[str] = frozenset({"gross_settlement_amount", "gross_item_amount", "total_invoice_amount", "taxable_amount"})
+MIXED_SIGN_OK: frozenset[str] = frozenset({"gross_settlement_amount", "gross_item_amount", "total_invoice_amount", "taxable_amount", "expense_amount"})  # expense_amount: a refund of an expense is a negative row
 
 
 def normalise_header(name: str) -> str:

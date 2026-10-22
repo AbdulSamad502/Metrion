@@ -2255,3 +2255,460 @@ def list_data_requests(ctx: AuthContext = require_auth(permission=AGENT_CFO)) ->
         }
         for r in rows
     ]
+
+
+# ---------------------------------------------------------------------------------------------------- CFO 2.0 financial query planner
+CFO_QUERY = "cfo.query"
+
+
+class FinancialQueryHttpRequest(BaseModel):
+    """A QUESTION and the period(s) the CEO resolved for it — never a plan (cfo-query-planner.md Q5). The planner turns the question into a
+    typed plan from a closed catalog; nothing in this request names a metric, a join, SQL or a tenant. Unknown fields are refused, not ignored."""
+
+    model_config = {"extra": "forbid"}
+
+    question: str = Field(min_length=3, max_length=500)
+    period_start: date
+    period_end: date
+    as_of_date: date
+    compare_period_start: date | None = None
+    compare_period_end: date | None = None
+    compare_as_of_date: date | None = None
+
+    @model_validator(mode="after")
+    def _compare_is_all_or_nothing(self) -> "FinancialQueryHttpRequest":
+        given = [self.compare_period_start, self.compare_period_end, self.compare_as_of_date]
+        if any(v is not None for v in given) and not all(v is not None for v in given):
+            raise ValueError("a comparison period needs compare_period_start, compare_period_end and compare_as_of_date together")
+        return self
+
+
+def _figure_to_dict(f: Any) -> dict[str, object]:
+    return {
+        "metricId": f.metric_id, "status": f.status, "periodIndex": f.period_index, "dimensionKeys": [list(k) for k in f.dimension_keys],
+        "valuePaise": f.value_paise, "valueCount": f.value_count, "valueFraction": f.value_fraction, "engineResultRef": f.engine_result_ref,
+        "estimateRef": f.estimate_ref, "formulaVersion": f.formula_version, "exclusions": [list(e) for e in f.exclusions],
+        "missingInputs": list(f.missing_inputs), "unavailableReason": f.unavailable_reason, "labels": list(f.labels),
+    }
+
+
+@router.post("/query")
+def post_financial_query(body: FinancialQueryHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """Answers a financial question from the seller's own data (cfo-query-planner.md). Reached through the CEO's fixed registry (`cfo.query`);
+    the response is an evidence packet — figures that each cite an `engineResultRef`, disclosures, no raw rows. An honest refusal is a normal
+    200 response with `status: "REFUSED"` and a stable code, never a guessed answer. Read-only: needs no `financials.adjust` gate."""
+    from cfo.planner.plan import PeriodRef
+    from cfo.planner.pipeline import PlannerAnswer
+    from backend.services.cfo_query import answer_financial_query
+
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_QUERY)
+    periods = [PeriodRef(body.period_start, body.period_end, body.as_of_date)]
+    if body.compare_period_start is not None:
+        assert body.compare_period_end is not None and body.compare_as_of_date is not None
+        periods.append(PeriodRef(body.compare_period_start, body.compare_period_end, body.compare_as_of_date))
+    result = answer_financial_query(ctx.tenant_id, requested_by=ctx.app_user_id, question=body.question, periods=periods)
+    if not isinstance(result, PlannerAnswer):
+        return {"status": "REFUSED", "code": result.code, "message": result.message, "ruleIds": list(result.rule_ids)}
+    p = result.packet
+    return {
+        "status": "ANSWERED", "cached": p.cached, "planHash": p.plan_hash, "catalogVersion": p.catalog_version, "dataVersion": p.data_version,
+        "asOfDate": p.as_of_date.isoformat(), "figures": [_figure_to_dict(f) for f in p.figures],
+        "bridge": None if p.bridge is None else {
+            "fromPeriod": p.bridge.from_period, "toPeriod": p.bridge.to_period, "deltaPaise": p.bridge.delta_paise, "otherPaise": p.bridge.other_paise,
+            "reconciles": p.bridge.reconciles, "otherRef": p.bridge.other_ref,
+            "drivers": [{"metricId": d.metric_id, "deltaPaise": d.delta_paise, "ref": d.ref} for d in p.bridge.drivers]},
+        "rowsExamined": p.rows_examined, "rowsExcluded": p.rows_excluded, "truncated": p.truncated, "labels": list(p.labels),
+        "drilldown": [{"handle": d.handle, "label": d.label, "rowCount": d.row_count} for d in p.drilldown], "dataRequests": list(p.data_requests),
+        "stages": [{"name": s.name, "ms": s.ms} for s in p.stages],
+        "coverage": [
+            {"metricId": c.metric_id, "periodIndex": c.period_index, "marketplace": c.marketplace, "included": c.included, "inputId": c.input_id,
+             "share": c.share, "sharePct": c.share_pct, "threshold": c.threshold, "thresholdPct": c.threshold_pct, "reason": c.reason,
+             "excludedAmountPaise": c.excluded_amount_paise, "excludedLineCount": c.excluded_line_count, "excludedBasis": c.excluded_basis,
+             "excludedRef": c.excluded_ref}
+            for c in p.coverage],
+    }
+
+
+# ---------------------------------------------------------------------------------------------------- CFO 2.0 expense ledger (Phase 3a)
+CFO_EXPENSE_LEDGER = "cfo.expense_ledger"
+
+
+def _changed(ctx: AuthContext) -> None:
+    """After a write that changes canonical financial data: the proactive risk scan (off unless enabled; background; never affects the write)."""
+    from backend.services import cfo_risk_scan
+
+    cfo_risk_scan.scan_in_background(ctx.tenant_id, ctx.app_user_id)
+
+
+def _require_ledger_write(ctx: AuthContext) -> None:
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_EXPENSE_LEDGER)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST):
+        raise HTTPException(status_code=403, detail="financials.adjust permission required")
+
+
+class LedgerEntryHttp(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    entry_date: date
+    amount_paise: int
+    category: str = Field(min_length=1, max_length=120)
+    paid_date: date | None = None
+    gst_amount_paise: int | None = None  # stored beside the amount; the GST TREATMENT is not settable yet (it stays unconfirmed until verified; spec E5)
+    vendor: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=500)
+    payment_ref: str | None = Field(default=None, max_length=120)
+    marketplace: str | None = None
+
+
+class LedgerAddHttp(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    entries: list[LedgerEntryHttp] = Field(min_length=1, max_length=500)
+
+
+class LedgerClassHttp(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    klass: str = Field(alias="class")
+    entry_id: UUID | None = None
+    category: str | None = Field(default=None, max_length=120)
+    allocated_component: str | None = Field(default=None, max_length=20)  # required for ALLOCATED_COST: advertising | packaging | storage | logistics | other
+
+
+class LedgerDeclarationHttp(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    period_start: date
+    period_end: date
+
+
+def _ledger_new_entry(e: LedgerEntryHttp) -> Any:
+    from calc_engine.expense_ledger import NewEntry
+
+    return NewEntry(entry_date=e.entry_date, amount_paise=e.amount_paise, category=e.category, paid_date=e.paid_date, gst_amount_paise=e.gst_amount_paise,
+                    gst_treatment=None, vendor=e.vendor, description=e.description, payment_ref=e.payment_ref, marketplace=e.marketplace, source="MANUAL")
+
+
+def _ledger_call(fn: Any) -> Any:
+    from calc_engine.expense_ledger import LedgerRuleError
+
+    try:
+        return fn()
+    except LedgerRuleError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@router.post("/ledger/entries")
+def post_ledger_entries(body: LedgerAddHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """Adds expenses to the ledger. An exact repeat is skipped and counted; a possible duplicate or a marketplace-deduction-like category is stored on
+    hold (excluded from every total) and reported back; class suggestions are recorded as suggestions only."""
+    from backend.services import cfo_expense_ledger
+
+    _require_ledger_write(ctx)
+    out = _ledger_call(lambda: cfo_expense_ledger.add_entries(ctx.tenant_id, ctx.app_user_id, [_ledger_new_entry(e) for e in body.entries]))
+    _changed(ctx)
+    return {"inserted": out.inserted, "skippedExactDuplicates": out.skipped_exact_duplicates, "heldPossibleDuplicates": out.held_possible_duplicates,
+            "heldOverlap": out.held_overlap, "suggestionsRecorded": out.suggestions_recorded, "entryIds": [str(i) for i in out.entry_ids],
+            "heldIds": [str(i) for i in out.held_ids]}
+
+
+@router.get("/ledger/entries")
+def get_ledger_entries(period_start: date | None = None, period_end: date | None = None, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_expense_ledger
+
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_EXPENSE_LEDGER)
+    rows = cfo_expense_ledger.entries_view(ctx.tenant_id, period_start, period_end)
+    return {"entries": [
+        {"id": r["id"], "entryDate": r["entry_date"].isoformat(), "paidDate": r["paid_date"].isoformat() if r["paid_date"] else None, "amountPaise": int(r["amount_paise"]),
+         "category": r["category"], "vendor": r["vendor"], "description": r["description"], "paymentRef": r["payment_ref"], "marketplace": r["marketplace"],
+         "gstAmountPaise": r["gst_amount_paise"], "gstTreatment": r["gst_treatment"], "allocatedComponent": r["allocated_component"], "gstTreatmentUnconfirmed": r["gst_amount_paise"] is not None and r["gst_treatment"] is None,
+         "hold": r["hold"], "source": r["source"], "confirmedClass": r["confirmed_class"], "suggestedClass": r["suggested_class"],
+         "suggestionReason": r["suggestion_reason"]} for r in rows]}
+
+
+@router.post("/ledger/entries/{entry_id}/correct")
+def post_ledger_correct(entry_id: UUID, body: LedgerEntryHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+    from calc_engine.repositories import expense_ledger_repo
+
+    _require_ledger_write(ctx)
+    new_id = _ledger_call(lambda: expense_ledger_repo.supersede_entry(ctx.tenant_id, entry_id, _ledger_new_entry(body), ctx.app_user_id))
+    return {"entryId": str(new_id)}
+
+
+@router.post("/ledger/entries/{entry_id}/void")
+def post_ledger_void(entry_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+    from calc_engine.repositories import expense_ledger_repo
+
+    _require_ledger_write(ctx)
+    return {"voidId": str(_ledger_call(lambda: expense_ledger_repo.void_entry(ctx.tenant_id, entry_id, ctx.app_user_id)))}
+
+
+@router.post("/ledger/entries/{entry_id}/release")
+def post_ledger_release(entry_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+    """The seller confirms a held entry is genuine (not a duplicate / not already deducted by the marketplace): it then counts."""
+    from calc_engine.repositories import expense_ledger_repo
+
+    _require_ledger_write(ctx)
+    return {"entryId": str(_ledger_call(lambda: expense_ledger_repo.release_hold(ctx.tenant_id, entry_id, ctx.app_user_id)))}
+
+
+@router.post("/ledger/classes")
+def post_ledger_confirm_class(body: LedgerClassHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+    """Confirms an accounting class for one entry or one category. Only a confirmation changes any figure (suggestions never do)."""
+    from calc_engine.formulas.expense_accounting import ExpenseClass
+    from backend.services import cfo_expense_ledger
+
+    _require_ledger_write(ctx)
+    try:
+        klass = ExpenseClass(body.klass)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="unknown expense class") from None
+    new_id = _ledger_call(lambda: cfo_expense_ledger.confirm_class(ctx.tenant_id, ctx.app_user_id, klass, entry_id=body.entry_id, category=body.category, allocated_component=body.allocated_component))
+    _changed(ctx)
+    return {"assignmentId": str(new_id)}
+
+
+@router.post("/ledger/declarations/no-overhead")
+def post_ledger_no_overhead(body: LedgerDeclarationHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+    """The seller declares there were no overhead expenses in a period (so operating profit equals Contribution Profit there). Refused when overhead entries exist."""
+    from calc_engine.repositories import expense_ledger_repo
+
+    _require_ledger_write(ctx)
+    out = str(_ledger_call(lambda: expense_ledger_repo.declare_no_overhead(ctx.tenant_id, body.period_start, body.period_end, ctx.app_user_id)))
+    _changed(ctx)
+    return {"declarationId": out}
+
+
+# ---------------------------------------------------------------------------------------------------- CFO 2.0 advertising (Phase 3b)
+class AdPeriodHttp(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    marketplace: str
+    period_start: date
+    period_end: date
+
+
+class AdOwnerHttp(AdPeriodHttp):
+    owner: str
+
+
+def _ads_call(fn: Any) -> Any:
+    from calc_engine.repositories.ad_report_repo import AdRuleError
+
+    try:
+        return fn()
+    except AdRuleError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@router.post("/ads/declarations/no-ads")
+def post_ads_no_ads(body: AdPeriodHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+    """The seller states there was no advertising on a marketplace in a period: a verified zero rather than an unknown. Refused when report lines exist there."""
+    from calc_engine.repositories import ad_report_repo
+
+    _require_ledger_write(ctx)
+    return {"declarationId": str(_ads_call(lambda: ad_report_repo.declare_no_ads(ctx.tenant_id, body.marketplace.upper(), body.period_start, body.period_end, ctx.app_user_id)))}
+
+
+@router.post("/ads/owner")
+def post_ads_owner(body: AdOwnerHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+    """When advertising appears both in an uploaded report and in a cost entered by hand for the same dates, the seller says which one is right
+    (REPORT or POOL). The other is then left out of advertising totals; nothing is deleted."""
+    from calc_engine.repositories import ad_report_repo
+
+    _require_ledger_write(ctx)
+    out = str(_ads_call(lambda: ad_report_repo.choose_owner(ctx.tenant_id, body.marketplace.upper(), body.period_start, body.period_end, body.owner.upper(), ctx.app_user_id)))
+    _changed(ctx)
+    return {"choiceId": out}
+
+
+# ---------------------------------------------------------------------------------------------------- CFO 2.0 payables (Phase 3c)
+class PayableHttp(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    amount_paise: int
+    due_date: date | None = None
+    supplier_ref: str | None = Field(default=None, max_length=120)
+    po_ref: str | None = Field(default=None, max_length=120)
+
+
+def _cash_call(fn: Any) -> Any:
+    from calc_engine.repositories.cash_repo import CashRuleError
+
+    try:
+        return fn()
+    except CashRuleError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@router.post("/payables")
+def post_payable(body: PayableHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+    """A supplier amount the seller owes (and when). It feeds the shortfall comparison with expected receipts; no bank balance is read or assumed."""
+    from calc_engine.repositories import cash_repo
+
+    _require_ledger_write(ctx)
+    ref = _cash_call(lambda: cash_repo.add_payable(ctx.tenant_id, ctx.app_user_id, amount_paise=body.amount_paise, due_date=body.due_date,
+                                                   supplier_ref=body.supplier_ref, po_ref=body.po_ref))
+    _changed(ctx)
+    return {"payableRef": ref}
+
+
+@router.get("/payables")
+def get_payables(include_paid: bool = False, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from calc_engine.repositories import cash_repo
+
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_EXPENSE_LEDGER)
+    return {"payables": [{"payableRef": p.target_ref, "amountPaise": p.amount_paise, "dueDate": p.due_date.isoformat() if p.due_date else None,
+                          "supplierRef": p.supplier_ref, "poRef": p.po_ref, "status": p.status} for p in cash_repo.list_payables(ctx.tenant_id, include_paid=include_paid)]}
+
+
+@router.post("/payables/{payable_ref}/paid")
+def post_payable_paid(payable_ref: str, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+    from calc_engine.repositories import cash_repo
+
+    _require_ledger_write(ctx)
+    _cash_call(lambda: cash_repo.mark_paid(ctx.tenant_id, ctx.app_user_id, payable_ref))
+    return {"status": "PAID"}
+
+
+# ---------------------------------------------------------------------------------------------------- CFO 2.0 claim lifecycle (Phase 3d)
+CFO_LEAK_CLAIMS = "cfo.leak_claims"
+
+
+class ClaimStepHttp(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    to: str
+    note: str | None = Field(default=None, max_length=500)
+
+
+def _claim_call(fn: Any) -> Any:
+    from calc_engine.leak_claims import ClaimRuleError
+
+    try:
+        return fn()
+    except ClaimRuleError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+def _claim_view_dict(v: Any) -> dict[str, object]:
+    return {"leakFindingId": str(v.leak_finding_id), "marketplace": v.marketplace, "category": v.category, "state": v.state,
+            "history": [{"from": a, "to": b, "at": c.isoformat(), "note": d} for a, b, c, d in v.history]}
+
+
+@router.get("/leak-findings/{finding_id}/claim")
+def get_claim(finding_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from calc_engine.repositories import leak_claim_repo
+
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_LEAK_CLAIMS)
+    return _claim_view_dict(_claim_call(lambda: leak_claim_repo.current_view(ctx.tenant_id, finding_id)))
+
+
+@router.post("/leak-findings/{finding_id}/claim/step")
+def post_claim_step(finding_id: UUID, body: ClaimStepHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """The seller reports a step in their own claim (acknowledged, raised with the marketplace, resolved, dismissed). Metrion files nothing."""
+    from calc_engine.repositories import leak_claim_repo
+
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_LEAK_CLAIMS)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST):
+        raise HTTPException(status_code=403, detail="financials.adjust permission required")
+    return _claim_view_dict(_claim_call(lambda: leak_claim_repo.transition(ctx.tenant_id, finding_id, body.to.upper(), ctx.app_user_id, body.note)))
+
+
+@router.post("/leak-findings/{finding_id}/claim/draft")
+def post_claim_draft(finding_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """Copyable claim text with order identifiers only (no amounts, no totals, no generated prose). The first draft moves the discrepancy to CLAIM_DRAFTED."""
+    from calc_engine.repositories import leak_claim_repo
+
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_LEAK_CLAIMS)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST):
+        raise HTTPException(status_code=403, detail="financials.adjust permission required")
+    text_, view = _claim_call(lambda: leak_claim_repo.draft(ctx.tenant_id, finding_id, ctx.app_user_id))
+    return {"text": text_, **_claim_view_dict(view)}
+
+
+# ---------------------------------------------------------------------------------------------------- CFO 2.0 CA export pack (Phase 3e)
+CFO_CA_EXPORT = "cfo.ca_export"
+
+
+@router.get("/ca-export")
+def get_ca_export(period_start: date, period_end: date, as_of_date: date, format: str = "xlsx", ctx: AuthContext = require_auth(permission=AGENT_CFO)):  # noqa: A002
+    """Prepared material for the seller's chartered accountant (an .xlsx workbook, or a .zip of CSVs): P&L with component lines, expenses by class, GST summary,
+    TCS/TDS schedule, reconciliation, everything excluded or unavailable with reasons, open data requests, and provenance. Not a return; files nothing."""
+    from fastapi import Response
+
+    from cfo.planner.plan import PeriodRef
+    from backend.services import cfo_ca_export
+
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_CA_EXPORT)
+    if period_end < period_start:
+        raise HTTPException(status_code=400, detail="the period ends before it starts")
+    fmt = format.lower()
+    if fmt not in ("xlsx", "zip"):
+        raise HTTPException(status_code=400, detail="format must be xlsx or zip")
+    pack = cfo_ca_export.build_pack(ctx.tenant_id, ctx.app_user_id, PeriodRef(period_start, period_end, as_of_date))
+    name = f"metrion-ca-pack-{period_start.isoformat()}-to-{period_end.isoformat()}"
+    if fmt == "xlsx":
+        return Response(cfo_ca_export.to_xlsx(pack), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": f'attachment; filename="{name}.xlsx"'})
+    return Response(cfo_ca_export.to_csv_zip(pack), media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}.zip"'})
+
+
+# ---------------------------------------------------------------------------------------------------- CFO 2.0 proactive scan (Phase 3f)
+class RiskScanHttp(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    as_of_date: date
+
+
+@router.post("/risk-scan")
+def post_risk_scan(body: RiskScanHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """Runs the deterministic risk scan now and records its signals as shared findings (the CEO and dashboard read those). Fixed wording; figures by reference only."""
+    from backend.services import cfo_risk_scan
+
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_RISK_SCAN)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST):
+        raise HTTPException(status_code=403, detail="financials.adjust permission required")
+    r = cfo_risk_scan.run_scan(ctx.tenant_id, ctx.app_user_id, body.as_of_date)
+    return {"asOfDate": r.as_of.isoformat(), "dataVersion": r.data_version, "recorded": r.recorded, "alreadyRecorded": r.already_recorded,
+            "signals": [{"rule": g.rule, "kind": g.kind, "severity": g.severity, "scope": g.scope, "text": g.text, "persisted": g.persisted,
+                         "figureRefs": [{"engineResultRef": ref, "label": lbl} for ref, lbl in g.figure_refs]} for g in r.signals],
+            "notRun": [{"rule": a, "reason": b} for a, b in r.not_run]}
+
+
+CFO_RISK_SCAN = "cfo.risk_scan"
+
+
+# ---------------------------------------------------------------------------------------------------- CFO 2.0 cost-ownership choice (Phase 3 finalization)
+class CostOwnerHttp(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    component: str
+    marketplace: str = "ALL"
+    period_start: date
+    period_end: date
+    owner: str
+
+
+@router.post("/costs/owner")
+def post_cost_owner(body: CostOwnerHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+    """When the same cost (advertising, packaging, storage, logistics, other) is recorded in more than one place for the same dates — the Expense Tracker, the expense
+    ledger, or (advertising) an uploaded report — the seller says which one is right (POOL, LEDGER or REPORT). Only that source counts; nothing is deleted."""
+    from calc_engine.repositories import cost_owner_repo
+
+    _require_ledger_write(ctx)
+    try:
+        new_id = cost_owner_repo.choose_owner(ctx.tenant_id, body.component.upper(), body.marketplace.upper(), body.period_start, body.period_end, body.owner.upper(), ctx.app_user_id)
+    except cost_owner_repo.CostOwnerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    _changed(ctx)
+    return {"choiceId": str(new_id)}

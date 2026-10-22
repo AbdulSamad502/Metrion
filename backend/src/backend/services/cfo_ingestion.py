@@ -41,7 +41,7 @@ from backend.config import (
 )
 
 MARKETPLACES = ("AMAZON", "FLIPKART", "MEESHO")
-UPLOAD_KINDS = ("SALES", "SETTLEMENT")  # EXPENSE and ADVERTISING have their own routes (spec §6.7, §6.8)
+UPLOAD_KINDS = ("SALES", "SETTLEMENT", "EXPENSE", "ADVERTISING")  # An ADVERTISING file belongs to one marketplace and is read through a confirmed mapping. An EXPENSE file is the business's, not a marketplace's: marketplace "ALL"
 ALLOWED_EXTENSIONS = (".csv", ".txt", ".xlsx")
 
 _lock = threading.Lock()
@@ -77,6 +77,27 @@ def _build_proposer() -> tuple[mapping_service.MappingProposer | None, str]:
     return LlmMappingProposer(OllamaLlmProvider(host=ollama_host()), model), f"MODEL:{model}"
 
 
+def _suggest_classes_for_new_categories(tenant_id: UUID, categories: tuple[str, ...]) -> None:
+    """After an expense file is committed: record rule-based class SUGGESTIONS for categories that have none. A suggestion changes no figure."""
+    from calc_engine.repositories import expense_ledger_repo
+
+    from backend.services import cfo_expense_ledger
+
+    known = expense_ledger_repo.categories_with_assignment(tenant_id)
+    for category in categories:
+        if category in known:
+            continue
+        hit = cfo_expense_ledger.suggest_for_category(category)
+        if hit is not None:
+            expense_ledger_repo.suggest_class(tenant_id, klass=hit[0], suggested_by="RULE", reason=hit[1], category=category)
+
+
+def _scan_after_ingest(tenant_id: UUID) -> None:
+    from backend.services import cfo_risk_scan
+
+    cfo_risk_scan.scan_in_background(tenant_id)
+
+
 def get_runner() -> JobRunner:
     global _runner
     with _lock:
@@ -86,7 +107,7 @@ def get_runner() -> JobRunner:
                 config=RunnerConfig(max_workers=cfo_ingest_workers(), stale_after_seconds=cfo_job_stale_seconds(),
                                     profile_rows=cfo_profile_rows(), sample_rows=cfo_mapping_sample_rows()),
                 stream_limits=stream_limits(), mapping_limits=mapping_limits(), as_of=lambda: datetime.now(timezone.utc).date(),
-                proposer=proposer, proposed_by=label,
+                proposer=proposer, proposed_by=label, after_expense_commit=_suggest_classes_for_new_categories, after_done=_scan_after_ingest,
             )
         return _runner
 
@@ -124,10 +145,20 @@ class UploadRejected(Exception):
 
 def validate_upload_request(filename: str, marketplace: str, report_kind: str, adapter_id: str | None = None) -> str:
     """Returns the lower-cased extension to store the file under; raises `UploadRejected` for anything unsupported."""
-    if marketplace not in MARKETPLACES:
-        raise UploadRejected(400, f"marketplace must be one of {list(MARKETPLACES)}")
     if report_kind not in UPLOAD_KINDS:
-        raise UploadRejected(400, f"report_kind must be one of {list(UPLOAD_KINDS)} (expense and advertising files use their own upload)")
+        raise UploadRejected(400, f"report_kind must be one of {list(UPLOAD_KINDS)} ")
+    if report_kind == "ADVERTISING":
+        if marketplace not in MARKETPLACES:
+            raise UploadRejected(400, f"marketplace must be one of {list(MARKETPLACES)}")
+        if adapter_id is not None:
+            raise UploadRejected(400, "advertising files are read through a column mapping; there is no report type to choose")
+    elif report_kind == "EXPENSE":
+        if marketplace != "ALL":
+            raise UploadRejected(400, "an expense file belongs to the business, not to one marketplace: use marketplace ALL")
+        if adapter_id is not None:
+            raise UploadRejected(400, "expense files are read through a column mapping; there is no report type to choose")
+    elif marketplace not in MARKETPLACES:
+        raise UploadRejected(400, f"marketplace must be one of {list(MARKETPLACES)}")
     if adapter_id is not None:
         from data_foundation.adapters.registry import ADAPTER_REGISTRY
 
@@ -167,7 +198,7 @@ def register_upload(
     final_path = stored_path.parent / f"{content_sha256}{stored_path.suffix}"
     os.replace(stored_path, final_path)  # atomic: the stored name is the content hash
     stored_path = final_path
-    category = "SETTLEMENT" if report_kind == "SETTLEMENT" else "ORDER_STATUS"
+    category = {"SETTLEMENT": "SETTLEMENT", "EXPENSE": "EXPENSE", "ADVERTISING": "ADVERTISING"}.get(report_kind, "ORDER_STATUS")
     rf = report_file_repo.insert_report_file(
         tenant_id, marketplace=marketplace, report_category=category, content_sha256=content_sha256, original_filename=original_filename,
         byte_size=size, storage_uri=f"file://{stored_path}", uploaded_by=user_id, uploaded_at=datetime.now(timezone.utc),

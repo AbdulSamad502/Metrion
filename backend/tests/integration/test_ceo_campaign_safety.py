@@ -112,7 +112,7 @@ def test_the_approval_gated_set_is_exactly_the_thirteen_the_report_names():
         "pi.discover", "pi.supplier_lookup", "ci.discover_competitors", "cmo.generate_title_sets", "cmo.generate_listing_copy", "cmo.generate_description", "cmo.generate_bullets",
         "cmo.generate_keywords", "cmo.generate_backend_terms", "cmo.generate_hashtags", "cmo.catalog_answer", "cmo.market_trends", "cmo.analyze_attachment",
     }
-    assert len(KEYS) == 48 and len([s for s in REAL.specs() if s.wired]) == 47 and [s.key for s in REAL.specs() if not s.wired] == ["ci.research_now"]
+    assert len(KEYS) == 49 and len([s for s in REAL.specs() if s.wired]) == 48 and [s.key for s in REAL.specs() if not s.wired] == ["ci.research_now"]
 
 
 @pytest.mark.parametrize("key", sorted(GATED & set(ACTIONS)))

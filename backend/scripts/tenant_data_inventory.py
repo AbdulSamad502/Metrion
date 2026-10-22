@@ -18,10 +18,11 @@ from sqlalchemy import create_engine, make_url, text
 CATEGORY = {
     "CONVERSATION": ("investigation", "investigation_message", "investigation_turn", "investigation_finding", "investigation_agent", "investigation_attachment", "ceo_need"),
     "SELLER_MEMORY_AND_SHARED_FACTS": ("agent_memory", "shared_finding", "seller_fact"),
-    "EXECUTION_RECORD": ("agent_run", "agent_data_request", "investigation_plan", "investigation_plan_event"),  # the plans a seller was asked to approve, and their audit events
+    "EXECUTION_RECORD": ("agent_run", "agent_data_request", "investigation_plan", "investigation_plan_event", "leak_claim_event"),  # the plans a seller was asked to approve, and their audit events
     "BILLING_AND_AUDIT": ("metered_event", "auth_audit", "cmo_quota_reservation", "tenant_plan", "tenant_cart_item", "member_entitlement_allocation"),
     "UPLOADED_FINANCIAL_DATA": ("report_file", "ingestion_run", "sales_line", "settlement_line", "line_component", "validation_finding", "report_period", "manual_adjustment",
-                                "ingestion_job", "column_mapping", "column_mapping_field", "data_quality_report", "ad_report_line"),  # CFO 2.0: upload jobs, confirmed mappings, quality reports, ad lines
+                                "ingestion_job", "column_mapping", "column_mapping_field", "data_quality_report", "ad_report_line",
+                                "expense_entry", "expense_class_assignment", "expense_period_declaration", "ad_period_declaration", "cost_owner_choice"),  # CFO 2.0: upload jobs, confirmed mappings, quality reports, ad lines
     "DERIVED_FINANCIAL_RESULTS": ("metric_result", "leak_finding", "reconciliation_run", "reconciliation_match", "reconciliation_exception", "gst_lookup_result", "product_feasibility_estimate", "cfo_read_model_version"),  # the version counter is a derived cache-invalidation signal
     "COMPETITOR_AND_PRODUCT_DATA": (
         "competitor_url", "competitor_snapshot", "competitor_snapshot_field", "competitor_evidence", "competitor_price_event", "competitor_listing_insight",

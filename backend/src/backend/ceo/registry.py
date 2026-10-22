@@ -341,6 +341,8 @@ def build_default_registry() -> ActionRegistry:
         ("cfo.cash_reconciliation", "post_cash_reconciliation", "cfo.cash_reconciliation", Effect.COMPUTE_PERSIST, {}),
         # The CEO composes; CFO must not narrate a second time (§6.4) — the registry pins it.
         ("cfo.strategic_briefing", "post_strategic_briefing", "cfo.strategic_briefing", Effect.READ, {"include_narration": False}),
+        # CFO 2.0 planner: a question + CEO-resolved periods in, an evidence packet out (cfo-query-planner.md). The CEO narrates; this never does.
+        ("cfo.query", "post_financial_query", "cfo.query", Effect.READ, {}),
     ]
     for key, fn_name, code, effect, fixed in cfo_rows:
         fn = getattr(cfo_api, fn_name)

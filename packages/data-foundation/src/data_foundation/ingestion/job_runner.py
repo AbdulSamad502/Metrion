@@ -26,6 +26,8 @@ from sqlalchemy import Connection
 
 from data_foundation.adapters.mapped import MappedAdapterUnsupported, adapter_from_mapping
 from data_foundation.adapters.registry import ADAPTER_REGISTRY
+from data_foundation.ingestion.ad_stream import AdIngestionOutcome, ingest_ad_stream
+from data_foundation.ingestion.expense_stream import ExpenseIngestionOutcome, ingest_expense_stream
 from data_foundation.ingestion.pipeline import AdapterMismatchError, RunQuarantineThresholdExceeded
 from data_foundation.ingestion.profiling import collect_profile_input
 from data_foundation.ingestion.stream_persist import StreamIngestionOutcome, ingest_stream_and_persist
@@ -83,6 +85,8 @@ class JobRunner:
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         proposer: mapping_service.MappingProposer | None = None,
         proposed_by: str = "MODEL:unspecified",
+        after_expense_commit: Callable[[UUID, tuple[str, ...]], None] | None = None,
+        after_done: Callable[[UUID], None] | None = None,
     ) -> None:
         self._cfg = config
         self._limits = stream_limits
@@ -91,6 +95,8 @@ class JobRunner:
         self._clock = clock
         self._proposer = proposer
         self._proposed_by = proposed_by
+        self._after_done = after_done  # e.g. the proactive risk scan after new data lands (best effort; never changes the job's result)
+        self._after_expense_commit = after_expense_commit  # e.g. record class SUGGESTIONS for the new categories (never a decision)
         self._pool = ThreadPoolExecutor(max_workers=config.max_workers, thread_name_prefix="cfo-ingest")
 
     # ------------------------------------------------------------------------------------ public
@@ -111,7 +117,13 @@ class JobRunner:
         if not jobs.claim(tenant_id, job_id, now=now()):
             return "SKIPPED"
         try:
-            return self._run_claimed(tenant_id, job_id)
+            status = self._run_claimed(tenant_id, job_id)
+            if status == "DONE" and self._after_done is not None:
+                try:
+                    self._after_done(tenant_id)
+                except Exception:  # noqa: BLE001
+                    logger.exception("after-done hook failed for job %s", job_id)
+            return status
         except JobCancelled:
             jobs.transition(tenant_id, job_id, "CANCELLED", error_code="CANCELLED_BY_SELLER", now=now())
             return "CANCELLED"
@@ -201,6 +213,25 @@ class JobRunner:
                 raise JobCancelled()
             jobs.heartbeat(tenant_id, job_id, rows_read, now=now())
 
+        if str(job["report_kind"]) == "ADVERTISING":
+            ads = ingest_ad_stream(tenant_id, report_file_id=UUID(str(rf["id"])), marketplace=str(rf["marketplace"]), adapter=adapter, stream=stream,
+                                   started_at=now(), on_progress=progress)
+            data_quality_report_repo.upsert(tenant_id, ingestion_job_id=job_id, summary=_ad_summary(ads, adapter, str(rf["marketplace"])))
+            jobs.transition(tenant_id, job_id, "DONE", outcome=_ad_outcome_dict(ads), now=now())
+            return "DONE"
+
+        if str(job["report_kind"]) == "EXPENSE":
+            exp = ingest_expense_stream(
+                tenant_id, report_file_id=UUID(str(rf["id"])), adapter=adapter, stream=stream, started_at=now(), created_by=UUID(str(job["created_by"])), on_progress=progress)
+            if self._after_expense_commit is not None and exp.categories:
+                try:
+                    self._after_expense_commit(tenant_id, exp.categories)
+                except Exception:  # noqa: BLE001 - suggestions are a convenience; the posted file stands
+                    logger.exception("class suggestions failed for job %s", job_id)
+            data_quality_report_repo.upsert(tenant_id, ingestion_job_id=job_id, summary=_expense_summary(exp, adapter))
+            jobs.transition(tenant_id, job_id, "DONE", outcome=_expense_outcome_dict(exp), now=now())
+            return "DONE"
+
         outcome = ingest_stream_and_persist(
             tenant_id, report_file_id=UUID(str(rf["id"])), adapter_id=adapter.adapter_id, stream=stream, started_at=now(),
             on_progress=progress, adapter=adapter,
@@ -250,6 +281,64 @@ class JobRunner:
             "needs_seller": needs,
             "confidence": "PROVISIONAL",
         }
+
+
+def _ad_outcome_dict(o: AdIngestionOutcome) -> dict[str, object]:
+    d = asdict(o)
+    d["ingestion_run_id"] = str(o.ingestion_run_id)
+    d["persisted_row_count"] = o.posted
+    d["period_start"] = o.period_start.isoformat() if o.period_start else None
+    d["period_end"] = o.period_end.isoformat() if o.period_end else None
+    return d
+
+
+def _ad_summary(o: AdIngestionOutcome, adapter: MarketplaceAdapter, marketplace: str) -> dict[str, object]:
+    needs: list[str] = []
+    if o.rejected:
+        needs.append(f"{o.rejected} row(s) were not saved (unreadable, or different figures for a campaign and day already recorded; see the examples).")
+    if o.no_attributed_sales:
+        needs.append(f"{o.no_attributed_sales} row(s) carry no attributed sales, so sales-based ratios (ROAS, ACOS) stay unavailable for them rather than assuming zero.")
+    if o.posted:
+        needs.append("If you also entered advertising cost by hand for the same marketplace and dates, you will be asked which source to use; until then neither is counted twice.")
+    return {
+        "marketplace": marketplace, "kind": "ADVERTISING",
+        "format": {"adapter_id": adapter.adapter_id, "version": adapter.format_version, "mapped": True},
+        "rows": {"read": o.row_count_read, "posted": o.posted, "duplicates_skipped": o.skipped_exact_duplicates, "rejected": o.rejected,
+                 "blank_skipped": o.blank_rows_skipped, "ragged_padded": o.ragged_rows},
+        "period": {"start": o.period_start.isoformat() if o.period_start else None, "end": o.period_end.isoformat() if o.period_end else None},
+        "rejection_examples": [{"row": n, "reason": why} for n, why in o.rejection_examples],
+        "needs_seller": needs, "confidence": "PROVISIONAL",
+    }
+
+
+def _expense_outcome_dict(o: ExpenseIngestionOutcome) -> dict[str, object]:
+    d = asdict(o)
+    d["ingestion_run_id"] = str(o.ingestion_run_id)
+    d["persisted_row_count"] = o.posted
+    return d
+
+
+def _expense_summary(o: ExpenseIngestionOutcome, adapter: MarketplaceAdapter) -> dict[str, object]:
+    held = o.held_possible_duplicates + o.held_overlap
+    needs: list[str] = []
+    if o.held_possible_duplicates:
+        needs.append(f"{o.held_possible_duplicates} expense(s) look like a payment already recorded (same day, amount and vendor) and were held; they count only after you confirm them.")
+    if o.held_overlap:
+        needs.append(f"{o.held_overlap} expense(s) are the kind of charge a marketplace usually deducts itself (commission, fees, TCS/TDS); they were held until you confirm they are not already in a settlement.")
+    if o.rejected:
+        needs.append(f"{o.rejected} row(s) could not be read and were not saved (see the examples).")
+    if o.gst_unconfirmed:
+        needs.append(f"{o.gst_unconfirmed} row(s) carry a GST amount; amounts are used exactly as entered until you confirm how GST is treated.")
+    if o.posted:
+        needs.append("New expenses have no accounting class until you confirm one; until then they are listed and operating profit stays provisional.")
+    return {
+        "marketplace": "ALL", "kind": "EXPENSE",
+        "format": {"adapter_id": adapter.adapter_id, "version": adapter.format_version, "mapped": True},
+        "rows": {"read": o.row_count_read, "posted": o.posted, "held_total": held, "held_possible_duplicates": o.held_possible_duplicates, "held_overlap": o.held_overlap,
+                 "duplicates_skipped": o.skipped_exact_duplicates, "rejected": o.rejected, "blank_skipped": o.blank_rows_skipped, "ragged_padded": o.ragged_rows},
+        "rejection_examples": [{"row": n, "reason": why} for n, why in o.rejection_examples],
+        "needs_seller": needs, "confidence": "PROVISIONAL",
+    }
 
 
 def _bump(conn: Connection, tenant_id: UUID) -> None:

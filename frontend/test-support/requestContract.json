@@ -78,6 +78,19 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/ca-export": {
+   "query": [
+    "as_of_date",
+    "format",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
+    "as_of_date",
+    "period_end",
+    "period_start"
+   ]
+  },
   "GET /api/v1/cfo/data-requests": {
    "query": [],
    "requiredQuery": []
@@ -129,6 +142,17 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/leak-findings/{finding_id}/claim": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/ledger/entries": {
+   "query": [
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/line-status-override": {
    "query": [
     "sales_line_id"
@@ -136,6 +160,12 @@
    "requiredQuery": [
     "sales_line_id"
    ]
+  },
+  "GET /api/v1/cfo/payables": {
+   "query": [
+    "include_paid"
+   ],
+   "requiredQuery": []
   },
   "GET /api/v1/cfo/seller-goal": {
    "query": [],
@@ -402,6 +432,20 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cfo/ads/declarations/no-ads": {
+   "body": {
+    "$ref": "#/components/schemas/AdPeriodHttp"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/ads/owner": {
+   "body": {
+    "$ref": "#/components/schemas/AdOwnerHttp"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/anomaly-check": {
    "body": {
     "$ref": "#/components/schemas/AnomalyCheckHttpRequest"
@@ -419,6 +463,13 @@
   "POST /api/v1/cfo/cash-reconciliation": {
    "body": {
     "$ref": "#/components/schemas/CashReconciliationHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/costs/owner": {
+   "body": {
+    "$ref": "#/components/schemas/CostOwnerHttp"
    },
    "query": [],
    "requiredQuery": []
@@ -494,6 +545,64 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cfo/leak-findings/{finding_id}/claim/draft": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/leak-findings/{finding_id}/claim/step": {
+   "body": {
+    "$ref": "#/components/schemas/ClaimStepHttp"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/ledger/classes": {
+   "body": {
+    "$ref": "#/components/schemas/LedgerClassHttp"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/ledger/declarations/no-overhead": {
+   "body": {
+    "$ref": "#/components/schemas/LedgerDeclarationHttp"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/ledger/entries": {
+   "body": {
+    "$ref": "#/components/schemas/LedgerAddHttp"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/ledger/entries/{entry_id}/correct": {
+   "body": {
+    "$ref": "#/components/schemas/LedgerEntryHttp"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/ledger/entries/{entry_id}/release": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/ledger/entries/{entry_id}/void": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/payables": {
+   "body": {
+    "$ref": "#/components/schemas/PayableHttp"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/payables/{payable_ref}/paid": {
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/period-comparison": {
    "body": {
     "$ref": "#/components/schemas/PeriodComparisonHttpRequest"
@@ -529,9 +638,23 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cfo/query": {
+   "body": {
+    "$ref": "#/components/schemas/FinancialQueryHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/reconcile": {
    "body": {
     "$ref": "#/components/schemas/ReconcileHttpRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/risk-scan": {
+   "body": {
+    "$ref": "#/components/schemas/RiskScanHttp"
    },
    "query": [],
    "requiredQuery": []
@@ -886,6 +1009,63 @@
     "sku"
    ],
    "title": "AcceptGstLookupHttpRequest",
+   "type": "object"
+  },
+  "AdOwnerHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "marketplace": {
+     "title": "Marketplace",
+     "type": "string"
+    },
+    "owner": {
+     "title": "Owner",
+     "type": "string"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    }
+   },
+   "required": [
+    "marketplace",
+    "period_start",
+    "period_end",
+    "owner"
+   ],
+   "title": "AdOwnerHttp",
+   "type": "object"
+  },
+  "AdPeriodHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "marketplace": {
+     "title": "Marketplace",
+     "type": "string"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    }
+   },
+   "required": [
+    "marketplace",
+    "period_start",
+    "period_end"
+   ],
+   "title": "AdPeriodHttp",
    "type": "object"
   },
   "AnalyzeBody": {
@@ -1409,6 +1589,32 @@
    "title": "CatalogBody",
    "type": "object"
   },
+  "ClaimStepHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "note": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Note"
+    },
+    "to": {
+     "title": "To",
+     "type": "string"
+    }
+   },
+   "required": [
+    "to"
+   ],
+   "title": "ClaimStepHttp",
+   "type": "object"
+  },
   "ClarificationReplyBody": {
    "description": "The seller answering a decision card: the card's message id and the chosen option key (null = the free-text \"Other\", which is the message text).",
    "properties": {
@@ -1516,6 +1722,42 @@
     "effective_from"
    ],
    "title": "CostEntryHttpRequest",
+   "type": "object"
+  },
+  "CostOwnerHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "component": {
+     "title": "Component",
+     "type": "string"
+    },
+    "marketplace": {
+     "default": "ALL",
+     "title": "Marketplace",
+     "type": "string"
+    },
+    "owner": {
+     "title": "Owner",
+     "type": "string"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    }
+   },
+   "required": [
+    "component",
+    "period_start",
+    "period_end",
+    "owner"
+   ],
+   "title": "CostOwnerHttp",
    "type": "object"
   },
   "CreateCompetitorUrlRequest": {
@@ -1959,6 +2201,77 @@
     "as_of_date"
    ],
    "title": "FinancialHealthHttpRequest",
+   "type": "object"
+  },
+  "FinancialQueryHttpRequest": {
+   "additionalProperties": false,
+   "description": "A QUESTION and the period(s) the CEO resolved for it \u2014 never a plan (cfo-query-planner.md Q5). The planner turns the question into a\ntyped plan from a closed catalog; nothing in this request names a metric, a join, SQL or a tenant. Unknown fields are refused, not ignored.",
+   "properties": {
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    },
+    "compare_as_of_date": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Compare As Of Date"
+    },
+    "compare_period_end": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Compare Period End"
+    },
+    "compare_period_start": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Compare Period Start"
+    },
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    },
+    "question": {
+     "maxLength": 500,
+     "minLength": 3,
+     "title": "Question",
+     "type": "string"
+    }
+   },
+   "required": [
+    "question",
+    "period_start",
+    "period_end",
+    "as_of_date"
+   ],
+   "title": "FinancialQueryHttpRequest",
    "type": "object"
   },
   "FundingReadinessHttpRequest": {
@@ -2529,6 +2842,193 @@
    "title": "LandedCostHttpRequest",
    "type": "object"
   },
+  "LedgerAddHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "entries": {
+     "items": {
+      "$ref": "#/components/schemas/LedgerEntryHttp"
+     },
+     "maxItems": 500,
+     "minItems": 1,
+     "title": "Entries",
+     "type": "array"
+    }
+   },
+   "required": [
+    "entries"
+   ],
+   "title": "LedgerAddHttp",
+   "type": "object"
+  },
+  "LedgerClassHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "allocated_component": {
+     "anyOf": [
+      {
+       "maxLength": 20,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Allocated Component"
+    },
+    "category": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Category"
+    },
+    "class": {
+     "title": "Class",
+     "type": "string"
+    },
+    "entry_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Entry Id"
+    }
+   },
+   "required": [
+    "class"
+   ],
+   "title": "LedgerClassHttp",
+   "type": "object"
+  },
+  "LedgerDeclarationHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "period_end": {
+     "format": "date",
+     "title": "Period End",
+     "type": "string"
+    },
+    "period_start": {
+     "format": "date",
+     "title": "Period Start",
+     "type": "string"
+    }
+   },
+   "required": [
+    "period_start",
+    "period_end"
+   ],
+   "title": "LedgerDeclarationHttp",
+   "type": "object"
+  },
+  "LedgerEntryHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "amount_paise": {
+     "title": "Amount Paise",
+     "type": "integer"
+    },
+    "category": {
+     "maxLength": 120,
+     "minLength": 1,
+     "title": "Category",
+     "type": "string"
+    },
+    "description": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Description"
+    },
+    "entry_date": {
+     "format": "date",
+     "title": "Entry Date",
+     "type": "string"
+    },
+    "gst_amount_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Gst Amount Paise"
+    },
+    "marketplace": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Marketplace"
+    },
+    "paid_date": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Paid Date"
+    },
+    "payment_ref": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Payment Ref"
+    },
+    "vendor": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Vendor"
+    }
+   },
+   "required": [
+    "entry_date",
+    "amount_paise",
+    "category"
+   ],
+   "title": "LedgerEntryHttp",
+   "type": "object"
+  },
   "MappingFieldOverrideBody": {
    "properties": {
     "canonical_field": {
@@ -2652,6 +3152,56 @@
     "decision"
    ],
    "title": "NicheDecisionBody",
+   "type": "object"
+  },
+  "PayableHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "amount_paise": {
+     "title": "Amount Paise",
+     "type": "integer"
+    },
+    "due_date": {
+     "anyOf": [
+      {
+       "format": "date",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Due Date"
+    },
+    "po_ref": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Po Ref"
+    },
+    "supplier_ref": {
+     "anyOf": [
+      {
+       "maxLength": 120,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Supplier Ref"
+    }
+   },
+   "required": [
+    "amount_paise"
+   ],
+   "title": "PayableHttp",
    "type": "object"
   },
   "PeriodComparisonHttpRequest": {
@@ -3545,6 +4095,21 @@
     "image_refs"
    ],
    "title": "ReviewResearchRequest",
+   "type": "object"
+  },
+  "RiskScanHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "as_of_date": {
+     "format": "date",
+     "title": "As Of Date",
+     "type": "string"
+    }
+   },
+   "required": [
+    "as_of_date"
+   ],
+   "title": "RiskScanHttp",
    "type": "object"
   },
   "SellerGoalHttpRequest": {

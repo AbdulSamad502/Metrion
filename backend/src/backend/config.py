@@ -837,3 +837,52 @@ def cfo_mapping_thresholds() -> dict[str, object]:
         "tax_tolerance_paise": _positive_int_env("CFO_MAPPING_TAX_TOLERANCE_PAISE", 1),
         "max_date_span_years": _positive_int_env("CFO_MAPPING_MAX_DATE_SPAN_YEARS", 5),
     }
+
+
+# ---------------------------------------------------------------------------------------------------- CFO query planner (cfo-query-planner.md)
+def _code_set_env(name: str, default: frozenset[str]) -> frozenset[str]:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return frozenset(x.strip().upper() for x in raw.split(",") if x.strip())
+
+
+def cfo_planner_model() -> str | None:
+    """`CFO_PLANNER_MODEL`: the LOCAL Ollama model that fills the planner's plan slots. Unset (the default) switches the planner OFF: a financial
+    question then gets an honest 'not available' instead of any model call. The endpoint is `ollama_host()` (operator-attested local only)."""
+    raw = (os.environ.get("CFO_PLANNER_MODEL") or "").strip()
+    return raw or None
+
+
+def cfo_planner_settings() -> dict[str, object]:
+    """Planner configuration, every value overridable and every default PROVISIONAL (spec PV2: needs calibration on real sellers' data).
+    CFO_PLANNER_MIN_COVERAGE (fraction, default 95/100: the share of lines that must carry an input before a metric needing it is reported),
+    CFO_PLANNER_LOW_EXPLAINABILITY (fraction, 1/10), CFO_PLANNER_MAX_ROWS_SCANNED (2000000), CFO_PLANNER_MAX_GROUPS (5000),
+    CFO_PLANNER_MAX_LIMIT (200), CFO_PLANNER_STATEMENT_TIMEOUT_MS (15000), CFO_PLANNER_ORACLE_SAMPLE (3), CFO_PLANNER_MAX_RANKING_GROUPS (500),
+    CFO_PLANNER_CACHE_TTL_SECONDS (86400, spec OQ3). The component-code taxonomy defaults come from data-foundation's component registry
+    (fee-kind codes except the logistics ones; forward = LOGISTICS_FEE + SHIPPING_CHARGE; reverse = RETURN_SHIPPING_FEE; non-refunded = none):
+    CFO_PLANNER_FEE_CODES, CFO_PLANNER_FORWARD_LOGISTICS_CODES, CFO_PLANNER_REVERSE_LOGISTICS_CODES, CFO_PLANNER_NON_REFUNDED_FEE_CODES."""
+    from fractions import Fraction
+
+    from data_foundation.component_registry import COMPONENT_KIND_BY_CODE
+
+    fee_default = frozenset(c for c, k in COMPONENT_KIND_BY_CODE.items() if k == "FEE" and c not in ("LOGISTICS_FEE", "RETURN_SHIPPING_FEE"))
+    return {
+        "min_coverage": Fraction((os.environ.get("CFO_PLANNER_MIN_COVERAGE") or "95/100").strip()),
+        "low_explainability_share": Fraction((os.environ.get("CFO_PLANNER_LOW_EXPLAINABILITY") or "1/10").strip()),
+        "max_rows_scanned": _positive_int_env("CFO_PLANNER_MAX_ROWS_SCANNED", 2_000_000),
+        "max_groups": _positive_int_env("CFO_PLANNER_MAX_GROUPS", 5000),
+        "max_limit": _positive_int_env("CFO_PLANNER_MAX_LIMIT", 200),
+        "statement_timeout_ms": _positive_int_env("CFO_PLANNER_STATEMENT_TIMEOUT_MS", 15_000),
+        "oracle_sample_size": _positive_int_env("CFO_PLANNER_ORACLE_SAMPLE", 3),
+        "margin_drop_points": Fraction((os.environ.get("CFO_RISK_MARGIN_DROP_POINTS") or "2").strip()),  # percentage points; PROVISIONAL
+        "margin_drop_high_points": Fraction((os.environ.get("CFO_RISK_MARGIN_DROP_HIGH_POINTS") or "5").strip()),
+        "stale_days": _positive_int_env("CFO_RISK_STALE_DAYS", 14),
+        "cash_min_samples": _positive_int_env("CFO_PLANNER_CASH_MIN_SAMPLES", 10),  # settled lines needed before a payout is estimated (PROVISIONAL)
+        "max_ranking_groups": _positive_int_env("CFO_PLANNER_MAX_RANKING_GROUPS", 500),
+        "cache_ttl_seconds": _positive_int_env("CFO_PLANNER_CACHE_TTL_SECONDS", 86_400),
+        "fee_codes": _code_set_env("CFO_PLANNER_FEE_CODES", fee_default),
+        "forward_logistics_codes": _code_set_env("CFO_PLANNER_FORWARD_LOGISTICS_CODES", frozenset({"LOGISTICS_FEE", "SHIPPING_CHARGE"})),
+        "reverse_logistics_codes": _code_set_env("CFO_PLANNER_REVERSE_LOGISTICS_CODES", frozenset({"RETURN_SHIPPING_FEE"})),
+        "non_refunded_fee_codes": _code_set_env("CFO_PLANNER_NON_REFUNDED_FEE_CODES", frozenset()),
+    }

@@ -76,6 +76,7 @@ ACTION_EFFECTS: Mapping[str, ActionEffects] = {
     "cfo.cash_reconciliation": _NONE,
     "cfo.financial_health": _NONE,
     "cfo.strategic_briefing": _NONE,  # include_narration pinned False by the registry
+    "cfo.query": _NONE,  # the planner model is the operator-controlled local one; it receives the question and the catalog, never rows or figures
     "cfo.preview": _NONE,
     "cfo.period_comparison": _MODEL_NARRATION,  # always calls the LLM (api/v1/cfo.py post_period_comparison)
     # ---- GST: fixed public pages + a model call over the product title; no seller data in any HTTP request ----

@@ -31,7 +31,7 @@ LIMITS = ValidatorLimits(
     max_rows_scanned=1_000_000, max_groups=5_000, max_limit=200,
     min_coverage={k: Fraction(95, 100) for k in (
         "sales_lines", "cogs_per_unit", "cancellation_state", "return_status", "rto_status", "rto_outcome",
-        "fee_components", "settlement_lines", "reconciliation_exceptions", "contribution_profit",
+        "fee_components", "settlement_lines", "settlement_history", "reconciliation_exceptions", "contribution_profit",
         "expense_entries", "expense_class", "ad_source")},
     low_explainability_share=Fraction(1, 10),
 )

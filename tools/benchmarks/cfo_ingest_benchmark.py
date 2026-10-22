@@ -6,9 +6,10 @@ WHAT THIS MEASURES, HONESTLY
   * SYNTHETIC data, generated deterministically from --seed. It is not seller data and it does not validate any adapter's mapping.
   * The three marketplace files go through the REAL job runner (stream -> validate -> classify duplicates -> post, one transaction per file) on
     the sales-side adapters that exist: amazon.mtr_b2c.v1, flipkart.sales_report.v1, meesho.orders.v1.
-  * The EXPENSE file is NOT ingested: expense posting (AC-D11) is not built. For it the report records only the stream + profile + mapping-
-    validation time, clearly labelled as such. The 60-second target is therefore reported for the 75,000 marketplace rows actually posted and,
-    separately, with the expense validation step added — never as "80,000 rows ingested".
+  * The EXPENSE file goes through the same job runner into the expense LEDGER (Phase 3a): profile -> (mocked) mapping proposal -> seller confirmation
+    -> stream -> classify duplicates/overlap -> post in one transaction. The 60-second target is reported for the whole four-file scenario
+    (75,000 marketplace rows + 5,000 expense rows), with the mapping/confirmation step included in the expense time. The mapping proposal is a MOCK
+    (no model call), so a real local-model proposal would add its own latency.
   * Two shapes are run. NARROW: only the columns the adapters map. WIDE: plus --wide-columns unmapped filler columns per row, modelling the
     width of real marketplace exports (every unmapped column becomes a V-COL-001 finding per row), which is the realistic cost.
   * Numbers are for THIS machine and this local, untuned Postgres; they are targets' evidence, not guarantees.
@@ -178,7 +179,7 @@ def run_shape(shape: str, wide_columns: int, chunk_rows: int, seed: int, scale: 
     mlim = MappingLimits(min_parse_rate=Fraction(98, 100), tax_consistency_rate=Fraction(98, 100), tax_tolerance_paise=1, key_unique_rate=Fraction(98, 100),
                          mixed_sign_low=Fraction(2, 100), max_date_span_years=5, unit_fraction_share=Fraction(2, 100))
     runner = JobRunner(config=RunnerConfig(max_workers=1, stale_after_seconds=3600, profile_rows=5000, sample_rows=20), stream_limits=limits,
-                       mapping_limits=mlim, as_of=lambda: date(2026, 10, 21))
+                       mapping_limits=mlim, as_of=lambda: date(2026, 10, 21), proposer=expense_proposal, proposed_by="MODEL:mock")
     tenant = uuid.uuid4()
     now = datetime.now(timezone.utc)
     results: list[FileResult] = []
@@ -205,24 +206,40 @@ def run_shape(shape: str, wide_columns: int, chunk_rows: int, seed: int, scale: 
                 dt = time.perf_counter() - t0
             out = (jobs.get_job(tenant, job) or {}).get("outcome") or {}
             results.append(FileResult(label, rows, path.stat().st_size / 2**20, status, dt, int(out.get("persisted_row_count", 0)), out.get("chunks"), m.growth_mib))
-    posted_total = time.perf_counter() - total_start
+    posted_total = time.perf_counter() - total_start  # the three marketplace files; the expense file is timed separately below
 
-    # Expense file: stream + profile + mapping validation ONLY (AC-D11 posting is not built).
+    # Expense file: profile -> mocked proposal -> confirmation -> ingestion into the ledger (AC-D11 / AC-L10).
     ex_path = tmp / f"{shape}-expenses.csv"
     ex_rows = int(EXPENSE_ROWS * scale)
     write_expense_file(ex_path, ex_rows, seed + 99)
+    fid = uuid.uuid4()
+    with tenant_scope(tenant) as conn:
+        conn.execute(text("""INSERT INTO report_file (id, tenant_id, marketplace, report_category, content_sha256, original_filename, byte_size, storage_uri, uploaded_by, uploaded_at)
+                             VALUES (:id,:t,'ALL','EXPENSE',:sha,:n,:b,:u,:by,:at)"""),
+                     {"id": str(fid), "t": str(tenant), "sha": uuid.uuid4().hex * 2, "n": ex_path.name, "b": ex_path.stat().st_size, "u": f"file://{ex_path}",
+                      "by": str(uuid.uuid4()), "at": now})
+    ex_job = jobs.create_job(tenant, report_file_id=fid, report_kind="EXPENSE", created_by=uuid.uuid4())
     with PeakRss() as m:
         t0 = time.perf_counter()
+        first = runner.run_job(tenant, ex_job)
+        assert first == "AWAITING_MAPPING_CONFIRMATION", first
+        job_row = jobs.get_job(tenant, ex_job) or {}
         pinput = collect_profile_input(open_csv(ex_path, limits), profile_rows=5000, sample_rows=20, seed=seed)
-        res = mapping_service.propose(tenant, pinput=pinput, report_kind="EXPENSE", marketplace=None, proposer=expense_proposal, proposed_by="MODEL:mock",
-                                      limits=mlim, as_of=date(2026, 10, 21))
+        mapping_service.confirm(tenant, job_row["mapping_id"], confirmed_by=uuid.uuid4(), decisions={i: "SELLER_CONFIRMED" for i in range(6)}, overrides={},
+                                pinput=pinput, limits=mlim, as_of=date(2026, 10, 21), now=now)
+        jobs.transition(tenant, ex_job, "QUEUED", mapping_id=job_row["mapping_id"], now=now)
+        status = runner.run_job(tenant, ex_job)
         ex_dt = time.perf_counter() - t0
-    results.append(FileResult("Expenses (stream + profile + validate ONLY; not posted)", ex_rows, ex_path.stat().st_size / 2**20,
-                              "VALIDATED_NOT_POSTED" if not res.verdict.has_errors else "VALIDATION_ERRORS", ex_dt, 0, None, m.growth_mib))
+    ex_out = (jobs.get_job(tenant, ex_job) or {}).get("outcome") or {}
+    results.append(FileResult("Expenses (to the ledger, incl. mapping + confirmation)", ex_rows, ex_path.stat().st_size / 2**20, status, ex_dt,
+                              int(ex_out.get("posted", 0)), ex_out.get("chunks"), m.growth_mib))
     with tenant_scope(tenant) as conn:  # integrity: what was reported as posted is what is in the database
         db_posted = conn.execute(text("SELECT count(*) FROM sales_line WHERE tenant_id = :t"), {"t": str(tenant)}).scalar_one()
-    assert db_posted == sum(r.posted for r in results), "reported posted rows differ from rows in the database"
-    return results, {"posted_seconds": posted_total, "expense_validation_seconds": ex_dt, "rss_growth_mib": whole.growth_mib, "db_rows": float(db_posted)}
+        db_expense = conn.execute(text("SELECT count(*) FROM expense_entry WHERE tenant_id = :t"), {"t": str(tenant)}).scalar_one()
+    assert db_posted == sum(r.posted for r in results[:-1]), "reported posted order rows differ from rows in the database"
+    assert db_expense == results[-1].posted, "reported expense rows differ from rows in the ledger"
+    db_posted += db_expense
+    return results, {"posted_seconds": posted_total + ex_dt, "expense_seconds": ex_dt, "rss_growth_mib": whole.growth_mib, "db_rows": float(db_posted)}
 
 
 def single_large_run(rows: int, wide_columns: int, chunk_rows: int, seed: int, json_out: Path) -> int:
@@ -327,9 +344,9 @@ def render(shapes: list[tuple[str, int, list[FileResult], dict[str, float]]], ar
           "Reproduce:", "", "```", "bash backend/scripts/scratch_db.sh up", 'eval "$(bash backend/scripts/scratch_db.sh env)"',
           f"python tools/benchmarks/cfo_ingest_benchmark.py --seed {args.seed} --chunk-rows {args.chunk_rows} --scale {args.scale} --wide-columns {args.wide_columns} --output <report.md>", "```", "",
           "## What is and is not measured", "",
-          "- **Measured:** the three marketplace files (Amazon, Flipkart, Meesho) through the real job runner: stream, validate, classify duplicates, post in one transaction each.",
-          "- **NOT measured / NOT built:** expense posting (**AC-D11 is not built**; the expense file below is only streamed, profiled and mapping-validated and is **not ingested**), "
-          "advertising ingestion, XLSX throughput, settlement-side files, and any real seller export.",
+          "- **Measured:** the three marketplace files (Amazon, Flipkart, Meesho) and the expense file through the real job runner: stream, validate, classify duplicates, post in one transaction each "
+          "(the expense file also runs the profile, a MOCK mapping proposal and the seller-confirmation step, then posts to the expense ledger).",
+          "- **NOT measured / NOT built:** a real local-model mapping proposal's latency, advertising ingestion, XLSX throughput, settlement-side files, and any real seller export.",
           "- The adapters map only a subset of each marketplace's columns, so *narrow* files understate the cost of real reports; *wide* adds unmapped columns per row to model real width.", ""]
     for shape, wide, results, totals in shapes:
         marketplace_rows = sum(r.rows for r in results if r.posted or r.status in ("DONE", "FAILED"))
@@ -339,17 +356,17 @@ def render(shapes: list[tuple[str, int, list[FileResult], dict[str, float]]], ar
         for r in results:
             L.append(f"| {r.label} | {r.rows:,} | {r.size_mib:.1f} | {r.status} | {r.seconds:.1f} | {r.rows / r.seconds:,.0f} | {r.posted:,} | {r.chunks if r.chunks is not None else '—'} | {r.rss_growth_mib:.0f} |")
         ps = totals["posted_seconds"]
-        both = ps + totals["expense_validation_seconds"]
         expense_rows = results[-1].rows
-        L += ["", f"- **Marketplace rows posted:** {posted:,} of {marketplace_rows:,} in **{ps:.1f} s** ({posted / ps:,.0f} rows/s).",
-              f"- **Against the 60 s target for the 80,000-row scenario:** {posted:,} rows posted plus {expense_rows:,} expense rows only stream-validated (not posted) took "
-              f"{both:.1f} s in total — **{'within' if both <= TARGET_SECONDS else 'OUTSIDE'} the target**. This is *not* a measurement of 80,000 rows ingested, because expense posting is not built.",
+        marketplace_posted = sum(r.posted for r in results[:-1])
+        L += ["", f"- **Rows posted:** {posted:,} of {marketplace_rows:,} ({marketplace_posted:,} order rows + {results[-1].posted:,} ledger rows) in **{ps:.1f} s** ({posted / ps:,.0f} rows/s).",
+              f"- **Against the 60 s target for the 80,000-row scenario:** all four files, including the expense file's profile, mocked mapping and confirmation, took "
+              f"{ps:.1f} s — **{'within' if ps <= TARGET_SECONDS else 'OUTSIDE'} the target** (a target, not a guarantee; synthetic data; this machine).",
               f"- **Whole-scenario peak memory growth:** {totals['rss_growth_mib']:.0f} MiB. Peak memory scales with chunk size × row width (a wide row carries one finding per unmapped column) "
               "plus one small digest per distinct row in the duplicate index; it never holds the file.",
-              f"- **Integrity:** rows reported as posted equal rows in the database ({int(totals['db_rows']):,}).", ""]
+              f"- **Integrity:** rows reported as posted equal rows in the database and the ledger ({int(totals['db_rows']):,}).", ""]
     L += ["## Verdict", "",
-          "Status of AC-D12: the script and this report are committed and reproducible. The four-file scenario is **only partly measurable today** because expense posting is not built; "
-          "the claim above is limited accordingly and must be re-run when AC-D11 lands.", ""]
+          "Status of AC-D12 / AC-L10: the four-file scenario (three marketplace files + an expense file) now runs end to end through the real job runner into the order tables and the "
+          "expense ledger, and this report is reproducible. It is synthetic data on one machine with a mocked mapping proposal; it does not validate any adapter against a real export.", ""]
     return "\n".join(L)
 
 

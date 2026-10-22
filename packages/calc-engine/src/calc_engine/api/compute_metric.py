@@ -1247,3 +1247,46 @@ def compute_margin_curve(
         )
 
     return results
+
+
+def mint_set_based_result(
+    metric_code: str,
+    value_paise: int | None,
+    *,
+    unavailable_reason: str | None = None,
+    exclusions: Sequence[dict[str, Any]] = (),
+    data_version: int,
+    computed_at: datetime,
+    as_of_date: date | None = None,
+    confidence: str = "VERIFIED",
+    formula_version: str | None = None,
+    value_fraction: Fraction | None = None,
+) -> MetricResult:
+    """Gives a value produced by the set-based (SQL) fast path a real, citable `engine_result_ref`.
+
+    cfo-query-planner.md D5: the set-based path is allowed only for metrics whose SQL is *proven equal* to the per-line
+    engine by the oracle suite, and its result is persisted exactly like an engine result so the dashboard and the CEO read
+    the same row. This wrapper performs no arithmetic and decides nothing: `value_paise=None` is an UNAVAILABLE result with
+    its reason (a missing input is never zero). `canonical_data_version` records the read-model version the SQL ran against.
+    """
+    available = value_paise is not None or value_fraction is not None
+    return MetricResult(
+        id=uuid4(),
+        metric_code=metric_code,
+        value_paise=value_paise,
+        recognition_state=RecognitionState.RECOGNISED if available else RecognitionState.UNAVAILABLE,
+        confidence=confidence,
+        calculation_basis=(
+            f"{metric_code} — set-based aggregation proven equal to the per-line engine by the oracle suite "
+            f"(cfo-query-planner.md §9); this wrapper mints an engine_result_ref only, it performs no arithmetic"
+        ),
+        formula_version=formula_version or f"{metric_code}.v1",
+        canonical_data_version=f"read-model-v{data_version}",
+        as_of_date=as_of_date,
+        input_refs=(),
+        exclusions=tuple(exclusions),
+        computed_at=computed_at,
+        is_available=available,
+        unavailable_reason=None if available else (unavailable_reason or "not available"),
+        value_fraction=value_fraction,
+    )

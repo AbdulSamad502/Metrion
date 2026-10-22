@@ -21,6 +21,7 @@ CFO_ACTION_METERS = (
     "cfo.pnl", "cfo.pricing", "cfo.gst_summary", "cfo.period_comparison", "cfo.landed_cost", "cfo.supplier_ranking", "cfo.funding_readiness",
     "cfo.batch_size", "cfo.reconcile", "cfo.anomaly_check", "cfo.financial_health", "cfo.cash_reconciliation", "cfo.strategic_briefing",
     "cfo.gst_lookup",  # wired in B4 (Route A of the GST lookup)
+    "cfo.query",  # CFO 2.0 planner: a CFO action like the rest, so capping every CFO meter must lock the agent
 )
 
 

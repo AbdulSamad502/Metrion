@@ -160,6 +160,7 @@ LEG_LABELS: Mapping[str, str] = {
     "cfo.financial_health": "The financial health check",
     "cfo.anomaly_check": "The anomaly check",
     "cfo.strategic_briefing": "The CFO briefing",
+    "cfo.query": "The answer to your financial question",
     "cfo.reconcile": "The marketplace reconciliation",
     "cfo.cash_reconciliation": "The cash reconciliation",
     "cfo.gst_lookup": "The GST rate lookup",

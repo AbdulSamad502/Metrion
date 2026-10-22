@@ -12,7 +12,7 @@ from backend.ceo.registry import ActionRegistry, RegistryError, _with_effects, g
 
 def test_every_registered_action_has_exactly_one_effects_entry_and_vice_versa():
     keys = {s.key for s in get_registry().specs()}
-    assert len(keys) == 48
+    assert len(keys) == 49  # +1 cfo.query (CFO 2.0 planner)
     assert keys == set(ACTION_EFFECTS)
     assert all(s.effects is ACTION_EFFECTS[s.key] for s in get_registry().specs())
 
