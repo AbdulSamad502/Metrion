@@ -371,6 +371,78 @@ def post_confirm_job_mapping(job_id: UUID, body: ConfirmMappingBody, ctx: AuthCo
         raise HTTPException(status_code=422, detail={"message": "The mapping cannot be confirmed yet.", "reasons": list(exc.reasons)}) from None
 
 
+class ManualMappingField(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    index: int = Field(ge=0)
+    canonical_field: str = Field(min_length=1, max_length=80)
+    component_code: str | None = Field(default=None, max_length=80)
+    transform: str | None = Field(default=None, max_length=40)
+    tax_inclusion: str | None = Field(default=None, max_length=20)
+    sign_convention: str | None = Field(default=None, max_length=20)
+
+
+class ManualMappingBody(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    fields: list[ManualMappingField] = Field(min_length=1, max_length=200)
+
+
+@router.post("/jobs/{job_id}/mapping/manual", status_code=202)
+def post_manual_mapping(job_id: UUID, body: ManualMappingBody, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """The seller maps the file's columns by hand (when no automatic proposal could be made). Creates a PROPOSED mapping on a fresh attempt that then needs the same
+    explicit confirmation as any proposal; nothing is saved from the file before that. Needs `financials.adjust`."""
+    assert ctx.tenant_id is not None and ctx.app_user_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_INGEST)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST):
+        raise HTTPException(status_code=403, detail="financials.adjust permission required")
+    try:
+        return cfo_ingestion.start_manual_mapping(ctx.tenant_id, ctx.app_user_id, job_id, [f.model_dump() for f in body.fields])
+    except cfo_ingestion.UploadRejected as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from None
+
+
+@router.get("/jobs/{job_id}/held")
+def get_job_held_rows(job_id: UUID, status: str = "HELD", page: int = 1, page_size: int = 50, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """Rows this upload held back (same order line with different values, or a repeat that cannot be told from a double export), with the reason. They are not in any figure."""
+    assert ctx.tenant_id is not None
+    if status not in ("HELD", "RESOLVED", "ALL"):
+        raise HTTPException(status_code=400, detail="status must be HELD, RESOLVED or ALL")
+    view = cfo_ingestion.held_view(ctx.tenant_id, job_id, status=status, page=max(1, page), page_size=max(1, min(page_size, 200)))
+    if view is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return view
+
+
+class HeldResolveBody(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    held_row_ids: list[UUID] = Field(min_length=1, max_length=200)
+    action: str
+    note: str | None = Field(default=None, max_length=300)
+
+
+@router.post("/jobs/{job_id}/held/resolve")
+def post_resolve_held_rows(job_id: UUID, body: HeldResolveBody, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """Decide held rows: KEEP_EARLIER (the earlier data stands) or DISCARD (this row is dropped). Neither changes a figure. Replacing earlier data
+    (SUPERSEDE_WITH_THIS) and keeping both with a reference (KEEP_BOTH_WITH_REFERENCE) are not available yet and are refused with that reason. Needs `financials.adjust`."""
+    from data_foundation.repositories import held_row_repo
+
+    assert ctx.tenant_id is not None and ctx.app_user_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_INGEST)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST):
+        raise HTTPException(status_code=403, detail="financials.adjust permission required")
+    if cfo_ingestion.jobs.get_job(ctx.tenant_id, job_id) is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    ids = list(dict.fromkeys(body.held_row_ids))
+    try:
+        for hid in ids:
+            held_row_repo.resolve(ctx.tenant_id, hid, body.action.upper(), ctx.app_user_id, body.note)
+    except held_row_repo.HeldRowError as exc:
+        raise HTTPException(status_code=409 if "already" in str(exc) else 400, detail=str(exc)) from None
+    return {"resolved": len(ids), "action": body.action.upper()}
+
+
 @router.get("/imports")
 def get_imports(limit: int = 100, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> list[dict[str, object]]:
     """Import history: this tenant's uploaded reports with their latest ingestion outcome. Read-only —
@@ -2712,3 +2784,118 @@ def post_cost_owner(body: CostOwnerHttp, ctx: AuthContext = require_auth(permiss
         raise HTTPException(status_code=400, detail=str(exc)) from None
     _changed(ctx)
     return {"choiceId": str(new_id)}
+
+
+# ---------------------------------------------------------------------------------------------------- CFO 2.0 dashboard read routes (D3-D5)
+# Each is a fixed server-built plan run through the same planner pipeline the CEO uses (services/cfo_dashboard.py): the dashboard and the CEO see one evidence packet.
+CFO_DASHBOARD = "cfo.query"  # the same entitlement as the planner it reads from
+_MARKETPLACE_FILTERS = ("ALL", "AMAZON", "FLIPKART", "MEESHO")
+_DASH_MAX_DAYS = 400
+
+
+def _dash_scope(period_start: date, period_end: date, as_of_date: date | None, marketplace: str):  # noqa: ANN202
+    from backend.services.cfo_dashboard import Scope
+
+    mp = marketplace.upper()
+    if mp not in _MARKETPLACE_FILTERS:
+        raise HTTPException(status_code=400, detail=f"marketplace must be one of {list(_MARKETPLACE_FILTERS)}")
+    if period_end < period_start:
+        raise HTTPException(status_code=400, detail="the period ends before it starts")
+    if (period_end - period_start).days > _DASH_MAX_DAYS:
+        raise HTTPException(status_code=400, detail=f"choose a period of at most {_DASH_MAX_DAYS} days")
+    return Scope(period_start, period_end, as_of_date or period_end, mp)
+
+
+def _dash_ctx(ctx: AuthContext) -> UUID:
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_DASHBOARD)
+    return ctx.tenant_id
+
+
+@router.get("/overview")
+def get_overview(period_start: date, period_end: date, as_of_date: date | None = None, marketplace: str = "ALL",
+                 ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    t = _dash_ctx(ctx)
+    out = cfo_dashboard.overview(t, ctx.app_user_id, _dash_scope(period_start, period_end, as_of_date, marketplace))
+    # What this member may change, so the page hides actions they cannot take (the server still refuses them: a hidden button is not a permission check).
+    out["canAdjust"] = ctx.role is not None and has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST)
+    return out
+
+
+@router.get("/profitability/marketplaces")
+def get_profitability_marketplaces(period_start: date, period_end: date, as_of_date: date | None = None, marketplace: str = "ALL", sort: str = "key", dir: str = "desc",  # noqa: A002
+                                   ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    t = _dash_ctx(ctx)
+    return cfo_dashboard.marketplaces_table(t, ctx.app_user_id, _dash_scope(period_start, period_end, as_of_date, marketplace), sort=sort, direction=dir if dir in ("asc", "desc") else "desc")
+
+
+@router.get("/profitability/skus")
+def get_profitability_skus(period_start: date, period_end: date, as_of_date: date | None = None, marketplace: str = "ALL", sku: str = "", sort: str = "key", dir: str = "desc",  # noqa: A002
+                           page: int = 1, page_size: int = 50, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    t = _dash_ctx(ctx)
+    out = cfo_dashboard.skus_table(t, ctx.app_user_id, _dash_scope(period_start, period_end, as_of_date, marketplace), sort=sort, direction=dir if dir in ("asc", "desc") else "desc",
+                                   page=max(1, page), page_size=max(1, min(page_size, 200)))
+    needle = sku.strip().lower()[:60]
+    if needle and isinstance(out.get("items"), list):  # SKU search is a filter on the returned page set's keys
+        out["items"] = [r for r in out["items"] if needle in str(r["key"]).lower()]  # type: ignore[index,union-attr]
+    return out
+
+
+@router.get("/profitability/trend")
+def get_profitability_trend(period_start: date, period_end: date, as_of_date: date | None = None, marketplace: str = "ALL",
+                            ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    t = _dash_ctx(ctx)
+    return cfo_dashboard.trend(t, ctx.app_user_id, _dash_scope(period_start, period_end, as_of_date, marketplace))
+
+
+@router.get("/profitability/bridge")
+def get_profitability_bridge(period_start: date, period_end: date, compare_start: date, compare_end: date, as_of_date: date | None = None, marketplace: str = "ALL",
+                             ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from cfo.planner.plan import PeriodRef
+
+    from backend.services import cfo_dashboard
+
+    t = _dash_ctx(ctx)
+    scope = _dash_scope(period_start, period_end, as_of_date, marketplace)
+    if compare_end < compare_start:
+        raise HTTPException(status_code=400, detail="the comparison period ends before it starts")
+    return cfo_dashboard.bridge(t, ctx.app_user_id, scope, PeriodRef(compare_start, compare_end, as_of_date or compare_end))
+
+
+@router.get("/cash/expected-receipts")
+def get_cash_view(period_start: date, period_end: date, as_of_date: date | None = None, marketplace: str = "ALL", ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    t = _dash_ctx(ctx)
+    return cfo_dashboard.cash(t, ctx.app_user_id, _dash_scope(period_start, period_end, as_of_date, marketplace))
+
+
+@router.get("/cash/payables")
+def get_cash_payables(ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    return cfo_dashboard.payables(_dash_ctx(ctx))
+
+
+@router.get("/leak/findings")
+def get_leak_findings(status: str = "ALL", page: int = 1, page_size: int = 50, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    if status not in ("ALL", "NEW", "ACKNOWLEDGED", "CLAIM_DRAFTED", "SELLER_REPORTED_RAISED", "SELLER_REPORTED_RESOLVED", "DISMISSED"):
+        raise HTTPException(status_code=400, detail="unknown claim status")
+    return cfo_dashboard.leak_findings(_dash_ctx(ctx), status=status, page=max(1, page), page_size=max(1, min(page_size, 200)))
+
+
+@router.get("/intelligence/alerts")
+def get_intelligence_alerts(limit: int = 25, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    return cfo_dashboard.alerts(_dash_ctx(ctx), max(1, min(limit, 100)))

@@ -172,3 +172,13 @@ Cached overview < 1 s; table pages < 1 s; filter change cancels the previous req
 | OQ3 | Export row cap and whether very large exports run as background jobs |
 | OQ4 | SSE vs polling as the primary progress transport once Redis-backed cross-worker events exist |
 | OQ5 | GST due-date source and CA-review gating wording for tax-adjacent labels |
+
+
+## 12. Implementation status (2026-10-22)
+
+| Phase | Status |
+|---|---|
+| D0 foundations | Built: `FigureView`, `CompletenessBadge`, `TrustPopover`, `DataTable`, `FilterBar` + URL filters, `ExportButton`, Recharts 3.10.1 (exact pin; peers include React 19) wrapper, banned-wording test, `noClientMath` extended to `lib/cfoV2/**` and `components/cfo/v2/**`. |
+| D1 Data & imports | Built (tab "Data & imports"): upload, live progress (never backwards), cancel, quality report. |
+| D2 | Mapping review built. Manual mapping and held-row routes built (cfo-data-intelligence §6.3a); held actions SUPERSEDE_WITH_THIS / KEEP_BOTH_WITH_REFERENCE **deferred** (OQ7). |
+| Backend read routes | `/cfo/overview`, `/profitability/{marketplaces,skus,trend,bridge}`, `/cash/{expected-receipts,payables}`, `/leak/findings`, `/intelligence/alerts` — each a fixed server-built plan through the planner pipeline (`services/cfo_dashboard.py`); same-truth test in `test_cfo_dashboard.py`. GST / tax assets is UNAVAILABLE with the reason "GST treatment is not confirmed yet". |

@@ -256,3 +256,59 @@ def test_held_duplicates_do_not_count_toward_the_quarantine_threshold(tmp_path: 
     out = pay_ingest(t, p)
     assert out.row_count_rejected == 0 and out.held_ambiguous == 9 and out.persisted_row_count == 1
     assert run_status(t, out.ingestion_run_id) == "VALIDATED"  # a double export is not a "mismatched file"
+
+
+# ------------------------------------------------------------------------------------------------ held rows are kept so the seller can decide
+def test_held_rows_are_stored_verbatim_with_reason_and_earlier_row_and_never_posted(tmp_path: Path) -> None:
+    from data_foundation.repositories import held_row_repo
+
+    t = uuid.uuid4()
+    p = tmp_path / "pay5.csv"
+    p.write_text(PAY_HEADER + "SUB-9,0.00,250.00,300.00\nSUB-9,0.00,250.00,300.00\nSUB-8,0.00,100.00,120.00\n", encoding="utf-8")
+    out = pay_ingest(t, p)
+    with tenant_scope(t) as conn:
+        rf = conn.execute(text("SELECT report_file_id FROM ingestion_run WHERE id = :r"), {"r": str(out.ingestion_run_id)}).scalar_one()
+    rows, total, unresolved = held_row_repo.list_for_file(t, rf, status="HELD", page=1, page_size=10)
+    assert (total, unresolved) == (1, 1) and len(rows) == 1
+    h = rows[0]
+    assert h["rowNumber"] == 2 and h["kind"] == "AMBIGUOUS" and h["rule"] == "V-DUP-002" and h["earlierRow"] == 1 and "distinguishing reference" in h["reason"]
+    assert settlement_rows(t) == [("SUB-8", 10000), ("SUB-9", 25000)]  # keeping the row changed nothing that posts
+
+
+def test_a_held_row_is_decided_once_keep_earlier_or_discard_and_neither_changes_a_figure(tmp_path: Path) -> None:
+    from data_foundation.repositories import held_row_repo
+
+    t = uuid.uuid4()
+    p = tmp_path / "pay6.csv"
+    p.write_text(PAY_HEADER + "SUB-9,0.00,250.00,300.00\nSUB-9,0.00,250.00,300.00\n", encoding="utf-8")
+    out = pay_ingest(t, p)
+    with tenant_scope(t) as conn:
+        rf = conn.execute(text("SELECT report_file_id FROM ingestion_run WHERE id = :r"), {"r": str(out.ingestion_run_id)}).scalar_one()
+    (h,), _, _ = held_row_repo.list_for_file(t, rf, status="HELD", page=1, page_size=10)
+    before = settlement_rows(t)
+    held_row_repo.resolve(t, uuid.UUID(h["id"]), "KEEP_EARLIER", uuid.uuid4(), "double export")
+    assert settlement_rows(t) == before
+    assert held_row_repo.list_for_file(t, rf, status="HELD", page=1, page_size=10)[0] == []
+    (done,), _, unresolved = held_row_repo.list_for_file(t, rf, status="RESOLVED", page=1, page_size=10)
+    assert done["resolution"] == "KEEP_EARLIER" and done["resolutionNote"] == "double export" and unresolved == 0
+    with pytest.raises(held_row_repo.HeldRowError, match="already"):
+        held_row_repo.resolve(t, uuid.UUID(h["id"]), "DISCARD", uuid.uuid4())
+    with pytest.raises(held_row_repo.HeldRowError, match="not available yet"):
+        held_row_repo.resolve(t, uuid.UUID(h["id"]), "SUPERSEDE_WITH_THIS", uuid.uuid4())
+    with pytest.raises(held_row_repo.HeldRowError, match="not found"):
+        held_row_repo.resolve(t, uuid.uuid4(), "DISCARD", uuid.uuid4())
+
+
+def test_held_rows_are_tenant_isolated(tmp_path: Path) -> None:
+    from data_foundation.repositories import held_row_repo
+
+    a, b = uuid.uuid4(), uuid.uuid4()
+    p = tmp_path / "pay7.csv"
+    p.write_text(PAY_HEADER + "SUB-9,0.00,250.00,300.00\nSUB-9,0.00,250.00,300.00\n", encoding="utf-8")
+    out = pay_ingest(a, p)
+    with tenant_scope(a) as conn:
+        rf = conn.execute(text("SELECT report_file_id FROM ingestion_run WHERE id = :r"), {"r": str(out.ingestion_run_id)}).scalar_one()
+        hid = conn.execute(text("SELECT id FROM held_row")).scalar_one()
+    assert held_row_repo.list_for_file(b, rf, status="ALL", page=1, page_size=10)[1] == 0
+    with pytest.raises(held_row_repo.HeldRowError, match="not found"):
+        held_row_repo.resolve(b, hid, "DISCARD", uuid.uuid4())

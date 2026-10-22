@@ -91,6 +91,22 @@
     "period_start"
    ]
   },
+  "GET /api/v1/cfo/cash/expected-receipts": {
+   "query": [
+    "as_of_date",
+    "marketplace",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
+    "period_end",
+    "period_start"
+   ]
+  },
+  "GET /api/v1/cfo/cash/payables": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/data-requests": {
    "query": [],
    "requiredQuery": []
@@ -128,6 +144,12 @@
    ],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/intelligence/alerts": {
+   "query": [
+    "limit"
+   ],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/jobs": {
    "query": [
     "limit"
@@ -138,12 +160,28 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/jobs/{job_id}/held": {
+   "query": [
+    "page",
+    "page_size",
+    "status"
+   ],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/jobs/{job_id}/mapping": {
    "query": [],
    "requiredQuery": []
   },
   "GET /api/v1/cfo/leak-findings/{finding_id}/claim": {
    "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/leak/findings": {
+   "query": [
+    "page",
+    "page_size",
+    "status"
+   ],
    "requiredQuery": []
   },
   "GET /api/v1/cfo/ledger/entries": {
@@ -161,11 +199,82 @@
     "sales_line_id"
    ]
   },
+  "GET /api/v1/cfo/overview": {
+   "query": [
+    "as_of_date",
+    "marketplace",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
+    "period_end",
+    "period_start"
+   ]
+  },
   "GET /api/v1/cfo/payables": {
    "query": [
     "include_paid"
    ],
    "requiredQuery": []
+  },
+  "GET /api/v1/cfo/profitability/bridge": {
+   "query": [
+    "as_of_date",
+    "compare_end",
+    "compare_start",
+    "marketplace",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
+    "compare_end",
+    "compare_start",
+    "period_end",
+    "period_start"
+   ]
+  },
+  "GET /api/v1/cfo/profitability/marketplaces": {
+   "query": [
+    "as_of_date",
+    "dir",
+    "marketplace",
+    "period_end",
+    "period_start",
+    "sort"
+   ],
+   "requiredQuery": [
+    "period_end",
+    "period_start"
+   ]
+  },
+  "GET /api/v1/cfo/profitability/skus": {
+   "query": [
+    "as_of_date",
+    "dir",
+    "marketplace",
+    "page",
+    "page_size",
+    "period_end",
+    "period_start",
+    "sku",
+    "sort"
+   ],
+   "requiredQuery": [
+    "period_end",
+    "period_start"
+   ]
+  },
+  "GET /api/v1/cfo/profitability/trend": {
+   "query": [
+    "as_of_date",
+    "marketplace",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
+    "period_end",
+    "period_start"
+   ]
   },
   "GET /api/v1/cfo/seller-goal": {
    "query": [],
@@ -531,9 +640,23 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cfo/jobs/{job_id}/held/resolve": {
+   "body": {
+    "$ref": "#/components/schemas/HeldResolveBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/jobs/{job_id}/mapping/confirm": {
    "body": {
     "$ref": "#/components/schemas/ConfirmMappingBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/jobs/{job_id}/mapping/manual": {
+   "body": {
+    "$ref": "#/components/schemas/ManualMappingBody"
    },
    "query": [],
    "requiredQuery": []
@@ -2790,6 +2913,43 @@
    "title": "HashtagsBody",
    "type": "object"
   },
+  "HeldResolveBody": {
+   "additionalProperties": false,
+   "properties": {
+    "action": {
+     "title": "Action",
+     "type": "string"
+    },
+    "held_row_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 200,
+     "minItems": 1,
+     "title": "Held Row Ids",
+     "type": "array"
+    },
+    "note": {
+     "anyOf": [
+      {
+       "maxLength": 300,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Note"
+    }
+   },
+   "required": [
+    "held_row_ids",
+    "action"
+   ],
+   "title": "HeldResolveBody",
+   "type": "object"
+  },
   "LandedCostHttpRequest": {
    "description": "One SKU, one `supplier.quote` target \u2014 never a set of quotes to compare (that is\nsupplier ranking, Phase B1, not this primitive). `supplier_quote_target_type`/\n`supplier_quote_target_ref` identify exactly the `(target_type, target_ref)` a seller used\nwhen recording the quote via `PUT /cfo/expenses` (`EnterExpenseRequest`'s own\n`target_type`/`target_ref` fields) \u2014 this route reads back what that write path wrote.",
    "properties": {
@@ -3027,6 +3187,95 @@
     "category"
    ],
    "title": "LedgerEntryHttp",
+   "type": "object"
+  },
+  "ManualMappingBody": {
+   "additionalProperties": false,
+   "properties": {
+    "fields": {
+     "items": {
+      "$ref": "#/components/schemas/ManualMappingField"
+     },
+     "maxItems": 200,
+     "minItems": 1,
+     "title": "Fields",
+     "type": "array"
+    }
+   },
+   "required": [
+    "fields"
+   ],
+   "title": "ManualMappingBody",
+   "type": "object"
+  },
+  "ManualMappingField": {
+   "additionalProperties": false,
+   "properties": {
+    "canonical_field": {
+     "maxLength": 80,
+     "minLength": 1,
+     "title": "Canonical Field",
+     "type": "string"
+    },
+    "component_code": {
+     "anyOf": [
+      {
+       "maxLength": 80,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Component Code"
+    },
+    "index": {
+     "minimum": 0.0,
+     "title": "Index",
+     "type": "integer"
+    },
+    "sign_convention": {
+     "anyOf": [
+      {
+       "maxLength": 20,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sign Convention"
+    },
+    "tax_inclusion": {
+     "anyOf": [
+      {
+       "maxLength": 20,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Tax Inclusion"
+    },
+    "transform": {
+     "anyOf": [
+      {
+       "maxLength": 40,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Transform"
+    }
+   },
+   "required": [
+    "index",
+    "canonical_field"
+   ],
+   "title": "ManualMappingField",
    "type": "object"
   },
   "MappingFieldOverrideBody": {

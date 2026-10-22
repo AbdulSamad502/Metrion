@@ -31,7 +31,7 @@ from calc_engine.types import Confidence
 from sqlalchemy import Connection
 
 from data_foundation.adapters.registry import ADAPTER_REGISTRY
-from data_foundation.ingestion.duplicates import SALES, SETTLEMENT, DupClass, DuplicateTracker, report_family
+from data_foundation.ingestion.duplicates import SALES, SETTLEMENT, DupClass, DupDecision, DuplicateTracker, report_family
 from data_foundation.ingestion.pipeline import (
     QUARANTINE_THRESHOLD,
     AdapterMismatchError,
@@ -40,6 +40,7 @@ from data_foundation.ingestion.pipeline import (
 )
 from data_foundation.ingestion.streaming import RowStream
 from data_foundation.repositories import (
+    held_row_repo,
     ingestion_run_repo,
     sales_line_repo,
     settlement_line_repo,
@@ -50,6 +51,12 @@ from data_foundation.types import FileSample, MarketplaceAdapter, ParsedRow
 from data_foundation.validation.severity import Finding
 
 logger = logging.getLogger(__name__)
+
+
+def _held(row: ParsedRow, d: DupDecision, kind: str) -> held_row_repo.NewHeldRow:
+    return held_row_repo.NewHeldRow(
+        row_number=row.source_row_number, kind=kind, rule=d.finding.rule_id if d.finding is not None else "V-DUP", reason=d.finding.message if d.finding is not None else "held",
+        earlier_row=d.first_seen_row, row_values=dict(row.source_row_json))
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +155,7 @@ def ingest_stream_and_persist(
 
                 decisions = tracker.classify(ok_rows, _existing_entries(tenant_id, adapter.marketplace, family, is_settlement, ok_rows))
                 to_persist: list[ParsedRow] = []
+                held_rows: list[held_row_repo.NewHeldRow] = []
                 for row, d in zip(ok_rows, decisions):
                     if d.klass is DupClass.NEW:
                         to_persist.append(row)
@@ -157,8 +165,10 @@ def ingest_stream_and_persist(
                         dup_in_file += 1
                     elif d.klass is DupClass.AMBIGUOUS_REPEAT:
                         held_ambiguous += 1
+                        held_rows.append(_held(row, d, "AMBIGUOUS"))
                     else:
                         held_conflicts += 1
+                        held_rows.append(_held(row, d, "CONFLICT"))
                     if d.finding is not None:
                         findings.append(d.finding)
 
@@ -172,6 +182,8 @@ def ingest_stream_and_persist(
                         writer(conn, tenant_id, ingestion_run_id=run_id, marketplace=adapter.marketplace,
                                confidence=Confidence.PROVISIONAL.value, rows=to_persist)
                     )
+                if held_rows:  # kept verbatim (same transaction as the file) so the seller can decide; never posted
+                    held_row_repo.insert_many_on(conn, tenant_id, ingestion_run_id=run_id, report_file_id=report_file_id, marketplace=adapter.marketplace, rows=held_rows)
                 if findings:
                     # Diagnostics never fail the import: a savepoint isolates a bad insert from the file's transaction.
                     try:

@@ -23,6 +23,7 @@ from data_foundation.mapping.validator import MappingLimits
 from data_foundation.repositories import (
     column_mapping_repo,
     data_quality_report_repo,
+    held_row_repo,
     ingestion_job_repo as jobs,
     report_file_repo,
 )
@@ -231,6 +232,61 @@ def cancel_job(tenant_id: UUID, job_id: UUID) -> tuple[str, dict[str, Any] | Non
         return "already_finished", job_view(job)
     jobs.request_cancel(tenant_id, job_id, now=datetime.now(timezone.utc))
     return "ok", job_view(jobs.get_job(tenant_id, job_id) or job)
+
+
+MANUAL_MAPPING_CODES = ("MAPPING_PROPOSAL_FAILED", "NO_MATCHING_FORMAT")
+
+
+def start_manual_mapping(tenant_id: UUID, user_id: UUID, job_id: UUID, fields: list[dict[str, Any]]) -> dict[str, Any]:
+    """The seller maps the columns by hand when no automatic proposal could be made (no model, or the proposal was unusable). The seller's choices become a PROPOSED
+    mapping (proposed_by SELLER) on a fresh attempt of the same file, and go through exactly the same validation and explicit confirmation as a model's proposal.
+    Nothing is saved from the file until that confirmation."""
+    from data_foundation.mapping.proposal import FieldProposal, MappingProposal
+
+    job = jobs.get_job(tenant_id, job_id)
+    if job is None:
+        raise UploadRejected(404, "job not found")
+    if job["status"] != "FAILED" or job["error_code"] not in MANUAL_MAPPING_CODES:
+        raise UploadRejected(409, "this upload did not stop for want of a column mapping, so there is nothing to map by hand")
+    if not fields:
+        raise UploadRejected(400, "choose at least one column to use")
+    rf = report_file_repo.get_report_file_for_ingestion(tenant_id, UUID(str(job["report_file_id"])))
+    if rf is None:
+        raise UploadRejected(404, "the uploaded file could not be found")
+    path = Path(str(rf["storage_uri"])[len("file://"):])
+    try:
+        stream = open_report(path, stream_limits(), sheet_name=job["sheet_name"])
+        pinput = collect_profile_input(stream, profile_rows=cfo_profile_rows(), sample_rows=cfo_mapping_sample_rows(), seed=int(str(rf["content_sha256"])[:12], 16))
+    except StreamError as exc:
+        raise UploadRejected(422, exc.detail) from None
+    seen: set[int] = set()
+    proposals: list[FieldProposal] = []
+    for f in fields:
+        idx = f.get("index")
+        if not isinstance(idx, int) or not 0 <= idx < len(pinput.columns):
+            raise UploadRejected(400, "a chosen column is not in the file")
+        if idx in seen:
+            raise UploadRejected(400, "a column was chosen twice")
+        seen.add(idx)
+        proposals.append(FieldProposal(source_column=pinput.columns[idx], index=idx, canonical_field=str(f.get("canonical_field") or ""), component_code=f.get("component_code"),
+                                       transform=str(f.get("transform") or "IDENTITY"), tax_inclusion=f.get("tax_inclusion"), sign_convention=f.get("sign_convention")))
+    unmapped = tuple(c for i, c in enumerate(pinput.columns) if i not in seen)
+    proposal = MappingProposal(fields=tuple(proposals), unmapped_columns=unmapped)
+    result = mapping_service.propose(
+        tenant_id, pinput=pinput, report_kind=str(job["report_kind"]), marketplace=str(rf["marketplace"]), proposer=lambda _inp: proposal,
+        proposed_by="SELLER", limits=mapping_limits(), as_of=datetime.now(timezone.utc).date())
+    new_job = jobs.create_job(tenant_id, report_file_id=UUID(str(job["report_file_id"])), report_kind=str(job["report_kind"]), created_by=user_id,
+                              sheet_name=job["sheet_name"], attempt=int(job["attempt"]) + 1, adapter_id=job["adapter_id"])
+    jobs.transition(tenant_id, new_job, "AWAITING_MAPPING_CONFIRMATION", mapping_id=result.mapping_id, total_rows_estimate=pinput.total_rows, now=datetime.now(timezone.utc))
+    return job_view(jobs.get_job(tenant_id, new_job) or {})
+
+
+def held_view(tenant_id: UUID, job_id: UUID, *, status: str, page: int, page_size: int) -> dict[str, Any] | None:
+    job = jobs.get_job(tenant_id, job_id)
+    if job is None:
+        return None
+    rows, total, unresolved = held_row_repo.list_for_file(tenant_id, UUID(str(job["report_file_id"])), status=status, page=page, page_size=page_size)
+    return {"items": rows, "page": page, "pageSize": page_size, "total": total, "pageCount": max(1, -(-total // page_size)), "unresolved": unresolved}
 
 
 def mapping_view(tenant_id: UUID, job_id: UUID) -> dict[str, Any] | None:

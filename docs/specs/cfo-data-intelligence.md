@@ -273,7 +273,7 @@ TD1 golden Meesho orders via old vs streaming path → identical rows · TD2 100
 | OQ4 | Whether to expose the closed-vocabulary synonym register as configuration |
 | OQ5 | Locale handling for dates/numbers (Indian digit grouping handled; others?) |
 | OQ6 | In-file duplicate index memory at 1M+ rows (one digest per identity); spill to disk or a DB-side temp table if the benchmark shows a problem |
-| OQ7 | The **resolution flow** for held duplicates and conflicts (seller confirms supersede / both real / discard) is not specified here; until it exists, held rows stay held |
+| OQ7 | **Partly resolved (2026-10-22, §6.3a).** Held rows are now kept and the seller can KEEP_EARLIER or DISCARD them. **Still open:** SUPERSEDE_WITH_THIS and KEEP_BOTH_WITH_REFERENCE — they need a supersession mechanism on `sales_line` / `settlement_line` that about 30 readers across the CFO, CMO and CI would have to honour; that is a data-model decision for the owner, not built |
 
 ---
 
@@ -306,3 +306,14 @@ TD1 golden Meesho orders via old vs streaming path → identical rows · TD2 100
 | OQ9 | Reconcile `report_file.report_category` with the resolved adapter/mapping after the job resolves the format |
 | OQ10 | Held-duplicate resolution flow (OQ7) and a manual-mapping UI when the model proposal fails or the model is off |
 | OQ11 | The `ADVERTISING` and `EXPENSE` ingestion routes (spec §6.7, §6.8) are not built yet; `POST /cfo/uploads` rejects those kinds with a clear 400 |
+
+
+## 6.3a Held rows — seller resolution (dashboard track, 2026-10-22)
+
+**Confirmed decisions.** A row an upload holds back (same order line with different values, or an identical repeat that cannot be told from a double export) is kept verbatim in the append-only `held_row` table (migration 20261022_0018), in the same transaction as the file, with its rule (`V-DUP-002/003`), the plain reason, the earlier row number (in-file) and the row's values. It never reaches a figure. The seller decides with `POST /cfo/jobs/{id}/held/resolve` (`financials.adjust`): **KEEP_EARLIER** (the earlier data stands) or **DISCARD** (this row is dropped). One decision per held row (`held_row_resolution`, unique); neither action changes a figure, so neither bumps the read-model version. `GET /cfo/jobs/{id}/held` lists them (paged; HELD | RESOLVED | ALL).
+
+**Not built (deliberately, OQ7):** `SUPERSEDE_WITH_THIS` and `KEEP_BOTH_WITH_REFERENCE` are refused with "not available yet". Superseding earlier data needs canonical-line supersession that every reader of `sales_line` / `settlement_line` must honour (30 query sites in the CFO, CMO and CI); keeping both needs a seller-supplied distinguishing identity. Both change what posts, so they need an owner decision on the data model first.
+
+**Limits.** Cross-file conflicts show the held row and the reason but not the earlier row's values side by side (the database remembers only the earlier row's hash). A multi-row resolve is applied row by row; a refusal part-way leaves the earlier rows decided (each is independently recorded).
+
+**Manual mapping.** `POST /cfo/jobs/{id}/mapping/manual` (`financials.adjust`) is accepted for a job that failed with `MAPPING_PROPOSAL_FAILED` or `NO_MATCHING_FORMAT`. The seller's chosen columns become a PROPOSED mapping (`proposed_by = SELLER`) on a fresh attempt, validated and explicitly confirmed exactly like a model's proposal; nothing is saved before confirmation. Tests: `test_cfo_uploads_jobs.py`, `test_stream_persist.py`.

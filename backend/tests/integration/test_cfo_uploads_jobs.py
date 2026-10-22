@@ -275,3 +275,82 @@ def test_amazon_mtr_needs_the_report_type_chosen_and_the_choice_is_validated_up_
     assert again["duplicate"] is True and again["job"]["attempt"] == 2  # same bytes: a new attempt, now with the choice
     done = wait_for(app_client, headers, again["job"]["jobId"])
     assert done["status"] == "DONE" and done["adapterId"] == "amazon.mtr_b2c.v1" and sales_count(a) == 20
+
+
+# ========================================================================= manual mapping (no model) and held rows (dashboard track)
+MANUAL_FIELDS = [
+    {"index": 0, "canonical_field": "order_ref"}, {"index": 1, "canonical_field": "line_ref"}, {"index": 2, "canonical_field": "quantity"},
+    {"index": 3, "canonical_field": "gross_item_amount", "transform": "RUPEES_TO_PAISE", "tax_inclusion": "EXCLUSIVE", "sign_convention": "AS_IS"},
+    {"index": 4, "canonical_field": "invoice_date", "transform": "DATE_DMY"}, {"index": 5, "canonical_field": "return_status"},
+]
+
+
+def test_a_seller_can_map_the_columns_by_hand_when_no_model_is_configured(app_client, fake_clerk, two_tenants, with_runner):
+    a, _ = two_tenants
+    with_runner(proposer=None)
+    owner = _register_owner(fake_clerk, a)
+    job = post_upload(app_client, owner, unknown(40)).json()["job"]["jobId"]
+    assert wait_for(app_client, owner, job)["status"] == "FAILED"
+
+    cfo_only = partner_with(fake_clerk, a, AGENT_CFO)
+    assert app_client.post(f"/api/v1/cfo/jobs/{job}/mapping/manual", json={"fields": MANUAL_FIELDS}, headers=cfo_only).status_code == 403
+    assert app_client.post(f"/api/v1/cfo/jobs/{job}/mapping/manual", json={"fields": []}, headers=owner).status_code == 422
+    assert app_client.post(f"/api/v1/cfo/jobs/{job}/mapping/manual", json={"fields": [{"index": 99, "canonical_field": "order_ref"}]}, headers=owner).status_code == 400
+    dup = app_client.post(f"/api/v1/cfo/jobs/{job}/mapping/manual", json={"fields": [MANUAL_FIELDS[0], MANUAL_FIELDS[0]]}, headers=owner)
+    assert dup.status_code == 400 and "twice" in dup.json()["detail"]
+    assert app_client.post(f"/api/v1/cfo/jobs/{job}/mapping/manual", json={"fields": MANUAL_FIELDS, "tenant_id": str(a)}, headers=owner).status_code == 422
+
+    resp = app_client.post(f"/api/v1/cfo/jobs/{job}/mapping/manual", json={"fields": MANUAL_FIELDS}, headers=owner)
+    assert resp.status_code == 202, resp.text
+    new_job = resp.json()
+    assert new_job["status"] == "AWAITING_MAPPING_CONFIRMATION" and new_job["attempt"] == 2 and sales_count(a) == 0  # nothing saved before confirming
+    m = app_client.get(f"/api/v1/cfo/jobs/{new_job['jobId']}/mapping", headers=owner).json()
+    assert m["proposedBy"] == "SELLER" and m["verified"] is False
+
+    silent = app_client.post(f"/api/v1/cfo/jobs/{new_job['jobId']}/mapping/confirm", json={"decisions": {}}, headers=owner)
+    assert silent.status_code == 422  # the same explicit confirmation as any proposal
+    ok = app_client.post(f"/api/v1/cfo/jobs/{new_job['jobId']}/mapping/confirm", json={"decisions": {str(i): "SELLER_CONFIRMED" for i in range(6)}}, headers=owner)
+    assert ok.status_code == 202, ok.text
+    assert wait_for(app_client, owner, new_job["jobId"])["status"] == "DONE" and sales_count(a) == 40
+
+    # a job that did not stop for want of a mapping has nothing to map by hand
+    assert app_client.post(f"/api/v1/cfo/jobs/{new_job['jobId']}/mapping/manual", json={"fields": MANUAL_FIELDS}, headers=owner).status_code == 409
+
+
+def test_held_rows_are_listed_and_decided_with_the_right_permission(app_client, fake_clerk, two_tenants, with_runner):
+    a, b = two_tenants
+    with_runner()
+    owner = _register_owner(fake_clerk, a)
+    first = post_upload(app_client, owner, known(3)).json()["job"]["jobId"]
+    assert wait_for(app_client, owner, first)["status"] == "DONE"
+    changed = (KNOWN_HEADER + "ORD-0,ORD-0_1,DELIVERED,Returned\nORD-9,ORD-9_1,DELIVERED,Delivered\n").encode()  # ORD-0_1 now carries different values
+    job = post_upload(app_client, owner, changed, name="changed.csv").json()["job"]["jobId"]
+    assert wait_for(app_client, owner, job)["status"] == "DONE"
+
+    held = app_client.get(f"/api/v1/cfo/jobs/{job}/held", headers=owner).json()
+    assert held["total"] == 1 and held["unresolved"] == 1 and held["pageCount"] == 1
+    row = held["items"][0]
+    assert row["kind"] == "CONFLICT" and row["rule"] == "V-DUP-003" and row["values"]["Sub Order No"] == "ORD-0_1" and row["resolution"] is None
+    assert app_client.get(f"/api/v1/cfo/jobs/{job}/held", params={"status": "BOGUS"}, headers=owner).status_code == 400
+
+    cfo_only = partner_with(fake_clerk, a, AGENT_CFO)
+    assert app_client.get(f"/api/v1/cfo/jobs/{job}/held", headers=cfo_only).status_code == 200
+    body = {"held_row_ids": [row["id"]], "action": "KEEP_EARLIER"}
+    assert app_client.post(f"/api/v1/cfo/jobs/{job}/held/resolve", json=body, headers=cfo_only).status_code == 403
+    for deferred in ("SUPERSEDE_WITH_THIS", "KEEP_BOTH_WITH_REFERENCE"):
+        r = app_client.post(f"/api/v1/cfo/jobs/{job}/held/resolve", json={**body, "action": deferred}, headers=owner)
+        assert r.status_code == 400 and "not available yet" in r.json()["detail"]
+    assert app_client.post(f"/api/v1/cfo/jobs/{job}/held/resolve", json={**body, "action": "BOGUS"}, headers=owner).status_code == 400
+    before = sales_count(a)
+    ok = app_client.post(f"/api/v1/cfo/jobs/{job}/held/resolve", json={**body, "note": "my earlier export was right"}, headers=owner)
+    assert ok.status_code == 200 and ok.json() == {"resolved": 1, "action": "KEEP_EARLIER"} and sales_count(a) == before
+    again = app_client.post(f"/api/v1/cfo/jobs/{job}/held/resolve", json=body, headers=owner)
+    assert again.status_code == 409
+    after = app_client.get(f"/api/v1/cfo/jobs/{job}/held", headers=owner).json()
+    assert after["total"] == 0 and after["unresolved"] == 0
+    done = app_client.get(f"/api/v1/cfo/jobs/{job}/held", params={"status": "RESOLVED"}, headers=owner).json()["items"][0]
+    assert done["resolution"] == "KEEP_EARLIER" and done["resolutionNote"] == "my earlier export was right"
+
+    other = _register_owner(fake_clerk, b)  # another tenant sees a plain 404 and cannot decide this tenant's rows
+    assert app_client.get(f"/api/v1/cfo/jobs/{job}/held", headers=other).status_code == 404
+    assert app_client.post(f"/api/v1/cfo/jobs/{job}/held/resolve", json=body, headers=other).status_code == 404
