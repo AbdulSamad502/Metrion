@@ -101,6 +101,12 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/expense-ledger/export": {
+   "query": [
+    "history"
+   ],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/expense-ledger/import/template": {
    "query": [],
    "requiredQuery": []

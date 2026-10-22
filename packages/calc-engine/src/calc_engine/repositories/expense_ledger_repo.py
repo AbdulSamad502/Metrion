@@ -225,6 +225,24 @@ def known_skus(tenant_id: UUID) -> set[str]:
     return {str(r[0]) for r in rows}
 
 
+def export_records(tenant_id: UUID) -> list[dict[str, Any]]:
+    """Every record in every review state (voided included) with its current statuses, oldest first, for the accountant export. Read-only."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(text(_CURRENT + " ORDER BY e.effective_date, e.created_at, e.id"), {"tenant": str(tenant_id)}).fetchall()
+    return [dict(r._mapping) for r in rows]
+
+
+def export_status_events(tenant_id: UUID) -> list[dict[str, Any]]:
+    """The full append-only status history of every record, in order. Read-only."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text("SELECT seq, expense_id, kind, review_state, payment_status, paid_amount_paise, reason, created_by, created_at FROM expense_status_event "
+                 "WHERE tenant_id = :tenant ORDER BY seq"),
+            {"tenant": str(tenant_id)},
+        ).fetchall()
+    return [dict(r._mapping) for r in rows]
+
+
 def import_candidates(tenant_id: UUID, *, date_from: date | None, date_to: date | None, source_references: list[str]) -> list[dict[str, Any]]:
     """The non-voided records an import could duplicate: those dated inside the file's date range, plus any whose `source_reference` is one the file carries
     (an id can be re-used at another date). Read-only; the matching rules live in the backend import service."""
