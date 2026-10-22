@@ -120,7 +120,7 @@ def test_a_manual_sku_tag_on_the_template_carries_to_every_entry(two_tenants):
 
 
 @pytest.mark.parametrize("kind,reason", [("PER_ORDER", "ORDERS_UNAVAILABLE"), ("PER_UNIT", "UNITS_UNAVAILABLE")])
-def test_per_order_and_per_unit_templates_never_materialise_a_made_up_amount(two_tenants, kind, reason):
+def test_per_order_and_per_unit_templates_without_a_count_source_make_nothing(two_tenants, kind, reason):
     a, _ = two_tenants
     key = repo.create(a, NewTemplate(kind=kind, category="packaging", cost_class="DIRECT", effective_from=date(2026, 1, 1), rate_paise=500), created_by=USER)
     out = repo.materialise(a, through_month=date(2026, 3, 1), created_by=USER)
@@ -159,3 +159,105 @@ def test_tenants_are_isolated(two_tenants):
     with pytest.raises(LookupError):
         repo.new_version(b, key, monthly(), created_by=USER)
     assert repo.materialise(b, through_month=date(2026, 1, 1), created_by=USER).created == []
+
+
+# ---- per-order and per-unit templates with the engine's count (section 5.18.2) ----------------------------------------------------------------------------------
+
+from calc_engine.formulas.expense_templates import CountOutcome  # noqa: E402
+
+
+def per_order(**kw) -> NewTemplate:
+    base = dict(kind="PER_ORDER", category="packaging", cost_class="DIRECT", effective_from=date(2026, 1, 1), rate_paise=500)
+    base.update(kw)
+    return NewTemplate(**base)
+
+
+def provider(counts: dict, log: list | None = None):
+    def get(start, end, per):
+        if log is not None:
+            log.append((start, end, per))
+        return counts.get((start, end), counts.get("default", CountOutcome(None, "ORDERS_UNAVAILABLE", True)))
+    return get
+
+
+def test_pt1_a_per_order_template_makes_rate_times_the_engine_count(two_tenants):
+    a, _ = two_tenants
+    repo.create(a, per_order(description="Mailer"), created_by=USER)
+    log: list = []
+    out = repo.materialise(a, through_month=date(2026, 1, 1), created_by=USER, counts=provider({"default": CountOutcome(200, None, True)}, log), today=date(2026, 3, 1))
+    assert len(out.created) == 1 and out.skipped == []
+    row = rows(a)[0]
+    assert (row["amount_paise"], row["review_state"], row["recurring"]) == (100_000, "pending_review", True)  # 200 x Rs 5.00, waiting for the seller
+    assert row["description"] == "Mailer: 200 orders x Rs 5.00" and row["effective_date"] == date(2026, 1, 1)
+    assert log == [(date(2026, 1, 1), date(2026, 1, 31), "ORDER")]
+
+
+def test_a_per_unit_template_asks_for_units(two_tenants):
+    a, _ = two_tenants
+    repo.create(a, per_order(kind="PER_UNIT", rate_paise=250), created_by=USER)
+    log: list = []
+    repo.materialise(a, through_month=date(2026, 1, 1), created_by=USER, counts=provider({"default": CountOutcome(40, None, True)}, log), today=date(2026, 3, 1))
+    assert log[0][2] == "UNIT" and rows(a)[0]["amount_paise"] == 10_000 and "40 units x Rs 2.50" in rows(a)[0]["description"]
+
+
+def test_pt3_a_true_zero_count_makes_a_real_zero_entry_shown_with_its_count(two_tenants):
+    a, _ = two_tenants
+    repo.create(a, per_order(), created_by=USER)
+    repo.materialise(a, through_month=date(2026, 1, 1), created_by=USER, counts=provider({"default": CountOutcome(0, None, True)}), today=date(2026, 3, 1))
+    assert rows(a)[0]["amount_paise"] == 0 and "0 orders x Rs 5.00" in rows(a)[0]["description"]
+
+
+def test_pt2_pt4_an_unavailable_count_creates_nothing_and_says_why(two_tenants):
+    a, _ = two_tenants
+    key = repo.create(a, per_order(), created_by=USER)
+    for outcome, reason in ((CountOutcome(None, "ORDERS_UNAVAILABLE", True), "ORDERS_UNAVAILABLE"), (CountOutcome(None, "NO_ORDERS_IN_PERIOD", False), "NO_ORDERS_IN_PERIOD")):
+        out = repo.materialise(a, through_month=date(2026, 2, 1), created_by=USER, counts=provider({"default": outcome}), today=date(2026, 6, 1))
+        assert out.created == [] and out.skipped == [(str(key), reason)]  # once per template, not per month
+    assert rows(a) == []
+
+
+def test_without_a_count_source_nothing_is_made_up(two_tenants):
+    a, _ = two_tenants
+    key = repo.create(a, per_order(), created_by=USER)
+    out = repo.materialise(a, through_month=date(2026, 1, 1), created_by=USER)
+    assert out.created == [] and out.skipped == [(str(key), "ORDERS_UNAVAILABLE")] and rows(a) == []
+
+
+def test_a_month_that_has_not_finished_is_not_priced(two_tenants):
+    a, _ = two_tenants
+    key = repo.create(a, per_order(), created_by=USER)
+    out = repo.materialise(a, through_month=date(2026, 2, 1), created_by=USER, counts=provider({"default": CountOutcome(10, None, True)}), today=date(2026, 2, 10))
+    assert [r["effective_date"] for r in rows(a)] == [date(2026, 1, 1)]  # January is finished, February is not
+    assert out.skipped == [(str(key), "MONTH_NOT_FINISHED")]
+
+
+def test_pt5_a_rate_change_mid_month_prices_each_part_at_its_own_rate(two_tenants):
+    a, _ = two_tenants
+    key = repo.create(a, per_order(effective_from=date(2026, 2, 1), effective_to=date(2026, 2, 14)), created_by=USER)
+    repo.new_version(a, key, per_order(effective_from=date(2026, 2, 15), rate_paise=600), created_by=USER)
+    counts = {(date(2026, 2, 1), date(2026, 2, 14)): CountOutcome(10, None, True), (date(2026, 2, 15), date(2026, 2, 28)): CountOutcome(20, None, True)}
+    log: list = []
+    repo.materialise(a, through_month=date(2026, 2, 1), created_by=USER, counts=provider(counts, log), today=date(2026, 6, 1))
+    assert [r["amount_paise"] for r in rows(a)] == [17_000]  # 10 x 500 + 20 x 600
+    assert log == [(date(2026, 2, 1), date(2026, 2, 14), "ORDER"), (date(2026, 2, 15), date(2026, 2, 28), "ORDER")]
+    assert rows(a)[0]["description"] == "10 orders x Rs 5.00 + 20 orders x Rs 6.00"
+
+
+def test_one_unavailable_part_of_a_month_makes_the_whole_month_unavailable(two_tenants):
+    a, _ = two_tenants
+    key = repo.create(a, per_order(effective_from=date(2026, 2, 1), effective_to=date(2026, 2, 14)), created_by=USER)
+    repo.new_version(a, key, per_order(effective_from=date(2026, 2, 15), rate_paise=600), created_by=USER)
+    counts = {(date(2026, 2, 1), date(2026, 2, 14)): CountOutcome(10, None, True), (date(2026, 2, 15), date(2026, 2, 28)): CountOutcome(None, "ORDERS_UNAVAILABLE", True)}
+    out = repo.materialise(a, through_month=date(2026, 2, 1), created_by=USER, counts=provider(counts), today=date(2026, 6, 1))
+    assert rows(a) == [] and out.skipped == [(str(key), "ORDERS_UNAVAILABLE")]
+
+
+def test_a_per_order_entry_is_made_once_and_a_voided_one_is_not_recreated(two_tenants):
+    a, _ = two_tenants
+    repo.create(a, per_order(), created_by=USER)
+    c = provider({"default": CountOutcome(5, None, True)})
+    repo.materialise(a, through_month=date(2026, 1, 1), created_by=USER, counts=c, today=date(2026, 6, 1))
+    again = repo.materialise(a, through_month=date(2026, 1, 1), created_by=USER, counts=provider({"default": CountOutcome(9, None, True)}), today=date(2026, 6, 1))
+    assert again.created == [] and again.replayed == 1 and rows(a)[0]["amount_paise"] == 2_500  # the first count stands
+    ledger.append_review(a, rows(a)[0]["id"], review_state="voided", reason="wrong", created_by=USER)
+    assert repo.materialise(a, through_month=date(2026, 1, 1), created_by=USER, counts=c, today=date(2026, 6, 1)).created == []

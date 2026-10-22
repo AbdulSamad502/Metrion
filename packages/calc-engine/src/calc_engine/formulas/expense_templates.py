@@ -15,17 +15,18 @@ Rate changes are new template versions: the version effective on each date is us
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 
-from calc_engine.types import ZERO, Paise
+from calc_engine.types import ZERO, CanonicalLine, Paise
 
 AMORTIZATION_INVALID = "AMORTIZATION_INVALID"
 ORDERS_UNAVAILABLE = "ORDERS_UNAVAILABLE"
 UNITS_UNAVAILABLE = "UNITS_UNAVAILABLE"
 NO_ORDERS_IN_PERIOD = "NO_ORDERS_IN_PERIOD"
 RATE_MISSING = "RATE_MISSING"
+MONTH_NOT_FINISHED = "MONTH_NOT_FINISHED"
 
 
 def first_of_month(d: date) -> date:
@@ -133,3 +134,42 @@ def per_count_amount(rate_paise: int | None, count: int | None, *, per: str, any
     if count is None or isinstance(count, bool) or not isinstance(count, int) or count < 0:
         return TemplateAmount(None, unavailable, None, rate_paise)
     return TemplateAmount(Paise(rate_paise * count), None, count, rate_paise)
+
+
+@dataclass(frozen=True, slots=True)
+class CountOutcome:
+    count: int | None  # None = unavailable
+    reason: str | None  # ORDERS_UNAVAILABLE / UNITS_UNAVAILABLE / NO_ORDERS_IN_PERIOD when count is None
+    any_lines: bool  # False only when there are no sales lines at all in scope
+
+
+def count_for_scope(lines: Sequence[CanonicalLine], order_ref_by_line: Mapping[str, str | None], per: str, *, blocked_lines: int = 0) -> CountOutcome:
+    """The engine's own count for a template (section 5.18.2, with the 5.10.1 definitions): `ORDER` = distinct order ids of the in-scope lines that are not cancelled;
+    `UNIT` = net units kept (units placed less returned and RTO units, zero for a cancelled line). Never a partial count: a line that could not be assembled (`blocked_lines`),
+    or any line lacking a field the count needs (cancellation state, order id, or for units the return and RTO status), makes the whole count unavailable with the engine's
+    reason; no lines at all is `NO_ORDERS_IN_PERIOD` (unavailable, not zero); a true count of 0 over real lines is 0."""
+    unavailable = ORDERS_UNAVAILABLE if per == "ORDER" else UNITS_UNAVAILABLE
+    if not lines and blocked_lines == 0:
+        return CountOutcome(None, NO_ORDERS_IN_PERIOD, False)
+    if blocked_lines > 0:
+        return CountOutcome(None, unavailable, True)
+    orders: set[str] = set()
+    units = 0
+    for line in lines:
+        if line.cancellation_state is None:
+            return CountOutcome(None, unavailable, True)
+        cancelled = line.cancellation_state == "CANCELLED"
+        if per == "ORDER":
+            ref = (order_ref_by_line.get(str(line.sales_line_id)) or "").strip()
+            if not ref:
+                return CountOutcome(None, unavailable, True)
+            if not cancelled:
+                orders.add(ref)
+        else:
+            if line.return_status is None or line.rto_status is None:
+                return CountOutcome(None, unavailable, True)
+            kept = 0 if cancelled else line.quantity - line.returned_qty - line.rto_qty
+            if kept < 0:
+                return CountOutcome(None, unavailable, True)
+            units += kept
+    return CountOutcome(len(orders) if per == "ORDER" else units, None, True)

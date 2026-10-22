@@ -107,7 +107,7 @@ export function RecurringPanel({ getToken, meta, onChanged }: { getToken: Getter
                     From {t.effectiveFrom}{t.effectiveTo ? ` to ${t.effectiveTo}` : ""}{t.kind === "AMORTIZED" && t.amortizationMonths ? ` · over ${t.amortizationMonths} months` : ""}{t.ended ? " · ended" : ""}
                   </div>
                   {(t.kind === "PER_ORDER" || t.kind === "PER_UNIT") && (
-                    <div className="t-micro" style={{ color: "var(--warning)" }}>{SKIP_REASON_LABEL[t.kind === "PER_ORDER" ? "ORDERS_UNAVAILABLE" : "UNITS_UNAVAILABLE"]}</div>
+                    <div className="t-micro" style={{ color: "var(--text-6)" }}>Priced from your sales for each finished month: the rate times the {t.kind === "PER_ORDER" ? "order" : "unit"} count.</div>
                   )}
                 </div>
                 <div className="flex items-center gap-3">
@@ -130,7 +130,7 @@ export function RecurringPanel({ getToken, meta, onChanged }: { getToken: Getter
         )}
       </Section>
 
-      <Section title="Add a recurring entry" hint="Amounts are in rupees. A cost per order or per unit needs the month's order or unit count, which is not available yet, so it creates nothing until it is.">
+      <Section title="Add a recurring entry" hint="Amounts are in rupees. A cost per order or per unit is the rate times that finished month's order or unit count from your uploaded sales; if the count is not available it creates nothing and says why.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Kind">
             <SelectInput value={form.kind} onChange={(v) => set("kind", v as TemplateKind)} options={(Object.keys(KIND_LABEL) as TemplateKind[]).map((k) => ({ value: k, label: KIND_LABEL[k] }))} />

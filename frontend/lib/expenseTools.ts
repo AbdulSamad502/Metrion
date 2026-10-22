@@ -20,8 +20,10 @@ export type MaterialiseResponse = { created: string[]; alreadyMaterialised: numb
 
 export const KIND_LABEL: Record<TemplateKind, string> = { MONTHLY: "Every month", AMORTIZED: "Spread over months", PER_ORDER: "Per order", PER_UNIT: "Per unit" };
 export const SKIP_REASON_LABEL: Record<string, string> = {
-  ORDERS_UNAVAILABLE: "Needs the order count for the month, which is not available yet, so no amount is made up.",
-  UNITS_UNAVAILABLE: "Needs the unit count for the month, which is not available yet, so no amount is made up.",
+  ORDERS_UNAVAILABLE: "Some sales lines are missing what the order count needs (their cancellation status or order id), so no amount is made up.",
+  UNITS_UNAVAILABLE: "Some sales lines are missing what the unit count needs (their cancellation, return or RTO status), so no amount is made up.",
+  NO_ORDERS_IN_PERIOD: "There are no sales lines for that month, so there is nothing to count. This is not a zero.",
+  MONTH_NOT_FINISHED: "The month has not finished, so its count is not final. It is made after the month ends.",
   AMORTIZATION_INVALID: "The number of months is not valid.",
 };
 

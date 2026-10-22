@@ -108,10 +108,101 @@ def test_invalid_amortization_months_are_refused_at_entry(app_client, owner, mon
     assert app_client.get(T, headers=owner).json()["templates"] == []
 
 
-def test_per_order_and_per_unit_templates_are_stored_but_never_materialise_an_amount(app_client, owner):
+def _insert_run(tenant):
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    from data_foundation.repositories import ingestion_run_repo
+    from data_foundation.repositories.tenant_context import tenant_scope as df_scope
+    from sqlalchemy import text as _text
+
+    file_id = _uuid.uuid4()
+    with df_scope(tenant) as conn:
+        conn.execute(
+            _text("INSERT INTO report_file (id, tenant_id, marketplace, report_category, content_sha256, original_filename, byte_size, storage_uri, uploaded_by, uploaded_at) "
+                  "VALUES (:id, :t, 'MEESHO', 'TAX', :sha, 'synthetic.csv', 100, 'file://x', :by, :at)"),
+            {"id": str(file_id), "t": str(tenant), "sha": _uuid.uuid4().hex + _uuid.uuid4().hex, "by": str(_uuid.uuid4()), "at": datetime.now(timezone.utc)},
+        )
+    return ingestion_run_repo.insert_ingestion_run(tenant, report_file_id=file_id, adapter_id="meesho.orders.v1", adapter_version="v1", started_at=datetime.now(timezone.utc))
+
+
+def _seed_sales(tenant, *, orders, day="2026-09-10", cancelled="NOT_CANCELLED", declare_status=True):
+    """Real sales_line rows (order id, quantity); the seller's status overrides are declared exactly as the period P&L reads them."""
+    import uuid as _uuid
+    from datetime import date as _date, datetime, timezone
+
+    from calc_engine.repositories.manual_adjustment_repo import insert_adjustment
+    from data_foundation.repositories.sales_line_repo import insert_sales_line
+
+    run = _insert_run(tenant)
+    ids = []
+    for n, (ref, qty) in enumerate(orders, start=1):
+        line = insert_sales_line(
+            tenant, ingestion_run_id=run, marketplace="MEESHO",
+            canonical_fields={"order_ref": ref, "quantity": qty, "gross_item_amount": 20_000, "taxable_amount": 20_000, "order_date": _date.fromisoformat(day),
+                              "return_status": "NOT_RETURNED", "sku": "SKU-1"},
+            source_row_number=n, source_row_json={}, confidence="PROVISIONAL",
+        )
+        if declare_status:
+            for field, value in (("cancellation_state_override", cancelled), ("rto_status_override", "NOT_RTO")):
+                insert_adjustment(tenant, target_type="LINE", target_ref=str(line), field=field, value=value, created_by=_uuid.uuid4(), created_at=datetime.now(timezone.utc))
+        ids.append(line)
+    return ids
+
+
+def test_per_order_and_per_unit_templates_with_no_sales_data_make_nothing_and_say_why(app_client, owner):
     key = app_client.post(T, json={"kind": "PER_ORDER", "category": "packaging", "effective_from": "2026-01-01", "rate_paise": 500}, headers=owner).json()["templateKey"]
     m = app_client.post(f"{T}/materialise", json={"through_month": "2026-03-01"}, headers=owner).json()
+    assert m["created"] == [] and m["skipped"] == [{"templateKey": key, "reason": "NO_ORDERS_IN_PERIOD"}] and entries(app_client, owner) == []  # unavailable, not zero
+
+
+def test_a_per_order_template_prices_the_engines_order_count_and_waits_for_review(app_client, owner, two_tenants):
+    _seed_sales(two_tenants[0], orders=[("ORD-1", 2), ("ORD-2", 3), ("ORD-2", 1)])  # two orders, three lines, six units
+    app_client.post(T, json={"kind": "PER_ORDER", "category": "packaging", "effective_from": "2026-09-01", "rate_paise": 500, "vendor": "Mailer Co"}, headers=owner)
+    m = app_client.post(f"{T}/materialise", json={"through_month": "2026-09-01"}, headers=owner).json()
+    assert len(m["created"]) == 1 and m["skipped"] == []
+    row = entries(app_client, owner)[0]
+    assert (row["amountPaise"], row["reviewState"], row["recurring"], row["effectiveDate"]) == (1_000, "pending_review", True, "2026-09-01")
+    assert "2 orders x Rs 5.00" in row["description"]
+
+
+def test_a_per_unit_template_prices_net_units_kept(app_client, owner, two_tenants):
+    _seed_sales(two_tenants[0], orders=[("ORD-1", 2), ("ORD-2", 3)])
+    app_client.post(T, json={"kind": "PER_UNIT", "category": "packaging", "effective_from": "2026-09-01", "rate_paise": 250}, headers=owner)
+    app_client.post(f"{T}/materialise", json={"through_month": "2026-09-01"}, headers=owner)
+    assert entries(app_client, owner)[0]["amountPaise"] == 1_250  # 5 units x Rs 2.50
+
+
+def test_cancelled_orders_are_not_counted_and_a_true_zero_is_a_real_zero_entry(app_client, owner, two_tenants):
+    _seed_sales(two_tenants[0], orders=[("ORD-1", 1), ("ORD-2", 1)], cancelled="CANCELLED")
+    app_client.post(T, json={"kind": "PER_ORDER", "category": "packaging", "effective_from": "2026-09-01", "rate_paise": 500}, headers=owner)
+    m = app_client.post(f"{T}/materialise", json={"through_month": "2026-09-01"}, headers=owner).json()
+    row = entries(app_client, owner)[0]
+    assert len(m["created"]) == 1 and row["amountPaise"] == 0 and "0 orders" in row["description"]
+
+
+def test_a_line_whose_status_is_unknown_makes_the_count_unavailable_not_partial(app_client, owner, two_tenants):
+    _seed_sales(two_tenants[0], orders=[("ORD-1", 1)])
+    _seed_sales(two_tenants[0], orders=[("ORD-9", 1)], declare_status=False)  # no declared cancellation or RTO status: this line cannot be assembled
+    key = app_client.post(T, json={"kind": "PER_ORDER", "category": "packaging", "effective_from": "2026-09-01", "rate_paise": 500}, headers=owner).json()["templateKey"]
+    m = app_client.post(f"{T}/materialise", json={"through_month": "2026-09-01"}, headers=owner).json()
     assert m["created"] == [] and m["skipped"] == [{"templateKey": key, "reason": "ORDERS_UNAVAILABLE"}] and entries(app_client, owner) == []
+
+
+def test_the_current_month_is_not_priced_until_it_has_finished(app_client, owner):
+    from datetime import date as _date
+
+    month = _date.today().replace(day=1).isoformat()
+    key = app_client.post(T, json={"kind": "PER_ORDER", "category": "packaging", "effective_from": month, "rate_paise": 500}, headers=owner).json()["templateKey"]
+    m = app_client.post(f"{T}/materialise", json={"through_month": month}, headers=owner).json()
+    assert m["created"] == [] and m["skipped"] == [{"templateKey": key, "reason": "MONTH_NOT_FINISHED"}]
+
+
+def test_tenants_do_not_count_each_others_orders(app_client, owner, other_owner, two_tenants):
+    _seed_sales(two_tenants[1], orders=[("X-1", 1), ("X-2", 1), ("X-3", 1)])
+    app_client.post(T, json={"kind": "PER_ORDER", "category": "packaging", "effective_from": "2026-09-01", "rate_paise": 500}, headers=owner)
+    m = app_client.post(f"{T}/materialise", json={"through_month": "2026-09-01"}, headers=owner).json()
+    assert m["created"] == [] and m["skipped"][0]["reason"] == "NO_ORDERS_IN_PERIOD"  # the other tenant three orders are invisible
 
 
 @pytest.mark.parametrize(

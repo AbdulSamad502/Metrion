@@ -78,7 +78,7 @@ describe("recurring entries", () => {
     expect(rows[0]).toHaveTextContent("Acme SaaS · Every month");
     expect(rows[0]).toHaveTextContent("₹500.00");
     expect(rows[1]).toHaveTextContent("Packaging · Per order");
-    expect(rows[1]).toHaveTextContent("no amount is made up");
+    expect(rows[1]).toHaveTextContent("Priced from your sales for each finished month: the rate times the order count.");
   });
 
   it("says so when there is nothing recurring", async () => {
@@ -127,7 +127,7 @@ describe("recurring entries", () => {
 
   it("creates the entries up to a month and reports how many wait for review, and what was skipped and why", async () => {
     handlers[`GET ${BASE}/templates`] = () => json({ templates: [tpl({})] });
-    handlers[`POST ${BASE}/templates/materialise`] = () => json({ created: ["a", "b"], alreadyMaterialised: 1, skipped: [{ templateKey: "k-2", reason: "ORDERS_UNAVAILABLE" }] });
+    handlers[`POST ${BASE}/templates/materialise`] = () => json({ created: ["a", "b"], alreadyMaterialised: 1, skipped: [{ templateKey: "k-2", reason: "NO_ORDERS_IN_PERIOD" }, { templateKey: "k-3", reason: "MONTH_NOT_FINISHED" }] });
     const user = userEvent.setup();
     const { onChanged } = mount();
     await screen.findByTestId("template-row");
@@ -136,7 +136,8 @@ describe("recurring entries", () => {
     await user.click(screen.getByRole("button", { name: "Create the entries" }));
     const box = await screen.findByTestId("materialise-result");
     expect(box).toHaveTextContent("2 new entries are waiting for review; 1 already existed.");
-    expect(box).toHaveTextContent("no amount is made up");
+    expect(box).toHaveTextContent("There are no sales lines for that month");
+    expect(box).toHaveTextContent("The month has not finished");
     expect(calls.find((c) => c.url.endsWith("/materialise"))!.body).toEqual({ through_month: "2026-03-01" });
     expect(onChanged).toHaveBeenCalled();
   });

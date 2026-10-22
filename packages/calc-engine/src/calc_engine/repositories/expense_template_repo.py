@@ -11,6 +11,8 @@ amount: they are reported as skipped with the engine's reason (`ORDERS_UNAVAILAB
 
 from __future__ import annotations
 
+from calendar import monthrange
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -135,14 +137,91 @@ def _version_for_month(vs: list[dict[str, Any]], month: date) -> dict[str, Any] 
     return max(covering, key=lambda v: (v["effective_from"], v["version"])) if covering else None
 
 
-def materialise(tenant_id: UUID, *, through_month: date, created_by: UUID) -> MaterialiseResult:
-    """Creates the `pending_review` entries for every month up to and including `through_month` that has none yet. Safe to repeat."""
+CountProvider = Callable[[date, date, str], engine.CountOutcome]
+"""`(period_start, period_end, "ORDER" | "UNIT") -> CountOutcome`: the engine's own count of the tenant's sales lines in that window (supplied by the caller, which owns the sales
+data; see `backend/services/expense_template_counts.py`). Without one, per-order and per-unit templates are skipped as unavailable."""
+
+
+def _segments(vs: list[dict[str, Any]], month: date) -> list[tuple[dict[str, Any], date, date]]:
+    """The slices of one month and the template version in force on each (a rate change mid-month splits it): a version covers from its `effective_from` until the next
+    version's `effective_from` (or its own `effective_to`, or the end of the month)."""
+    last = date(month.year, month.month, monthrange(month.year, month.month)[1])
+    closed = [v["effective_to"] for v in vs if v["ended"] and v["effective_to"] is not None]
+    horizon = min(last, max(closed)) if closed else last
+    ordered = sorted({v["effective_from"]: v for v in sorted(vs, key=lambda v: v["version"])}.values(), key=lambda v: v["effective_from"])  # latest version per start date
+    out: list[tuple[dict[str, Any], date, date]] = []
+    for i, v in enumerate(ordered):
+        end = horizon if i + 1 == len(ordered) else min(horizon, ordered[i + 1]["effective_from"].fromordinal(ordered[i + 1]["effective_from"].toordinal() - 1))
+        if v["effective_to"] is not None:
+            end = min(end, v["effective_to"])
+        begin = max(month, v["effective_from"])
+        if begin <= end:
+            out.append((v, begin, end))
+    return out
+
+
+def _per_count_entry(
+    vs: list[dict[str, Any]], month: date, counts: CountProvider, per: str, any_rate_missing: list[bool]
+) -> tuple[int, str] | str:
+    """`(amount_paise, description)` for one month of a per-order or per-unit template, or the engine's reason string when the month cannot be priced (never a partial sum)."""
+    total = 0
+    parts: list[str] = []
+    for version, begin, end in _segments(vs, month):
+        outcome = counts(begin, end, per)
+        priced = engine.per_count_amount(version["rate_paise"], outcome.count, per=per, any_sales_lines=outcome.any_lines)
+        if priced.amount is None:
+            return outcome.reason or priced.reason or (engine.ORDERS_UNAVAILABLE if per == "ORDER" else engine.UNITS_UNAVAILABLE)
+        total += priced.amount.value
+        rupees, paise = divmod(int(version["rate_paise"]), 100)
+        parts.append(f"{outcome.count} {'orders' if per == 'ORDER' else 'units'} x Rs {rupees}.{paise:02d}")
+    if not parts:
+        return engine.NO_ORDERS_IN_PERIOD
+    return total, " + ".join(parts)
+
+
+def materialise(tenant_id: UUID, *, through_month: date, created_by: UUID, counts: CountProvider | None = None, today: date | None = None) -> MaterialiseResult:
+    """Creates the `pending_review` entries for every month up to and including `through_month` that has none yet. Safe to repeat.
+
+    A per-order or per-unit template needs `counts` (the engine's count of the month's sales lines) and a FINISHED month (`today` after the month's last day), because an entry
+    made from a half-uploaded month would stay at that count: otherwise it is skipped with the engine's reason (`ORDERS_UNAVAILABLE`, `UNITS_UNAVAILABLE`, `NO_ORDERS_IN_PERIOD`,
+    `MONTH_NOT_FINISHED`), never with a made-up amount."""
     result = MaterialiseResult()
     through = engine.first_of_month(through_month)
     for key, vs in _all_versions(tenant_id).items():
         first = vs[0]
         if first["kind"] in ("PER_ORDER", "PER_UNIT"):
-            result.skipped.append((str(key), engine.ORDERS_UNAVAILABLE if first["kind"] == "PER_ORDER" else engine.UNITS_UNAVAILABLE))
+            per = "ORDER" if first["kind"] == "PER_ORDER" else "UNIT"
+            skipped: list[str] = []
+            for month in engine.months_inclusive(min(v["effective_from"] for v in vs), through):
+                if not _segments(vs, month):
+                    continue
+                if counts is None:
+                    reason: str | None = engine.ORDERS_UNAVAILABLE if per == "ORDER" else engine.UNITS_UNAVAILABLE
+                    priced: tuple[int, str] | str = reason
+                elif today is not None and date(month.year, month.month, monthrange(month.year, month.month)[1]) >= today:
+                    priced = engine.MONTH_NOT_FINISHED
+                else:
+                    priced = _per_count_entry(vs, month, counts, per, [])
+                if isinstance(priced, str):
+                    if priced not in skipped:
+                        skipped.append(priced)
+                        result.skipped.append((str(key), priced))
+                    continue
+                version = _segments(vs, month)[-1][0]
+                amount, why = priced
+                res = ledger.insert_record(
+                    tenant_id,
+                    NewRecord(
+                        effective_date=month, category=version["category"], cost_class=version["cost_class"], amount_paise=amount, treatment=version["treatment"],
+                        vendor=version["vendor"], description=(f"{version['description']}: {why}" if version["description"] else why),
+                        channel_scope=version["channel_scope"], sku=version["sku"], source_reference=f"template:{key}:{month:%Y-%m}", recurring=True,
+                    ),
+                    review_state="pending_review", created_by=created_by, idempotency_key=f"template:{key}:{month:%Y-%m}",
+                )
+                if res.replayed:
+                    result.replayed += 1
+                else:
+                    result.created.append(res.expense_id)
             continue
         start = engine.first_of_month(min(v["effective_from"] for v in vs))
         schedule = None

@@ -24,6 +24,7 @@ from backend.api.v1.cfo import _require_cfo_entitlement
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CFO
 from backend.services import expense_ledger_rules as rules
+from backend.services.expense_template_counts import count_provider
 
 router = APIRouter(prefix="/api/v1/cfo/expense-ledger/templates")
 
@@ -170,7 +171,9 @@ def materialise(body: MaterialiseRequest, ctx: AuthContext = require_auth(permis
         begin = engine.first_of_month(t["start_month"] or t["effective_from"])
         if len(engine.months_inclusive(begin, through)) > MONTHS_MAX + 1 and t["kind"] in ("MONTHLY", "AMORTIZED"):
             raise HTTPException(status_code=422, detail=f"a template would span more than {MONTHS_MAX} months; end it or choose an earlier through_month")
-    result = repo.materialise(tenant, through_month=through, created_by=ctx.app_user_id)
+    result = repo.materialise(
+        tenant, through_month=through, created_by=ctx.app_user_id, counts=count_provider(tenant), today=datetime.now(timezone.utc).date()
+    )
     if result.created:
         _log_write(ctx)
     return {
