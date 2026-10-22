@@ -53,7 +53,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "products", label: label("products"), icon: "products", href: "/dashboard/pi" },
       { id: "competitors", label: label("competitors"), icon: "competitors", href: "/dashboard/competitors" },
-      { id: "cfo", label: label("cfo"), icon: "finance", href: "/dashboard/cfo" },
+      { id: "cfo", label: label("cfo"), icon: "finance", href: "/dashboard/cfo", exact: true }, // exact: the Expense Tracker below is its own page, so it must not also light this one
+      { id: "cfo-expenses", label: label("cfo-expenses"), icon: "expenses", href: "/dashboard/cfo/expenses" },
       { id: "pnl-calculator", label: label("pnl-calculator"), icon: "reports", href: "/dashboard/pnl-calculator" },
       { id: "cmo", label: label("cmo"), icon: "marketing", href: "/dashboard/cmo" },
     ],

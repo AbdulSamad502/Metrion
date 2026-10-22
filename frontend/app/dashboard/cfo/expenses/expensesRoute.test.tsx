@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NAV_GROUPS, PAGE_COPY, allNavItems, isActive, pageTitle } from "@/lib/navigation";
 
-// Round 9 R9-1: the Expense Tracker is a dedicated dashboard at /dashboard/cfo/expenses, linked from the CFO page; the sidebar is unchanged and there is no new top-level
-// product or agent.
+// The Expense Tracker is a dedicated dashboard at /dashboard/cfo/expenses with its own sidebar entry (owner instruction 2026-10-22, superseding R9-1's "sidebar unchanged"),
+// still linked from the CFO page. It is part of CFO, not a new agent.
 
 describe("the Expense Tracker route", () => {
   it("has a title and description from PAGE_COPY, and the page uses them instead of hand-written wording", () => {
@@ -19,14 +19,16 @@ describe("the Expense Tracker route", () => {
     expect(layout.metadata.title).toBe(pageTitle("cfo-expenses"));
   });
 
-  it("leaves the sidebar unchanged and keeps Profit & Finance highlighted on the new route", () => {
+  it("is its own entry in the sidebar, right after Profit & Finance, and only that entry is highlighted on its page", () => {
     expect(NAV_GROUPS.map((g) => g.items.map((i) => i.label))).toEqual([
       ["Overview", "CEO Hub", "Action Center"],
-      ["Products", "Competitors", "Profit & Finance", "Profit Calculator", "Listings & Marketing"],
+      ["Products", "Competitors", "Profit & Finance", "Expense Tracker", "Profit Calculator", "Listings & Marketing"],
     ]);
-    const cfo = allNavItems().find((i) => i.id === "cfo")!;
-    expect(isActive(cfo, "/dashboard/cfo/expenses")).toBe(true);
-    expect(allNavItems().some((i) => i.href === "/dashboard/cfo/expenses")).toBe(false);
+    const items = allNavItems();
+    const tracker = items.find((i) => i.id === "cfo-expenses")!;
+    expect(tracker.href).toBe("/dashboard/cfo/expenses");
+    expect(items.filter((i) => isActive(i, "/dashboard/cfo/expenses")).map((i) => i.id)).toEqual(["cfo-expenses"]);
+    expect(items.filter((i) => isActive(i, "/dashboard/cfo")).map((i) => i.id)).toEqual(["cfo"]);
   });
 
   it("is linked from the CFO page", () => {

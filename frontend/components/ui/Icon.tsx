@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
  * navigation, plus the few utility glyphs the dashboard needs. `currentColor` so a parent's
  * text color (active / hover / locked) drives the icon. Decorative by default (aria-hidden);
  * pass `label` when an icon stands alone. */
-export type IconName = "overview" | "ceo" | "products" | "competitors" | "orders" | "customers" | "finance" | "marketing" | "reports" | "agents" | "cart" | "settings" | "notifications" | "lock" | "check" | "plus" | "arrow" | "chevron" | "close" | "menu" | "collapse" | "logout" | "dot" | "alert" | "trash";
+export type IconName = "overview" | "ceo" | "products" | "competitors" | "orders" | "customers" | "finance" | "marketing" | "reports" | "expenses" | "agents" | "cart" | "settings" | "notifications" | "lock" | "check" | "plus" | "arrow" | "chevron" | "close" | "menu" | "collapse" | "logout" | "dot" | "alert" | "trash";
 
 const PATHS: Record<IconName, ReactNode> = {
   overview: <><rect x="2" y="2" width="7" height="7" rx="1.5" /><rect x="11" y="2" width="7" height="7" rx="1.5" /><rect x="2" y="11" width="7" height="7" rx="1.5" /><rect x="11" y="11" width="7" height="7" rx="1.5" /></>,
@@ -15,6 +15,7 @@ const PATHS: Record<IconName, ReactNode> = {
   customers: <><circle cx="7.5" cy="6.5" r="2.6" /><path d="M2.5 16 C2.5 12.5 5 11 7.5 11 C10 11 12.5 12.5 12.5 16" /><circle cx="14.5" cy="7.5" r="2.1" /><path d="M13 11.2 C15.5 11.4 17.5 12.8 17.5 16" /></>,
   finance: <><rect x="2" y="5" width="16" height="11" rx="2" /><path d="M2 8 H18" /><circle cx="14" cy="12" r="1.3" fill="currentColor" stroke="none" /></>,
   marketing: <><path d="M2 9 H6 L13 4 V16 L6 11 H2 Z" /><path d="M6 11 L7 16" /></>,
+  expenses: <><path d="M5 2.5 H15 V17.5 L12.5 16 L10 17.5 L7.5 16 L5 17.5 Z" /><line x1="7.5" y1="6.5" x2="12.5" y2="6.5" /><line x1="7.5" y1="9.5" x2="12.5" y2="9.5" /><line x1="7.5" y1="12.5" x2="10.5" y2="12.5" /></>,
   reports: <><line x1="3" y1="17" x2="17" y2="17" /><rect x="4" y="10" width="3" height="7" /><rect x="8.5" y="6" width="3" height="11" /><rect x="13" y="12" width="3" height="5" /></>,
   agents: <><rect x="4" y="6" width="12" height="10" rx="2.5" /><circle cx="7.6" cy="11" r="1.15" fill="currentColor" stroke="none" /><circle cx="12.4" cy="11" r="1.15" fill="currentColor" stroke="none" /><line x1="10" y1="6" x2="10" y2="3.2" /><circle cx="10" cy="2.4" r="1" fill="currentColor" stroke="none" /></>,
   cart: <><circle cx="7" cy="17" r="1.3" fill="currentColor" stroke="none" /><circle cx="14" cy="17" r="1.3" fill="currentColor" stroke="none" /><path d="M2 3 H4 L6.5 13 H15.5 L17.5 6 H5.5" /></>,
