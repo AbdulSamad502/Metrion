@@ -66,7 +66,7 @@ def expense(client, headers, category="advertising", amount=10_001):
 
 def feed_for(tenant):
     from calc_engine.formulas.ledger_feed import ledger_feed
-    from calc_engine.repositories import expense_ledger_repo as ledger
+    from calc_engine.repositories import expense_tracker_repo as ledger
 
     from backend.services import expense_assignment_data as data
 
@@ -183,7 +183,7 @@ def test_the_other_tenants_sales_never_feed_the_split(app_client, owner, other_o
 
 
 def test_nothing_is_read_unless_a_record_actually_needs_sales_data(app_client, owner, two_tenants, monkeypatch):
-    from calc_engine.repositories import expense_ledger_repo as ledger
+    from calc_engine.repositories import expense_tracker_repo as ledger
 
     from backend.services import cfo_actions
     from backend.services import expense_assignment_data as data
@@ -200,7 +200,7 @@ def test_nothing_is_read_unless_a_record_actually_needs_sales_data(app_client, o
 
 
 def test_a_voided_record_does_not_ask_for_sales_data(app_client, owner, two_tenants, monkeypatch):
-    from calc_engine.repositories import expense_ledger_repo as ledger
+    from calc_engine.repositories import expense_tracker_repo as ledger
 
     from backend.services import expense_assignment_data as data
 

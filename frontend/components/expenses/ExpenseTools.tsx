@@ -160,7 +160,7 @@ export function RecurringPanel({ getToken, meta, onChanged }: { getToken: Getter
         {result && (
           <div className="mt-3 t-body-sm" style={{ color: "var(--text-4)" }} data-testid="materialise-result">
             {result.created.length} new {result.created.length === 1 ? "entry" : "entries"} are waiting for review; {result.alreadyMaterialised} already existed.
-            {result.skipped.map((s) => <div key={s.templateKey} style={{ color: "var(--warning)" }}>{SKIP_REASON_LABEL[s.reason] ?? s.reason}</div>)}
+            {result.skipped.map((s, i) => <div key={`${s.templateKey}-${i}`} style={{ color: "var(--warning)" }}>{SKIP_REASON_LABEL[s.reason] ?? s.reason}</div>)}
           </div>
         )}
       </Section>

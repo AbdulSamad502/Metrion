@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BLANK, buildRequest, emptyForm, type PnlForm } from "@/lib/pnlScenario";
+import { BLANK, buildRequest, emptyForm, newFeeEntry, type PnlForm } from "@/lib/pnlScenario";
 
 const f = (text: string, na = false) => ({ text, na });
 const filled = (over: Partial<PnlForm> = {}): PnlForm => ({
@@ -12,7 +12,7 @@ const filled = (over: Partial<PnlForm> = {}): PnlForm => ({
   rto: f("0"),
   returns: f("0"),
   adSpend: f("", true),
-  fees: { referral: { ...f("10"), refund: BLANK }, closing: { ...f("20"), refund: BLANK }, shipping: { ...f("50"), refund: BLANK } },
+  fees: { referral: { ...newFeeEntry(), ...f("10") }, closing: { ...newFeeEntry(), ...f("20") }, shipping: { ...newFeeEntry(), ...f("50") } },
   ...over,
 });
 const ok = (form: PnlForm) => {
@@ -63,10 +63,10 @@ describe("form -> request", () => {
   });
 
   it("only sends fees that exist for the marketplace and mode (no stray ids, no quick-mode extras)", () => {
-    const quick = ok(filled({ mode: "quick", fees: { referral: { ...f("10"), refund: BLANK }, reverse: { ...f("30"), refund: BLANK } } }));
+    const quick = ok(filled({ mode: "quick", fees: { referral: { ...newFeeEntry(), ...f("10") }, reverse: { ...newFeeEntry(), ...f("30") } } }));
     expect(Object.keys(quick.fees)).toEqual(["referral"]);
     expect(quick.packaging_cost).toEqual({ state: "empty" });
-    const fba = ok(filled({ fulfilment: "fba", fees: { shipping: { ...f("50"), refund: BLANK }, fba_fulfilment: { ...f("40"), refund: BLANK } } }));
+    const fba = ok(filled({ fulfilment: "fba", fees: { shipping: { ...newFeeEntry(), ...f("50") }, fba_fulfilment: { ...newFeeEntry(), ...f("40") } } }));
     expect(Object.keys(fba.fees)).toEqual(["fba_fulfilment"]);
   });
 
@@ -79,7 +79,7 @@ describe("form -> request", () => {
 
   it("rejects a 100% target margin and carries a valid one as an integer string", () => {
     expect(buildRequest(filled({ targetMargin: f("100") })).ok).toBe(false);
-    expect(ok(filled({ targetMargin: f("20"), wantBreakeven: false })).targets).toEqual([{ kind: "margin", bps: "2000" }]);
+    expect(ok(filled({ targetMargin: f("20"), wantBreakeven: false })).targets).toEqual([{ kind: "margin", bps: "2000", basis: "contribution" }]);
   });
 
   it("makes no fee assumption: the default form carries no fee value at all", () => {

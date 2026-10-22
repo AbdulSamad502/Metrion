@@ -35,6 +35,7 @@ const CONTRACTS: { route: string; file: string; type: string; wrap?: string }[] 
   { route: "POST /api/v1/cfo/pricing", file: "lib/api.ts", type: "PricingCurveResponse" },
   { route: "POST /api/v1/cfo/pnl", file: "lib/api.ts", type: "PeriodPnlResponse" },
   { route: "POST /api/v1/cfo/pnl-scenario", file: "lib/pnlScenario.ts", type: "PnlScenarioResponse" },
+  { route: "POST /api/v1/cfo/pnl-scenario-compare", file: "lib/pnlScenario.ts", type: "PnlCompareResponse" },
   { route: "GET /api/v1/cfo/expense-ledger/categories", file: "lib/expenseLedger.ts", type: "LedgerMeta" },
   { route: "GET /api/v1/cfo/expense-ledger", file: "lib/expenseLedger.ts", type: "ExpenseListResponse" },
   { route: "POST /api/v1/cfo/expense-ledger/summary", file: "lib/expenseLedger.ts", type: "SummaryResponse" },

@@ -14,7 +14,7 @@ import re
 from fractions import Fraction
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, StrictBool
 
 from calc_engine.formulas.pnl_scenario import (
     EMPTY,
@@ -190,6 +190,8 @@ class PnlScenarioHttpRequest(_Strict):
     ad_revenue: MoneyEntry = Field(default_factory=MoneyEntry)
     operating_expenses: MoneyEntry = Field(default_factory=MoneyEntry)
     targets: list[TargetIn] = Field(default_factory=list, max_length=MAX_TARGETS)
+    # True only when the page filled the form with its fictional example numbers: the result then carries the standing "example data" label. It changes no figure.
+    is_example: StrictBool = False
 
     @model_validator(mode="after")
     def _fees_belong_to_the_marketplace(self) -> "PnlScenarioHttpRequest":
@@ -209,6 +211,14 @@ class PnlScenarioHttpRequest(_Strict):
             if v.kind == "tiers" and not definition.tierable:
                 raise ValueError(f"fee '{fee_id}' does not support price bands")
         return self
+
+
+class PnlScenarioCompareHttpRequest(_Strict):
+    """A base scenario and a what-if variant of it, each a complete scenario request. The page builds the variant from the same form with a few values replaced; the
+    difference between the two results is computed by the engine (`calc_engine.formulas.pnl_scenario.compare`)."""
+
+    base: PnlScenarioHttpRequest
+    what_if: PnlScenarioHttpRequest
 
 
 def to_inputs(body: PnlScenarioHttpRequest) -> ScenarioInputs:
@@ -240,7 +250,7 @@ def to_inputs(body: PnlScenarioHttpRequest) -> ScenarioInputs:
         ad_spend=body.ad_spend.to_entry(),
         ad_revenue=body.ad_revenue.to_entry(),
         operating_expenses=body.operating_expenses.to_entry(),
-        is_example=False,
+        is_example=body.is_example,
     )
 
 
@@ -368,3 +378,13 @@ def to_response(result: ScenarioResult, solutions: list[dict[str, Any]], *, esti
 
 def solution_dict(target: TargetIn, r: SolveResult) -> dict[str, Any]:
     return _solution(target, r)
+
+
+def comparison_dict(c: Any) -> dict[str, Any]:
+    """The engine's what-if-minus-base changes; a figure that was not available on either side is None, never zero."""
+    return {
+        "perKeptChange": _s(c.per_kept_change.value) if c.per_kept_change is not None else None,
+        "perPlacedChange": _s(c.per_placed_change.value) if c.per_placed_change is not None else None,
+        "monthlyChange": _s(c.monthly_change.value) if c.monthly_change is not None else None,
+        "marginChangeBps": _s(c.margin_change_bps),
+    }

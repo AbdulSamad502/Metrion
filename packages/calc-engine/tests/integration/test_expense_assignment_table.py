@@ -10,8 +10,8 @@ import pytest
 from sqlalchemy import text
 
 from calc_engine.formulas.expense_assignment import SkuAssignment
-from calc_engine.repositories import expense_ledger_repo as repo
-from calc_engine.repositories.expense_ledger_repo import NewRecord
+from calc_engine.repositories import expense_tracker_repo as repo
+from calc_engine.repositories.expense_tracker_repo import NewRecord
 from calc_engine.repositories.tenant_context import tenant_scope
 
 USER = uuid.uuid4()

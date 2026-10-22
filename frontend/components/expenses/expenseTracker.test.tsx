@@ -134,6 +134,39 @@ describe("review queue", () => {
   });
 });
 
+describe("review queue wording", () => {
+  it("says an unknown-SKU entry stays in the total and only its SKU allocation is pending", async () => {
+    overrides["POST /api/v1/cfo/expense-ledger/summary"] = () => json({ ...SUMMARY, reviewQueue: { ...SUMMARY.reviewQueue, items: [{ expenseId: "e-9", reason: "UNMAPPED_IDENTIFIER", amountPaise: 125050 }] } });
+    mount();
+    const u = userEvent.setup();
+    await u.click(await screen.findByRole("tab", { name: /Review queue/ }));
+    const panel = await screen.findByText(/SKU not found in your catalog/);
+    expect(panel).toHaveTextContent("still in the total");
+    expect(panel).toHaveTextContent("only the SKU allocation is pending");
+    expect(screen.queryByText(/^These are not counted in the total until you confirm them\.$/)).toBeNull();
+    expect(screen.getByText(/An entry whose SKU is not found stays in the total/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();   // nothing to confirm: only the allocation is pending
+  });
+});
+
+describe("history", () => {
+  it("loads the record's review and payment events from the server when History is opened", async () => {
+    overrides["GET /api/v1/cfo/expense-ledger/e-2"] = () => json({ ...RECORDS[1], history: [
+      { seq: 1, kind: "REVIEW", reviewState: "confirmed", paymentStatus: null, paidAmountPaise: null, reason: null, createdAt: "2026-10-03T00:00:00Z" },
+      { seq: 2, kind: "PAYMENT", reviewState: null, paymentStatus: "paid", paidAmountPaise: 125050, reason: null, createdAt: "2026-10-04T00:00:00Z" },
+    ] });
+    mount();
+    const u = userEvent.setup();
+    await u.click(await screen.findByRole("tab", { name: "Expenses" }));
+    await screen.findAllByTestId("expense-row");
+    await u.click(screen.getAllByRole("button", { name: "History" })[1]);
+    const events = await screen.findAllByTestId("history-event");
+    expect(events).toHaveLength(2);
+    expect(events[1]).toHaveTextContent("Payment status: Paid (₹1,250.50 paid)");
+    expect(calls.some((c) => c.method === "GET" && c.url.endsWith("/expense-ledger/e-2"))).toBe(true);
+  });
+});
+
 describe("entry form", () => {
   it("parses the typed rupees to an integer-paise string and sends the category and date", async () => {
     mount();

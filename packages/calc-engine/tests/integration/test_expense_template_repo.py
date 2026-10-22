@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import text
 
 from calc_engine.formulas.ledger_feed import ledger_feed
-from calc_engine.repositories import expense_ledger_repo as ledger
+from calc_engine.repositories import expense_tracker_repo as ledger
 from calc_engine.repositories import expense_template_repo as repo
 from calc_engine.repositories.expense_template_repo import NewTemplate
 

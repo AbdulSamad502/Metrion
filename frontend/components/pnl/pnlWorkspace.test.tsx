@@ -192,13 +192,13 @@ describe("Profit Calculator page", () => {
     expect(screen.getByTestId("estimate-banner")).toBeInTheDocument();
   });
 
-  it("offers 'Not applicable' as a separate, explicit choice from leaving a field blank", async () => {
+  it("offers Doesn't apply as a separate, explicit choice from leaving a field blank", async () => {
     serve(200, response());
     const user = userEvent.setup();
     render(<PnlCalculatorPage />);
     await fillBasics(user);
     const packagingRow = screen.getByLabelText("Packaging per order").closest("div")!.parentElement!;
-    await user.click(within(packagingRow).getByRole("checkbox", { name: "Not applicable" }));
+    await user.click(within(packagingRow).getByRole("checkbox", { name: /Doesn't apply/ }));
     await user.click(screen.getByRole("button", { name: "Calculate" }));
     await screen.findByText("Contribution profit per order kept");
     expect(JSON.parse(calls[0].init.body as string).packaging_cost).toEqual({ state: "na" });
@@ -283,15 +283,15 @@ describe("Profit Calculator page", () => {
     expect(screen.queryByText("How this estimate treats fees and GST")).toBeNull();
   });
 
-  it("makes the 'Not applicable' checkbox larger, with its label still clickable, keyboard-operable and named", async () => {
+  it("makes the Doesn't apply checkbox larger, with its label still clickable, keyboard-operable and named", async () => {
     const user = userEvent.setup();
     render(<PnlCalculatorPage />);
     const cost = screen.getByLabelText("Product cost per unit") as HTMLInputElement;
-    const box = within(cost.closest("div")!.parentElement!).getByRole("checkbox", { name: "Not applicable" });
+    const box = within(cost.closest("div")!.parentElement!).getByRole("checkbox", { name: /Doesn't apply/ });
     expect(box.className).toMatch(/(^| )h-5( |$)/);
     expect(box.className).toMatch(/(^| )w-5( |$)/);
-    expect(box.closest("label")).toHaveTextContent("Not applicable"); // the whole label is the click target
-    await user.click(within(cost.closest("div")!.parentElement!).getByText("Not applicable"));
+    expect(box.closest("label")).toHaveTextContent("Doesn't apply (₹0)"); // the whole label is the click target
+    await user.click(within(cost.closest("div")!.parentElement!).getByText("Doesn't apply (₹0)"));
     expect(box).toBeChecked();
     expect(cost).toBeDisabled();
     box.focus();
@@ -299,15 +299,18 @@ describe("Profit Calculator page", () => {
     expect(box).not.toBeChecked();
   });
 
-  it("lines up the fee fields: each fee and its refund field share rows across the two columns in Detailed mode", async () => {
+  it("groups each fee with its own refund and charged-on choices in Detailed mode, and shows only the key fee in Expected mode", async () => {
     const user = userEvent.setup();
     render(<PnlCalculatorPage />);
-    const referral = screen.getByLabelText("Referral fee").closest("div")!.parentElement!.parentElement!;
-    expect(referral.className).toMatch(/sm:grid-rows-subgrid/);
-    expect(referral.className).toMatch(/sm:row-span-2/);
-    await user.click(screen.getByRole("radio", { name: "Quick estimate" }));
-    const quickRow = screen.getByLabelText("Referral fee").closest("div")!.parentElement!.parentElement!;
-    expect(quickRow.className).not.toMatch(/subgrid/);
+    const referral = screen.getByTestId("fee-referral");
+    expect(within(referral).getByLabelText("Referral fee")).toBeInTheDocument();
+    expect(within(referral).getByLabelText("Referral fee: share refunded on returns")).toBeInTheDocument();
+    expect(within(referral).getByLabelText("Referral fee: charged on")).toBeInTheDocument();
+    expect(within(referral).getByRole("checkbox", { name: "This fee changes with the selling price" })).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Expected" }));
+    const quick = screen.getByTestId("fee-referral");
+    expect(within(quick).queryByLabelText("Referral fee: share refunded on returns")).toBeNull();
+    expect(within(quick).queryByRole("checkbox", { name: "This fee changes with the selling price" })).toBeNull();
   });
   it("shows numbered steps that tick only when everything in them was entered, and counts them", async () => {
     const user = userEvent.setup();
@@ -318,7 +321,7 @@ describe("Profit Calculator page", () => {
     await user.type(screen.getByLabelText("Product cost per unit"), "450");
     await user.type(screen.getByLabelText("Product GST rate"), "18");
     expect(within(screen.getByTestId("step-1")).queryByText("Entered")).toBeNull(); // packaging (Detailed) is still blank
-    await user.click(within(screen.getByTestId("step-1")).getAllByRole("checkbox", { name: "Not applicable" }).at(-1)!); // packaging: confirmed not applicable
+    await user.click(within(screen.getByTestId("step-1")).getAllByRole("checkbox", { name: /Doesn't apply/ }).at(-1)!); // packaging: confirmed not applicable
     expect(within(screen.getByTestId("step-1")).getByText("Entered")).toBeInTheDocument();
     expect(progress).toHaveTextContent("1 of 4 steps entered");
   });

@@ -142,6 +142,19 @@ describe("recurring entries", () => {
     expect(onChanged).toHaveBeenCalled();
   });
 
+  it("does not log a duplicate-key warning when one template is skipped for several months", async () => {
+    handlers[`GET ${BASE}/templates`] = () => json({ templates: [tpl({})] });
+    handlers[`POST ${BASE}/templates/materialise`] = () => json({ created: [], alreadyMaterialised: 0, skipped: [{ templateKey: "k-1", reason: "NO_ORDERS_IN_PERIOD" }, { templateKey: "k-1", reason: "NO_ORDERS_IN_PERIOD" }] });
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const user = userEvent.setup();
+    mount();
+    await screen.findByTestId("template-row");
+    await user.click(screen.getByRole("button", { name: "Create the entries" }));
+    await screen.findByTestId("materialise-result");
+    expect(spy.mock.calls.filter((c) => String(c[0]).includes("same key"))).toHaveLength(0);
+    spy.mockRestore();
+  });
+
   it("shows a server refusal in place", async () => {
     handlers[`GET ${BASE}/templates`] = () => json({ templates: [] });
     handlers[`POST ${BASE}/templates/materialise`] = () => json({ detail: "through_month may be at most next month" }, 422);

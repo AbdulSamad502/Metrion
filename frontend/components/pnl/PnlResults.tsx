@@ -34,6 +34,14 @@ const BLANK_INPUT_ASSUMPTIONS: ReadonlySet<string> = new Set(["purchase_gst_defa
 
 const money = (v: string | null | undefined) => formatPaise(v);
 
+/** The statement's blocks, in the order the public calculator shows them. A line whose group is not listed here still prints, after the blocks. */
+const LEDGER_BLOCKS = [
+  { title: "Cost of goods", groups: ["product", "stock_loss"] },
+  { title: "Marketplace charges", groups: ["commission", "shipping", "fulfilment", "other_fee", "fee_gst", "fee_refund"] },
+  { title: "Packaging and advertising", groups: ["packaging", "advertising"] },
+] as const;
+const KNOWN_GROUPS: ReadonlySet<string> = new Set(LEDGER_BLOCKS.flatMap((b) => b.groups));
+
 function Ledger({ view, label }: { view: PnlView; label: string }) {
   return (
     <div className="overflow-x-auto">
@@ -50,10 +58,25 @@ function Ledger({ view, label }: { view: PnlView; label: string }) {
             <th scope="row" className="py-2 pr-4 text-left font-medium" style={{ color: "var(--text-3)" }}>Revenue (excluding output GST)</th>
             <td className="py-2 text-right tabular-nums" style={{ color: "var(--text-2)" }}>{money(view.revenue)}</td>
           </tr>
-          {view.lines.map((l) => (
-            <tr key={l.id} style={{ borderTop: "1px solid var(--border-subtle)" }}>
-              <th scope="row" className="py-2 pr-4 text-left font-normal" style={{ color: "var(--text-4)" }}>{l.label}</th>
-              <td className="py-2 text-right tabular-nums" style={{ color: "var(--text-3)" }}>{money(l.amount)}</td>
+          {LEDGER_BLOCKS.map((block) => {
+            const lines = view.lines.filter((l) => (block.groups as readonly string[]).includes(l.group));
+            if (lines.length === 0) return null;
+            return [
+              <tr key={`h-${block.title}`} style={{ borderTop: "1px solid var(--border-subtle)" }}>
+                <th scope="colgroup" colSpan={2} className="pb-1 pt-3 text-left t-label" style={{ color: "var(--text-5)" }}>{block.title}</th>
+              </tr>,
+              ...lines.map((l) => (
+                <tr key={l.id}>
+                  <th scope="row" className="py-1.5 pr-4 text-left font-normal" style={{ color: "var(--text-4)" }}>{l.label}</th>
+                  <td className="py-1.5 text-right tabular-nums" style={{ color: l.amount.startsWith("-") ? "var(--accent)" : "var(--text-3)" }}>{money(l.amount)}</td>
+                </tr>
+              )),
+            ];
+          })}
+          {view.lines.filter((l) => !KNOWN_GROUPS.has(l.group)).map((l) => (
+            <tr key={l.id}>
+              <th scope="row" className="py-1.5 pr-4 text-left font-normal" style={{ color: "var(--text-4)" }}>{l.label}</th>
+              <td className="py-1.5 text-right tabular-nums" style={{ color: "var(--text-3)" }}>{money(l.amount)}</td>
             </tr>
           ))}
           <tr style={{ borderTop: "1px solid var(--border-default)" }}>
@@ -188,6 +211,11 @@ export function PnlResults({ result, stale, busy, onUsePrice }: { result: PnlSce
   return (
     <div className="flex flex-col gap-6" aria-busy={busy}>
       <EstimateBanner />
+      {result.isExample && (
+        <p role="note" className="m-0 rounded-xl px-4 py-2.5 t-body-sm" style={{ background: "var(--warning-fill)", border: "1px solid var(--warning-border)", color: "var(--warning)" }} data-testid="example-result-note">
+          <strong>Example data — not real marketplace rates.</strong> These numbers are made up to show how the calculator works. Replace them with your own.
+        </p>
+      )}
       {stale && (
         <p role="status" className="rounded-xl px-4 py-2.5 t-body-sm" style={{ background: "var(--warning-fill)", border: "1px solid var(--warning-border)", color: "var(--warning)" }}>
           You changed an input after this was worked out. Choose Calculate to refresh it.

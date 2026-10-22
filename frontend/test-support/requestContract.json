@@ -111,6 +111,17 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/expense-ledger/lines": {
+   "query": [
+    "include_voided",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
+    "period_end",
+    "period_start"
+   ]
+  },
   "GET /api/v1/cfo/expense-ledger/templates": {
    "query": [],
    "requiredQuery": []

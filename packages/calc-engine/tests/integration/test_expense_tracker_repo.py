@@ -1,4 +1,4 @@
-"""`expense_ledger_repo` against a real Postgres (kickoff S3b): append-only writes, current state from the latest status events, linked corrections and
+"""`expense_tracker_repo` against a real Postgres (kickoff S3b): append-only writes, current state from the latest status events, linked corrections and
 refunds, idempotent replay, filters and tenant isolation. No arithmetic: the repository stores and reads; totals come from the engine feed."""
 
 from __future__ import annotations
@@ -8,8 +8,8 @@ from datetime import date
 
 import pytest
 
-from calc_engine.repositories import expense_ledger_repo as repo
-from calc_engine.repositories.expense_ledger_repo import NewRecord
+from calc_engine.repositories import expense_tracker_repo as repo
+from calc_engine.repositories.expense_tracker_repo import NewRecord
 
 USER = uuid.uuid4()
 

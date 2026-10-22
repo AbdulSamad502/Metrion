@@ -221,6 +221,12 @@ def assign_skus(tenant_id: UUID, expense_id: UUID, assignment: SkuAssignment, *,
         )
 
 
+def all_assignments(tenant_id: UUID) -> dict[str, SkuAssignment]:
+    """The current multi-SKU choice of every record that has one, keyed by record id (one query, for the read contract)."""
+    with tenant_scope(tenant_id) as conn:
+        return _current_assignments(conn, tenant_id)
+
+
 def get_assignment(tenant_id: UUID, expense_id: UUID) -> SkuAssignment | None:
     with tenant_scope(tenant_id) as conn:
         return _current_assignments(conn, tenant_id).get(str(expense_id))

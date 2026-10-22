@@ -129,7 +129,7 @@ export function ExpenseTracker({ getToken }: { getToken: Getter }) {
         {meta && list ? (
           <>
             <ExpenseTable
-              records={list.records} filters={filters} meta={meta} onFilters={setFilters}
+              getToken={getToken} records={list.records} filters={filters} meta={meta} onFilters={setFilters}
               onCorrect={(r) => { setCorrecting(r); setTab("add"); }}
               onRefund={(r) => { setRefunding(r); setVoiding(null); }}
               onVoid={(r) => { setVoiding(r); setRefunding(null); setAssigning(null); }}
@@ -145,7 +145,7 @@ export function ExpenseTracker({ getToken }: { getToken: Getter }) {
 
       <TabPanel id="review" active={tab} idPrefix="exp">
         {summary ? (
-          <Section title="Items to review" hint="These are not counted in the total until you confirm them.">
+          <Section title="Items to review" hint="Entries waiting for review are not in the total until you confirm them. An entry whose SKU is not found stays in the total; only its SKU allocation is pending.">
             <ReviewQueue summary={summary} busyId={busyId} onConfirm={(id) => run(id, () => post(getToken, `/${id}/review`, { state: "confirmed" }), "Could not confirm the expense")} />
           </Section>
         ) : <LoadingState lines={3} label="Loading the review queue" />}

@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import Response
 
-from calc_engine.repositories import expense_ledger_repo as ledger
+from calc_engine.repositories import expense_tracker_repo as ledger
 
 from backend.api.v1.cfo import _require_cfo_entitlement
 from backend.api.v1.expense_ledger import READ_CODE, _iso

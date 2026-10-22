@@ -1,7 +1,7 @@
 """The Profit Calculator form's fee fields (`frontend/lib/pnlFeeFields.ts`) must be exactly the fee fields the engine has (`calc_engine.formulas.pnl_scenario.fields`).
 
 Both hold labels and shapes only, never a rate (calculator.md N4). If they drift, the form would offer a fee the API rejects or hide one the engine reports as
-missing; this fails first. Compared: id, label, unit, what a fee is charged on, whether it is in Quick mode and which Amazon fulfilment methods show it. The form's help text is the
+missing; this fails first. Compared: id, label, unit, what a fee is charged on, whether it is in Quick mode, which Amazon fulfilment methods show it and whether it can have price bands. The form's help text is the
 frontend's own."""
 
 from __future__ import annotations
@@ -31,7 +31,8 @@ def _frontend() -> dict[str, list[tuple]]:
         m = _ROW.search(line)
         if m and current:
             ful = None if m["ful"] == "null" else tuple(re.findall(r'"(\w+)"', m["ful"]))
-            out[current].append((m["id"], m["label"], m["unit"], m["charged"], m["quick"] == "true", ful))
+            tier = re.search(r"tierable: (true|false) \}", line)
+            out[current].append((m["id"], m["label"], m["unit"], m["charged"], m["quick"] == "true", ful, bool(tier) and tier.group(1) == "true"))
     return out
 
 
@@ -39,7 +40,7 @@ def test_the_form_offers_exactly_the_engines_fee_fields() -> None:
     fe = _frontend()
     assert set(fe) == set(MARKETPLACE_FIELDS)
     for marketplace, defs in MARKETPLACE_FIELDS.items():
-        engine = [(d.id, d.label, d.unit, d.charged_on, d.quick, d.amazon_fulfilment) for d in defs]
+        engine = [(d.id, d.label, d.unit, d.charged_on, d.quick, d.amazon_fulfilment, d.tierable) for d in defs]
         assert fe[marketplace] == engine, marketplace
 
 

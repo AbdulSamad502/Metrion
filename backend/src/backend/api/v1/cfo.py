@@ -72,14 +72,16 @@ from backend.config import cfo_max_upload_bytes, cfo_narration_model, cfo_report
 from backend.entitlement import resolve_cfo_entitlement, resolve_gst_lookup_entitlement
 from backend.repositories import agent_run_repo
 from backend.services.pnl_scenario import (
+    PnlScenarioCompareHttpRequest,
     ESTIMATE_REF_PREFIX as PNL_ESTIMATE_REF_PREFIX,
     PnlScenarioHttpRequest,
+    comparison_dict as pnl_scenario_comparison,
     solution_dict as pnl_scenario_solution,
     to_inputs as pnl_scenario_to_inputs,
     to_response as pnl_scenario_to_response,
     to_targets as pnl_scenario_targets,
 )
-from calc_engine.formulas.pnl_scenario import calculate_scenario, solve_price
+from calc_engine.formulas.pnl_scenario import calculate_scenario, compare_results, solve_price
 from backend.services.cfo_imports import get_import, list_imports
 from backend.services.cfo_actions import (
     AcceptGstLookupRequest,
@@ -853,6 +855,41 @@ def post_pnl_scenario(body: PnlScenarioHttpRequest, ctx: AuthContext = require_a
         tenant_id, run_id, status="COMPLETE" if result.status == "estimate" else "PARTIAL", error_reason=None, finished_at=datetime.now(timezone.utc)
     )
     return pnl_scenario_to_response(result, solutions, estimate_ref=f"{PNL_ESTIMATE_REF_PREFIX}{run_id}")
+
+
+@router.post("/pnl-scenario-compare")
+def post_pnl_scenario_compare(body: PnlScenarioCompareHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """The calculator's "What if...?" comparison: two hypothetical scenarios (the base and a variant) and the engine's change between them.
+
+    Same rules as `/pnl-scenario`: `agent.cfo`, the CFO entitlement gate, no tenant in the body, ONE `agent_run` audit row for the pair, no `metric_result`, no data
+    request, an `estimateRef` per scenario and never an `engineResultRef`. The change is computed by `calc_engine.formulas.pnl_scenario.compare`, not by the page."""
+    assert ctx.tenant_id is not None
+    tenant_id = ctx.tenant_id
+    _require_cfo_entitlement(tenant_id, direct_action_code=CFO_PNL_SCENARIO)
+    run_id = agent_run_repo.insert_run(
+        tenant_id, agent_id="CFO", trigger_type="DIRECT", trigger_ref=CFO_PNL_SCENARIO, requested_by=ctx.app_user_id, permission_check="PASS", entitlement_check="PASS",
+        status="RUNNING", started_at=datetime.now(timezone.utc),
+    )
+    try:
+        base_inputs, what_inputs = pnl_scenario_to_inputs(body.base), pnl_scenario_to_inputs(body.what_if)
+        base, what_if = calculate_scenario(base_inputs), calculate_scenario(what_inputs)
+        base_solutions = [pnl_scenario_solution(t, solve_price(base_inputs, target, t.basis)) for t, target in pnl_scenario_targets(body.base)]
+        what_solutions = [pnl_scenario_solution(t, solve_price(what_inputs, target, t.basis)) for t, target in pnl_scenario_targets(body.what_if)]
+        comparison = compare_results(base, what_if)
+    except Exception as exc:
+        agent_run_repo.finish_run(tenant_id, run_id, status="FAILED", error_reason=type(exc).__name__, finished_at=datetime.now(timezone.utc))
+        raise
+    agent_run_repo.finish_run(
+        tenant_id, run_id, status="COMPLETE" if base.status == "estimate" and what_if.status == "estimate" else "PARTIAL", error_reason=None, finished_at=datetime.now(timezone.utc)
+    )
+    ref = f"{PNL_ESTIMATE_REF_PREFIX}{run_id}"
+    return {
+        "kind": "hypothetical_comparison",
+        "persisted": False,
+        "base": pnl_scenario_to_response(base, base_solutions, estimate_ref=ref),
+        "whatIf": pnl_scenario_to_response(what_if, what_solutions, estimate_ref=f"{ref}:what-if"),
+        "comparison": pnl_scenario_comparison(comparison),
+    }
 
 
 class PeriodPnlLineRequest(BaseModel):

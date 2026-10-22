@@ -105,7 +105,8 @@ export async function importFile(getToken: Getter, file: File, commit: boolean, 
   const form = new FormData();
   form.append("file", file);
   const query = commit && skipInvalid ? "?skip_invalid=true" : "";
-  return apiFetchForm<ImportSummary>(`${BASE}/import/${commit ? "commit" : "preview"}${query}`, await getToken(), form);
+  const url = commit ? `${BASE}/import/commit` : `${BASE}/import/preview`;
+  return apiFetchForm<ImportSummary>(`${url}${query}`, await getToken(), form);
 }
 
 // ---- downloads ---------------------------------------------------------------------------------------------------------------------

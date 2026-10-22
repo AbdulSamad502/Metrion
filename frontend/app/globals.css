@@ -1668,3 +1668,23 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .mt-hub-edge--flow { animation: none; }
 }
+
+/* Print / save as PDF for the Profit Calculator: only the result area (`.mt-print-area`) is printed, on white, without the application chrome. The tokens are
+   redefined for paper inside the area so every colour stays legible. Warnings (example data, provisional, hypothetical estimate) are part of the area and print too. */
+.mt-print-only { display: none; }
+@media print {
+  body * { visibility: hidden; }
+  .mt-print-area, .mt-print-area * { visibility: visible; }
+  .mt-print-area {
+    position: absolute; left: 0; top: 0; width: 100%; padding: 0 12mm;
+    background: #fff; color: #111;
+    --text-1: #111; --text-2: #1a1a1a; --text-3: #222; --text-4: #333; --text-5: #444; --text-6: #555;
+    --bg-card: #fff; --bg-popover: #fff; --fill-hover: #e6e6e6; --border-subtle: #bbb; --border-default: #999; --border-hover: #777;
+    --accent: #0a6b2e; --accent-fill-default: #e6f4ea; --accent-border-default: #0a6b2e; --accent-border-strong: #0a6b2e; --accent-on-fill: #fff;
+    --negative: #b42318; --warning: #8a4b00; --warning-fill: #fff4e0; --warning-border: #d9a441; --info-fill: #eef3fb; --info-border: #9db4d8;
+  }
+  .mt-print-area .mt-no-print, .mt-no-print { display: none !important; }
+  .mt-print-only { display: block !important; }
+  .mt-print-area table { page-break-inside: avoid; }
+  html, body { background: #fff !important; overflow: visible !important; height: auto !important; }
+}

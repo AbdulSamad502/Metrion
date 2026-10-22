@@ -86,8 +86,8 @@ def _seed_pnl(tenant_id: uuid.UUID) -> None:
 
 
 def _expense(tenant_id, *, cost_class, category, amount, review="confirmed", treatment="incremental", day=date(2026, 9, 12), refund_of=None, **kw):
-    from calc_engine.repositories import expense_ledger_repo as ledger
-    from calc_engine.repositories.expense_ledger_repo import NewRecord
+    from calc_engine.repositories import expense_tracker_repo as ledger
+    from calc_engine.repositories.expense_tracker_repo import NewRecord
 
     return ledger.insert_record(
         tenant_id, NewRecord(effective_date=day, category=category, cost_class=cost_class, amount_paise=amount, treatment=treatment, refund_of_expense_id=refund_of, **kw),
@@ -180,7 +180,7 @@ def test_only_confirmed_incremental_rows_count_and_a_refund_reduces_the_pool(mon
     _expense(tenant, cost_class="ADVERTISING", category="advertising", amount=500, day=date(2026, 10, 2))  # outside the period
     _expense(tenant, cost_class="ADVERTISING", category="advertising", amount=-1_000, refund_of=ad)  # a refund in its own period reduces the pool (sign mapping)
     voided = _expense(tenant, cost_class="ADVERTISING", category="advertising", amount=400)
-    from calc_engine.repositories import expense_ledger_repo as ledger
+    from calc_engine.repositories import expense_tracker_repo as ledger
 
     ledger.append_review(tenant, voided, review_state="voided", reason="duplicate", created_by=uuid.uuid4())
     monkeypatch.setenv(_FLAG, "true")
@@ -202,7 +202,7 @@ def test_an_advertising_entry_in_the_request_wins_so_nothing_is_counted_twice(mo
 
 def test_the_pnl_and_the_dashboard_total_reconcile(monkeypatch) -> None:
     from calc_engine.formulas.ledger_feed import ledger_feed
-    from calc_engine.repositories import expense_ledger_repo as ledger
+    from calc_engine.repositories import expense_tracker_repo as ledger
 
     tenant = uuid.uuid4()
     _seed_pnl(tenant)

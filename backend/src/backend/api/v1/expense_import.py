@@ -14,8 +14,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
 
-from calc_engine.repositories import expense_ledger_repo as ledger
-from calc_engine.repositories.expense_ledger_repo import NewRecord
+from calc_engine.repositories import expense_tracker_repo as ledger
+from calc_engine.repositories.expense_tracker_repo import NewRecord
 
 from backend.api.v1.cfo import _require_cfo_entitlement
 from backend.api.v1.expense_ledger import READ_CODE, _iso, _log_write, _require_write

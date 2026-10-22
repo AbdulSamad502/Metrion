@@ -3,7 +3,7 @@
 import { useId, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { PNL_FULFILMENT, PNL_MARKETPLACES, activeFeeFields, type PnlFulfilment, type PnlMarketplace } from "@/lib/pnlFeeFields";
-import { BLANK, type PnlFeeEntry, type PnlField, type PnlForm } from "@/lib/pnlScenario";
+import { exampleForm, newFeeEntry, type PnlBand, type PnlFeeEntry, type PnlField, type PnlForm } from "@/lib/pnlScenario";
 
 /** One typed number with an explicit "not applicable" switch. Leaving it blank means "not entered" (the result then says what is missing); it is never
  * read as zero. "Not applicable" is the seller confirming the amount really is zero. */
@@ -24,7 +24,7 @@ function NumberField({
           autoComplete="off"
           value={value.na ? "" : value.text}
           disabled={value.na}
-          placeholder={value.na ? "Not applicable" : (placeholder ?? "Not entered")}
+          placeholder={value.na ? "Doesn't apply" : (placeholder ?? "Not entered")}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-err` : hint ? `${id}-hint` : undefined}
           onChange={(e) => onChange({ text: e.target.value, na: false })}
@@ -33,7 +33,7 @@ function NumberField({
         {allowNa && (
           <label className="flex min-h-9 flex-shrink-0 cursor-pointer items-center gap-2 t-meta" style={{ color: "var(--text-5)" }}>
             <input type="checkbox" className="mt-focus h-5 w-5 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={value.na} onChange={(e) => onChange({ text: "", na: e.target.checked })} />
-            <span>Not applicable</span>
+            <span>{unit === "%" ? "Doesn't apply (0%)" : "Doesn't apply (₹0)"}</span>
           </label>
         )}
       </div>
@@ -165,15 +165,54 @@ function StepCard({ n, title, subtitle, done, open, onToggle, children }: { n: n
 }
 
 const answered = (f: PnlField): boolean => f.na || f.text.trim() !== "";
+/** A fee counts as entered when its single amount is answered, or (price bands on) every band has its limit and rate. */
+const feeAnswered = (f: PnlFeeEntry): boolean => (f.useTiers ? f.bands.every((b, i) => (i === f.bands.length - 1 || b.upTo.trim() !== "") && b.rate.trim() !== "") : answered(f));
 
-export function PnlInputs({ form, setForm, errors, onReset }: { form: PnlForm; setForm: (update: (f: PnlForm) => PnlForm) => void; errors: Record<string, string>; onReset: () => void }) {
+/** Price bands for a fee that changes with the selling price: "up to ₹X" and the rate or amount charged, the last band having no upper limit. The engine checks the
+ * bands (order, gaps, overlap) and says what is wrong; this editor only collects what was typed. */
+function BandEditor({ def, entry, errors, onChange }: { def: { id: string; label: string; unit: "percent" | "flat"; help: string }; entry: PnlFeeEntry; errors: Record<string, string>; onChange: (patch: Partial<PnlFeeEntry>) => void }) {
+  const percent = def.unit === "percent";
+  const setBand = (i: number, patch: Partial<PnlBand>) => onChange({ bands: entry.bands.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
+  return (
+    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+      <legend className="p-0 t-body-sm font-semibold" style={{ color: "var(--text-2)" }}>{def.label} by price band</legend>
+      <p className="m-0 t-meta" style={{ color: "var(--text-6)" }}>{def.help}</p>
+      <div>
+        <label htmlFor={`mode-${def.id}`} className="mb-1.5 block t-body-sm font-medium" style={{ color: "var(--text-5)" }}>Band type</label>
+        <select id={`mode-${def.id}`} value={entry.tierMode} onChange={(e) => onChange({ tierMode: e.target.value === "marginal" ? "marginal" : "whole" })} className="mt-input rounded-lg px-3 py-2 t-body">
+          <option value="whole">The rate applies to the whole price</option>
+          {percent && <option value="marginal">Progressive (each slice has its own rate)</option>}
+        </select>
+      </div>
+      {entry.bands.map((b, i) => {
+        const last = i === entry.bands.length - 1;
+        return (
+          <div key={i} className="grid gap-3 sm:grid-cols-2">
+            {last ? (
+              <p className="m-0 flex min-h-10 items-center t-body-sm" style={{ color: "var(--text-5)" }}>Above the last limit</p>
+            ) : (
+              <NumberField label={`Band ${i + 1}: up to`} unit="₹" value={{ text: b.upTo, na: false }} onChange={(n) => setBand(i, { upTo: n.text })} error={errors[`fee.${def.id}.band.${i}.upTo`]} allowNa={false} />
+            )}
+            <NumberField label={`Band ${i + 1}: ${percent ? "rate" : "amount"}`} unit={percent ? "%" : "₹"} value={{ text: b.rate, na: false }} onChange={(n) => setBand(i, { rate: n.text })} error={errors[`fee.${def.id}.band.${i}.rate`]} allowNa={false} />
+          </div>
+        );
+      })}
+      <div className="flex gap-3 t-body-sm">
+        <button type="button" className="mt-focus font-semibold underline" style={{ color: "var(--accent)" }} onClick={() => onChange({ bands: [{ upTo: "", rate: "" }, ...entry.bands] })}>Add band</button>
+        {entry.bands.length > 2 && <button type="button" className="mt-focus underline" style={{ color: "var(--text-5)" }} onClick={() => onChange({ bands: entry.bands.slice(1) })}>Remove first band</button>}
+      </div>
+    </fieldset>
+  );
+}
+
+export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form: PnlForm; setForm: (update: (f: PnlForm) => PnlForm) => void; errors: Record<string, string>; onReset: () => void; onExample: () => void }) {
   const set = <K extends keyof PnlForm>(key: K, value: PnlForm[K]) => setForm((f) => ({ ...f, [key]: value }));
   const field = (key: keyof PnlForm) => (next: PnlField) => set(key, next as never);
   const registered = form.gstStatus !== "unregistered";
   const detailed = form.mode === "detailed";
   const fees = activeFeeFields(form.marketplace, form.fulfilment, form.mode);
   const setFee = (id: string, patch: Partial<PnlFeeEntry>) =>
-    setForm((f) => ({ ...f, fees: { ...f.fees, [id]: { ...(f.fees[id] ?? { ...BLANK, refund: BLANK }), ...patch } } }));
+    setForm((f) => ({ ...f, fees: { ...f.fees, [id]: { ...(f.fees[id] ?? newFeeEntry()), ...patch } } }));
   const setRecovery = (which: "rtoRecovery" | "returnRecovery", part: "sellable" | "damaged", next: PnlField) =>
     setForm((f) => ({ ...f, [which]: { ...f[which], [part]: next } }));
 
@@ -184,7 +223,7 @@ export function PnlInputs({ form, setForm, errors, onReset }: { form: PnlForm; s
   const steps = [
     { n: 1, name: "Product", done: answered(form.sellingPrice) && answered(form.productCost) && (!registered || answered(form.gstRate)) && (!detailed || answered(form.packaging)) },
     // The key fees (the ones Quick mode asks for). Optional extras such as a return handling fee do not hold the tick back; if one matters the result names it as missing.
-    { n: 2, name: "Fees", done: fees.filter((d) => d.quick).every((d) => answered(form.fees[d.id] ?? BLANK)) },
+    { n: 2, name: "Fees", done: fees.filter((d) => d.quick).every((d) => feeAnswered(form.fees[d.id] ?? newFeeEntry())) },
     { n: 3, name: "Orders", done: answered(form.monthlyOrders) && answered(form.rto) && answered(form.returns) },
     ...(detailed ? [{ n: 4, name: "Advertising", done: answered(form.adSpend) }] : []),
   ];
@@ -194,14 +233,17 @@ export function PnlInputs({ form, setForm, errors, onReset }: { form: PnlForm; s
     <div className="flex flex-col gap-5">
       <div className="grid gap-4 rounded-2xl p-4 sm:grid-cols-2" style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
         <div className="flex flex-col gap-3">
-          <PillChoice legend="Marketplace" value={form.marketplace} options={PNL_MARKETPLACES} onChange={(v: PnlMarketplace) => setForm((f) => ({ ...f, marketplace: v, fees: {} }))} />
-          <PillChoice legend="Detail" value={form.mode} options={[{ id: "detailed", label: "Detailed" }, { id: "quick", label: "Quick estimate" }]} onChange={(v) => set("mode", v)} />
-          {!detailed && <p className="t-meta" style={{ color: "var(--text-6)" }}>Quick estimate leaves out packaging, advertising, operating costs and return/RTO handling fees.</p>}
+          <PillChoice legend="Marketplace" value={form.marketplace} options={PNL_MARKETPLACES} onChange={(v: PnlMarketplace) => setForm((f) => (f.isExample ? exampleForm(v, f.mode) : { ...f, marketplace: v, fees: {}, fulfilment: "easy_ship" }))} />
+          <PillChoice legend="Detail" value={form.mode} options={[{ id: "quick", label: "Expected" }, { id: "detailed", label: "Detailed" }]} onChange={(v) => set("mode", v)} />
+          <p className="t-meta" style={{ color: "var(--text-6)" }}>{detailed ? "Detailed: adds packaging, advertising, operating costs, return/RTO handling fees, fee refunds, price bands and damaged stock." : "Expected: only the key numbers (price, cost, fees, returns). A quick profit and loss. It leaves out packaging, advertising, operating costs and return/RTO handling fees."}</p>
         </div>
         <div className="flex flex-col gap-2.5" data-testid="progress">
           <p className="m-0 t-body-sm font-semibold" style={{ color: doneCount === steps.length ? "var(--accent)" : "var(--text-2)" }} aria-live="polite">
-            {doneCount === steps.length ? "Everything entered. Choose Calculate." : `${doneCount} of ${steps.length} steps entered`}
+            {doneCount === steps.length ? "All set: choose Calculate to see your result." : `${doneCount} of ${steps.length} steps entered`}
           </p>
+          <div role="progressbar" aria-label="Steps entered" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={doneCount} className="h-2 overflow-hidden rounded-full" style={{ background: "var(--fill-hover)" }}>
+            <div className="h-full rounded-full" style={{ width: `${(doneCount / steps.length) * 100}%`, background: "var(--accent)" }} />
+          </div>
           <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
             {steps.map((s) => (
               <li key={s.n} className="flex items-center gap-1 rounded-full px-2.5 py-1 t-meta" style={{ border: `1px solid ${s.done ? "var(--accent-border-default)" : "var(--border-default)"}`, color: s.done ? "var(--accent)" : "var(--text-5)" }}>
@@ -212,9 +254,15 @@ export function PnlInputs({ form, setForm, errors, onReset }: { form: PnlForm; s
             ))}
           </ul>
           <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={onExample} className="mt-btn mt-focus min-h-9 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--accent-border-strong)", color: "var(--accent)" }}>Try with example numbers</button>
             <button type="button" onClick={onReset} className="mt-btn mt-focus min-h-9 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>Reset</button>
             <span className="t-meta" style={{ color: "var(--text-6)" }}>Not saved. Sent to Metrion only to work out the estimate.</span>
           </div>
+          {form.isExample && (
+            <p role="note" className="m-0 rounded-lg px-3 py-2 t-body-sm" style={{ background: "var(--warning-fill)", border: "1px solid var(--warning-border)", color: "var(--warning)" }} data-testid="example-note">
+              <strong>Example data — not real marketplace rates.</strong> These numbers are made up to show how the calculator works. Replace them with your own, or choose Reset.
+            </p>
+          )}
         </div>
       </div>
 
@@ -239,13 +287,39 @@ export function PnlInputs({ form, setForm, errors, onReset }: { form: PnlForm; s
         <p className="mb-3 t-meta" style={{ color: "var(--text-6)" }}>Metrion does not fill any fee in. A fee left blank is shown as missing and left out of the profit.</p>
         <div className="grid gap-4 sm:grid-cols-2">
           {fees.map((def) => {
-            const entry = form.fees[def.id] ?? { ...BLANK, refund: BLANK };
+            const entry = form.fees[def.id] ?? newFeeEntry();
             const hasRefund = detailed && def.chargedOn !== "kept";
+            const tiers = detailed && def.tierable;
+            const percent = def.unit === "percent";
             return (
-              <div key={def.id} className={hasRefund ? "grid gap-4 sm:row-span-2 sm:grid-rows-subgrid" : "flex flex-col gap-2"}>
-                <NumberField label={def.label} unit={def.unit === "percent" ? "%" : "₹"} value={entry} onChange={(next) => setFee(def.id, next)} error={errors[`fee.${def.id}`]} hint={def.help} />
-                {hasRefund && (
-                  <NumberField label={`${def.label}: share refunded on returns`} unit="%" value={entry.refund} onChange={(next) => setFee(def.id, { refund: next })} error={errors[`fee.${def.id}.refund`]} allowNa={false} hint="Optional. Blank means your fees are assumed not refunded (stated in the result)." />
+              <div key={def.id} className="flex flex-col gap-3 rounded-xl p-3.5 sm:col-span-2" style={{ border: "1px solid var(--border-subtle)" }} data-testid={`fee-${def.id}`}>
+                {entry.useTiers && tiers ? (
+                  <BandEditor def={def} entry={entry} errors={errors} onChange={(patch) => setFee(def.id, patch)} />
+                ) : (
+                  <NumberField label={def.label} unit={percent ? "%" : "₹"} value={entry} onChange={(next) => setFee(def.id, next)} error={errors[`fee.${def.id}`]} hint={def.help} />
+                )}
+                {tiers && (
+                  <label className="flex w-fit cursor-pointer items-center gap-2 t-body-sm" style={{ color: "var(--text-4)" }}>
+                    <input type="checkbox" className="mt-focus h-5 w-5 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={entry.useTiers} onChange={(e) => setFee(def.id, { useTiers: e.target.checked })} />
+                    This fee changes with the selling price
+                  </label>
+                )}
+                {(hasRefund || (detailed && percent)) && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {hasRefund && (
+                      <NumberField label={`${def.label}: share refunded on returns`} unit="%" value={entry.refund} onChange={(next) => setFee(def.id, { refund: next })} error={errors[`fee.${def.id}.refund`]} allowNa={false} hint="Optional. Blank means your fees are assumed not refunded (stated in the result)." />
+                    )}
+                    {detailed && percent && (
+                      <div>
+                        <label htmlFor={`basis-${def.id}`} className="mb-1.5 block t-body-sm font-medium" style={{ color: "var(--text-5)" }}>{def.label}: charged on</label>
+                        <select id={`basis-${def.id}`} value={entry.basis} onChange={(e) => setFee(def.id, { basis: e.target.value as PnlFeeEntry["basis"] })} className="mt-input w-full rounded-lg px-3 py-2 t-body">
+                          <option value="">Selling price including GST (default)</option>
+                          <option value="price_excl_gst">Selling price excluding GST</option>
+                        </select>
+                        <p className="mt-1 t-meta" style={{ color: "var(--text-6)" }}>Check your fee report. Blank assumes the price including GST (stated in the result).</p>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             );
@@ -289,7 +363,8 @@ export function PnlInputs({ form, setForm, errors, onReset }: { form: PnlForm; s
             <input type="checkbox" className="mt-focus h-5 w-5 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={form.wantBreakeven} onChange={(e) => set("wantBreakeven", e.target.checked)} />
             Find my break-even price
           </label>
-          <NumberField label="Find the price for a target margin" unit="%" value={form.targetMargin} onChange={field("targetMargin")} error={errors.targetMargin} allowNa={false} hint="Contribution margin on revenue. Blank skips it." />
+          <NumberField label="Find the price for a target margin" unit="%" value={form.targetMargin} onChange={field("targetMargin")} error={errors.targetMargin} allowNa={false} hint="Margin on revenue. Blank skips it." />
+          <PillChoice legend="Margin type" value={form.targetBasis} options={[{ id: "contribution", label: "Contribution" }, { id: "operating", label: "Operating" }]} onChange={(v) => set("targetBasis", v)} />
         </div>
       </StepCard>
     </div>

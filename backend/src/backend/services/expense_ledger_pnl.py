@@ -23,7 +23,7 @@ from uuid import UUID
 
 from calc_engine.api.expense_metrics import mint_ledger_feed_metrics
 from calc_engine.formulas.ledger_feed import ledger_feed
-from calc_engine.repositories import expense_ledger_repo as ledger
+from calc_engine.repositories import expense_tracker_repo as ledger
 from calc_engine.repositories import metric_result_repo
 
 from backend.services import expense_assignment_data as assignment_data

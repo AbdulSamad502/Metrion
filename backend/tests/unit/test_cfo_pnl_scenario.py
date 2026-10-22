@@ -367,3 +367,83 @@ def test_on_every_recorded_reference_scenario_the_slices_tile_the_circle_and_the
         assert all(a.end_bps == c.start_bps for a, c in zip(b.segments, b.segments[1:])), i
     # Most random scenarios are losses or have fee-refund credits (no chart), so only a few draw one; the engine suite checks tiling on many generated ones.
     assert seen_chart >= 3 and seen_none >= 3, (seen_chart, seen_none)
+
+
+def test_the_example_flag_only_adds_the_label_and_changes_no_figure(runs: _Runs) -> None:
+    plain = cfo_routes.post_pnl_scenario(PnlScenarioHttpRequest.model_validate(_a1()), _ctx())
+    example = cfo_routes.post_pnl_scenario(PnlScenarioHttpRequest.model_validate(_a1() | {"is_example": True}), _ctx())
+    assert plain["isExample"] is False and example["isExample"] is True
+    for key in ("perKept", "perPlaced", "monthly", "metrics", "breakdown", "status", "missingCosts"):
+        assert plain[key] == example[key]
+    assert example["persisted"] is False and "engineResultRef" not in str(example)
+    with pytest.raises(ValidationError):
+        PnlScenarioHttpRequest.model_validate(_a1() | {"is_example": "yes"})
+
+
+# ---- what-if comparison (POST /cfo/pnl-scenario-compare) ----------------------------------------------------------------------------------------------------
+
+
+def _compare(what_if_patch: dict | None = None, base: dict | None = None) -> dict:
+    from backend.services.pnl_scenario import PnlScenarioCompareHttpRequest
+
+    return {"base": base or _a1(), "what_if": (base or _a1()) | (what_if_patch or {})}
+
+
+def test_the_comparison_is_the_engines_and_labelled_hypothetical(runs: _Runs) -> None:
+    from backend.services.pnl_scenario import PnlScenarioCompareHttpRequest
+
+    ctx = _ctx()
+    out = cfo_routes.post_pnl_scenario_compare(PnlScenarioCompareHttpRequest.model_validate(_compare({"selling_price": _set("130000")})), ctx)
+    base, what = out["base"]["perKept"]["contribution"], out["whatIf"]["perKept"]["contribution"]
+    assert base == "49200" and int(out["comparison"]["perKeptChange"]) == int(what) - int(base) != 0
+    assert out["kind"] == "hypothetical_comparison" and out["persisted"] is False
+    assert out["base"]["estimateRef"] == f"pnl-scenario:{runs.inserted[0]['run_id']}" and out["whatIf"]["estimateRef"].endswith(":what-if")
+    assert "engineResultRef" not in str(out) and "engine_result_ref" not in str(out)
+
+
+def test_one_audit_row_covers_the_pair_and_it_is_the_session_tenants(runs: _Runs) -> None:
+    from backend.services.pnl_scenario import PnlScenarioCompareHttpRequest
+
+    ctx = _ctx()
+    cfo_routes.post_pnl_scenario_compare(PnlScenarioCompareHttpRequest.model_validate(_compare()), ctx)
+    assert len(runs.inserted) == 1 and len(runs.finished) == 1
+    assert (runs.inserted[0]["trigger_ref"], runs.inserted[0]["tenant_id"], runs.finished[0]["status"]) == ("cfo.pnl_scenario", ctx.tenant_id, "COMPLETE")
+
+
+def test_an_unchanged_what_if_is_a_real_zero_change(runs: _Runs) -> None:
+    from backend.services.pnl_scenario import PnlScenarioCompareHttpRequest
+
+    out = cfo_routes.post_pnl_scenario_compare(PnlScenarioCompareHttpRequest.model_validate(_compare()), _ctx())
+    assert out["comparison"] == {"perKeptChange": "0", "perPlacedChange": "0", "monthlyChange": "0", "marginChangeBps": "0"}
+
+
+def test_an_incomplete_variant_has_no_change_not_zero(runs: _Runs) -> None:
+    from backend.services.pnl_scenario import PnlScenarioCompareHttpRequest
+
+    out = cfo_routes.post_pnl_scenario_compare(PnlScenarioCompareHttpRequest.model_validate(_compare({"selling_price": {"state": "empty"}})), _ctx())
+    assert out["whatIf"]["status"] == "incomplete" and set(out["comparison"].values()) == {None}
+    assert runs.finished[0]["status"] == "PARTIAL"
+
+
+def test_the_comparison_request_cannot_carry_a_tenant_or_extra_fields(runs: _Runs) -> None:
+    from backend.services.pnl_scenario import PnlScenarioCompareHttpRequest
+
+    for bad in (_compare() | {"tenant_id": str(uuid.uuid4())}, {"base": _a1()}, _compare() | {"extra": 1}, {"base": _a1(), "what_if": _a1() | {"tenant_id": "x"}}):
+        with pytest.raises(ValidationError):
+            PnlScenarioCompareHttpRequest.model_validate(bad)
+
+
+def test_a_denied_entitlement_blocks_the_comparison_with_no_run_and_no_computation(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.services.pnl_scenario import PnlScenarioCompareHttpRequest
+
+    spy = _Runs()
+    monkeypatch.setattr(cfo_routes, "agent_run_repo", spy)
+
+    def deny(*a, **k):  # noqa: ANN002, ANN003
+        raise HTTPException(status_code=402, detail={"reason": "OVER_CAP"})
+
+    monkeypatch.setattr(cfo_routes, "_require_cfo_entitlement", deny)
+    monkeypatch.setattr(cfo_routes, "calculate_scenario", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not compute")))
+    with pytest.raises(HTTPException) as err:
+        cfo_routes.post_pnl_scenario_compare(PnlScenarioCompareHttpRequest.model_validate(_compare()), _ctx())
+    assert err.value.status_code == 402 and spy.inserted == []

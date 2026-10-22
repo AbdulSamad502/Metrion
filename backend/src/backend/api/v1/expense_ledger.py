@@ -21,9 +21,9 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, StringConstraints,
 from calc_engine.api.expense_metrics import mint_ledger_feed_metrics
 from calc_engine.formulas import expense_assignment as assignment_engine
 from calc_engine.formulas.ledger_feed import ledger_feed
-from calc_engine.repositories import expense_ledger_repo as ledger
+from calc_engine.repositories import expense_tracker_repo as ledger
 from calc_engine.repositories import metric_result_repo
-from calc_engine.repositories.expense_ledger_repo import NewRecord
+from calc_engine.repositories.expense_tracker_repo import NewRecord
 
 from backend.api.v1.cfo import _require_cfo_entitlement
 from backend.auth.context import AuthContext, require_auth
@@ -296,6 +296,41 @@ def list_expenses(
         payment_status=payment_status, channel_scope=channel_scope, include_voided=include_voided, limit=limit, offset=offset,
     )
     return {"records": [_record(r) for r in rows], "total": total, "limit": limit, "offset": offset}
+
+
+CONTRACT_VERSION = "EXPENSE_TRACKER_LINES.v1"
+
+
+@router.get("/lines")
+def get_lines(
+    period_start: date,
+    period_end: date,
+    include_voided: bool = False,
+    ctx: AuthContext = require_auth(permission=AGENT_CFO),
+) -> dict[str, object]:
+    """The read contract for CFO (docs/specs/expense-tracker-cfo-integration.md): every record dated in the window with its current states and SKU
+    assignment, in the Expense Tracker's own vocabulary. Read-only; nothing is summed or mapped here (Brain 1 stays authoritative), so a missing
+    paid amount stays null, never zero."""
+    assert ctx.tenant_id is not None
+    if period_end < period_start:
+        raise HTTPException(status_code=422, detail="period_end is before period_start")
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=READ_CODE)
+    lines: list[dict[str, object]] = []
+    offset = 0
+    while True:
+        rows, total = ledger.list_records(
+            ctx.tenant_id, date_from=period_start, date_to=period_end, category=None, cost_class=None, review_state=None, payment_status=None,
+            channel_scope=None, include_voided=include_voided, limit=rules.PAGE_SIZE_MAX, offset=offset,
+        )
+        lines.extend(_record(r) for r in rows)
+        offset += len(rows)
+        if not rows or offset >= total:
+            break
+    assignments = ledger.all_assignments(ctx.tenant_id)
+    for line in lines:
+        a = assignments.get(str(line["id"]))
+        line["assignment"] = None if a is None else {"basis": a.basis, "shares": [{"sku": sku, "bp": bp} for sku, bp in a.shares]}
+    return {"contractVersion": CONTRACT_VERSION, "periodStart": period_start.isoformat(), "periodEnd": period_end.isoformat(), "lines": lines}
 
 
 class SummaryRequest(_Strict):

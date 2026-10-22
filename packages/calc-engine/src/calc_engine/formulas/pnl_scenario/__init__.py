@@ -6,6 +6,7 @@ semantics are the hand-checked fixtures of the public calculator (Metrion-P-L-we
 """
 
 from calc_engine.formulas.pnl_scenario.calculate import calculate_scenario, make_view
+from calc_engine.formulas.pnl_scenario.compare import Comparison, compare_results
 from calc_engine.formulas.pnl_scenario.fields import MARKETPLACE_FIELDS, FeeFieldDef, active_fields
 from calc_engine.formulas.pnl_scenario.solve import solve_price
 from calc_engine.formulas.pnl_scenario.types import (
@@ -37,5 +38,5 @@ from calc_engine.formulas.pnl_scenario.types import (
 __all__ = [
     "EMPTY", "NA", "Assumption", "Band", "Breakdown", "LineShare", "Segment", "Entry", "FeeAmount", "FeeFieldDef", "FeeInput", "Issue", "Line", "MARKETPLACE_FIELDS", "Metrics",
     "OrderCounts", "PriceRange", "Recovery", "ScenarioInputs", "ScenarioResult", "SolveResult", "SolveTarget", "View", "active_fields",
-    "calculate_scenario", "invalid", "make_view", "set_", "solve_price",
+    "Comparison", "calculate_scenario", "compare_results", "invalid", "make_view", "set_", "solve_price",
 ]

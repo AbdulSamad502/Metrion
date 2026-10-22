@@ -46,7 +46,7 @@ def seed_catalog(tenant, *skus: str) -> None:
 
 def feed(tenant):
     from calc_engine.formulas.ledger_feed import ledger_feed
-    from calc_engine.repositories import expense_ledger_repo as ledger
+    from calc_engine.repositories import expense_tracker_repo as ledger
 
     return ledger_feed(ledger.feed_events(tenant, period_start=date(2026, 9, 1), period_end=date(2026, 9, 30)), period_start=date(2026, 9, 1), period_end=date(2026, 9, 30),
                        channel_scope=None, catalog={s: s for s in ledger.known_skus(tenant)})
@@ -143,7 +143,7 @@ def test_ms7_invalid_assignments_are_rejected_at_entry_and_store_nothing(app_cli
     assert app_client.get(f"{BASE}/{eid}", headers=owner).json()["assignment"] is None and feed(two_tenants[0]).pools["ADVERTISING"].sku_level == {}
 
 
-@pytest.mark.parametrize("body", [{"basis": "UNITS", "shares": [{"sku": "A"}]}, {"basis": "EQUAL", "shares": []}, {"basis": "EQUAL"}, {"shares": [{"sku": "A"}]},
+@pytest.mark.parametrize("body", [{"basis": "BY_WEIGHT", "shares": [{"sku": "A"}]}, {"basis": "EQUAL", "shares": []}, {"basis": "EQUAL"}, {"shares": [{"sku": "A"}]},
                                   {"basis": "EQUAL", "shares": [{"sku": "A", "bp": 1.5}]}, {"basis": "EQUAL", "shares": [{"sku": "A"}], "tenant_id": "x"},
                                   {"basis": "EQUAL", "shares": [{"sku": f"S{i}"} for i in range(21)]}])
 def test_malformed_bodies_are_422(app_client, owner, body):

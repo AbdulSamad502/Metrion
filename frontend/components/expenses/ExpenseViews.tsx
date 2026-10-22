@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Section } from "@/components/ui/Section";
 import { StatusBadge, type Tone } from "@/components/ui/StatusBadge";
 import { Field, SelectInput, TextInput } from "@/components/cfo/primitives";
 import {
-  COST_CLASS_LABEL, PAYMENT_LABEL, REVIEW_LABEL, REVIEW_REASON_LABEL, money,
-  type ExpenseRecord, type LedgerMeta, type ListFilters, type PaymentStatus, type ReviewState, type SummaryResponse,
+  COST_CLASS_LABEL, HISTORY_KIND_LABEL, PAYMENT_LABEL, REVIEW_LABEL, REVIEW_REASON_LABEL, loadRecord, money,
+  type ExpenseRecord, type Getter, type LedgerMeta, type ListFilters, type PaymentStatus, type ReviewState, type SummaryResponse,
 } from "@/lib/expenseLedger";
 
 const REVIEW_TONE: Record<ReviewState, Tone> = { draft: "neutral", pending_review: "warning", confirmed: "accent", voided: "negative" };
@@ -84,9 +84,35 @@ export function Overview({ summary }: { summary: SummaryResponse }) {
   );
 }
 
+/** The record's own review and payment events, read from the server each time it is opened and whenever the record changes, so a status change shows at once. */
+function HistoryPanel({ record, getToken }: { record: ExpenseRecord; getToken?: Getter }) {
+  const [events, setEvents] = useState<NonNullable<ExpenseRecord["history"]> | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!getToken) return;
+    let live = true;
+    loadRecord(getToken, record.id).then((r) => { if (live) { setFailed(false); setEvents(r.history ?? []); } }).catch(() => { if (live) setFailed(true); });
+    return () => { live = false; };
+  }, [getToken, record.id, record.reviewState, record.paymentStatus]);
+  return (
+    <div className="t-micro" style={{ color: "var(--text-6)" }} data-testid="history-panel">
+      <div>Entered {record.createdAt ?? "—"} · {record.origin === "MANUAL" ? "typed in by hand" : "imported"}</div>
+      {failed && <div role="alert">Could not load the full history.</div>}
+      {events?.map((e) => (
+        <div key={e.seq} data-testid="history-event">
+          {HISTORY_KIND_LABEL[e.kind] ?? e.kind}: {e.kind === "PAYMENT" ? PAYMENT_LABEL[(e.paymentStatus ?? "unknown") as PaymentStatus] : REVIEW_LABEL[(e.reviewState ?? "draft") as ReviewState]}
+          {e.kind === "PAYMENT" && e.paidAmountPaise != null ? ` (${money(e.paidAmountPaise)} paid)` : ""}
+          {e.reason ? ` · ${e.reason}` : ""}{e.createdAt ? ` · ${e.createdAt}` : ""}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ExpenseTable({
-  records, filters, meta, onFilters, onCorrect, onRefund, onVoid, onPayment, onAssign,
+  records, filters, meta, onFilters, onCorrect, onRefund, onVoid, onPayment, onAssign, getToken,
 }: {
+  getToken?: Getter;
   records: ExpenseRecord[];
   filters: ListFilters;
   meta: LedgerMeta;
@@ -162,7 +188,7 @@ export function ExpenseTable({
                     <button type="button" className="mt-focus t-micro" style={{ color: "var(--text-5)" }} onClick={() => setOpen(open === r.id ? null : r.id)}>
                       {open === r.id ? "Hide history" : "History"}
                     </button>
-                    {open === r.id && <div className="t-micro" style={{ color: "var(--text-6)" }}>Entered {r.createdAt ?? "—"} · {r.origin === "MANUAL" ? "typed in by hand" : "imported"}</div>}
+                    {open === r.id && <HistoryPanel record={r} getToken={getToken} />}
                   </td>
                 </tr>
               ))}

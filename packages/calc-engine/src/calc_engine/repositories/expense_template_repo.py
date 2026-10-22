@@ -1,7 +1,7 @@
 """expense_template repository — engine §5.18.1 / §5.18.2; migration `20261022_0014_expense_template.py`.
 
 Templates are standing instructions, stored as immutable versions (INSERT and SELECT only). `materialise` turns them into ordinary ledger records through
-`expense_ledger_repo.insert_record`: each is a `pending_review` record (X10: nothing recurring is counted until the seller confirms it), dated the first of its month, flagged
+`expense_tracker_repo.insert_record`: each is a `pending_review` record (X10: nothing recurring is counted until the seller confirms it), dated the first of its month, flagged
 `recurring`, with the idempotency key `template:<template_key>:<yyyy-mm>` — so materialising again creates nothing twice and a voided entry is not silently recreated.
 The amounts come from `calc_engine/formulas/expense_templates.py`; this module only selects the version that applies to a month and routes the result.
 
@@ -21,8 +21,8 @@ from uuid import UUID, uuid4
 from sqlalchemy import text
 
 from calc_engine.formulas import expense_templates as engine
-from calc_engine.repositories import expense_ledger_repo as ledger
-from calc_engine.repositories.expense_ledger_repo import NewRecord
+from calc_engine.repositories import expense_tracker_repo as ledger
+from calc_engine.repositories.expense_tracker_repo import NewRecord
 from calc_engine.repositories.tenant_context import tenant_scope
 
 KINDS = ("MONTHLY", "AMORTIZED", "PER_ORDER", "PER_UNIT")

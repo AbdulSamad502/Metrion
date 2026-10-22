@@ -69,9 +69,11 @@ export const BASE = "/api/v1/cfo/expense-ledger";
 export const REVIEW_LABEL: Record<ReviewState, string> = { draft: "Draft", pending_review: "Pending review", confirmed: "Confirmed", voided: "Voided" };
 export const PAYMENT_LABEL: Record<PaymentStatus, string> = { unpaid: "Unpaid", partially_paid: "Partly paid", paid: "Paid", unknown: "Payment unknown" };
 export const COST_CLASS_LABEL: Record<string, string> = { ADVERTISING: "Advertising", STORAGE: "Storage", OVERHEAD: "Overhead", DIRECT: "Direct costs" };
+export const HISTORY_KIND_LABEL: Record<string, string> = { REVIEW: "Review state", PAYMENT: "Payment status" };
+
 export const REVIEW_REASON_LABEL: Record<string, string> = {
   PENDING_REVIEW: "Waiting for review",
-  UNMAPPED_IDENTIFIER: "SKU not found in your catalog",
+  UNMAPPED_IDENTIFIER: "SKU not found in your catalog (still in the total; only the SKU allocation is pending)",
   UNKNOWN_COST_CLASS: "Cost class not recognised",
   UNKNOWN_TREATMENT: "Treatment not recognised",
 };
@@ -143,6 +145,10 @@ export async function loadList(getToken: Getter, f: ListFilters): Promise<Expens
   if (f.limit) q.set("limit", String(f.limit));
   const qs = q.toString();
   return apiFetch<ExpenseListResponse>(qs ? `${BASE}?${qs}` : BASE, await getToken());
+}
+
+export async function loadRecord(getToken: Getter, id: string): Promise<ExpenseRecord> {
+  return apiFetch<ExpenseRecord>(`${BASE}/${id}`, await getToken());
 }
 
 export async function post<T = { expenseId: string }>(getToken: Getter, path: string, body: unknown): Promise<T> {
