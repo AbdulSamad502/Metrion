@@ -83,3 +83,28 @@ Mechanical grep (`PROPOSED`, `TBD`, whole-word `open`, case-insensitive for `ope
 | other specs (`ceo-agent-orchestration.md`, `cfo-agent.md`, …) | "open" in their own open-question sections | unrelated to the expense register; the lines edited for the Expense Tracker (E30/T36, §6.7 caveat, §14.9, auth §5.2, D7) carry no `PROPOSED`/`TBD` |
 
 **Hits with no register entry:** only the two `billing-and-pricing.md` `TBD` rows (a different feature's open numbers). Every expense-related hit maps to a register entry, a decision, or an errata item.
+
+
+## 7. Update 2026-10-22 (kickoff Steps 3 to 5 built; see `15-build-notes.md`)
+Status from the repository on `feat/pnl-calculator-and-expense-tracker` (no push, no merge to main).
+
+| Item | Status | Commit |
+|---|---|---|
+| S3a ledger tables (`expense_event`, `expense_status_event`) | built, tested | `1a82c13` |
+| S3b repository, rules, ledger routes, dashboard summary route | built, tested | `9b197b4`, `4669ebf` |
+| Round 9 decisions recorded | done | `8c78638` |
+| S3c dashboard `/dashboard/cfo/expenses` | built, tested | `23ad994` |
+| S4a ledger feeds the period P&L, flag default OFF | built, tested; flag stays off | `2c1c03a` |
+| S4b recurring and amortized templates | built, tested; per-order and per-unit amounts not built (no engine count source) | `d7d32e8`, `ea0bf1e` |
+| S5a CSV import | built, tested | `ea0bf1e` |
+| S5b accountant CSV export | built, tested | `0ef5770` |
+| S5c multi-SKU assignment (`EQUAL`, `EXPLICIT_SHARES`) | built, tested | `a258ff2` |
+| S5d draft-from-chat | not built: G6 has not passed | none |
+
+**Updated gate view.**
+- **G2 financial integrity:** the engine pieces (feed, templates, assignment) and their MS, AM, PT and TP tests exist; the ledger feeds the P&L only behind the default-off flag. Still needed: A8 and F7 reconciliation on real data, the per-order and per-unit count source, owner acknowledgement of the Step 3 and X2 proposals, and the release date (Q15).
+- **G3 security:** write routes now exist with `agent.cfo`, the CFO entitlement gate and `financials.adjust`, every-route permission tests, two-tenant isolation and idempotency tests for each slice. Still needed: the documented `financials.adjust` COGS limitation visible to owners and a reviewer pass; no penetration or external review has been done.
+- **G4 and G5:** unchanged, legal/CA (retention, the "30-day rule", GST, ITC and TCS wording). The export carries no GST or ITC column.
+- **G6:** not passed; nothing built.
+- **G7:** not started; needs 3 to 5 sellers reconciling output.
+- **Not built:** frontend screens for templates, import, export and assignment (API only); `CONTRIBUTION_PROFIT.v2` stays inactive and must not be persisted before the release date.
