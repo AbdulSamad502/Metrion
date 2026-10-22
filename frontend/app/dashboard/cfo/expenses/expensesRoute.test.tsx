@@ -39,7 +39,7 @@ describe("the Expense Tracker route", () => {
 // integer-paise STRINGS by rupeesToPaise and shown by formatPaise; every total is the backend's (the engine feed). The same guard as the Profit Calculator's.
 describe("the Expense Tracker does no money maths in the browser", () => {
   const ROOT = process.cwd();
-  const files = ["lib/expenseLedger.ts", "app/dashboard/cfo/expenses/page.tsx", ...readdirSync(join(ROOT, "components/expenses")).filter((f) => /\.tsx$/.test(f) && !/\.test\./.test(f)).map((f) => `components/expenses/${f}`)];
+  const files = ["lib/expenseLedger.ts", "lib/expenseTools.ts", "app/dashboard/cfo/expenses/page.tsx", ...readdirSync(join(ROOT, "components/expenses")).filter((f) => /\.tsx$/.test(f) && !/\.test\./.test(f)).map((f) => `components/expenses/${f}`)];
   const BANNED = [/toFixed/, /parseFloat/, /parseInt/, /\bNumber\(/, /Math\./, /Intl\.NumberFormat/, /toLocaleString/, /\bBigInt\b/, /\bDecimal\b/];
   for (const file of files) {
     it(file, () => {

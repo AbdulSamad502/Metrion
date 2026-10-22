@@ -13,8 +13,9 @@ import {
 } from "@/lib/expenseLedger";
 import { ExpenseForm, RefundPanel, VoidPanel } from "./ExpenseForm";
 import { ExpenseTable, Overview, ReviewQueue } from "./ExpenseViews";
+import { AssignPanel, ImportExportPanel, RecurringPanel } from "./ExpenseTools";
 
-const TABS = ["overview", "expenses", "review", "add"] as const;
+const TABS = ["overview", "expenses", "review", "add", "recurring", "import"] as const;
 
 /** The default period is the current calendar month: dates only, no money. */
 function currentMonth(): { start: string; end: string } {
@@ -42,6 +43,7 @@ export function ExpenseTracker({ getToken }: { getToken: Getter }) {
   const [correcting, setCorrecting] = useState<ExpenseRecord | null>(null);
   const [voiding, setVoiding] = useState<ExpenseRecord | null>(null);
   const [refunding, setRefunding] = useState<ExpenseRecord | null>(null);
+  const [assigning, setAssigning] = useState<ExpenseRecord | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const reloadSummary = useCallback(async () => {
@@ -104,6 +106,8 @@ export function ExpenseTracker({ getToken }: { getToken: Getter }) {
     { id: "expenses", label: "Expenses" },
     { id: "review", label: "Review queue", count: queue },
     { id: "add", label: correcting ? "Correct an expense" : "Add expense" },
+    { id: "recurring", label: "Recurring" },
+    { id: "import", label: "Import & export" },
   ];
 
   return (
@@ -128,10 +132,12 @@ export function ExpenseTracker({ getToken }: { getToken: Getter }) {
               records={list.records} filters={filters} meta={meta} onFilters={setFilters}
               onCorrect={(r) => { setCorrecting(r); setTab("add"); }}
               onRefund={(r) => { setRefunding(r); setVoiding(null); }}
-              onVoid={(r) => { setVoiding(r); setRefunding(null); }}
+              onVoid={(r) => { setVoiding(r); setRefunding(null); setAssigning(null); }}
+              onAssign={(r) => { setAssigning(r); setVoiding(null); setRefunding(null); }}
               onPayment={(r, status: PaymentStatus) => run(r.id, () => post(getToken, `/${r.id}/payment`, { status, ...(status === "paid" ? { paid_amount_paise: String(r.amountPaise) } : {}) }), "Could not change the payment status")}
             />
             {voiding && <VoidPanel getToken={getToken} record={voiding} onCancel={() => setVoiding(null)} onDone={async () => { setVoiding(null); await refresh(); }} />}
+            {assigning && <AssignPanel getToken={getToken} record={assigning} onCancel={() => setAssigning(null)} onDone={async () => { setAssigning(null); await refresh(); }} />}
             {refunding && <RefundPanel getToken={getToken} record={refunding} onCancel={() => setRefunding(null)} onDone={async () => { setRefunding(null); await refresh(); }} />}
           </>
         ) : <LoadingState lines={3} label="Loading expenses" />}
@@ -143,6 +149,14 @@ export function ExpenseTracker({ getToken }: { getToken: Getter }) {
             <ReviewQueue summary={summary} busyId={busyId} onConfirm={(id) => run(id, () => post(getToken, `/${id}/review`, { state: "confirmed" }), "Could not confirm the expense")} />
           </Section>
         ) : <LoadingState lines={3} label="Loading the review queue" />}
+      </TabPanel>
+
+      <TabPanel id="recurring" active={tab} idPrefix="exp">
+        {meta ? <RecurringPanel getToken={getToken} meta={meta} onChanged={refresh} /> : <LoadingState lines={3} label="Loading recurring entries" />}
+      </TabPanel>
+
+      <TabPanel id="import" active={tab} idPrefix="exp">
+        <ImportExportPanel getToken={getToken} onChanged={refresh} />
       </TabPanel>
 
       <TabPanel id="add" active={tab} idPrefix="exp">

@@ -85,7 +85,7 @@ export function Overview({ summary }: { summary: SummaryResponse }) {
 }
 
 export function ExpenseTable({
-  records, filters, meta, onFilters, onCorrect, onRefund, onVoid, onPayment,
+  records, filters, meta, onFilters, onCorrect, onRefund, onVoid, onPayment, onAssign,
 }: {
   records: ExpenseRecord[];
   filters: ListFilters;
@@ -95,6 +95,7 @@ export function ExpenseTable({
   onRefund: (r: ExpenseRecord) => void;
   onVoid: (r: ExpenseRecord) => void;
   onPayment: (r: ExpenseRecord, status: PaymentStatus) => void;
+  onAssign?: (r: ExpenseRecord) => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
@@ -143,6 +144,9 @@ export function ExpenseTable({
                         <button type="button" className="mt-btn mt-btn-secondary mt-focus rounded-lg px-2 py-1 t-micro" onClick={() => onCorrect(r)}>Correct</button>
                         <button type="button" className="mt-btn mt-btn-secondary mt-focus rounded-lg px-2 py-1 t-micro" onClick={() => onRefund(r)}>Refund</button>
                         <button type="button" className="mt-btn mt-btn-secondary mt-focus rounded-lg px-2 py-1 t-micro" onClick={() => onVoid(r)}>Void</button>
+                        {onAssign && (r.costClass === "ADVERTISING" || r.costClass === "STORAGE") && (
+                          <button type="button" className="mt-btn mt-btn-secondary mt-focus rounded-lg px-2 py-1 t-micro" onClick={() => onAssign(r)}>Split across SKUs</button>
+                        )}
                         <select
                           aria-label={`Payment status for ${r.vendor ?? r.categoryLabel}`}
                           value={r.paymentStatus ?? "unknown"}
