@@ -1069,6 +1069,21 @@ def _canonical_assembly_blocked_line_to_dict(blocked: Any) -> dict[str, object]:
     }
 
 
+def _ledger_block(outcome: Any) -> dict[str, object]:
+    """S4a: the expense-ledger part of the response. EMPTY while `EXPENSE_LEDGER_FEEDS_PNL` is off, so the response gains no key at all."""
+    feed = outcome.ledger_feed
+    if feed is None:
+        return {}
+    return {
+        "expenseLedger": {
+            "formulaVersion": feed.formula_version,
+            "watermark": feed.watermark,
+            "unallocated": [{"costClass": u.cost_class, "paise": u.paise, "engineResultRef": u.engine_result_ref} for u in feed.unallocated],
+            "skippedBecauseSuppliedInRequest": list(feed.skipped),
+        }
+    }
+
+
 @router.post("/pnl-for-tenant")
 def post_period_pnl_for_tenant(
     body: PeriodPnlForTenantHttpRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)
@@ -1121,6 +1136,7 @@ def post_period_pnl_for_tenant(
         "assembledLineCount": outcome.assembled_line_count,
         "blockedLines": [_canonical_assembly_blocked_line_to_dict(b) for b in outcome.blocked_lines],
         "dataRequestIds": [str(i) for i in outcome.data_request_ids],
+        **_ledger_block(outcome),
     }
 
 

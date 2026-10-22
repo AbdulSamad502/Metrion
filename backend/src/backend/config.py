@@ -765,3 +765,10 @@ def rag_max_document_bytes() -> int:
 def rag_max_documents_per_tenant() -> int:
     """`RAG_MAX_DOCUMENTS_PER_TENANT`: pilot per-tenant document cap (owner decision Q7: 50)."""
     return _positive_int_env("RAG_MAX_DOCUMENTS_PER_TENANT", 50)
+
+
+def expense_ledger_feeds_pnl() -> bool:
+    """OPTIONAL `EXPENSE_LEDGER_FEEDS_PNL=true`: the expense ledger's engine feed (confirmed, non-voided rows) supplies the advertising and storage terms of the period P&L
+    and the unallocated lines shown beside contribution profit (expense-tracker.md F6/F7). DEFAULT OFF: any other value, or unset, leaves every P&L result and response exactly as
+    it was. Not cached, so a change takes effect on the next request."""
+    return (os.environ.get("EXPENSE_LEDGER_FEEDS_PNL") or "").strip().lower() == "true"
