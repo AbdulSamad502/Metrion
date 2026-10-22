@@ -27,6 +27,8 @@ UNITS_UNAVAILABLE = "UNITS_UNAVAILABLE"
 NO_ORDERS_IN_PERIOD = "NO_ORDERS_IN_PERIOD"
 RATE_MISSING = "RATE_MISSING"
 MONTH_NOT_FINISHED = "MONTH_NOT_FINISHED"
+NO_REMAINING_SCHEDULE = "NO_REMAINING_SCHEDULE"
+REFUND_EXCEEDS_REMAINING = "REFUND_EXCEEDS_REMAINING"
 
 
 def first_of_month(d: date) -> date:
@@ -173,3 +175,48 @@ def count_for_scope(lines: Sequence[CanonicalLine], order_ref_by_line: Mapping[s
                 return CountOutcome(None, unavailable, True)
             units += kept
     return CountOutcome(len(orders) if per == "ORDER" else units, None, True)
+
+
+# ---- a refund of an amortized expense (section 5.18.1, Q31) -------------------------------------------------------------------------------------------------------
+
+
+def effective_schedule(versions: Sequence[tuple[date, int, int]]) -> AmortizationSchedule:
+    """The schedule in force from a template's versions, each `(start_month, remaining_total_paise, months)` read as "from this month on, this amount is spread over this many months":
+    the first version is the original schedule; a later version (a refund) replaces every month from its own start and drops what the earlier one had after it. Months before the
+    later version's start keep their earlier shares, so a refund never restates a past month."""
+    shares: dict[date, Paise] = {}
+    for start, total, months in versions:
+        schedule = amortization_schedule(total, months, start)
+        if not schedule.valid:
+            return schedule
+        first = first_of_month(start)
+        for m in [m for m in shares if m >= first]:
+            del shares[m]
+        for m, share in zip(schedule.months, schedule.shares):
+            shares[m] = share
+    ordered = sorted(shares)
+    return AmortizationSchedule(tuple(ordered), tuple(shares[m] for m in ordered))
+
+
+@dataclass(frozen=True, slots=True)
+class RefundOutcome:
+    start: date | None  # first month of the re-spread remainder
+    remaining_total: Paise | None  # what is left to spread from `start` after the refund
+    months: int | None
+    reason: str | None  # NO_REMAINING_SCHEDULE / REFUND_EXCEEDS_REMAINING when nothing could be done
+
+
+def refund_remaining(schedule: AmortizationSchedule, refund_paise: int, from_month: date) -> RefundOutcome:
+    """A refund of an amortized expense reduces what is left to amortize from the refund month on, spread over the months that remain; earlier months are untouched. With no month
+    left in the schedule there is nothing to reduce (`NO_REMAINING_SCHEDULE`: the refund belongs to its own period as an ordinary refund); a refund larger than what remains is
+    refused (`REFUND_EXCEEDS_REMAINING`)."""
+    if not schedule.valid or isinstance(refund_paise, bool) or not isinstance(refund_paise, int) or refund_paise <= 0:
+        return RefundOutcome(None, None, None, AMORTIZATION_INVALID)
+    first = first_of_month(from_month)
+    remaining = [(m, s) for m, s in zip(schedule.months, schedule.shares) if m >= first]
+    if not remaining:
+        return RefundOutcome(None, None, None, NO_REMAINING_SCHEDULE)
+    left = sum(s.value for _, s in remaining)
+    if refund_paise > left:
+        return RefundOutcome(None, None, None, REFUND_EXCEEDS_REMAINING)
+    return RefundOutcome(remaining[0][0], Paise(left - refund_paise), len(remaining), None)

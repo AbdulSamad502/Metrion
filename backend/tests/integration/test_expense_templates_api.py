@@ -259,3 +259,55 @@ def test_unknown_templates_are_404_and_tenants_are_isolated(app_client, owner, o
 def test_the_entitlement_gate_applies(app_client, owner, two_tenants, migrate_engine):
     _seed_zero_cap(migrate_engine, agent_code="CFO", meter_code="cfo.expense_ledger.write")
     assert app_client.post(T, json=MONTHLY, headers=owner).status_code == 402
+
+
+# ---- AM7 through the API ----------------------------------------------------------------------------------------------------------------------------------------
+
+AMORT = {"kind": "AMORTIZED", "category": "software", "effective_from": "2026-01-01", "amount_paise": 1_200_000, "amortization_months": 12, "start_month": "2026-01-01"}
+
+
+def test_a_refund_of_an_amortized_template_reduces_only_the_months_not_yet_made(app_client, owner):
+    key = app_client.post(T, json=AMORT, headers=owner).json()["templateKey"]
+    app_client.post(f"{T}/materialise", json={"through_month": "2026-02-01"}, headers=owner)
+    r = app_client.post(f"{T}/{key}/refund", json={"effective_date": "2026-03-15", "amount_paise": "300000"}, headers=owner)
+    assert r.status_code == 201, r.text
+    assert r.json() == {"templateKey": key, "remainingFrom": "2026-03-01", "remainingMonths": 10, "remainingPaise": "700000"}
+    app_client.post(f"{T}/materialise", json={"through_month": "2026-11-01"}, headers=owner)
+    got = entries(app_client, owner)
+    assert [e["amountPaise"] for e in got][:2] == [100_000, 100_000]  # January and February were made before the refund and are not restated
+    assert all(e["amountPaise"] == 70_000 for e in got[2:]) and len(got) == 11  # the remainder, a month at a time, up to the month asked for
+
+
+def test_a_refund_with_nothing_left_or_too_large_is_refused_and_writes_nothing(app_client, owner, two_tenants, migrate_engine):
+    from sqlalchemy import text
+
+    from backend.tenant_context import tenant_scope
+
+    key = app_client.post(T, json=AMORT | {"amount_paise": 120_000, "amortization_months": 3}, headers=owner).json()["templateKey"]
+
+    def runs():
+        with tenant_scope(two_tenants[0]) as conn:
+            return conn.execute(text("SELECT count(*) FROM agent_run WHERE trigger_ref = 'cfo.expense_ledger'")).scalar_one()
+
+    before = runs()
+    late = app_client.post(f"{T}/{key}/refund", json={"effective_date": "2026-09-01", "amount_paise": 1}, headers=owner)
+    big = app_client.post(f"{T}/{key}/refund", json={"effective_date": "2026-02-01", "amount_paise": 80_001}, headers=owner)
+    assert (late.status_code, late.json()["detail"]["code"]) == (422, "NO_REMAINING_SCHEDULE")
+    assert (big.status_code, big.json()["detail"]["code"]) == (422, "REFUND_EXCEEDS_REMAINING")
+    assert runs() == before and app_client.get(T, headers=owner).json()["templates"][0]["version"] == 1
+
+
+@pytest.mark.parametrize("patch", [{"amount_paise": 0}, {"amount_paise": -5}, {"amount_paise": 1.5}, {"amount_paise": "abc"}, {"effective_date": "not-a-date"}, {"tenant_id": "x"}])
+def test_a_malformed_refund_is_refused(app_client, owner, patch):
+    key = app_client.post(T, json=AMORT, headers=owner).json()["templateKey"]
+    assert app_client.post(f"{T}/{key}/refund", json={"effective_date": "2026-03-01", "amount_paise": 100} | patch, headers=owner).status_code == 422
+
+
+def test_only_an_amortized_template_can_be_refunded_and_not_by_another_tenant_or_without_permission(app_client, fake_clerk, two_tenants, owner, other_owner):
+    monthly_key = app_client.post(T, json=MONTHLY, headers=owner).json()["templateKey"]
+    key = app_client.post(T, json=AMORT, headers=owner).json()["templateKey"]
+    body = {"effective_date": "2026-03-01", "amount_paise": 100}
+    assert app_client.post(f"{T}/{monthly_key}/refund", json=body, headers=owner).status_code == 404
+    assert app_client.post(f"{T}/{key}/refund", json=body, headers=other_owner).status_code == 404
+    partner = _register_partner_with_permissions(fake_clerk, two_tenants[0], permissions={"agent.cfo": True})
+    assert app_client.post(f"{T}/{key}/refund", json=body, headers=partner).status_code == 403

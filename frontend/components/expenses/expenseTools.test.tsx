@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssignPanel, ImportExportPanel, RecurringPanel } from "@/components/expenses/ExpenseTools";
 import { ExpenseTable } from "@/components/expenses/ExpenseViews";
-import { buildTemplateBody } from "@/lib/expenseTools";
+import { buildTemplateBody, buildTemplateRefundBody } from "@/lib/expenseTools";
 import type { ExpenseRecord, LedgerMeta } from "@/lib/expenseLedger";
 
 // Recurring templates, CSV import and the accountant export (kickoff S4b, S5a, S5b). Amounts are rupees typed by the seller and sent as integer-paise strings; every
@@ -384,5 +384,63 @@ describe("splitting an expense across SKUs", () => {
     expect(buttons).toHaveLength(2);
     await user.click(buttons[0]);
     expect(onAssign).toHaveBeenCalledWith(expect.objectContaining({ id: "a" }));
+  });
+});
+
+describe("refund of a spread-over-months entry", () => {
+  const amort = tpl({ templateKey: "k-4", kind: "AMORTIZED", amountPaise: 1200000, amortizationMonths: 12, startMonth: "2026-01-01" });
+  const mount = () => render(<RecurringPanel getToken={async () => "t"} meta={META} onChanged={async () => {}} />);
+
+  it("builds the refund as integer paise and refuses a missing date or a zero or unreadable amount", () => {
+    expect(buildTemplateRefundBody("2026-03-15", "3000")).toEqual({ ok: true, body: { effective_date: "2026-03-15", amount_paise: "300000" } });
+    expect(buildTemplateRefundBody("", "3000")).toEqual({ ok: false, error: "Choose the date of the refund." });
+    expect(buildTemplateRefundBody("2026-03-15", "0")).toEqual({ ok: false, error: "A refund must be more than zero." });
+    expect(buildTemplateRefundBody("2026-03-15", "abc")).toMatchObject({ ok: false });
+  });
+
+  it("offers Refund only on a spread-over-months entry that has not ended", async () => {
+    handlers[`GET ${BASE}/templates`] = () => json({ templates: [tpl({}), amort, tpl({ templateKey: "k-5", kind: "AMORTIZED", amortizationMonths: 3, ended: true })] });
+    mount();
+    await screen.findAllByTestId("template-row");
+    expect(screen.getAllByRole("button", { name: "Refund" })).toHaveLength(1);
+  });
+
+  it("sends the refund and says what is left to spread, with earlier months unchanged", async () => {
+    handlers[`GET ${BASE}/templates`] = () => json({ templates: [amort] });
+    handlers[`POST ${BASE}/templates/k-4/refund`] = () => json({ templateKey: "k-4", remainingFrom: "2026-03-01", remainingMonths: 10, remainingPaise: "700000" }, 201);
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Refund" }));
+    await user.type(screen.getByLabelText("Refund date"), "2026-03-15");
+    await user.type(screen.getByLabelText("Refund amount (₹)"), "3000");
+    await user.click(screen.getByRole("button", { name: "Record the refund" }));
+    expect(await screen.findByTestId("refund-note")).toHaveTextContent("From 2026-03-01, ₹7,000.00 is left to spread over 10 months. Earlier months are not changed.");
+    expect(calls.find((c) => c.url.endsWith("/k-4/refund"))!.body).toEqual({ effective_date: "2026-03-15", amount_paise: "300000" });
+    expect(screen.queryByTestId("refund-panel")).toBeNull();
+  });
+
+  it("explains a refusal in plain words and keeps the form", async () => {
+    handlers[`GET ${BASE}/templates`] = () => json({ templates: [amort] });
+    handlers[`POST ${BASE}/templates/k-4/refund`] = () => json({ detail: { code: "REFUND_EXCEEDS_REMAINING" } }, 422);
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Refund" }));
+    await user.type(screen.getByLabelText("Refund date"), "2026-03-15");
+    await user.type(screen.getByLabelText("Refund amount (₹)"), "99999");
+    await user.click(screen.getByRole("button", { name: "Record the refund" }));
+    expect(await screen.findByText("The refund is more than what is left to spread.")).toBeInTheDocument();
+    expect(screen.getByTestId("refund-panel")).toBeInTheDocument();
+  });
+
+  it("does not send an incomplete refund", async () => {
+    handlers[`GET ${BASE}/templates`] = () => json({ templates: [amort] });
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Refund" }));
+    await user.click(screen.getByRole("button", { name: "Record the refund" }));
+    expect(await screen.findByText("Choose the date of the refund.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByTestId("refund-panel")).toBeNull();
   });
 });

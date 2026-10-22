@@ -194,6 +194,36 @@ def new_version(template_key: UUID, body: TemplateRequest, ctx: AuthContext = re
     return {"templateKey": str(template_key), "version": version}
 
 
+class TemplateRefundRequest(_Strict):
+    effective_date: date
+    amount_paise: Paise
+
+    @field_validator("amount_paise", mode="after")
+    @classmethod
+    def _amount(cls, v: Any) -> Any:
+        v = _to_int(v)
+        _check(rules.amount_error(v))
+        if v <= 0:
+            raise ValueError("a refund is more than zero")
+        return v
+
+
+@router.post("/{template_key}/refund", status_code=201)
+def refund_template(template_key: UUID, body: TemplateRefundRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """A refund of an amortized expense: reduces what is left to amortize from the refund month on (the engine re-spreads the remainder; earlier months and the entries already
+    made from them are not restated). With no month left in the schedule, or a refund above what remains, nothing is written and the reason is returned (422): record it as an
+    ordinary refund on the entry instead."""
+    tenant = _require_write(ctx)
+    try:
+        outcome = repo.refund_amortized(tenant, template_key, refund_date=body.effective_date, refund_paise=body.amount_paise, created_by=ctx.app_user_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="template not found") from None
+    if outcome.reason is not None:
+        raise HTTPException(status_code=422, detail={"code": outcome.reason})
+    _log_write(ctx)
+    return {"templateKey": str(template_key), "remainingFrom": _iso(outcome.start), "remainingMonths": outcome.months, "remainingPaise": str(outcome.remaining_total.value)}  # type: ignore[union-attr]
+
+
 @router.post("/{template_key}/end", status_code=201)
 def end_template(template_key: UUID, body: EndRequest, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
     """Ends the template: a new version carrying the same terms with an end date. Entries already made stay."""

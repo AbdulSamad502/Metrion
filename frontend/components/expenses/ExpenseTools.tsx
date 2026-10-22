@@ -9,7 +9,7 @@ import { friendlyApiError } from "@/lib/apiErrors";
 import { money, post, type ExpenseRecord, type Getter, type LedgerMeta } from "@/lib/expenseLedger";
 import { percentToBps } from "@/lib/pnlText";
 import {
-  KIND_LABEL, SKIP_REASON_LABEL, STATUS_LABEL, buildTemplateBody, createTemplate, downloadCsv, endTemplate, importFile, loadTemplates, materialise,
+  KIND_LABEL, REFUND_REASON_LABEL, SKIP_REASON_LABEL, STATUS_LABEL, buildTemplateBody, buildTemplateRefundBody, createTemplate, downloadCsv, endTemplate, importFile, loadTemplates, materialise, refundTemplate,
   type ExpenseTemplate, type ImportStatus, type ImportSummary, type MaterialiseResponse, type TemplateForm, type TemplateKind,
 } from "@/lib/expenseTools";
 
@@ -33,6 +33,10 @@ export function RecurringPanel({ getToken, meta, onChanged }: { getToken: Getter
   const [result, setResult] = useState<MaterialiseResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refunding, setRefunding] = useState<ExpenseTemplate | null>(null);
+  const [refundDate, setRefundDate] = useState("");
+  const [refundAmount, setRefundAmount] = useState("");
+  const [refundNote, setRefundNote] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -78,6 +82,26 @@ export function RecurringPanel({ getToken, meta, onChanged }: { getToken: Getter
     }
   };
 
+  const sendRefund = async () => {
+    if (!refunding) return;
+    const built = buildTemplateRefundBody(refundDate, refundAmount);
+    if (!built.ok) return setError(built.error);
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await refundTemplate(getToken, refunding.templateKey, built.body);
+      setRefundNote(`Done. From ${out.remainingFrom}, ${money(out.remainingPaise)} is left to spread over ${out.remainingMonths} months. Earlier months are not changed.`);
+      setRefunding(null);
+      setRefundAmount("");
+      await reload();
+    } catch (e) {
+      const code = (e as { detail?: { code?: string } }).detail?.code;
+      setError(code && REFUND_REASON_LABEL[code] ? REFUND_REASON_LABEL[code] : friendlyApiError(e, "Could not record the refund"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const end = async (t: ExpenseTemplate) => {
     setBusy(true);
     setError(null);
@@ -112,12 +136,23 @@ export function RecurringPanel({ getToken, meta, onChanged }: { getToken: Getter
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="t-metric">{money(String(t.kind === "PER_ORDER" || t.kind === "PER_UNIT" ? t.ratePaise : t.amountPaise))}</span>
+                  {t.kind === "AMORTIZED" && !t.ended && <button type="button" disabled={busy} className="mt-btn mt-btn-secondary mt-focus rounded-lg px-2 py-1 t-micro" onClick={() => { setRefunding(t); setRefundNote(null); }}>Refund</button>}
                   {!t.ended && <button type="button" disabled={busy} className="mt-btn mt-btn-secondary mt-focus rounded-lg px-2 py-1 t-micro" onClick={() => end(t)}>End</button>}
                 </div>
               </div>
             ))}
           </div>
         )}
+        {refunding && (
+          <div className="mt-4 grid grid-cols-1 items-end gap-3 rounded-xl p-3 sm:grid-cols-4" style={{ border: "1px solid var(--border-default)" }} data-testid="refund-panel">
+            <p className="t-body-sm sm:col-span-4" style={{ color: "var(--text-4)" }}>Refund of {refunding.vendor ?? refunding.categoryLabel}: reduces what is left to spread from the refund month on. Months already made are not changed.</p>
+            <Field label="Refund date"><TextInput type="date" value={refundDate} onChange={setRefundDate} /></Field>
+            <Field label="Refund amount (₹)"><TextInput value={refundAmount} onChange={setRefundAmount} /></Field>
+            <SubmitButton onClick={sendRefund} busy={busy} label="Record the refund" busyLabel="Saving…" />
+            <button type="button" className="mt-btn mt-btn-secondary mt-focus rounded-lg px-3 py-2 t-body-sm" onClick={() => setRefunding(null)}>Cancel</button>
+          </div>
+        )}
+        {refundNote && <p className="mt-3 t-body-sm" style={{ color: "var(--text-4)" }} data-testid="refund-note">{refundNote}</p>}
         <div className="mt-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-3">
           <Field label="Create the entries up to"><TextInput type="date" value={through} onChange={setThrough} /></Field>
           <SubmitButton onClick={make} busy={busy} label="Create the entries" busyLabel="Creating…" />

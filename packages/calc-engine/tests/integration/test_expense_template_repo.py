@@ -261,3 +261,62 @@ def test_a_per_order_entry_is_made_once_and_a_voided_one_is_not_recreated(two_te
     assert again.created == [] and again.replayed == 1 and rows(a)[0]["amount_paise"] == 2_500  # the first count stands
     ledger.append_review(a, rows(a)[0]["id"], review_state="voided", reason="wrong", created_by=USER)
     assert repo.materialise(a, through_month=date(2026, 1, 1), created_by=USER, counts=c, today=date(2026, 6, 1)).created == []
+
+
+# ---- AM7 on the stored template ---------------------------------------------------------------------------------------------------------------------------------
+
+
+def amortized(**kw) -> NewTemplate:
+    base = dict(kind="AMORTIZED", category="software", cost_class="OVERHEAD", effective_from=date(2026, 1, 1), amount_paise=1_200_000, amortization_months=12, start_month=date(2026, 1, 1))
+    base.update(kw)
+    return NewTemplate(**base)
+
+
+def test_am7_a_refund_changes_only_the_months_not_yet_made(two_tenants):
+    a, _ = two_tenants
+    key = repo.create(a, amortized(), created_by=USER)
+    repo.materialise(a, through_month=date(2026, 2, 1), created_by=USER)  # January and February are made at Rs 1,000
+    out = repo.refund_amortized(a, key, refund_date=date(2026, 3, 15), refund_paise=300_000, created_by=USER)
+    assert (out.reason, out.start, out.months, out.remaining_total.value) == (None, date(2026, 3, 1), 10, 700_000)
+    repo.materialise(a, through_month=date(2026, 12, 1), created_by=USER)
+    got = rows(a)
+    assert [r["amount_paise"] for r in got] == [100_000, 100_000] + [70_000] * 10  # the two entries already made are not restated
+    assert sum(r["amount_paise"] for r in got) == 900_000
+    assert [v["version"] for v in repo.versions(a, key)] == [1, 2]
+    assert [str(x) for x in repo.schedule_of(a, key).months][:1] == ["2026-01-01"]
+
+
+def test_a_refund_before_anything_is_made_re_spreads_the_whole_schedule(two_tenants):
+    a, _ = two_tenants
+    key = repo.create(a, amortized(amount_paise=120_000, amortization_months=4), created_by=USER)
+    assert repo.refund_amortized(a, key, refund_date=date(2026, 1, 10), refund_paise=40_000, created_by=USER).reason is None
+    repo.materialise(a, through_month=date(2026, 12, 1), created_by=USER)
+    assert [r["amount_paise"] for r in rows(a)] == [20_000] * 4
+
+
+def test_a_refund_with_no_schedule_left_or_too_large_writes_nothing(two_tenants):
+    a, _ = two_tenants
+    key = repo.create(a, amortized(amount_paise=120_000, amortization_months=3), created_by=USER)
+    assert repo.refund_amortized(a, key, refund_date=date(2026, 9, 1), refund_paise=1, created_by=USER).reason == "NO_REMAINING_SCHEDULE"
+    assert repo.refund_amortized(a, key, refund_date=date(2026, 2, 1), refund_paise=80_001, created_by=USER).reason == "REFUND_EXCEEDS_REMAINING"
+    assert [v["version"] for v in repo.versions(a, key)] == [1]
+
+
+def test_only_an_amortized_template_of_the_same_tenant_can_be_refunded(two_tenants):
+    a, b = two_tenants
+    monthly_key = repo.create(a, monthly(), created_by=USER)
+    key = repo.create(a, amortized(), created_by=USER)
+    with pytest.raises(LookupError):
+        repo.refund_amortized(a, monthly_key, refund_date=date(2026, 2, 1), refund_paise=1, created_by=USER)
+    with pytest.raises(LookupError):
+        repo.refund_amortized(b, key, refund_date=date(2026, 2, 1), refund_paise=1, created_by=USER)
+
+
+def test_ending_an_amortized_template_keeps_its_refunded_schedule(two_tenants):
+    a, _ = two_tenants
+    key = repo.create(a, amortized(amount_paise=120_000, amortization_months=4), created_by=USER)
+    repo.refund_amortized(a, key, refund_date=date(2026, 3, 1), refund_paise=30_000, created_by=USER)
+    latest = repo.versions(a, key)[-1]
+    repo.new_version(a, key, amortized(amount_paise=int(latest["amount_paise"]), amortization_months=latest["amortization_months"], start_month=latest["start_month"], effective_to=date(2026, 3, 31), ended=True), created_by=USER)
+    repo.materialise(a, through_month=date(2026, 12, 1), created_by=USER)
+    assert [r["effective_date"] for r in rows(a)] == [date(2026, 1, 1), date(2026, 2, 1), date(2026, 3, 1)]  # ended after March: no later entry

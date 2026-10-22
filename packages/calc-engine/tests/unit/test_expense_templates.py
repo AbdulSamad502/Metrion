@@ -212,3 +212,65 @@ def test_pt6_the_counts_are_the_same_whatever_the_line_order() -> None:
     forward = t.count_for_scope(lines, refs(lines, *names), "UNIT")
     backward = t.count_for_scope(lines[::-1], refs(lines, *names), "UNIT")
     assert forward == backward and forward.count == 10
+
+
+# ---- AM7: a refund of an amortized expense reduces the remaining schedule from the refund month forward ------------------------------------------------------------
+
+
+def test_am7_a_refund_reduces_the_remaining_months_and_leaves_the_past_alone() -> None:
+    original = t.amortization_schedule(1_200_000, 12, date(2026, 1, 1))  # Rs 12,000 over 12 months: Rs 1,000 a month
+    out = t.refund_remaining(original, 300_000, date(2026, 3, 20))  # a Rs 3,000 refund in March
+    assert (out.start, out.remaining_total, out.months, out.reason) == (date(2026, 3, 1), Paise(700_000), 10, None)  # Rs 10,000 left, less Rs 3,000
+    after = t.effective_schedule([(date(2026, 1, 1), 1_200_000, 12), (out.start, out.remaining_total.value, out.months)])
+    shares = [x.value for x in after.shares]
+    assert shares[:2] == [100_000, 100_000]  # January and February are not restated
+    assert shares[2:] == [70_000] * 10 and sum(shares) == 900_000 and after.months == original.months
+
+
+def test_the_re_spread_of_a_refund_uses_the_same_largest_remainder() -> None:
+    original = t.amortization_schedule(100_000, 4, date(2026, 1, 1))
+    out = t.refund_remaining(original, 1, date(2026, 2, 1))
+    after = t.effective_schedule([(date(2026, 1, 1), 100_000, 4), (out.start, out.remaining_total.value, out.months)])
+    assert sum(x.value for x in after.shares) == 99_999 and max(x.value for x in after.shares[1:]) - min(x.value for x in after.shares[1:]) <= 1
+
+
+def test_a_refund_in_the_first_month_reduces_the_whole_schedule() -> None:
+    original = t.amortization_schedule(120_000, 4, date(2026, 5, 1))
+    out = t.refund_remaining(original, 40_000, date(2026, 5, 31))
+    assert (out.start, out.remaining_total, out.months) == (date(2026, 5, 1), Paise(80_000), 4)
+
+
+def test_a_refund_after_the_schedule_ended_has_no_remaining_schedule_to_reduce() -> None:
+    original = t.amortization_schedule(120_000, 3, date(2026, 1, 1))
+    out = t.refund_remaining(original, 1_000, date(2026, 6, 1))
+    assert (out.remaining_total, out.reason) == (None, "NO_REMAINING_SCHEDULE")
+
+
+def test_a_refund_larger_than_what_remains_is_refused_and_an_exact_clearing_is_allowed() -> None:
+    original = t.amortization_schedule(120_000, 4, date(2026, 1, 1))
+    assert t.refund_remaining(original, 90_001, date(2026, 2, 1)).reason == "REFUND_EXCEEDS_REMAINING"  # Rs 900.00 remains from February
+    cleared = t.refund_remaining(original, 90_000, date(2026, 2, 1))
+    assert (cleared.remaining_total, cleared.reason) == (Paise(0), None)
+    after = t.effective_schedule([(date(2026, 1, 1), 120_000, 4), (cleared.start, 0, cleared.months)])
+    assert [x.value for x in after.shares] == [30_000, 0, 0, 0]  # real zeros
+
+
+@pytest.mark.parametrize("refund", [0, -5, True, 2.5])
+def test_a_refund_amount_must_be_a_positive_whole_paise(refund) -> None:
+    assert t.refund_remaining(t.amortization_schedule(100, 2, date(2026, 1, 1)), refund, date(2026, 1, 1)).reason == "AMORTIZATION_INVALID"
+
+
+def test_an_invalid_schedule_cannot_be_refunded() -> None:
+    assert t.refund_remaining(t.amortization_schedule(100, 0, date(2026, 1, 1)), 5, date(2026, 1, 1)).reason == "AMORTIZATION_INVALID"
+
+
+def test_two_refunds_compose_and_a_repeated_identical_version_changes_nothing() -> None:
+    v1 = (date(2026, 1, 1), 1_200_000, 12)
+    first = t.refund_remaining(t.effective_schedule([v1]), 200_000, date(2026, 4, 1))
+    v2 = (first.start, first.remaining_total.value, first.months)
+    second = t.refund_remaining(t.effective_schedule([v1, v2]), 100_000, date(2026, 8, 1))
+    v3 = (second.start, second.remaining_total.value, second.months)
+    final = t.effective_schedule([v1, v2, v3])
+    assert sum(x.value for x in final.shares) == 900_000 and len(final.months) == 12
+    assert [x.value for x in final.shares[:3]] == [100_000] * 3  # January to March untouched by both refunds
+    assert t.effective_schedule([v1, v2, v2]) == t.effective_schedule([v1, v2])

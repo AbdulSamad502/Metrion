@@ -493,6 +493,13 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cfo/expense-ledger/templates/{template_key}/refund": {
+   "body": {
+    "$ref": "#/components/schemas/TemplateRefundRequest"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/expense-ledger/templates/{template_key}/version": {
    "body": {
     "$ref": "#/components/schemas/TemplateRequest"
@@ -4737,6 +4744,34 @@
     "kind"
    ],
    "title": "TargetIn",
+   "type": "object"
+  },
+  "TemplateRefundRequest": {
+   "additionalProperties": false,
+   "properties": {
+    "amount_paise": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
+       "type": "string"
+      }
+     ],
+     "title": "Amount Paise"
+    },
+    "effective_date": {
+     "format": "date",
+     "title": "Effective Date",
+     "type": "string"
+    }
+   },
+   "required": [
+    "effective_date",
+    "amount_paise"
+   ],
+   "title": "TemplateRefundRequest",
    "type": "object"
   },
   "TemplateRequest": {

@@ -179,6 +179,45 @@ def _per_count_entry(
     return total, " + ".join(parts)
 
 
+def _schedule_of(vs: list[dict[str, Any]]) -> engine.AmortizationSchedule:
+    """The amortization schedule in force: version 1 is the original; a later version (a refund) restarts the remainder from its own start month."""
+    parts = [(v["start_month"], int(v["amount_paise"]), v["amortization_months"]) for v in vs if v["kind"] == "AMORTIZED"]
+    if any(m is None or not isinstance(m, int) or isinstance(m, bool) for _, _, m in parts):
+        return engine.amortization_schedule(0, None, None)
+    return engine.effective_schedule(parts)
+
+
+def schedule_of(tenant_id: UUID, template_key: UUID) -> engine.AmortizationSchedule:
+    """The current amortization schedule of a template (empty and invalid for an unknown key or a template that is not amortized)."""
+    vs = versions(tenant_id, template_key)
+    if not vs or vs[0]["kind"] != "AMORTIZED":
+        return engine.amortization_schedule(0, None, None)
+    return _schedule_of(vs)
+
+
+def refund_amortized(tenant_id: UUID, template_key: UUID, *, refund_date: date, refund_paise: int, created_by: UUID) -> engine.RefundOutcome:
+    """A refund of an amortized expense (section 5.18.1, Q31): reduces what is left to amortize from the refund month forward, as a NEW template version, so earlier months and
+    the entries already made from them are never restated. Returns the engine's outcome; nothing is written unless it carries no reason. Raises LookupError for an unknown or
+    non-amortized template."""
+    vs = versions(tenant_id, template_key)
+    if not vs or vs[0]["kind"] != "AMORTIZED":
+        raise LookupError(f"no amortized template {template_key} for this tenant")
+    outcome = engine.refund_remaining(_schedule_of(vs), refund_paise, refund_date)
+    if outcome.reason is not None:
+        return outcome
+    latest = vs[-1]
+    new_version(
+        tenant_id, template_key,
+        NewTemplate(
+            kind="AMORTIZED", category=latest["category"], cost_class=latest["cost_class"], treatment=latest["treatment"], effective_from=latest["effective_from"],
+            effective_to=latest["effective_to"], vendor=latest["vendor"], description=latest["description"], amount_paise=outcome.remaining_total.value,  # type: ignore[union-attr]
+            amortization_months=outcome.months, start_month=outcome.start, channel_scope=latest["channel_scope"], sku=latest["sku"], ended=latest["ended"],
+        ),
+        created_by=created_by,
+    )
+    return outcome
+
+
 def materialise(tenant_id: UUID, *, through_month: date, created_by: UUID, counts: CountProvider | None = None, today: date | None = None) -> MaterialiseResult:
     """Creates the `pending_review` entries for every month up to and including `through_month` that has none yet. Safe to repeat.
 
@@ -226,7 +265,7 @@ def materialise(tenant_id: UUID, *, through_month: date, created_by: UUID, count
         start = engine.first_of_month(min(v["effective_from"] for v in vs))
         schedule = None
         if first["kind"] == "AMORTIZED":
-            schedule = engine.amortization_schedule(int(first["amount_paise"]), first["amortization_months"], first["start_month"])
+            schedule = _schedule_of(vs)
             if not schedule.valid:
                 result.skipped.append((str(key), engine.AMORTIZATION_INVALID))
                 continue

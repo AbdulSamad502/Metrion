@@ -61,6 +61,25 @@ export async function createTemplate(getToken: Getter, body: Record<string, unkn
 export async function materialise(getToken: Getter, throughMonth: string): Promise<MaterialiseResponse> {
   return apiFetch(`${BASE}/templates/materialise`, await getToken(), { method: "POST", body: JSON.stringify({ through_month: throughMonth }) });
 }
+export type RefundTemplateResponse = { templateKey: string; remainingFrom: string; remainingMonths: number; remainingPaise: string };
+export const REFUND_REASON_LABEL: Record<string, string> = {
+  NO_REMAINING_SCHEDULE: "No month of this schedule is left, so there is nothing to reduce. Record the refund on the entry it belongs to instead.",
+  REFUND_EXCEEDS_REMAINING: "The refund is more than what is left to spread.",
+  AMORTIZATION_INVALID: "This schedule cannot be reduced.",
+};
+
+/** A refund of a spread-over-months expense reduces what is left from the refund month on; past months and the entries already made are not restated. The amount is rupees,
+ * sent as an integer-paise string; the re-spread is the backend's. */
+export function buildTemplateRefundBody(date: string, amount: string): BuiltTemplate {
+  if (!date) return { ok: false, error: "Choose the date of the refund." };
+  const parsed = rupeesToPaise(amount);
+  if (!parsed.ok) return { ok: false, error: parsed.reason };
+  if (parsed.value === "0") return { ok: false, error: "A refund must be more than zero." };
+  return { ok: true, body: { effective_date: date, amount_paise: parsed.value } };
+}
+export async function refundTemplate(getToken: Getter, key: string, body: Record<string, unknown>): Promise<RefundTemplateResponse> {
+  return apiFetch(`${BASE}/templates/${key}/refund`, await getToken(), { method: "POST", body: JSON.stringify(body) });
+}
 export async function endTemplate(getToken: Getter, key: string, effectiveTo: string): Promise<{ templateKey: string; version: number }> {
   return apiFetch(`${BASE}/templates/${key}/end`, await getToken(), { method: "POST", body: JSON.stringify({ effective_to: effectiveTo }) });
 }
