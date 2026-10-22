@@ -292,6 +292,11 @@ def test_a_seller_can_map_the_columns_by_hand_when_no_model_is_configured(app_cl
     job = post_upload(app_client, owner, unknown(40)).json()["job"]["jobId"]
     assert wait_for(app_client, owner, job)["status"] == "FAILED"
 
+    cols = app_client.get(f"/api/v1/cfo/jobs/{job}/columns", headers=owner).json()
+    assert cols["canManuallyMap"] is True and [c["name"] for c in cols["columns"]] == ["Order ID", "Line ID", "Qty", "Selling Price", "Invoice Date", "Status"]
+    assert "B-0" not in str(cols) and any(f["name"] == "gross_item_amount" for f in cols["canonicalFields"]) and ["order_ref"] in cols["requiredGroups"]  # names only, never cell values
+    assert app_client.get(f"/api/v1/cfo/jobs/{uuid.uuid4()}/columns", headers=owner).status_code == 404
+
     cfo_only = partner_with(fake_clerk, a, AGENT_CFO)
     assert app_client.post(f"/api/v1/cfo/jobs/{job}/mapping/manual", json={"fields": MANUAL_FIELDS}, headers=cfo_only).status_code == 403
     assert app_client.post(f"/api/v1/cfo/jobs/{job}/mapping/manual", json={"fields": []}, headers=owner).status_code == 422

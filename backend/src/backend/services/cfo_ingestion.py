@@ -281,6 +281,33 @@ def start_manual_mapping(tenant_id: UUID, user_id: UUID, job_id: UUID, fields: l
     return job_view(jobs.get_job(tenant_id, new_job) or {})
 
 
+def columns_view(tenant_id: UUID, job_id: UUID) -> dict[str, Any] | None:
+    """What a seller needs to map a file by hand: its column NAMES (never any cell value) and the closed vocabulary they may map to."""
+    from data_foundation.mapping import vocab
+
+    job = jobs.get_job(tenant_id, job_id)
+    if job is None:
+        return None
+    rf = report_file_repo.get_report_file_for_ingestion(tenant_id, UUID(str(job["report_file_id"])))
+    if rf is None:
+        return None
+    path = Path(str(rf["storage_uri"])[len("file://"):])
+    try:
+        stream = open_report(path, stream_limits(), sheet_name=job["sheet_name"])
+        pinput = collect_profile_input(stream, profile_rows=cfo_profile_rows(), sample_rows=cfo_mapping_sample_rows(), seed=int(str(rf["content_sha256"])[:12], 16))
+    except StreamError as exc:
+        raise UploadRejected(422, exc.detail) from None
+    kind = str(job["report_kind"])
+    return {
+        "jobId": str(job["id"]), "reportKind": kind, "canManuallyMap": job["status"] == "FAILED" and job["error_code"] in MANUAL_MAPPING_CODES,
+        "columns": [{"index": i, "name": n} for i, n in enumerate(pinput.columns)],
+        "canonicalFields": [{"name": f.name, "valueType": f.value_type} for f in sorted(vocab.CANONICAL_FIELDS.values(), key=lambda x: x.name) if kind in f.kinds or (f.name == vocab.COMPONENT_FIELD and kind in ("SALES", "SETTLEMENT"))],
+        "requiredGroups": [list(g) for g in vocab.REQUIRED_GROUPS.get(kind, ())],
+        "transforms": sorted(vocab.TRANSFORMS), "taxInclusion": sorted(vocab.TAX_INCLUSION_VALUES), "signConventions": sorted(vocab.SIGN_CONVENTIONS),
+        "componentCodes": sorted(vocab.COMPONENT_CODES),
+    }
+
+
 def held_view(tenant_id: UUID, job_id: UUID, *, status: str, page: int, page_size: int) -> dict[str, Any] | None:
     job = jobs.get_job(tenant_id, job_id)
     if job is None:

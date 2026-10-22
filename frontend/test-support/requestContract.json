@@ -78,6 +78,10 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/access": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/ca-export": {
    "query": [
     "as_of_date",
@@ -157,6 +161,10 @@
    "requiredQuery": []
   },
   "GET /api/v1/cfo/jobs/{job_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cfo/jobs/{job_id}/columns": {
    "query": [],
    "requiredQuery": []
   },
@@ -251,6 +259,7 @@
    "query": [
     "as_of_date",
     "dir",
+    "export",
     "marketplace",
     "page",
     "page_size",
@@ -3407,8 +3416,27 @@
    "additionalProperties": false,
    "properties": {
     "amount_paise": {
-     "title": "Amount Paise",
-     "type": "integer"
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Amount Paise"
+    },
+    "amount_rupees": {
+     "anyOf": [
+      {
+       "maxLength": 20,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Amount Rupees"
     },
     "due_date": {
      "anyOf": [
@@ -3447,9 +3475,6 @@
      "title": "Supplier Ref"
     }
    },
-   "required": [
-    "amount_paise"
-   ],
    "title": "PayableHttp",
    "type": "object"
   },

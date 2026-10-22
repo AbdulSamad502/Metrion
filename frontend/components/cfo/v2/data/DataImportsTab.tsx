@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ImportHistory } from "@/components/cfo/ImportHistory";
 import type { JobView } from "@/lib/cfoV2/ingest";
 import { JobProgress } from "./JobProgress";
+import { ManualMapping } from "./ManualMapping";
 import { MappingReview } from "./MappingReview";
 import { UploadPanel } from "./UploadPanel";
 
@@ -12,9 +13,19 @@ export function DataImportsTab({ getToken }: { getToken: () => Promise<string | 
   const [job, setJob] = useState<JobView | null>(null);
   const [tick, setTick] = useState(0);
   const [reviewing, setReviewing] = useState(false);
+  const [manual, setManual] = useState(false);
   return (
     <div className="flex flex-col gap-7">
-      {job && reviewing ? (
+      {job && manual ? (
+        <ManualMapping
+          jobId={job.jobId}
+          onProposed={(next) => {
+            setManual(false);
+            setJob(next);
+            setReviewing(true);
+          }}
+        />
+      ) : job && reviewing ? (
         <MappingReview jobId={job.jobId} onConfirmed={() => setReviewing(false)} />
       ) : job ? (
         <JobProgress
@@ -22,9 +33,11 @@ export function DataImportsTab({ getToken }: { getToken: () => Promise<string | 
           jobId={job.jobId}
           initial={job}
           onConfirmMapping={() => setReviewing(true)}
+          onManualMap={() => setManual(true)}
           onRetry={() => {
             setJob(null);
             setReviewing(false);
+            setManual(false);
             setTick((n) => n + 1);
           }}
         />

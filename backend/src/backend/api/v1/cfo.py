@@ -126,6 +126,8 @@ from cfo.reasoning.ollama_provider import OllamaLlmProvider, OllamaUnavailable
 from cfo.reasoning.signals import PricingCandidateInput, SupplierRankInput
 from cfo.repositories.agent_data_request_repo import list_for_tenant
 
+from backend.ceo.figure_format import format_paise  # noqa: E402
+
 router = APIRouter(prefix="/api/v1/cfo")
 
 # cfo-agent.md §6.16 (ingestion). Direct-path only, no CEO dispatch — same reasoning as
@@ -386,6 +388,19 @@ class ManualMappingBody(BaseModel):
     model_config = {"extra": "forbid"}
 
     fields: list[ManualMappingField] = Field(min_length=1, max_length=200)
+
+
+@router.get("/jobs/{job_id}/columns")
+def get_job_columns(job_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """The file's column names (no cell values) and the fields they can be mapped to, for mapping by hand."""
+    assert ctx.tenant_id is not None
+    try:
+        view = cfo_ingestion.columns_view(ctx.tenant_id, job_id)
+    except cfo_ingestion.UploadRejected as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from None
+    if view is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return view
 
 
 @router.post("/jobs/{job_id}/mapping/manual", status_code=202)
@@ -2495,6 +2510,7 @@ def get_ledger_entries(period_start: date | None = None, period_end: date | None
     rows = cfo_expense_ledger.entries_view(ctx.tenant_id, period_start, period_end)
     return {"entries": [
         {"id": r["id"], "entryDate": r["entry_date"].isoformat(), "paidDate": r["paid_date"].isoformat() if r["paid_date"] else None, "amountPaise": int(r["amount_paise"]),
+         "amountDisplay": format_paise(int(r["amount_paise"])), "gstAmountDisplay": None if r["gst_amount_paise"] is None else format_paise(int(r["gst_amount_paise"])),
          "category": r["category"], "vendor": r["vendor"], "description": r["description"], "paymentRef": r["payment_ref"], "marketplace": r["marketplace"],
          "gstAmountPaise": r["gst_amount_paise"], "gstTreatment": r["gst_treatment"], "allocatedComponent": r["allocated_component"], "gstTreatmentUnconfirmed": r["gst_amount_paise"] is not None and r["gst_treatment"] is None,
          "hold": r["hold"], "source": r["source"], "confirmedClass": r["confirmed_class"], "suggestedClass": r["suggested_class"],
@@ -2601,7 +2617,8 @@ def post_ads_owner(body: AdOwnerHttp, ctx: AuthContext = require_auth(permission
 class PayableHttp(BaseModel):
     model_config = {"extra": "forbid"}
 
-    amount_paise: int
+    amount_paise: int | None = None
+    amount_rupees: str | None = Field(default=None, max_length=20)  # e.g. "12500.50": what a seller types; converted once, exactly, on the server
     due_date: date | None = None
     supplier_ref: str | None = Field(default=None, max_length=120)
     po_ref: str | None = Field(default=None, max_length=120)
@@ -2621,8 +2638,19 @@ def post_payable(body: PayableHttp, ctx: AuthContext = require_auth(permission=A
     """A supplier amount the seller owes (and when). It feeds the shortfall comparison with expected receipts; no bank balance is read or assumed."""
     from calc_engine.repositories import cash_repo
 
+    from data_foundation.adapters.base import rupees_to_paise
+
     _require_ledger_write(ctx)
-    ref = _cash_call(lambda: cash_repo.add_payable(ctx.tenant_id, ctx.app_user_id, amount_paise=body.amount_paise, due_date=body.due_date,
+    if (body.amount_paise is None) == (body.amount_rupees is None):
+        raise HTTPException(status_code=400, detail="give the amount either in paise or in rupees, not both and not neither")
+    if body.amount_rupees is not None:
+        if not re.fullmatch(r"\d{1,12}(\.\d{1,2})?", body.amount_rupees.strip()):
+            raise HTTPException(status_code=400, detail="enter the amount in rupees with at most two decimals, for example 12500.50")
+        amount = rupees_to_paise(body.amount_rupees)
+    else:
+        assert body.amount_paise is not None
+        amount = body.amount_paise
+    ref = _cash_call(lambda: cash_repo.add_payable(ctx.tenant_id, ctx.app_user_id, amount_paise=amount, due_date=body.due_date,
                                                    supplier_ref=body.supplier_ref, po_ref=body.po_ref))
     _changed(ctx)
     return {"payableRef": ref}
@@ -2835,13 +2863,24 @@ def get_profitability_marketplaces(period_start: date, period_end: date, as_of_d
 
 @router.get("/profitability/skus")
 def get_profitability_skus(period_start: date, period_end: date, as_of_date: date | None = None, marketplace: str = "ALL", sku: str = "", sort: str = "key", dir: str = "desc",  # noqa: A002
-                           page: int = 1, page_size: int = 50, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+                           page: int = 1, page_size: int = 50, export: str | None = None, ctx: AuthContext = require_auth(permission=AGENT_CFO)):  # type: ignore[no-untyped-def]
+    from fastapi import Response
+
     from backend.services import cfo_dashboard
 
     t = _dash_ctx(ctx)
-    out = cfo_dashboard.skus_table(t, ctx.app_user_id, _dash_scope(period_start, period_end, as_of_date, marketplace), sort=sort, direction=dir if dir in ("asc", "desc") else "desc",
-                                   page=max(1, page), page_size=max(1, min(page_size, 200)))
+    if export is not None and export != "csv":
+        raise HTTPException(status_code=400, detail="export must be csv")
+    scope = _dash_scope(period_start, period_end, as_of_date, marketplace)
+    direction = dir if dir in ("asc", "desc") else "desc"
     needle = sku.strip().lower()[:60]
+    if export == "csv":  # the same query again, server-side, whole result (not just a page); cells that could run as formulas are neutralised
+        out = cfo_dashboard.skus_table(t, ctx.app_user_id, scope, sort=sort, direction=direction, page=1, page_size=100000)
+        rows = [r for r in out.get("items", []) if not needle or needle in str(r["key"]).lower()]  # type: ignore[union-attr,attr-defined]
+        body = cfo_dashboard.csv_text(["SKU", "Gross Sales", "Net Realized Revenue", "Contribution Profit"],
+                                      [[r["sku"], r["grossSales"]["display"], r["nrr"]["display"], r["contributionProfit"]["display"]] for r in rows])  # type: ignore[index]
+        return Response(body, media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="sku-profit.csv"'})
+    out = cfo_dashboard.skus_table(t, ctx.app_user_id, scope, sort=sort, direction=direction, page=max(1, page), page_size=max(1, min(page_size, 200)))
     if needle and isinstance(out.get("items"), list):  # SKU search is a filter on the returned page set's keys
         out["items"] = [r for r in out["items"] if needle in str(r["key"]).lower()]  # type: ignore[index,union-attr]
     return out
@@ -2899,3 +2938,9 @@ def get_intelligence_alerts(limit: int = 25, ctx: AuthContext = require_auth(per
     from backend.services import cfo_dashboard
 
     return cfo_dashboard.alerts(_dash_ctx(ctx), max(1, min(limit, 100)))
+
+
+@router.get("/access")
+def get_cfo_access(ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """What this member may change in the CFO workspace, so the page can hide actions they cannot take. The server still refuses every write they are not allowed to make."""
+    return {"canAdjust": ctx.role is not None and has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST)}

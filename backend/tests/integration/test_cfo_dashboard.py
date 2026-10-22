@@ -148,3 +148,49 @@ def test_the_profit_bridge_needs_a_comparison_period_and_explains_a_missing_one(
     assert r.status_code == 200 and r.json()["status"] in ("ANSWERED", "REFUSED")
     bad = app_client.get("/api/v1/cfo/profitability/bridge", params={**Q, "compare_start": "2026-10-31", "compare_end": "2026-10-01"}, headers=h)
     assert bad.status_code == 400
+
+
+def test_payables_can_be_entered_in_rupees_converted_once_on_the_server_and_shown_as_a_display_string(app_client, fake_clerk, two_tenants):  # noqa: F811
+    a, _ = two_tenants
+    h = _register_owner(fake_clerk, a)
+    ok = app_client.post("/api/v1/cfo/payables", json={"amount_rupees": "12500.50", "due_date": "2026-10-30", "supplier_ref": "S1"}, headers=h)
+    assert ok.status_code == 200, ok.text
+    listed = app_client.get("/api/v1/cfo/payables", headers=h).json()["payables"]
+    assert listed[0]["amountPaise"] == 1_250_050
+    dash = app_client.get("/api/v1/cfo/cash/payables", headers=h).json()["items"]
+    assert dash[0]["amount"]["display"] == "\u20b912,500.50" and dash[0]["supplierRef"] == "S1"
+    for bad in ({"amount_rupees": "12,500"}, {"amount_rupees": "1.234"}, {"amount_rupees": "-5"}, {"amount_rupees": "1e3"}, {"amount_rupees": "5", "amount_paise": 500}, {}):
+        assert app_client.post("/api/v1/cfo/payables", json=bad, headers=h).status_code == 400, bad
+    assert app_client.post("/api/v1/cfo/payables", json={"amount_paise": 5000}, headers=h).status_code == 200  # the paise form still works
+
+
+def test_ledger_entries_carry_display_strings_for_the_dashboard(app_client, fake_clerk, two_tenants):  # noqa: F811
+    a, _ = two_tenants
+    h = _register_owner(fake_clerk, a)
+    app_client.post("/api/v1/cfo/ledger/entries", json={"entries": [{"entry_date": "2026-09-05", "amount_paise": 118_000, "category": "Software", "gst_amount_paise": 18_000}]}, headers=h)
+    e = app_client.get("/api/v1/cfo/ledger/entries", headers=h).json()["entries"][0]
+    assert e["amountDisplay"] == "\u20b91,180.00" and e["gstAmountDisplay"] == "\u20b9180.00" and e["gstTreatment"] is None and e["gstTreatmentUnconfirmed"] is True
+
+
+def test_sku_csv_export_is_the_same_query_server_side_and_neutralises_formula_cells(app_client, fake_clerk, two_tenants):  # noqa: F811
+    from backend.services.cfo_dashboard import csv_text
+
+    a, _ = two_tenants
+    _seed(a)
+    h = _register_owner(fake_clerk, a)
+    r = get(app_client, h, "/profitability/skus", export="csv", sort="grossSales", dir="desc")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv") and "attachment" in r.headers["content-disposition"]
+    lines = r.text.strip().split("\r\n")
+    assert lines[0] == '"SKU","Gross Sales","Net Realized Revenue","Contribution Profit"' and lines[1].startswith('"A"') and lines[2].startswith('"B"')
+    assert get(app_client, h, "/profitability/skus", export="xlsx").status_code == 400
+    assert csv_text(["x"], [["=1+1"], ["+cmd"], ["-5"], ["@SUM(A1)"], [None], ['a"b']]) == '"x"\r\n"\'=1+1"\r\n"\'+cmd"\r\n"\'-5"\r\n"\'@SUM(A1)"\r\n"Unavailable"\r\n"a""b"\r\n'
+
+
+def test_access_route_reports_whether_the_member_may_change_things(app_client, fake_clerk, two_tenants):  # noqa: F811
+    from backend.auth.permissions import AGENT_CFO
+    from tests.integration.test_cfo_uploads_jobs import partner_with
+
+    a, _ = two_tenants
+    assert app_client.get("/api/v1/cfo/access", headers=_register_owner(fake_clerk, a)).json() == {"canAdjust": True}
+    assert app_client.get("/api/v1/cfo/access", headers=partner_with(fake_clerk, a, AGENT_CFO)).json() == {"canAdjust": False}
+    assert app_client.get("/api/v1/cfo/access", headers=partner_with(fake_clerk, a)).status_code == 403

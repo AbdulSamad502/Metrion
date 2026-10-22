@@ -58,7 +58,7 @@ describe("JobProgress follows a job to its end", () => {
       }),
     ];
     let i = 0;
-    vi.stubGlobal("fetch", vi.fn(() => reply(seq[Math.min(i++, seq.length - 1)])));
+    vi.stubGlobal("fetch", vi.fn((url: string) => (url.includes("/held") ? reply({ items: [], page: 1, pageSize: 20, total: 0, pageCount: 1, unresolved: 0 }) : url.includes("/access") ? reply({ canAdjust: false }) : reply(seq[Math.min(i++, seq.length - 1)]))));
     render(<JobProgress jobId={seq[0].jobId} />);
     expect(await screen.findByText(/500 rows read/)).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "Rows read" })).toHaveAttribute("value", "500");

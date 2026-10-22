@@ -7,11 +7,12 @@ import { apiFetch } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
 import { STATUS_TEXT, isActive, type JobView } from "@/lib/cfoV2/ingest";
 import { useJob } from "@/lib/cfoV2/useJob";
+import { HeldRows } from "./HeldRows";
 import { QualityReport } from "./QualityReport";
 
 /** One upload's live status: what stage it is in, rows read (a determinate bar only when the server knows the total), a cancel while it is active, the plain reason if
  * it failed, and the quality report once it is done. Progress never moves backwards. */
-export function JobProgress({ jobId, initial, onConfirmMapping, onRetry }: { jobId: string; initial?: JobView | null; onConfirmMapping?: (job: JobView) => void; onRetry?: () => void }) {
+export function JobProgress({ jobId, initial, onConfirmMapping, onRetry, onManualMap }: { jobId: string; initial?: JobView | null; onConfirmMapping?: (job: JobView) => void; onRetry?: () => void; onManualMap?: (job: JobView) => void }) {
   const { getToken } = useAuth();
   const { job, error, status, reload } = useJob(jobId, initial);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -64,6 +65,11 @@ export function JobProgress({ jobId, initial, onConfirmMapping, onRetry }: { job
       {job.status === "FAILED" && (
         <div className="flex flex-col gap-2">
           <ErrorNotice message={job.errorDetail ?? "This file could not be read."} />
+          {onManualMap && (job.errorCode === "MAPPING_PROPOSAL_FAILED" || job.errorCode === "NO_MATCHING_FORMAT") && (
+            <button type="button" onClick={() => onManualMap(job)}>
+              Map the columns yourself
+            </button>
+          )}
           {onRetry && (
             <button type="button" onClick={onRetry}>
               Upload again
@@ -73,6 +79,7 @@ export function JobProgress({ jobId, initial, onConfirmMapping, onRetry }: { job
       )}
       {job.status === "CANCELLED" && <p className="t-body">Cancelled. Nothing from this file was saved.</p>}
       {job.status === "DONE" && job.qualityReport && <QualityReport report={job.qualityReport} />}
+      {job.status === "DONE" && (job.qualityReport?.rows?.held_total ?? 0) > 0 && <HeldRows jobId={job.jobId} />}
     </section>
   );
 }

@@ -23,6 +23,7 @@ from cfo.planner.plan import PeriodRef
 from backend.ceo.figure_format import format_paise, format_percent_number, format_units
 from backend.services.cfo_query import answer_financial_query
 
+TAB, CR, CRLF = chr(9), chr(13), chr(13) + chr(10)
 MARKETPLACES = ("AMAZON", "FLIPKART", "MEESHO")
 
 # Labels the engine and planner attach → one fixed plain sentence each. An unknown label is never shown raw.
@@ -345,3 +346,18 @@ def payables(tenant_id: UUID) -> dict[str, Any]:
     rows = cash_repo.list_payables(tenant_id)
     return {"status": "ANSWERED", "items": [{"id": r.payable_id, "amount": {"display": format_paise(r.amount_paise), "status": "COMPLETE"}, "dueDate": r.due_date.isoformat() if r.due_date else None,
                                            "supplierRef": r.supplier_ref, "poRef": r.po_ref} for r in rows], "generatedAt": _now()}
+
+
+def _csv_cell(v: object) -> str:
+    """One CSV cell. A value that starts with = + - @ tab or CR could run as a formula when opened in a spreadsheet, so it is prefixed with an apostrophe; an
+    unavailable figure is the word "Unavailable", never blank or zero."""
+    t = "Unavailable" if v is None else str(v)
+    if t[:1] in ("=", "+", "-", "@", TAB, CR):
+        t = "'" + t
+    return '"' + t.replace('"', '""') + '"'
+
+
+def csv_text(header: list[str], rows: list[list[object]]) -> str:
+    everything: list[list[object]] = [list(header), *rows]
+    return CRLF.join(",".join(_csv_cell(c) for c in r) for r in everything) + CRLF
+
