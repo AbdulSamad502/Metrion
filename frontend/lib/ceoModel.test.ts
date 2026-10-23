@@ -285,7 +285,7 @@ import { sourceLabel, stageLabel } from "@/lib/ceoModel";
 
 describe("live progress and the new actions", () => {
   it("every known event kind has plain words, and an unknown one adds nothing", () => {
-    for (const k of ["TURN_RECEIVED", "CLASSIFIED", "LEG_STARTED", "LEG_FINISHED", "STATE_READ", "SYNTHESIS_STARTED", "ANSWER_READY"]) expect(stageLabel(k)).toBeTruthy();
+    for (const k of ["TURN_RECEIVED", "CLASSIFIED", "LEG_STARTED", "LEG_FINISHED", "STATE_READ", "SYNTHESIS_STARTED", "ANSWER_READY", "CFO_PLANNING", "CFO_VALIDATING", "CFO_CACHED", "CFO_QUERYING", "CFO_FINALIZING"]) expect(stageLabel(k)).toBeTruthy();
     expect(stageLabel("TURN_DONE")).toBeNull();
     expect(stageLabel("SOMETHING_NEW")).toBeNull();
   });

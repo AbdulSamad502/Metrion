@@ -84,3 +84,25 @@ def test_a_possible_duplicate_outranks_an_overlap_hold() -> None:
     first = validate_new_entry(e(category="Commission"))
     second = validate_new_entry(e(category="Commission", description="again"))
     assert decide(second, {entry_identity(first)}, {possible_duplicate_key(first)}).hold is ExpenseHold.POSSIBLE_DUPLICATE
+
+
+# ---------------------------------------------------------------------------------------------------- payment states and the removal reason (14.5)
+from calc_engine.expense_ledger import validate_payment, validate_void_reason  # noqa: E402
+
+
+@pytest.mark.parametrize("status,paid,whole,want", [("unpaid", None, 100_000, ("UNPAID", None)), ("PAID", None, 100_000, ("PAID", None)), ("partially paid", 40_000, 100_000, ("PARTIALLY_PAID", 40_000))])
+def test_payment_states_are_accepted_in_the_three_shapes(status, paid, whole, want) -> None:
+    assert validate_payment(status, paid, whole) == want
+
+
+@pytest.mark.parametrize("status,paid", [("unknown", None), ("partially_paid", None), ("partially_paid", 0), ("partially_paid", 100_000), ("partially_paid", 120_000), ("paid", 5), ("unpaid", 5), ("partially_paid", True)])
+def test_a_payment_that_does_not_fit_its_state_or_the_amount_is_refused(status, paid) -> None:
+    with pytest.raises(LedgerRuleError):
+        validate_payment(status, paid, 100_000)
+
+
+def test_a_removal_reason_is_required_trimmed_and_bounded() -> None:
+    assert validate_void_reason("  entered   by mistake ") == "entered by mistake"
+    for bad in (None, "", "  ", "ok", "x" * 301):
+        with pytest.raises(LedgerRuleError):
+            validate_void_reason(bad)

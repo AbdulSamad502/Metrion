@@ -730,6 +730,7 @@ def enter_expense(
 # value domain (`calc_engine.formulas.line_status_overrides` names the exact allowed strings),
 # and the generic `enter_expense` path passes a caller's `value` straight through, uninspected —
 # it must never be able to write an invalid status string for one of these fields.
+_CANONICAL_RETURN_STATUS: frozenset[str] = frozenset({"RETURNED", "NOT_RETURNED"})
 _LINE_STATUS_OVERRIDE_VALUES: dict[str, frozenset[str]] = {
     "cancellation_state_override": frozenset({"CANCELLED", "NOT_CANCELLED"}),
     "return_status_override": frozenset({"RETURNED", "NOT_RETURNED"}),
@@ -1062,7 +1063,12 @@ def assemble_canonical_lines_for_period(
             returned_qty_override=_first_value(line_adjustments, line_ref, "returned_qty_override"),  # type: ignore[arg-type]
             rto_qty_override=_first_value(line_adjustments, line_ref, "rto_qty_override"),  # type: ignore[arg-type]
         )
-        final_return_status = resolve_line_status(row.get("return_status"), overrides.return_status_override)
+        # A marketplace's own words ("Returned", "Not Returned", "Delivered") are not the engine's vocabulary. Only a canonical value counts as an OBSERVED status; anything else is
+        # unresolved, so a seller's declaration can fill the gap and, without one, the figure is unavailable. Treating the raw text as canonical would read every returned order
+        # as "not returned" and overstate Net Realized Revenue without any warning.
+        raw_return_status = row.get("return_status")
+        observed_return_status = raw_return_status if raw_return_status in _CANONICAL_RETURN_STATUS else None
+        final_return_status = resolve_line_status(observed_return_status, overrides.return_status_override)
         final_cancellation_state = resolve_line_status(None, overrides.cancellation_state_override)
         final_rto_status = resolve_line_status(None, overrides.rto_status_override)
 

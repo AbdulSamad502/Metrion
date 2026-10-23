@@ -59,7 +59,16 @@ Contribution Profit stays **Not available** until you give a cost per unit for e
 3. **Leak Shield**: findings by claim-window urgency. Amazon is "Provisional — withheld". *Draft claim text* gives order identifiers only. Status buttons record what *you* did; Metrion files nothing.
 4. **Cash & Tax**: expected settlements are an estimate from your own history, "not your bank balance". Add a payable in rupees (for example `12500.50`). *Download workbook* gives the CA pack.
 5. **Held rows**: upload a file where one order line appears twice with different values; the second is held, not counted, and listed under the upload with *Keep the earlier data* / *Discard this row*.
-6. **CEO Hub** (planner model on): ask "which SKU made the most profit in September?" — the answer's figures link to stored results; anything unavailable is said in words.
+6. **Expenses through the CEO** (the CFO ledger is the one expense source; works without any model switch):
+   * Say "add an expense of 5000 for office rent yesterday". The CEO asks only for what is missing, then shows a card. Nothing is saved until you press **Approve**; typing "yes" does nothing. After Approve it says the entry has *no confirmed class yet*, so it does not change Operating Profit until you confirm its class on **CFO → Expenses**.
+   * Add the same expense again: it is stored **on hold as a possible duplicate** and is in no total until you review it on the Expenses tab.
+   * "How much did I spend in September?", "month wise expenses from 1 Sep to 31 Oct", "date wise expenses for October": totals come from the CFO engine; each listed entry links to its own entry.
+   * "Mark my rent expense as paid / unpaid / partially paid": a partial payment asks how much was paid and must be below the whole amount. Payment state is shown on the Expenses tab ("Payment: …") and never changes a profit figure; an entry with no statement says *not stated*.
+   * "Remove my software expense": it asks **why** (a few words are required), shows the card, and after Approve the entry leaves the totals but stays in the history with your reason (who, when, why).
+   * "I paid Rs 800 for packaging tape today" (just mentioning it): the CEO asks "Is this an expense of yours?"; **No** saves nothing.
+   * Sign in as a member without the *adjust financials* permission: the CEO will not start an add, change or remove.
+7. **Expense Tracker bridge** (the teammate's page `/dashboard/cfo/expenses` stays usable): add an expense there, then `GET /api/v1/cfo/ledger/tracker-bridge` shows what would move (nothing is added by looking). `POST` the same path to bring it into the CFO ledger; a second POST adds nothing, an entry you removed from the ledger is not added back, and the Tracker's payment status travels with it.
+8. **CEO Hub** (planner model on): ask "which SKU made the most profit in September?" — the answer's figures link to stored results; anything unavailable is said in words.
 
 ## 5. Known limits (not defects)
 
@@ -68,4 +77,6 @@ Contribution Profit stays **Not available** until you give a cost per unit for e
 * No measured evaluation of a real model's mapping proposals, plans or routing was run (no real model is called in tests).
 * Responsive layout and keyboard use are covered by unit tests, not yet looked at in a browser by a person.
 * Amazon and Flipkart findings stay provisional/withheld until join keys are validated on real exports.
-* The old standalone Expense Tracker (`/dashboard/cfo/expenses`, built by a teammate, event-sourced) and the CFO 2.0 expense ledger are two separate expense models that coexist; see `docs/specs/cfo-expense-ledger.md` §14.
+* The CFO ledger is the authoritative expense source (owner decision 2026-10-23). The teammate's Expense Tracker page still works on its own tables and reaches the ledger only through the bridge in item 7, never silently; see `docs/specs/cfo-expense-ledger.md` §14.4 and §14.5.
+* Expenses added in chat have no confirmed class: they are recorded, but only a class you confirm moves Operating Profit (suggest-only).
+* The ledger records *unpaid / partly paid / paid* only; the Tracker's "unknown" is carried as *not stated*.

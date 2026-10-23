@@ -90,3 +90,24 @@ def test_the_new_product_answer_names_the_unusable_line_and_runs_on_the_real_eng
     assert res.status == "DELIVERED"
     assert any("Sales history: 1 line" in n for n in res.notes) and any("1 sales line could not be used" in n for n in res.notes)
     assert "Most units your budget allows: 200 units" in res.answer  # floor(2,000,000 / 10,000): the history does not change a budget-and-MOQ ceiling
+
+
+def test_a_marketplaces_own_status_words_are_not_read_as_the_engines_status(two_tenants, app_user, cleanup):
+    """Found running the owner's mock MTR reports: a file's "Returned" / "Not Returned" / "Delivered" text was taken as an OBSERVED canonical status, so a returned order was read as
+    not returned and Net Realized Revenue silently equalled Gross Sales. Only the engine's own values count as observed; other words are unresolved, so the seller's declaration fills
+    the gap (and a confirmed return still needs its unit count)."""
+    from calc_engine.repositories.manual_adjustment_repo import insert_adjustment
+
+    a, _ = two_tenants
+    run = _run(a)
+    returned_word = _line(a, run, "SKU-1", 2, 20000, "Returned")
+    kept_word = _line(a, run, "SKU-1", 1, 10000, "Not Returned")
+    undeclared = _line(a, run, "SKU-1", 1, 10000, "Delivered")
+    for lid, field, value in ((returned_word, "return_status_override", "RETURNED"), (kept_word, "return_status_override", "NOT_RETURNED")):
+        insert_adjustment(a, target_type="LINE", target_ref=str(lid), field=field, value=value, created_by=app_user, created_at=datetime.now(timezone.utc))
+    out = cfo_actions.assemble_canonical_lines_for_period(a, period_start=START, period_end=END)
+    by_id = {l.sales_line_id: l for l in out.lines}
+    assert by_id[kept_word].return_status == "NOT_RETURNED"  # the seller's declaration was used, not the file's wording
+    assert by_id[undeclared].return_status is None  # "Delivered" is not a canonical status: unresolved, never guessed
+    blocked = {b.sales_line_id: b for b in out.blocked}
+    assert returned_word in blocked and "returned_qty_override" in blocked[returned_word].missing_inputs  # a declared return still needs its unit count

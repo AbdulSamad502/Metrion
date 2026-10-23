@@ -353,7 +353,7 @@ def build_default_registry() -> ActionRegistry:
                 slot_model=_body_model(fn), invoke=_route_invoke(fn), entitlement=_cfo_entitlement(code), fixed_params=fixed,
             )
         )
-    # The Expense Tracker through the CEO (ceo-expense-tracker-chat.md). One READ, and the four chat-prepared writes (owner decision 2026-10-23, amending C21 for exactly these keys):
+    # The expense ledger through the CEO (ceo-expense-tracker-chat.md). One READ, and the four chat-prepared writes (owner decision 2026-10-23, amending C21 for exactly these keys):
     # each write is approval-gated (a plan card the seller approves), needs `financials.adjust`, and runs the tracker's own route function with the real context.
     from backend.ceo.expense_chat import summary_refs as expense_summary_refs
     from backend.services import ceo_expense_ops as expense_ops

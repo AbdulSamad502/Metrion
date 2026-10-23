@@ -19,7 +19,7 @@ READ_ONLY = (
     "reconciliation_tolerance_config", "severity_config", "expense_class_map", "ci_tenant_config", "tenant_cart_item",
     "whatsapp_alert_subscription", "whatsapp_binding", "whatsapp_message", "whatsapp_pending_action",
 )
-APPEND_ONLY = ("auth_audit", "metered_event", "expense_entry", "expense_class_assignment", "expense_period_declaration", "ad_report_line", "ad_period_declaration", "cost_owner_choice", "leak_claim_event", "held_row", "held_row_resolution")  # the CFO expense ledger and advertising records
+APPEND_ONLY = ("auth_audit", "metered_event", "expense_entry", "expense_class_assignment", "expense_period_declaration", "ad_report_line", "ad_period_declaration", "cost_owner_choice", "leak_claim_event", "held_row", "held_row_resolution", "expense_payment_event")  # the CFO expense ledger and advertising records
 
 
 def _has(conn, table: str, priv: str) -> bool:

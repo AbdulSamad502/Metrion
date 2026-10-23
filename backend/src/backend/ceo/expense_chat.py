@@ -1,4 +1,4 @@
-"""The CEO's side of the Expense Tracker conversation (docs/specs/ceo-expense-tracker-chat.md).
+"""The CEO's side of the expense ledger conversation (docs/specs/ceo-expense-tracker-chat.md).
 
 Pure helpers: what the seller said is turned into values BY CODE (an amount, a day, a category from a closed list, one of their own entries), never by a model. Nothing here
 saves anything: a write is only ever prepared as an input session -> plan card, and runs when the seller presses Approve. The session fields that use these helpers live in
@@ -14,10 +14,9 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
-from calc_engine.repositories import expense_tracker_repo as ledger
-
 from backend.ceo import periods, slot_resolvers
 from backend.ceo.figure_format import format_paise
+from backend.services import ceo_expense_reads as reads
 from backend.services import expense_ledger_rules as rules
 
 READ_KEY = "cfo.expense_summary"
@@ -81,8 +80,7 @@ def category_choices(tenant: UUID, hint: str = "") -> list[tuple[str, str]]:
     if guess:
         out.append(guess)
     try:
-        rows, _ = ledger.list_records(tenant, date_from=None, date_to=None, category=None, cost_class=None, review_state=None, payment_status=None, channel_scope=None,
-                                      include_voided=False, limit=rules.PAGE_SIZE_MAX, offset=0)
+        rows = reads.live_entries(tenant)
         counts: dict[str, int] = {}
         for r in rows:
             counts[r["category"]] = counts.get(r["category"], 0) + 1
@@ -103,7 +101,7 @@ def parse_amount(raw: str) -> int | Bad:
     if paise is None:
         return Bad("I could not read that as an amount in rupees above zero. For example 5,000 or 1,299.50.")
     if paise > rules.AMOUNT_MAX_PAISE:
-        return Bad("That amount is above the limit the Expense Tracker accepts.")
+        return Bad("That amount is above the limit the expense ledger accepts.")
     return paise
 
 
@@ -141,9 +139,7 @@ def _match_score(r: Mapping[str, Any], hint: str) -> int:
 
 def recent_entries(tenant: UUID, hint: str = "", limit: int = MAX_PICK) -> list[dict[str, Any]]:
     """The seller's live (not voided) entries ranked by how well they match what was said, newest first among equals."""
-    rows, _ = ledger.list_records(tenant, date_from=None, date_to=None, category=None, cost_class=None, review_state=None, payment_status=None, channel_scope=None,
-                                  include_voided=False, limit=rules.PAGE_SIZE_MAX, offset=0)
-    rows = [r for r in rows if r["review_state"] != "voided"]
+    rows = reads.live_entries(tenant)
     ranked = sorted(rows, key=lambda r: (-_match_score(r, hint), -r["effective_date"].toordinal(), str(r["id"])))
     if hint.strip():
         best = _match_score(ranked[0], hint) if ranked else 0
@@ -166,7 +162,7 @@ def pick_options(tenant: UUID, hint: str) -> list[tuple[str, str, str]]:
 def parse_pick(raw: str, tenant: UUID, hint: str = "") -> dict[str, Any] | Bad:
     t = " ".join(raw.split())
     try:
-        row = ledger.get_record(tenant, UUID(t))
+        row = reads.get_entry(tenant, UUID(t))
     except (ValueError, AttributeError):
         row = None
     if row is not None:
@@ -198,36 +194,36 @@ def plan_extras(key: str, slots: Mapping[str, Any], tenant: UUID) -> tuple[list[
             parts.append(f"Paid to: {slots['vendor']}")
         if slots.get("description"):
             parts.append(f"Note: {slots['description']}")
-        return (["It adds this expense to your Expense Tracker as confirmed."], ["Add an expense to your Expense Tracker:", *parts, "Saved only when you press Approve."], "Add an expense to your Expense Tracker")
+        return (["It adds this expense to your expense ledger as confirmed."], ["Add an expense to your expense ledger:", *parts, "Saved only when you press Approve."], "Add an expense to your expense ledger")
     if key == CORRECT_KEY:
         row = _row(tenant, slots.get("expense_id"))
         was = _entry_label(row) if row is not None else "the entry you picked"
         parts = [f"Now: {money(slots['amount_paise'])} · {category_label(str(slots['category']))} · {slots['effective_date']}"]
         if slots.get("vendor"):
             parts.append(f"Paid to: {slots['vendor']}")
-        return (["The original stays in the history as removed and is replaced by the corrected entry."], [f"Change an expense: {was}", *parts, "Saved only when you press Approve."], "Change an expense in your Expense Tracker")
+        return (["The original stays in the history as removed and is replaced by the corrected entry."], [f"Change an expense: {was}", *parts, "Saved only when you press Approve."], "Change an expense in your expense ledger")
     if key == VOID_KEY:
         row = _row(tenant, slots.get("expense_id"))
         was = _entry_label(row) if row is not None else "the entry you picked"
         return (["The entry is voided, not deleted: it stays in the history with your reason."], [f"Remove this expense: {was}", f"Reason: {slots.get('reason')}", "Saved only when you press Approve."],
-                "Remove an expense from your Expense Tracker")
+                "Remove an expense from your expense ledger")
     row = _row(tenant, slots.get("expense_id"))
     was = _entry_label(row) if row is not None else "the entry you picked"
     status = str(slots.get("status", "")).replace("_", " ")
-    extra = f" ({money(slots['paid_amount_paise'])} paid)" if slots.get("paid_amount_paise") is not None else ""
-    return (["Payment status is display only; it does not change any profit figure."], [f"Mark as {status}{extra}: {was}", "Saved only when you press Approve."], "Update an expense's payment status")
+    extra = f" ({money(slots['paid_amount_paise'])} paid so far)" if slots.get("paid_amount_paise") is not None else ""
+    return (["Payment status is information about cash; it does not change any profit figure."], [f"Mark as {status}{extra}: {was}", "Saved only when you press Approve."], "Update an expense's payment status")
 
 
 def _row(tenant: UUID, expense_id: Any) -> dict[str, Any] | None:
     try:
-        return ledger.get_record(tenant, UUID(str(expense_id)))
+        return reads.get_entry(tenant, UUID(str(expense_id)))
     except (ValueError, TypeError):
         return None
 
 
 # ------------------------------------------------------------------------------------------------ evidence for the answer
 def heading_for(key: str) -> str:
-    return {ADD_KEY: "Done. Here is what was saved to your Expense Tracker.", CORRECT_KEY: "Done. Here is the corrected entry in your Expense Tracker.",
+    return {ADD_KEY: "Done. Here is what was saved to your expense ledger.", CORRECT_KEY: "Done. Here is the corrected entry in your expense ledger.",
             VOID_KEY: "Done. This expense was removed from your totals; it stays in the history.", PAID_KEY: "Done. The payment status was updated."}[key]
 
 
@@ -341,8 +337,8 @@ def hidden_for(key: str | None, slots: Mapping[str, str], flags: Any) -> dict[st
 
 # ------------------------------------------------------------------------------------------------ evidence
 def summary_refs(payload: Mapping[str, Any]) -> list[Any]:
-    """The engine results of a tracker summary the answer needs: per bucket the total, each category and - only when something waits - the review-queue amount.
-    Everything else in the summary stays on the Expense Tracker page. (A custom extractor: the default would carry every cost-class figure of every month.)"""
+    """The engine results of an expense summary the answer needs: per bucket the total and each category figure, exactly as the planner minted them.
+    Everything else stays on the CFO Expenses tab. (A custom extractor: the default would not know the bucket layout.)"""
     from backend.ceo.contract import Ref, RefKind  # noqa: PLC0415
     from backend.ceo.provenance import _as_uuid  # noqa: PLC0415
 
@@ -356,20 +352,15 @@ def summary_refs(payload: Mapping[str, Any]) -> list[Any]:
             out.append(Ref(kind=RefKind.ENGINE_RESULT, id=ident))
 
     for b in payload.get("buckets") or []:
-        s = b.get("summary") or {}
-        add((s.get("expenseTotal") or {}).get("engineResultRef"))
-        for c in s.get("byCategory") or []:
-            add(c.get("engineResultRef"))
-        rq = s.get("reviewQueue") or {}
-        if rq.get("items"):
-            add(rq.get("engineResultRef"))
+        for f in b.get("figures") or []:
+            add(f.get("engineResultRef"))
     return out
 
 
 def entry_figure(e: Mapping[str, Any], prefix: str = "") -> Any:
-    """One tracker entry as a figure: the amount is shown only through a reference to the very record (Register MANUAL: entered by the seller)."""
+    """One ledger entry as a figure: the amount is shown only through a reference to the very entry (Register MANUAL: entered by the seller)."""
     from backend.ceo.contract import Figure, Ref, RefKind, Register  # noqa: PLC0415
 
     who = f" ({e['vendor']})" if e.get("vendor") else ""
     label = f"{prefix}{str(e.get('categoryLabel') or e.get('category')).split(' (')[0]} on {e['effectiveDate']}{who}"
-    return Figure(label, format_paise(int(e["amountPaise"])), Register.MANUAL, Ref(RefKind.AGENT_REPORT_FIELD, UUID(str(e["id"])), source="expense_event"))
+    return Figure(label, format_paise(int(e["amountPaise"])), Register.MANUAL, Ref(RefKind.AGENT_REPORT_FIELD, UUID(str(e["id"])), source="expense_entry"))

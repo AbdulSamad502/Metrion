@@ -161,7 +161,7 @@ def test_a_correction_and_a_void_are_new_rows_and_the_history_stays() -> None:
     assert active == [str(fixed)]
     with pytest.raises(LedgerRuleError):
         repo.supersede_entry(t, first, entry(120_000, "Rent"), USER)  # the original is no longer active
-    repo.void_entry(t, fixed, USER)
+    repo.void_entry(t, fixed, USER, "entered by mistake")
     assert repo.lines_for_period(t, START, END) == []
     with tenant_scope(t) as conn:
         assert conn.execute(text("SELECT count(*) FROM expense_entry WHERE tenant_id = :t"), {"t": str(t)}).scalar_one() == 3  # original, correction, void
@@ -289,3 +289,84 @@ def test_an_allocated_cost_must_name_its_cost_pool_and_the_component_is_validate
         repo.confirm_class(t, klass=C.OVERHEAD, confirmed_by=USER, category="Packaging", allocated_component="PACKAGING")  # only an allocated cost names a pool
     repo.confirm_class(t, klass=C.ALLOCATED_COST, confirmed_by=USER, category="Packaging", allocated_component="PACKAGING")
     assert {ln.allocated_component for ln in repo.lines_for_period(t, START, END)} == {"PACKAGING"}
+
+
+# ---------------------------------------------------------------------------------------------------- payment states and the removal reason (docs/specs/cfo-expense-ledger.md 14.5)
+def _active(t: uuid.UUID) -> list[dict]:
+    return repo.list_entries(t, None, None)
+
+
+def test_no_payment_statement_reads_as_not_stated_never_unpaid_or_paid() -> None:
+    t = uuid.uuid4()
+    add(t, entry(500_000, "Rent"))
+    row = _active(t)[0]
+    assert row["payment_status"] is None and row["paid_amount_paise"] is None
+
+
+def test_payment_states_are_recorded_append_only_and_the_latest_wins_without_moving_any_figure() -> None:
+    t = uuid.uuid4()
+    eid = add(t, entry(500_000, "Rent")).inserted_ids[0]
+    version = rmv.get(t) if hasattr(rmv, "get") else None
+    assert repo.set_payment(t, eid, "UNPAID", None, USER) is True
+    assert repo.set_payment(t, eid, "unpaid", None, USER) is False  # a repeat writes nothing
+    assert repo.set_payment(t, eid, "PARTIALLY_PAID", 200_000, USER) is True
+    assert repo.set_payment(t, eid, "PAID", None, USER) is True
+    row = _active(t)[0]
+    assert (row["payment_status"], row["paid_amount_paise"]) == ("PAID", None)
+    with tenant_scope(t) as conn:
+        assert conn.execute(text("SELECT count(*) FROM expense_payment_event WHERE entry_id = :e"), {"e": str(eid)}).scalar_one() == 3  # the history is kept
+    if version is not None:
+        assert rmv.get(t) == version  # payment is information about cash: no cached figure is invalidated
+
+
+def test_a_partial_payment_must_be_between_zero_and_the_whole_and_a_removed_entry_takes_no_payment() -> None:
+    t = uuid.uuid4()
+    eid = add(t, entry(500_000, "Rent")).inserted_ids[0]
+    for bad in (None, 0, 500_000, 600_000):
+        with pytest.raises(LedgerRuleError):
+            repo.set_payment(t, eid, "PARTIALLY_PAID", bad, USER)
+    repo.void_entry(t, eid, USER, "entered by mistake")
+    with pytest.raises(LedgerRuleError):
+        repo.set_payment(t, eid, "PAID", None, USER)
+
+
+def test_the_database_itself_refuses_a_payment_row_that_breaks_the_shape() -> None:
+    t = uuid.uuid4()
+    eid = add(t, entry(500_000, "Rent")).inserted_ids[0]
+    with pytest.raises((IntegrityError, DBAPIError)), tenant_scope(t) as conn:
+        conn.execute(text("INSERT INTO expense_payment_event (tenant_id, entry_id, payment_status, paid_amount_paise, created_by) VALUES (:t, :e, 'PAID', 5, :u)"),
+                     {"t": str(t), "e": str(eid), "u": str(USER)})
+
+
+def test_a_removal_keeps_who_why_and_when_and_needs_a_reason() -> None:
+    t = uuid.uuid4()
+    eid = add(t, entry(500_000, "Rent")).inserted_ids[0]
+    for bad in ("", "ok", None):
+        with pytest.raises(LedgerRuleError):
+            repo.void_entry(t, eid, USER, bad)  # type: ignore[arg-type]
+    assert len(_active(t)) == 1  # a refused removal changed nothing
+    void_id = repo.void_entry(t, eid, USER, "  Duplicate   entry ")
+    with tenant_scope(t) as conn:
+        row = conn.execute(text("SELECT is_void, void_reason, created_by, created_at, supersedes_id FROM expense_entry WHERE id = :i"), {"i": str(void_id)}).one()
+    assert row.is_void and row.void_reason == "Duplicate entry" and str(row.created_by) == str(USER) and row.created_at is not None and str(row.supersedes_id) == str(eid)
+    assert _active(t) == []
+    got = repo.get_entry(t, eid)
+    assert got is not None and got["superseded"] is True  # the original is still readable
+
+
+def test_the_database_refuses_a_new_void_row_without_a_reason() -> None:
+    t = uuid.uuid4()
+    eid = add(t, entry(500_000, "Rent")).inserted_ids[0]
+    with pytest.raises((IntegrityError, DBAPIError)), tenant_scope(t) as conn:
+        conn.execute(text("INSERT INTO expense_entry (id, tenant_id, source, entry_date, amount_paise, category, identity, hold, supersedes_id, is_void, created_by) "
+                          "VALUES (gen_random_uuid(), :t, 'MANUAL', '2026-10-05', 500000, 'Rent', 'void:x', 'NONE', :e, true, :u)"), {"t": str(t), "e": str(eid), "u": str(USER)})
+
+
+def test_a_correction_carries_the_payment_statement_unless_the_new_amount_makes_it_impossible() -> None:
+    t = uuid.uuid4()
+    a = add(t, entry(500_000, "Rent")).inserted_ids[0]
+    repo.set_payment(t, a, "PARTIALLY_PAID", 300_000, USER)
+    b = repo.supersede_entry(t, a, entry(450_000, "Rent"), USER)  # 3,000.00 of 4,500.00 is still a partial payment
+    assert repo.get_entry(t, b)["payment_status"] == "PARTIALLY_PAID"
+    c = repo.supersede_entry(t, b, entry(250_000, "Rent"), USER)  # 3,000.00 is now more than the whole: the statement is not carried, not guessed
+    assert repo.get_entry(t, c)["payment_status"] is None

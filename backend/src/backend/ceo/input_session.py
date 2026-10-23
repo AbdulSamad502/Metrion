@@ -800,7 +800,7 @@ DR_TREND_RUN: tuple[Field, ...] = (
     Field("confirm", lambda c, g: str(g.get("preview", "")), _yes, lambda c, g: (Option("Yes, run the research", "yes", "Sends exactly these searches"),)),
 )
 
-# ------------------------------------------------------------------------------------------------ the Expense Tracker through the CEO (docs/specs/ceo-expense-tracker-chat.md)
+# ------------------------------------------------------------------------------------------------ the expense ledger through the CEO (docs/specs/ceo-expense-tracker-chat.md)
 # Every answer is parsed by code against ONE field; nothing is saved by answering. When the last field is collected the task becomes a plan card the seller approves.
 def _bad(r: Any) -> Any:
     return Reject(r.why) if isinstance(r, expense_chat.Bad) else r
@@ -820,7 +820,7 @@ def _exp_category(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
 
 def _exp_category_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
     hint = " ".join(str(got.get(k) or "") for k in ("expense_note", "_hint"))
-    return tuple(Option(label.split(" (")[0], cid, "A category in your Expense Tracker") for cid, label in expense_chat.category_choices(ctx.tenant_id, hint))
+    return tuple(Option(label.split(" (")[0], cid, "A category in your expense ledger") for cid, label in expense_chat.category_choices(ctx.tenant_id, hint))
 
 
 def _exp_day_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
@@ -856,7 +856,7 @@ def _exp_note(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
 
 def _exp_reason(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     t = " ".join(raw.split())
-    return t if 0 < len(t) <= 300 else Reject("Please give a short reason (at most 300 characters).")
+    return t if 3 <= len(t) <= 300 else Reject("Please give a short reason, a few words (at most 300 characters). It is kept in the history.")
 
 
 def _exp_pick(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
@@ -872,13 +872,13 @@ def _exp_pick_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
 
 def _exp_pick_blocked(ctx: Ctx, got: Mapping[str, Any]) -> str | None:
     try:
-        return None if expense_chat.recent_entries(ctx.tenant_id, "", 1) else "You have no expenses in your Expense Tracker yet, so there is nothing to change. Nothing was saved."
+        return None if expense_chat.recent_entries(ctx.tenant_id, "", 1) else "You have no expenses in your expense ledger yet, so there is nothing to change. Nothing was saved."
     except Exception:  # noqa: BLE001
         return None
 
 
 _PAYMENT_WORDS = {"paid": "paid", "fully paid": "paid", "unpaid": "unpaid", "not paid": "unpaid", "pending": "unpaid", "partially paid": "partially_paid", "partly paid": "partially_paid",
-                  "part paid": "partially_paid", "partial": "partially_paid", "unknown": "unknown"}
+                  "part paid": "partially_paid", "partial": "partially_paid"}
 
 
 def _exp_payment(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
@@ -888,7 +888,7 @@ def _exp_payment(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
 
 def _exp_mention_question(ctx: Ctx, got: Mapping[str, Any]) -> str:
     said = expense_chat.mention_summary(got)
-    return (f"I noticed you mentioned an expense{f' ({said})' if said else ''}. Is this an expense of yours, and shall I add it to your Expense Tracker? "
+    return (f"I noticed you mentioned an expense{f' ({said})' if said else ''}. Is this an expense of yours, and shall I add it to your expense ledger? "
             "I will ask for anything that is missing, and nothing is saved until you press Approve on the card.")
 
 

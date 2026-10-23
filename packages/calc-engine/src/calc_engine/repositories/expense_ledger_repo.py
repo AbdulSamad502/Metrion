@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import Connection, text
 
-from calc_engine.expense_ledger import Decision, Disposition, LedgerRuleError, NewEntry, decide, entry_identity, validate_new_entry
+from calc_engine.expense_ledger import Decision, Disposition, LedgerRuleError, NewEntry, decide, entry_identity, validate_new_entry, validate_payment, validate_void_reason
 from calc_engine.formulas.expense_accounting import ExpenseClass, ExpenseHold, ExpenseLine, OverheadCoverage, effective_class
 from calc_engine.repositories import read_model_version_repo
 from calc_engine.repositories.tenant_context import tenant_scope
@@ -26,10 +26,10 @@ _INSERT_ENTRY = text(
     """
     INSERT INTO expense_entry
       (id, tenant_id, source, ingestion_run_id, source_row_number, entry_date, paid_date, amount_paise, gst_amount_paise, gst_treatment, category,
-       vendor, description, payment_ref, marketplace, identity, hold, supersedes_id, is_void, created_by)
+       vendor, description, payment_ref, marketplace, identity, hold, supersedes_id, is_void, void_reason, created_by)
     VALUES
       (:id, :tenant_id, :source, :ingestion_run_id, :source_row_number, :entry_date, :paid_date, :amount_paise, :gst_amount_paise, :gst_treatment, :category,
-       :vendor, :description, :payment_ref, :marketplace, :identity, :hold, :supersedes_id, :is_void, :created_by)
+       :vendor, :description, :payment_ref, :marketplace, :identity, :hold, :supersedes_id, :is_void, :void_reason, :created_by)
     """
 )
 
@@ -52,13 +52,13 @@ class AddResult:
 
 
 def _params(tenant_id: UUID, e: NewEntry, ident: str, hold: ExpenseHold, created_by: UUID, *, supersedes_id: UUID | None = None, is_void: bool = False,
-            entry_id: UUID | None = None) -> dict[str, Any]:
+            entry_id: UUID | None = None, void_reason: str | None = None) -> dict[str, Any]:
     return {
         "id": str(entry_id or uuid4()), "tenant_id": str(tenant_id), "source": e.source, "ingestion_run_id": e.ingestion_run_id,
         "source_row_number": e.source_row_number, "entry_date": e.entry_date, "paid_date": e.paid_date, "amount_paise": e.amount_paise,
         "gst_amount_paise": e.gst_amount_paise, "gst_treatment": e.gst_treatment, "category": e.category, "vendor": e.vendor, "description": e.description,
         "payment_ref": e.payment_ref, "marketplace": e.marketplace, "identity": ident, "hold": hold.value,
-        "supersedes_id": None if supersedes_id is None else str(supersedes_id), "is_void": is_void, "created_by": str(created_by),
+        "supersedes_id": None if supersedes_id is None else str(supersedes_id), "is_void": is_void, "void_reason": void_reason, "created_by": str(created_by),
     }
 
 
@@ -133,19 +133,23 @@ def supersede_entry(tenant_id: UUID, entry_id: UUID, replacement: NewEntry, crea
             raise LedgerRuleError("an expense identical to the corrected one already exists")
         new_id = uuid4()
         conn.execute(_INSERT_ENTRY, _params(tenant_id, new, ident, ExpenseHold.NONE, created_by, supersedes_id=entry_id, entry_id=new_id))
+        kept = _latest_payment_on(conn, tenant_id, entry_id)  # the payment statement follows the entry it belongs to, unless the new amount makes it impossible
+        if kept is not None and (kept[0] != "PARTIALLY_PAID" or 0 < int(kept[1] or 0) < abs(new.amount_paise)):
+            conn.execute(_INSERT_PAYMENT, {"t": str(tenant_id), "e": str(new_id), "s": kept[0], "p": kept[1], "by": str(created_by)})
         read_model_version_repo.bump_on(conn, tenant_id)
         return new_id
 
 
-def void_entry(tenant_id: UUID, entry_id: UUID, created_by: UUID) -> UUID:
-    """A removal: a void row copying the original, naming it in supersedes_id. The original stops being active; nothing is deleted."""
+def void_entry(tenant_id: UUID, entry_id: UUID, created_by: UUID, reason: str) -> UUID:
+    """A removal: a void row copying the original, naming it in supersedes_id and carrying the seller's reason. The original stops being active; nothing is deleted."""
+    why = validate_void_reason(reason)
     with tenant_scope(tenant_id) as conn:
         old = _get_entry_on(conn, tenant_id, entry_id)
         e = NewEntry(entry_date=old["entry_date"], amount_paise=int(old["amount_paise"]), category=old["category"], paid_date=old["paid_date"],
                      gst_amount_paise=old["gst_amount_paise"], gst_treatment=old["gst_treatment"], vendor=old["vendor"], description=old["description"],
                      payment_ref=old["payment_ref"], marketplace=old["marketplace"], source="MANUAL")
         void_id = uuid4()
-        conn.execute(_INSERT_ENTRY, _params(tenant_id, e, f"void:{void_id}", ExpenseHold.NONE, created_by, supersedes_id=entry_id, is_void=True, entry_id=void_id))
+        conn.execute(_INSERT_ENTRY, _params(tenant_id, e, f"void:{void_id}", ExpenseHold.NONE, created_by, supersedes_id=entry_id, is_void=True, entry_id=void_id, void_reason=why))
         read_model_version_repo.bump_on(conn, tenant_id)
         return void_id
 
@@ -265,12 +269,14 @@ def list_entries(tenant_id: UUID, start: date | None, end: date | None) -> list[
     with tenant_scope(tenant_id) as conn:
         rows = active_entries_on(conn, tenant_id, start, end)
         confirmed, suggested = _assignments_on(conn, tenant_id, [r["id"] for r in rows], sorted({r["category"] for r in rows}))
+    pays = payments_for(tenant_id, [r["id"] for r in rows])
     out = []
     for r in rows:
         eid = str(r["id"])
+        pay = pays.get(eid)
         conf = confirmed.get(("ENTRY", eid)) or confirmed.get(("CATEGORY", r["category"]))
         sugg = suggested.get(("ENTRY", eid)) or suggested.get(("CATEGORY", r["category"]))
-        out.append({**r, "id": eid, "allocated_component": None if conf is None else conf[2], "confirmed_class": None if conf is None else conf[0].value, "suggested_class": None if sugg is None else sugg[0].value,
+        out.append({**r, "id": eid, "payment_status": None if pay is None else pay[0], "paid_amount_paise": None if pay is None else pay[1], "allocated_component": None if conf is None else conf[2], "confirmed_class": None if conf is None else conf[0].value, "suggested_class": None if sugg is None else sugg[0].value,
                     "suggestion_reason": None if sugg is None else sugg[1]})
     return out
 
@@ -310,3 +316,58 @@ def declare_no_overhead(tenant_id: UUID, start: date, end: date, declared_by: UU
             {"id": str(new_id), "t": str(tenant_id), "s": start, "e": end, "by": str(declared_by)})
         read_model_version_repo.bump_on(conn, tenant_id)
     return new_id
+
+
+# --------------------------------------------------------------------------------------------------- payment state and single-entry reads (docs/specs/cfo-expense-ledger.md 14.5)
+_INSERT_PAYMENT = text("INSERT INTO expense_payment_event (tenant_id, entry_id, payment_status, paid_amount_paise, created_by) VALUES (:t, :e, :s, :p, :by)")
+
+
+def _latest_payment_on(conn: Connection, tenant_id: UUID, entry_id: UUID) -> tuple[str, int | None] | None:
+    row = conn.execute(text("SELECT payment_status, paid_amount_paise FROM expense_payment_event WHERE tenant_id = :t AND entry_id = :e ORDER BY created_at DESC, id DESC LIMIT 1"),
+                       {"t": str(tenant_id), "e": str(entry_id)}).one_or_none()
+    return None if row is None else (row[0], row[1])
+
+
+def set_payment(tenant_id: UUID, entry_id: UUID, status: str, paid_amount_paise: int | None, created_by: UUID) -> bool:
+    """Records the seller's statement about payment. Returns False when it repeats the current state (nothing is written). Payment state never changes a profit figure,
+    so the read-model version is not bumped."""
+    with tenant_scope(tenant_id) as conn:
+        old = _get_entry_on(conn, tenant_id, entry_id)
+        st, paid = validate_payment(status, paid_amount_paise, int(old["amount_paise"]))
+        if _latest_payment_on(conn, tenant_id, entry_id) == (st, paid):
+            return False
+        conn.execute(_INSERT_PAYMENT, {"t": str(tenant_id), "e": str(entry_id), "s": st, "p": paid, "by": str(created_by)})
+        return True
+
+
+def payments_for(tenant_id: UUID, entry_ids: Sequence[UUID | str]) -> dict[str, tuple[str, int | None]]:
+    """Latest payment state per entry id; an entry with no statement is absent (not stated)."""
+    if not entry_ids:
+        return {}
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(text("SELECT DISTINCT ON (entry_id) entry_id, payment_status, paid_amount_paise FROM expense_payment_event "
+                                 "WHERE tenant_id = :t AND entry_id = ANY(:ids) ORDER BY entry_id, created_at DESC, id DESC"),
+                            {"t": str(tenant_id), "ids": [str(i) for i in entry_ids]}).all()
+    return {str(r[0]): (r[1], r[2]) for r in rows}
+
+
+def get_entry(tenant_id: UUID, entry_id: UUID) -> dict[str, Any] | None:
+    """One entry of THIS tenant by id, active or not (a removed entry stays readable, with its reason), or None."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(text(f"SELECT {_ENTRY_COLUMNS}, e.is_void, e.void_reason, "
+                                "EXISTS (SELECT 1 FROM expense_entry n WHERE n.tenant_id = e.tenant_id AND n.supersedes_id = e.id) AS superseded "
+                                "FROM expense_entry e WHERE e.tenant_id = :t AND e.id = :id"),
+                           {"t": str(tenant_id), "id": str(entry_id)}).one_or_none()
+        if row is None:
+            return None
+        out = dict(row._mapping)
+        pay = _latest_payment_on(conn, tenant_id, entry_id)
+    out["payment_status"], out["paid_amount_paise"] = (None, None) if pay is None else pay
+    return out
+
+
+def find_active_by_identity(tenant_id: UUID, identity: str) -> UUID | None:
+    """The id of the active entry with this identity (the one an exact repeat was skipped in favour of), or None."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(text(f"SELECT e.id FROM expense_entry e WHERE {_ACTIVE_WHERE} AND e.identity = :i LIMIT 1"), {"tenant_id": str(tenant_id), "i": identity}).first()
+    return None if row is None else UUID(str(row[0]))

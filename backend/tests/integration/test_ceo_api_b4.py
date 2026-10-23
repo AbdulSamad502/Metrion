@@ -22,6 +22,7 @@ CFO_ACTION_METERS = (
     "cfo.batch_size", "cfo.reconcile", "cfo.anomaly_check", "cfo.financial_health", "cfo.cash_reconciliation", "cfo.strategic_briefing",
     "cfo.gst_lookup",  # wired in B4 (Route A of the GST lookup)
     "cfo.query",  # CFO 2.0 planner: a CFO action like the rest, so capping every CFO meter must lock the agent
+    "cfo.expense_ledger.read", "cfo.expense_ledger.write",  # the Expense Tracker actions the CEO now offers
 )
 
 
@@ -92,7 +93,7 @@ def test_an_agent_the_tenant_is_not_entitled_to_cannot_be_attached_and_shows_loc
     for meter in CFO_ACTION_METERS:
         seed_platform_cap(migrate_engine, agent_code="CFO", meter_code=meter, cap_value=0)
     avail = client.get("/api/v1/ceo/agents/availability", headers=ha).json()
-    assert avail["CFO"] == {"status": "NOT_ENTITLED", "chatActions": 7} and avail["CI"]["status"] == "PRESENT"
+    assert avail["CFO"] == {"status": "NOT_ENTITLED", "chatActions": 8} and avail["CI"]["status"] == "PRESENT"
     inv = start(client, ha)  # default attachment follows entitlement (§6.22 rule 1): CFO is recorded detached
     assert client.get(f"/api/v1/ceo/investigations/{inv}", headers=ha).json()["agents"]["CFO"] is False
     r = client.put(f"/api/v1/ceo/investigations/{inv}/agents/CFO", json={"attached": True}, headers=ha)
@@ -104,7 +105,7 @@ def test_availability_reflects_the_members_permissions_and_truthful_chat_actions
     client, ha, _, a, _ = api
     full = client.get("/api/v1/ceo/agents/availability", headers=ha).json()
     assert {k: v["status"] for k, v in full.items()} == {"CFO": "PRESENT", "CI": "PRESENT", "PI": "PRESENT", "CMO": "PRESENT"}
-    assert {k: v["chatActions"] for k, v in full.items()} == {"CFO": 7, "CI": 4, "PI": 1, "CMO": 9}  # CFO +GST lookup (Route A) +open financial question (cfo.query), CI price positioning + re-check + review findings + remove a competitor (CI spec 6.21.3; discovery is approval-required, so not counted), PI report only, CMO market-trends preview only: the approval-required ones (D-8) are refused from chat, so they are not counted
+    assert {k: v["chatActions"] for k, v in full.items()} == {"CFO": 8, "CI": 4, "PI": 1, "CMO": 9}  # CFO +GST lookup (Route A) +open financial question (cfo.query) +expense summary read (the four expense writes are approval-required, so not counted), CI price positioning + re-check + review findings + remove a competitor (CI spec 6.21.3; discovery is approval-required, so not counted), PI report only, CMO market-trends preview only: the approval-required ones (D-8) are refused from chat, so they are not counted
     member = login(clerk, a, role=PARTNER_ROLE, permissions={AGENT_CEO: True, INVESTIGATION_VIEW: True})
     assert client.get("/api/v1/ceo/agents/availability", headers=member).json()["CFO"]["status"] == "NOT_PERMITTED"
     assert client.get("/api/v1/ceo/agents/availability", headers={}).status_code == 401

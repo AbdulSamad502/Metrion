@@ -19,6 +19,7 @@ from cfo.planner.validator import ValidatorLimits
 from cfo.reasoning.ollama_provider import OllamaLlmProvider
 
 from backend.config import cfo_planner_model, cfo_planner_settings, ollama_host
+from backend.services.ceo_progress import STAGE_SINK
 from backend.services.cfo_planner_backend import PlannerComponentCodes, PostgresPlannerBackend
 
 # Every input the planner can ever need coverage for; a threshold exists for each so a metric is never "CONFIG_MISSING" by accident.
@@ -88,5 +89,5 @@ def answer_financial_query(
         limits=planner_limits(s),
         config=ExecutorConfig(statement_timeout_ms=int(s["statement_timeout_ms"]), oracle_sample_size=int(s["oracle_sample_size"]),  # type: ignore[call-overload]
                               max_ranking_groups=int(s["max_ranking_groups"])),  # type: ignore[call-overload]
-        on_stage=on_stage,
+        on_stage=on_stage if on_stage is not None else STAGE_SINK.get(),
     )

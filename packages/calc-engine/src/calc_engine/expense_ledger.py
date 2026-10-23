@@ -84,6 +84,36 @@ def validate_new_entry(e: NewEntry) -> NewEntry:
     )
 
 
+PAYMENT_STATUSES: tuple[str, ...] = ("UNPAID", "PARTIALLY_PAID", "PAID")
+VOID_REASON_MIN, VOID_REASON_MAX = 3, 300
+
+
+def validate_payment(status: str, paid_amount_paise: int | None, amount_paise: int) -> tuple[str, int | None]:
+    """UNPAID / PARTIALLY_PAID / PAID. A partial payment names how much was paid and it must be above zero and below the whole amount; the other two carry no amount."""
+    st = (status or "").strip().upper().replace(" ", "_")
+    if st not in PAYMENT_STATUSES:
+        raise LedgerRuleError("payment status must be UNPAID, PARTIALLY_PAID or PAID")
+    if st == "PARTIALLY_PAID":
+        if isinstance(paid_amount_paise, bool) or not isinstance(paid_amount_paise, int):
+            raise LedgerRuleError("a partly paid expense needs the amount paid so far, in whole paise")
+        if not 0 < paid_amount_paise < abs(amount_paise):
+            raise LedgerRuleError("the amount paid so far must be more than zero and less than the whole expense")
+        return st, paid_amount_paise
+    if paid_amount_paise is not None:
+        raise LedgerRuleError("only a partly paid expense has an amount paid so far")
+    return st, None
+
+
+def validate_void_reason(reason: str | None) -> str:
+    """Removing an expense needs a reason in the seller's words; it is kept with the removal."""
+    r = normalize_text(reason)
+    if r is None or len(r) < VOID_REASON_MIN:
+        raise LedgerRuleError("say why you are removing this expense (at least a few words); the reason is kept in the history")
+    if len(r) > VOID_REASON_MAX:
+        raise LedgerRuleError(f"the reason can be at most {VOID_REASON_MAX} characters")
+    return r
+
+
 def _fold(value: str | None) -> str | None:
     return None if value is None else value.casefold()
 

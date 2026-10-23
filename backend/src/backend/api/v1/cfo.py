@@ -35,7 +35,7 @@ import re
 from datetime import date, datetime, timezone
 from fractions import Fraction
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile
@@ -2630,8 +2630,29 @@ def get_ledger_entries(period_start: date | None = None, period_end: date | None
          "amountDisplay": format_paise(int(r["amount_paise"])), "gstAmountDisplay": None if r["gst_amount_paise"] is None else format_paise(int(r["gst_amount_paise"])),
          "category": r["category"], "vendor": r["vendor"], "description": r["description"], "paymentRef": r["payment_ref"], "marketplace": r["marketplace"],
          "gstAmountPaise": r["gst_amount_paise"], "gstTreatment": r["gst_treatment"], "allocatedComponent": r["allocated_component"], "gstTreatmentUnconfirmed": r["gst_amount_paise"] is not None and r["gst_treatment"] is None,
-         "hold": r["hold"], "source": r["source"], "confirmedClass": r["confirmed_class"], "suggestedClass": r["suggested_class"],
+         "hold": r["hold"], "source": r["source"], "paymentStatus": r.get("payment_status"), "paidAmountPaise": r.get("paid_amount_paise"), "paidAmountDisplay": None if r.get("paid_amount_paise") is None else format_paise(int(r["paid_amount_paise"])), "confirmedClass": r["confirmed_class"], "suggestedClass": r["suggested_class"],
          "suggestionReason": r["suggestion_reason"]} for r in rows]}
+
+
+@router.get("/ledger/tracker-bridge")
+def get_ledger_tracker_bridge(ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """What bringing the Expense Tracker's entries into the CFO ledger would do. Read-only; nothing is added."""
+    from backend.services import expense_bridge
+
+    assert ctx.tenant_id is not None
+    _require_cfo_entitlement(ctx.tenant_id, direct_action_code=CFO_EXPENSE_LEDGER)
+    return expense_bridge.preview(ctx.tenant_id)
+
+
+@router.post("/ledger/tracker-bridge")
+def post_ledger_tracker_bridge(ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """The seller brings the Expense Tracker's entries into the CFO ledger (the authoritative expense source). Idempotent: an entry already brought over is never added twice."""
+    from backend.services import expense_bridge
+
+    _require_ledger_write(ctx)
+    out = _ledger_call(lambda: expense_bridge.sync(ctx.tenant_id, ctx.app_user_id))
+    _changed(ctx)
+    return out
 
 
 @router.post("/ledger/entries/{entry_id}/correct")
@@ -2643,12 +2664,38 @@ def post_ledger_correct(entry_id: UUID, body: LedgerEntryHttp, ctx: AuthContext 
     return {"entryId": str(new_id)}
 
 
+class LedgerVoidHttp(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    reason: str = Field(min_length=3, max_length=300)  # kept with the removal: who removed what, when, and why (audit)
+
+
+class LedgerPaymentHttp(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    status: Literal["UNPAID", "PARTIALLY_PAID", "PAID"]
+    paid_amount_paise: int | None = Field(default=None, gt=0)  # required for PARTIALLY_PAID, refused for the others
+
+
 @router.post("/ledger/entries/{entry_id}/void")
-def post_ledger_void(entry_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+def post_ledger_void(entry_id: UUID, body: LedgerVoidHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, str]:
+    """Removes an expense from the totals. The reason is required and is kept with the removal; the original row stays in the history."""
     from calc_engine.repositories import expense_ledger_repo
 
     _require_ledger_write(ctx)
-    return {"voidId": str(_ledger_call(lambda: expense_ledger_repo.void_entry(ctx.tenant_id, entry_id, ctx.app_user_id)))}
+    out = str(_ledger_call(lambda: expense_ledger_repo.void_entry(ctx.tenant_id, entry_id, ctx.app_user_id, body.reason)))
+    _changed(ctx)
+    return {"voidId": out}
+
+
+@router.post("/ledger/entries/{entry_id}/payment")
+def post_ledger_payment(entry_id: UUID, body: LedgerPaymentHttp, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """Records whether an expense is unpaid, partly paid (with the amount paid so far) or paid. Information about cash only: it never changes a profit figure."""
+    from calc_engine.repositories import expense_ledger_repo
+
+    _require_ledger_write(ctx)
+    changed = _ledger_call(lambda: expense_ledger_repo.set_payment(ctx.tenant_id, entry_id, body.status, body.paid_amount_paise, ctx.app_user_id))
+    return {"entryId": str(entry_id), "changed": bool(changed)}
 
 
 @router.post("/ledger/entries/{entry_id}/release")

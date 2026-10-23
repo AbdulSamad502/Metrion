@@ -25,6 +25,8 @@ type LedgerEntry = {
   confirmedClass: string | null;
   suggestedClass: string | null;
   suggestionReason: string | null;
+  paymentStatus?: string | null;
+  paidAmountDisplay?: string | null;
 };
 
 const CLASS_LABEL: Record<string, string> = {
@@ -36,6 +38,7 @@ const CLASS_LABEL: Record<string, string> = {
   TAX_ASSET: "Tax asset",
   MARKETPLACE_DEDUCTION: "Marketplace deduction",
 };
+const PAYMENT_TEXT: Record<string, string> = { UNPAID: "Unpaid", PARTIALLY_PAID: "Partly paid", PAID: "Paid" };
 const HOLD_TEXT: Record<string, string> = {
   POSSIBLE_DUPLICATE: "On hold: looks like a duplicate of another entry, so it is not counted.",
   MAY_OVERLAP_UNCONFIRMED: "On hold: marketplaces often deduct this themselves, so it is not counted until you say it is not already in a settlement.",
@@ -77,6 +80,10 @@ export function ExpensesTab({ period, getToken }: { period: Period; getToken: ()
                     <div className="t-body">
                       {e.entryDate} · {e.category} · {e.amountDisplay}
                       {e.vendor ? ` · ${e.vendor}` : ""}
+                    </div>
+                    <div className="t-meta" style={{ color: "var(--text-5)" }}>
+                      Payment: {e.paymentStatus ? (PAYMENT_TEXT[e.paymentStatus] ?? e.paymentStatus) : "not stated"}
+                      {e.paymentStatus === "PARTIALLY_PAID" && e.paidAmountDisplay ? ` · ${e.paidAmountDisplay} paid so far` : ""}
                     </div>
                     {e.gstAmountDisplay && (
                       <div className="t-meta" style={{ color: "var(--text-5)" }}>

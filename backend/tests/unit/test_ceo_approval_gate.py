@@ -30,7 +30,7 @@ def _playbook(*legs: tuple[str, bool]) -> Playbook:
 # ------------------------------------------------------------------------------------------------ the 37 registered actions
 def test_the_gate_agrees_with_the_registry_metadata_for_every_registered_action():
     specs = get_registry().specs()
-    assert len(specs) == 49  # CP4: +11 CI conversational actions (CI spec 6.21.3); +1 cfo.query (CFO 2.0 planner)
+    assert len(specs) == 54  # CP4: +11 CI conversational actions (CI spec 6.21.3); +1 cfo.query (CFO 2.0 planner); +5 Expense Tracker actions (one read, four approval-gated writes)
     for spec in specs:
         assert spec.effects is not None, spec.key
         decision = gate_leg(spec.key)
@@ -189,6 +189,8 @@ CHAT_ACTIONS_NEEDING_APPROVAL_TODAY = frozenset({
     "pi.discover", "cmo.market_trends", "cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords",
     "cmo.generate_bullets", "cmo.generate_backend_terms", "cmo.generate_listing_copy",
     "ci.discover_competitors",  # CI spec C34: the seller's product search terms go to Tavily, so it needs a stored approval plan like pi.discover
+    # The Expense Tracker through the CEO (owner decision 2026-10-23, ceo-expense-tracker-chat.md): a saved financial record needs the seller's Approve on an exact card.
+    "cfo.expense_add", "cfo.expense_correct", "cfo.expense_void", "cfo.expense_paid",
 })
 WITH_A_CONFIRMATION_CARD = frozenset({"pi.discover", "cmo.market_trends"})
 WITH_NO_CONFIRMATION_STEP = CHAT_ACTIONS_NEEDING_APPROVAL_TODAY - WITH_A_CONFIRMATION_CARD

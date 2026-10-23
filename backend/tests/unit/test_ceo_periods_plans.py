@@ -89,6 +89,10 @@ def test_every_planned_action_is_a_wired_registry_action_with_valid_slots():
         "cmo.generate_listing_copy": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
         "cmo.market_trends": {"request_key": "k", "marketplaces": ["AMAZON"], "plan_digest": "a" * 64},  # spec 6.40: the run is bound to a confirmed preview
         "cmo.market_trends_preview": {"marketplaces": ["AMAZON"]},
+        "cfo.expense_add": {"effective_date": "2026-10-01", "category": "operating_overhead", "amount_paise": 500000, "request_key": "k"},
+        "cfo.expense_correct": {"expense_id": str(uuid.uuid4()), "effective_date": "2026-10-01", "category": "software", "amount_paise": 99900, "request_key": "k"},
+        "cfo.expense_void": {"expense_id": str(uuid.uuid4()), "reason": "duplicate", "request_key": "k"},
+        "cfo.expense_paid": {"expense_id": str(uuid.uuid4()), "status": "paid", "request_key": "k"},
     }
     for key, plan in ACTIONS.items():
         built = plan.build_slots(dataclasses.replace(resolved, direct=sample[key]) if key in sample else resolved)

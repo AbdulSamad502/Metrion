@@ -339,17 +339,17 @@ ACTIONS: Mapping[str, ActionPlan] = {
         ),
         ActionPlan(
             "cfo.expense_summary",
-            "Answer a question about the expenses the seller recorded in their Expense Tracker: a total for a month, a day or a range, by category, month by month or day by day, or a list of the "
+            "Answer a question about the expenses the seller recorded in their expense ledger: a total for a month, a day or a range, by category, month by month or day by day, or a list of the "
             "entries. Put the seller's question, as they asked it, in the question slot",
             ("question", "period"), _financial_query,
         ),
         ActionPlan(
-            "cfo.expense_add", "Add an expense to the seller's Expense Tracker. The CEO asks for the amount, day and category and shows an exact card the seller must approve; nothing is saved before that",
+            "cfo.expense_add", "Add an expense to the seller's expense ledger. The CEO asks for the amount, day and category and shows an exact card the seller must approve; nothing is saved before that",
             (), _direct, session=True,
         ),
         ActionPlan("cfo.expense_correct", "Change an expense the seller already recorded (amount, day, category or vendor). The seller picks the entry and approves the change", (), _direct, session=True),
-        ActionPlan("cfo.expense_void", "Remove an expense from the seller's Expense Tracker (it is kept in the history). The seller picks the entry, gives a reason and approves", (), _direct, session=True),
-        ActionPlan("cfo.expense_paid", "Mark an expense in the seller's Expense Tracker as paid, unpaid or partially paid. The seller picks the entry and approves", (), _direct, session=True),
+        ActionPlan("cfo.expense_void", "Remove an expense from the seller's expense ledger (it is kept in the history). The seller picks the entry, gives a reason and approves", (), _direct, session=True),
+        ActionPlan("cfo.expense_paid", "Mark an expense in the seller's expense ledger as paid, unpaid or partially paid. The seller picks the entry and approves", (), _direct, session=True),
         ActionPlan("cfo.financial_health", "Financial health bands (good / watch / at-risk) for a period", ("period",), _period_only),
         ActionPlan("cfo.anomaly_check", "Check a period for statistically unusual changes in results", ("period",), _anomaly),
         ActionPlan("cfo.strategic_briefing", "CFO strategic briefing for a period: health, leaks and open data requests ranked", ("period",), _period_only),

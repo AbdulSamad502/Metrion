@@ -12,7 +12,7 @@ from backend.ceo.registry import ActionRegistry, RegistryError, _with_effects, g
 
 def test_every_registered_action_has_exactly_one_effects_entry_and_vice_versa():
     keys = {s.key for s in get_registry().specs()}
-    assert len(keys) == 49  # +1 cfo.query (CFO 2.0 planner)
+    assert len(keys) == 54  # +1 cfo.query (CFO 2.0 planner); +5 Expense Tracker actions
     assert keys == set(ACTION_EFFECTS)
     assert all(s.effects is ACTION_EFFECTS[s.key] for s in get_registry().specs())
 
@@ -51,6 +51,7 @@ def test_the_derived_approval_set_is_a_visible_diff_when_it_changes():
         "cmo.analyze_attachment", "cmo.catalog_answer", "cmo.generate_backend_terms", "cmo.generate_bullets", "cmo.generate_description", "cmo.generate_hashtags",
         "cmo.generate_keywords", "cmo.generate_listing_copy", "cmo.generate_title_sets", "cmo.market_trends", "pi.discover", "pi.supplier_lookup",
         "ci.discover_competitors",
+        "cfo.expense_add", "cfo.expense_correct", "cfo.expense_void", "cfo.expense_paid",  # a saved financial record the seller dictated: approval-gated by force (ceo-expense-tracker-chat.md)
     }
 
 

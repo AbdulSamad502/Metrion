@@ -209,7 +209,7 @@ def test_correct_and_void_keep_the_history_and_a_no_overhead_declaration_is_chec
     app_client.post("/api/v1/cfo/ledger/classes", json={"class": "OVERHEAD", "category": "Rent"}, headers=headers)
     d = app_client.post("/api/v1/cfo/ledger/declarations/no-overhead", json={"period_start": "2026-09-01", "period_end": "2026-09-30"}, headers=headers)
     assert d.status_code == 400 and "contradict" in d.json()["detail"]
-    voided = app_client.post(f"/api/v1/cfo/ledger/entries/{fixed.json()['entryId']}/void", headers=headers)
+    voided = app_client.post(f"/api/v1/cfo/ledger/entries/{fixed.json()['entryId']}/void", json={"reason": "entered by mistake"}, headers=headers)
     assert voided.status_code == 200
     ok = app_client.post("/api/v1/cfo/ledger/declarations/no-overhead", json={"period_start": "2026-09-01", "period_end": "2026-09-30"}, headers=headers)
     assert ok.status_code == 200, ok.text
@@ -242,7 +242,7 @@ def test_one_tenant_never_sees_anothers_ledger(app_client, fake_clerk, two_tenan
     ha, hb = _register_owner(fake_clerk, tenant_a), _register_owner(fake_clerk, tenant_b)
     r = app_client.post("/api/v1/cfo/ledger/entries", json=body(e(100_00, "Rent")), headers=ha).json()
     assert app_client.get("/api/v1/cfo/ledger/entries", headers=hb).json()["entries"] == []
-    assert app_client.post(f"/api/v1/cfo/ledger/entries/{r['entryIds'][0]}/void", headers=hb).status_code == 400
+    assert app_client.post(f"/api/v1/cfo/ledger/entries/{r['entryIds'][0]}/void", json={"reason": "entered by mistake"}, headers=hb).status_code == 400
 
 
 # ---------------------------------------------------------------------------------------------------- the planner reads the ledger
@@ -341,3 +341,24 @@ def test_planner_ledger_answers_are_tenant_isolated():
     repo.add_entries(a, [NewEntry(entry_date=date(2026, 9, 2), amount_paise=900_00, category="Rent", vendor="L")], uuid.uuid4())
     r = ask(b, plan([{"op": "aggregate", "params": {"metric": "EXPENSE_BY_CATEGORY"}}], intent="EXPENSE_BREAKDOWN"))
     assert isinstance(r, PlannerAnswer) and r.packet.figures[0].status == "UNAVAILABLE"
+
+
+def test_removal_needs_a_reason_and_payment_states_are_validated_and_shown(app_client, fake_clerk, two_tenants):
+    tenant_a, tenant_b = two_tenants
+    ha, hb = _register_owner(fake_clerk, tenant_a), _register_owner(fake_clerk, tenant_b)
+    eid = app_client.post("/api/v1/cfo/ledger/entries", json=body(e(500_00, "Rent")), headers=ha).json()["entryIds"][0]
+    pay = f"/api/v1/cfo/ledger/entries/{eid}/payment"
+    assert app_client.post(f"/api/v1/cfo/ledger/entries/{eid}/void", headers=ha).status_code == 422  # no body: no reason
+    assert app_client.post(f"/api/v1/cfo/ledger/entries/{eid}/void", json={"reason": "ok"}, headers=ha).status_code == 422  # too short to be a reason
+    assert app_client.post(pay, json={"status": "PARTIALLY_PAID"}, headers=ha).status_code == 400  # a partial payment names the amount
+    assert app_client.post(pay, json={"status": "PARTIALLY_PAID", "paid_amount_paise": 500_00}, headers=ha).status_code == 400  # not the whole amount
+    assert app_client.post(pay, json={"status": "PAID", "paid_amount_paise": 5}, headers=ha).status_code == 400
+    assert app_client.post(pay, json={"status": "UNKNOWN"}, headers=ha).status_code == 422
+    assert app_client.post(pay, json={"status": "PARTIALLY_PAID", "paid_amount_paise": 200_00}, headers=hb).status_code == 400  # another tenant's entry does not exist for them
+    ok = app_client.post(pay, json={"status": "PARTIALLY_PAID", "paid_amount_paise": 200_00}, headers=ha)
+    assert ok.status_code == 200 and ok.json()["changed"] is True
+    assert app_client.post(pay, json={"status": "PARTIALLY_PAID", "paid_amount_paise": 200_00}, headers=ha).json()["changed"] is False
+    row = app_client.get("/api/v1/cfo/ledger/entries", headers=ha).json()["entries"][0]
+    assert row["paymentStatus"] == "PARTIALLY_PAID" and row["paidAmountPaise"] == 200_00
+    assert app_client.post(f"/api/v1/cfo/ledger/entries/{eid}/void", json={"reason": "Entered by mistake"}, headers=ha).status_code == 200
+    assert app_client.get("/api/v1/cfo/ledger/entries", headers=ha).json()["entries"] == []

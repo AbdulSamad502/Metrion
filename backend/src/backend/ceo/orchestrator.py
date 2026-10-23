@@ -49,7 +49,7 @@ from backend.entitlement import meter_ceo_turn
 from backend.repositories import accounting_cutover_repo
 from backend.repositories import investigation_repo as repo
 from backend.repositories import ceo_need_repo
-from backend.services import ceo_attachment_analysis, ceo_briefs, ceo_inputs, cmo_ci_inputs
+from backend.services import ceo_attachment_analysis, ceo_briefs, ceo_inputs, ceo_progress, cmo_ci_inputs
 from backend.services.ceo_reads import product_facts as ceo_reads_product_facts
 
 logger = logging.getLogger(__name__)
@@ -374,6 +374,7 @@ def _run_turn_locked(
 
     clock = StageClock()
     log = EventLog(clock, sink)
+    ceo_progress.STAGE_SINK.set(lambda stage: log.emit(f"CFO_{stage}"))  # the planner's stages become live progress for THIS turn
     now = runtime.clock()
     log.emit("TURN_RECEIVED")
     with clock.span("admission"):
@@ -638,7 +639,7 @@ def _run_admitted(
     cmo_delegated = route == "ACTION" and key in cmo_delegation.DELEGATED_ACTIONS  # ceo-cmo-delegation.md: the CMO actions the seller reaches through the CEO
     # CMO actions always become a stored plan the seller approves on its card (never run unapproved); every other approval-required action follows CEO_APPROVAL_ENABLED
     # (OFF by default: the refusal below stays exactly as it was).
-    approval_on = cmo_delegated or config.ceo_approval_enabled()
+    approval_on = cmo_delegated or (route == "ACTION" and key in expense_chat.WRITE_KEYS) or config.ceo_approval_enabled()  # + the expense ledger writes: they only ever become a plan card (ceo-expense-tracker-chat.md CE3)
     if compound_plan is not None and compound_plan.chosen_text is None:
         # "Handled: nothing": the message held several requests and none can start from it. The WHOLE text is never routed as if it were one of them (it would start a
         # question the block above says was not started); the seller gets the block, and nothing is asked, run or used.
@@ -1266,6 +1267,8 @@ def _ci_direct(
         return None
     try:
         ruled = intent_router.route(text, cat)
+        if ruled is not None and str(ruled.key or "").startswith("cfo.expense"):
+            return None  # "add an expense of 500 ...": the expense ledger rules own this message; a competitor-name reading of "add <name>" must not take it
         other_agent = ruled is not None and not str(ruled.key or "").startswith("ci.") and ruled.route in ("ACTION", "PLAYBOOK")
         ceo_last = [m for m in repo.list_messages(tenant, inv_id) if m.get("role") == "CEO"]
         plan = ci_conversation.plan_turn(

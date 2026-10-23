@@ -96,7 +96,7 @@ _PRICE_DECISION = _rx(
     r"\b(?:should i|can i|could i|what if i|what happens if i|if i|is it worth|do i need to|how (?:can|do) i|what should i do)\b[^.?!]*\b(?:reduce|lower|cut|drop|decrease|raise|increase|match|beat|undercut|reprice|change|conquer|compete)\b[^.?!]*\b(?:price|prices|pricing)\b"
     r"|\b(?:conquer|beat|win against|compete with)\b[^.?!]*\b(?:competitors?|rivals?)\b[^.?!]*\b(?:price|pricing)\b|\bwhat should i do\b[^.?!]*\bpricing\b")
 
-# The Expense Tracker through the CEO (docs/specs/ceo-expense-tracker-chat.md). Plain rules, first: a request to add, change, remove or mark an expense, a question about recorded
+# The expense ledger through the CEO (docs/specs/ceo-expense-tracker-chat.md). Plain rules, first: a request to add, change, remove or mark an expense, a question about recorded
 # expenses, and - last of these - a first-person payment STATEMENT, which only starts a question ("is this your expense?"), never a save.
 _EXP_NOUN = r"(?:an? |the |my |our |that |this |these |those |one |some |new )*expenses?"
 _NOT_HOWTO = r"^(?!\s*(?:how (?:do|does|can|to|would)|where|what (?:is|are|does)|why|is it|are there)\b)"

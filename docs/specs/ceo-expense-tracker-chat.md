@@ -96,3 +96,20 @@ Routing matrix rows (add / correct / remove / list / summary / mention) through 
 | OQ1 | Should the CEO also offer to add an expense it finds in an uploaded file or screenshot? (Not built.) |
 | OQ2 | Should several mentioned expenses in one message be offered together? (V1: one at a time.) |
 | OQ3 | Choose one expense model (CE8). |
+
+## 14. Implementation status (2026-10-23, re-pointed at the CFO ledger)
+
+**Owner decision (2026-10-23): the CFO ledger is the authoritative expense source.** This spec was written against the Expense Tracker; every chat action now uses the ledger instead (decisions CE1 to CE7 about the conversation, the approval card and the permission are unchanged; CE8 is resolved by this decision). The Expense Tracker's tables are no longer read or written by the chat.
+
+Built and tested: the five actions (summary read; add, correct, remove, mark paid behind the plan-card Approve), the mention question ("Is this an expense of yours?"), day and relative periods, evidence figures through entry references, the permission gate (`financials.adjust`), and tenant isolation including forged ids. What changed with the move:
+
+* **Reads** run the planner's `EXPENSE_BY_CATEGORY` per bucket (month, day or whole range), so every total is a stored engine result with a reference, and entries on hold are named as left out of the totals.
+* **Add** writes one ledger entry (category stored as the closed list's plain label). It gets **no confirmed class**: the answer says so, and Operating Profit moves only after the seller confirms a class (suggest-only, OQ2). A repeat of the same expense is stored **on hold** as a possible duplicate and is in no total until reviewed; the answer says so.
+* **Correct** replaces the entry with a new one that names it (the original stays in the history) and carries its payment statement.
+* **Remove** needs a reason of a few words (3 to 300 characters), kept with who, when and why.
+* **Mark paid** supports UNPAID, PARTIALLY_PAID (asks how much; must be above zero and below the whole) and PAID. "Unknown" is no longer an option: no statement reads as "not stated".
+* **Bridge:** entries made on the Tracker's own page reach the ledger only when the seller asks (`/cfo/ledger/tracker-bridge`), idempotent, no double counting, no silent migration (`cfo-expense-ledger.md` 14.4).
+
+Proof: `tests/unit/test_ceo_expense_chat.py` (pure parsing and routing), `tests/integration/test_ceo_expense_tracker_chat.py` (26: add, duplicate, decline, cancel, reads incl. month-wise, date-wise and empty, remove with reason, pick, change, paid, unpaid, partly paid, partial refused, mention, permission, forged id), plus the approval-gate, effects, architecture, periods and registry guards.
+
+Still open (not hidden): no real-model wording evaluation (the conversation is rule-driven; no model fills a field); the ledger has no "unknown" payment state by design; the class of a chat-added expense is confirmed on the CFO Expenses tab, not in chat.

@@ -280,6 +280,10 @@
    ],
    "requiredQuery": []
   },
+  "GET /api/v1/cfo/ledger/tracker-bridge": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/cfo/line-status-override": {
    "query": [
     "sales_line_id"
@@ -924,11 +928,25 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cfo/ledger/entries/{entry_id}/payment": {
+   "body": {
+    "$ref": "#/components/schemas/LedgerPaymentHttp"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cfo/ledger/entries/{entry_id}/release": {
    "query": [],
    "requiredQuery": []
   },
   "POST /api/v1/cfo/ledger/entries/{entry_id}/void": {
+   "body": {
+    "$ref": "#/components/schemas/LedgerVoidHttp"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cfo/ledger/tracker-bridge": {
    "query": [],
    "requiredQuery": []
   },
@@ -3912,6 +3930,53 @@
     "category"
    ],
    "title": "LedgerEntryHttp",
+   "type": "object"
+  },
+  "LedgerPaymentHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "paid_amount_paise": {
+     "anyOf": [
+      {
+       "exclusiveMinimum": 0.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Paid Amount Paise"
+    },
+    "status": {
+     "enum": [
+      "UNPAID",
+      "PARTIALLY_PAID",
+      "PAID"
+     ],
+     "title": "Status",
+     "type": "string"
+    }
+   },
+   "required": [
+    "status"
+   ],
+   "title": "LedgerPaymentHttp",
+   "type": "object"
+  },
+  "LedgerVoidHttp": {
+   "additionalProperties": false,
+   "properties": {
+    "reason": {
+     "maxLength": 300,
+     "minLength": 3,
+     "title": "Reason",
+     "type": "string"
+    }
+   },
+   "required": [
+    "reason"
+   ],
+   "title": "LedgerVoidHttp",
    "type": "object"
   },
   "ManualMappingBody": {
