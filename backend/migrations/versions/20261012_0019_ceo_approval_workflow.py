@@ -204,12 +204,18 @@ def _refuse_if_rows_exist() -> None:
         ("an APPROVAL turn", "SELECT 1 FROM investigation_turn WHERE route_source = 'APPROVAL' OR plan_id IS NOT NULL LIMIT 1"),
         ("a PLAN message", "SELECT 1 FROM investigation_message WHERE kind = 'PLAN' LIMIT 1"),
     )
-    with op.get_bind().engine.connect() as probe:
-        for (tenant_id,) in probe.execute(text("SELECT id FROM tenant")).all():
-            probe.execute(text("SELECT set_config('app.current_tenant_id', :t, false)"), {"t": str(tenant_id)})
+    # The probe runs on the migration's own connection, inside a savepoint that is ALWAYS rolled back, so the transaction-local tenant setting never survives it. A second
+    # connection would block on locks that later downgrades of the same `downgrade base` transaction already hold (it hung on `tenant`).
+    conn = op.get_bind()
+    probe = conn.begin_nested()
+    try:
+        for (tenant_id,) in conn.execute(text("SELECT id FROM tenant")).all():
+            conn.execute(text("SELECT set_config('app.current_tenant_id', :t, true)"), {"t": str(tenant_id)})
             for what, sql in checks:
-                if probe.execute(text(sql)).first() is not None:
+                if conn.execute(text(sql)).first() is not None:
                     raise RuntimeError(f"cannot downgrade 20261012_0019: {what} rows exist (approval history is never destroyed silently)")
+    finally:
+        probe.rollback()
 
 
 def downgrade() -> None:

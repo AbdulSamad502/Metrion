@@ -1,3 +1,14 @@
+## Metrion design rules
+
+Metrion design rules override Impeccable and any other design skill:
+
+- Evidence first: every number shows its source, period and status (verified, provisional, estimated, unavailable).
+- Never invent a number. Missing input shows as unavailable or "not yet calculable", never as zero or a made-up estimate.
+- CI uses dated screenshot evidence, never live monitoring. Slim CMO is recommend-only and never publishes. GST is indicative, not filing-grade. Expense Tracker is part of CFO, not an agent. The CEO Hub is out of scope.
+- Motion and effects stay restrained. Respect reduced motion. No pulsing or count-up animations.
+- Contrast must meet WCAG 2.2 AA. Status never relies on colour alone.
+- Green means verified or positive only. Amber means estimate or needs review. Red means a real risk.
+
 # Metrion — Project Instructions
 
 ## Mission

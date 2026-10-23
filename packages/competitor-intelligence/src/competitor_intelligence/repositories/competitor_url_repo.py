@@ -9,7 +9,7 @@ below is now a labeling/format validation (C4/D7), not a fetch gate. `capture/al
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import os
@@ -91,7 +91,7 @@ def create_url(
                 "added_by": str(added_by),
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def get_by_ids(tenant_id: UUID, url_ids: list[UUID]) -> list[dict[str, Any]]:

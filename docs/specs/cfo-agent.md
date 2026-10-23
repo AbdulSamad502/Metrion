@@ -110,11 +110,13 @@ cash_view (                               -- DERIVED read model. Not a store, no
 
 **Provenance grain.** `engine_result_ref` identifies **one computed figure**, not one row. A view exposing several computed figures carries one reference per figure; AC1b is satisfied per figure, never per row.
 
-**Removed by design.** Earlier drafts defined `expense_entry`, `cash_event` and `supplier_quote` as CFO-owned tables. They duplicated `manual_adjustment` and fragmented the guarantee that manual input never overwrites source data. All three are now `manual_adjustment` field types:
+**Removed by design — amended 2026-10-15 for expenses (EXP-01, EXP-07; `docs/decisions/phase1-decisions.md`).** Earlier drafts defined `expense_entry`, `cash_event` and `supplier_quote` as CFO-owned tables. They duplicated `manual_adjustment` and fragmented the guarantee that manual input never overwrites source data. `cash_event` and `supplier_quote` **remain** `manual_adjustment` field types. **The decision is reversed for expenses only:** `expense_entry` is reinstated as a dedicated **append-only expense ledger**, specified in `docs/specs/expense-tracker.md` and read by Brain 1 through an explicit contract (treatments `incremental`, `already_in_settlement`, `informational`).
+
+*Rationale.* `manual_adjustment` cannot hold a date, vendor, source reference, payment or review status or treatment; cannot edit across target and field; cannot delete; has no idempotency key; and its expense pools do not reach the period P&L. *Affected components.* The expense ledger and its feed, `compute_period_pnl` inputs, `deterministic-engine.md` §5.8/§5.10, the legacy `PUT/GET /cfo/expenses` route. *Guarantee kept.* Manual input still never overwrites source data: the ledger is append-only (no app-role UPDATE/DELETE), tenant-isolated with FORCE RLS, and feeds the engine only through the feed. Writes still require `financials.adjust` (no new permission key). Until the ledger cut-over (legacy compatibility is an open decision), the `expense.<category>` rows below remain the stored form.
 
 | Seller input | Stored as |
 |---|---|
-| Advertising spend, packaging, storage, logistics, other pools | `manual_adjustment` field `expense.<category>` (engine §7.2.1) |
+| Advertising spend, packaging, storage, logistics, other pools | `manual_adjustment` field `expense.<category>` (engine §7.2.1) — legacy form until the expense-ledger cut-over (`expense-tracker.md`) |
 | Settlement receipt correction where a report is missing or disputed | `manual_adjustment` field `settlement.receipt` (engine §7.2.1) |
 | Supplier quote (cost, MOQ, lead time, shipping, terms, reliability) | `manual_adjustment` field `supplier.quote` (engine §7.2.1) |
 | COGS, discount bearer, RTO outcome, cancellation flag, fee-GST toggle | `manual_adjustment` (engine §7.2.1, unchanged) |
@@ -265,6 +267,8 @@ Statistical only: z-score, period-over-period delta, percentile thresholds over 
 3. Where CI has supplied competitor observations, the competitor's estimated range may be shown alongside — clearly labelled estimated, never as their actual margin.
 4. Every recommendation states its assumptions: COGS basis, fee reference version, GST treatment, and what was unavailable.
 5. Recommend-only (C7). No marketplace write, ever.
+
+**Q27 caveat, required before release of the ledger feed** (approved 2026-10-15, `docs/decisions/phase1-decisions.md`; engine `deterministic-engine.md` §5.8.1; `expense-tracker.md` §6.13 rule 9, AC13, B.11). Pricing recommendations (the margin curve and every price scenario) and loss-making-SKU alerts that CFO produces or feeds must state that **unallocated advertising and storage spend is excluded from SKU contribution**. Wherever CFO shows contribution profit or margin (the period P&L, the pricing curve, the strategic briefing, the Financial Health Band), unallocated advertising, storage and overhead appear as **their own labelled lines beside contribution profit**, and **total profit includes them**. A **seller-facing release note** is required when the contribution-profit definition changes (the new formula version takes effect at the release date). This paragraph changes no formula and no behaviour; it records what must be true before the ledger feed is released.
 
 ### 6.8 Registered direct execution paths (B4)
 

@@ -16,6 +16,7 @@ axes, §5.4) — it stays visible elsewhere, just never counted in a market-wide
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 from competitor_intelligence.discovery.identity_resolution import IdentityMatch
@@ -34,7 +35,7 @@ _ELIGIBLE_IDENTITY_MATCHES = frozenset({IdentityMatch.EXACT_MATCH.value, Identit
 _ELIGIBLE_RELATIONSHIPS = frozenset({"SAME_PRODUCT", "VARIANT", "DIRECT_COMPETITOR"})
 
 
-def _is_band_eligible(candidate: dict | None) -> bool:
+def _is_band_eligible(candidate: dict[str, Any] | None) -> bool:
     if candidate is None:
         return True  # manually added competitor: the seller named it
     if candidate["identity_match"] in _ELIGIBLE_IDENTITY_MATCHES:

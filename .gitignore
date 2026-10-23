@@ -12,3 +12,10 @@ __pycache__/
 # The backend writes to ./data/... relative to its working directory, so cover both locations.
 backend/data/
 /data/
+.venv-ci/
+
+# Downloaded design-tool binaries (reinstallable, not source)
+.agents/skills/*/scripts/bin/
+.claude/skills/*/scripts/bin/
+.github/skills/*/scripts/bin/
+.claude/settings.local.json

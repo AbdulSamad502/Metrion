@@ -5,7 +5,7 @@ cost_owner_choice       which source owns a cost component for a marketplace and
 
 Both are append-only (SELECT and INSERT only for the application role); a later row supersedes an earlier one.
 
-Revision ID: 20261022_0015
+Revision ID: 20261022_0015c
 Revises: 20261021_0014
 Create Date: 2026-10-22
 """
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "20261022_0015"
+revision = "20261022_0015c"
 down_revision = "20261021_0014"
 branch_labels = None
 depends_on = None

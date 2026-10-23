@@ -12,7 +12,7 @@ Every function takes `tenant_id` first and receives its connection only via `ten
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -47,7 +47,7 @@ def create_run(
                 "provider_name": provider_name,
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def get_run(tenant_id: UUID, discovery_run_id: UUID) -> dict[str, Any] | None:

@@ -29,7 +29,7 @@ class RecTavily:
     def __init__(self) -> None:
         self.queries: list[str] = []
 
-    def search(self, query, *, include_images=False, max_results=10):
+    def search(self, query, *, include_images=False, max_results=10, topic=None, days=None, country=None, include_domains=None):
         self.queries.append(query)
         return [TavilySearchResult(url="https://example.com/p", title="Insulated Steel Bottle 1L Review", content="steel bottle priced at 799", score=0.9, published_date="2026-09-20", retrieved_at=NOW)]
 
@@ -109,6 +109,8 @@ def test_pi_supplier_lookup_sends_a_public_candidate_title_plus_the_fixed_suffix
     sent = [*places.queries, *tavily.queries]
     assert sent, "no supplier query was sent"
     for q in sent:
-        assert q.endswith(" manufacturer supplier wholesale india")
-        assert q.removesuffix(" manufacturer supplier wholesale india") in titles  # a persisted candidate title, derived from public search results
+        # the two fixed query shapes: the trade-directory search and the open-web / places search
+        suffix = next((s for s in (" wholesale price per piece supplier", " manufacturer supplier wholesale india") if q.endswith(s)), None)
+        assert suffix is not None, q
+        assert q.removesuffix(suffix) in titles  # a persisted candidate title, derived from public search results
         assert str(BUDGET_PAISE) not in q and "SecretBrand" not in q and "AMAZON" not in q

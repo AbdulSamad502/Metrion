@@ -7,18 +7,28 @@ describe("navigation (customer-goal groups)", () => {
   it("groups by what the seller wants to do, and Ask Metrion is one click from anywhere", () => {
     expect(NAV_GROUPS.map((g) => g.label)).toEqual(["Start", "Business"]);
     expect(SYSTEM_GROUP_LABEL).toBe("System");
-    expect(NAV_GROUPS[1].items.map((i) => i.label)).toEqual(["Products", "Competitors", "Profit & Finance", "Listings & Marketing"]);
+    expect(NAV_GROUPS[1].items.map((i) => i.label)).toEqual(["Products", "Competitors", "Profit & Finance", "Expense Tracker", "Profit Calculator", "Listings & Marketing"]);
     expect(FOOTER_NAV.map((i) => i.label)).toEqual(["Agents", "Settings"]);
     expect(NAV_GROUPS[0].items.map((i) => i.label)).toEqual(["Overview", "CEO Hub", "Action Center"]);
   });
   it("keeps every real route reachable and lists no inert 'Soon' entry", () => {
     const hrefs = allNavItems().map((i) => i.href);
-    for (const h of ["/dashboard", "/dashboard/ceo-hub", "/dashboard/notifications", "/dashboard/cfo", "/dashboard/pi", "/dashboard/competitors", "/dashboard/cmo", "/dashboard/agents", "/settings"]) {
+    for (const h of ["/dashboard", "/dashboard/ceo-hub", "/dashboard/notifications", "/dashboard/cfo", "/dashboard/cfo/expenses", "/dashboard/pnl-calculator", "/dashboard/pi", "/dashboard/competitors", "/dashboard/cmo", "/dashboard/agents", "/settings"]) {
       expect(hrefs).toContain(h);
     }
     expect(allNavItems().every((i) => !i.soon && i.href)).toBe(true);
     expect(FOOTER_NAV.map((i) => i.id)).not.toContain("cart");
   });
+  it("gives the Expense Tracker its own sidebar entry and highlights only it on its page, while Profit & Finance stays its own page", () => {
+    const cfo = allNavItems().find((i) => i.id === "cfo")!;
+    const expenses = allNavItems().find((i) => i.id === "cfo-expenses")!;
+    expect(expenses.href).toBe("/dashboard/cfo/expenses");
+    expect(isActive(expenses, "/dashboard/cfo/expenses")).toBe(true);
+    expect(isActive(cfo, "/dashboard/cfo/expenses")).toBe(false);
+    expect(isActive(cfo, "/dashboard/cfo")).toBe(true);
+    expect(isActive(expenses, "/dashboard/cfo")).toBe(false);
+  });
+
   it("highlights Overview only on its own page", () => {
     const overview = allNavItems().find((i) => i.id === "overview")!;
     expect(isActive(overview, "/dashboard")).toBe(true);
@@ -34,7 +44,7 @@ describe("navigation (customer-goal groups)", () => {
     const pages: Record<string, string> = {
       overview: "app/dashboard/page.tsx", "ceo-hub": "app/dashboard/ceo-hub/page.tsx", notifications: "app/dashboard/notifications/page.tsx",
       products: "app/dashboard/pi/page.tsx", competitors: "app/dashboard/competitors/page.tsx", cfo: "app/dashboard/cfo/page.tsx",
-      cmo: "app/dashboard/cmo/page.tsx", agents: "app/dashboard/agents/page.tsx", settings: "app/settings/page.tsx",
+      cmo: "app/dashboard/cmo/page.tsx", "pnl-calculator": "app/dashboard/pnl-calculator/page.tsx", agents: "app/dashboard/agents/page.tsx", settings: "app/settings/page.tsx",
     };
     for (const [id, file] of Object.entries(pages)) {
       const src = readFileSync(join(process.cwd(), file), "utf8");
@@ -50,7 +60,7 @@ describe("every page has a route-level title", () => {
       overview: () => import("@/app/dashboard/layout"), "ceo-hub": () => import("@/app/dashboard/ceo-hub/layout"),
       notifications: () => import("@/app/dashboard/notifications/layout"), products: () => import("@/app/dashboard/pi/layout"),
       competitors: () => import("@/app/dashboard/competitors/layout"), cfo: () => import("@/app/dashboard/cfo/layout"),
-      cmo: () => import("@/app/dashboard/cmo/layout"), agents: () => import("@/app/dashboard/agents/layout"), settings: () => import("@/app/settings/layout"),
+      cmo: () => import("@/app/dashboard/cmo/layout"), "pnl-calculator": () => import("@/app/dashboard/pnl-calculator/layout"), agents: () => import("@/app/dashboard/agents/layout"), settings: () => import("@/app/settings/layout"),
     };
     for (const [id, load] of Object.entries(layouts)) expect((await load()).metadata.title).toBe(pageTitle(id as keyof typeof PAGE_COPY));
   });

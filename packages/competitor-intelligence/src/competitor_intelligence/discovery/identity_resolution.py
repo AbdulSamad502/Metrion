@@ -218,8 +218,8 @@ def _extract_brand(title: str | None) -> str | None:
         # cheap heuristic; a licensed provider or a richer catalogue lookup can replace this
         # without touching the resolution/gating logic above.
         if token[0].isupper() and any(c.isalpha() for c in token):
-            return token
-    return tokens[0] if tokens else None
+            return str(token)
+    return str(tokens[0]) if tokens else None
 
 
 def _seller_brand(seller_product: SellerProduct) -> str | None:

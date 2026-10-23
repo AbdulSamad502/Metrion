@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -71,4 +72,4 @@ def insert_agent_run(
                 "finished_at": finished_at,
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])

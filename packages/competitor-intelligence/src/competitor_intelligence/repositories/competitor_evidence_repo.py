@@ -4,7 +4,7 @@ Step 3's migration creating this table."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -46,7 +46,7 @@ def insert_evidence(
                 "status": ExtractionStatus.PENDING.value,
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def set_intake_metadata(

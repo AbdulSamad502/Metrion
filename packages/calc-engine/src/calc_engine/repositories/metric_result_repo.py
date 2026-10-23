@@ -43,6 +43,7 @@ _GET_SQL = text(
            unavailable_reason, computed_at
     FROM metric_result
     WHERE id = :id
+      AND (CAST(:include_trial AS boolean) OR is_trial = false)
     """
 )
 
@@ -136,6 +137,7 @@ _LIST_BY_METRIC_CODE_SQL = text(
            unavailable_reason, computed_at
     FROM metric_result
     WHERE metric_code = :metric_code
+      AND (CAST(:include_trial AS boolean) OR is_trial = false)
       AND (CAST(:period_start AS text) IS NULL OR period >= :period_start)
       AND (CAST(:period_end AS text) IS NULL OR period <= :period_end)
     ORDER BY period ASC
@@ -149,6 +151,7 @@ def list_by_metric_code(
     metric_code: str,
     period_start: str | None = None,
     period_end: str | None = None,
+    include_trial: bool = False,
 ) -> list[dict[str, object]]:
     """Fetches every `metric_result` row for `tenant_id` whose `metric_code` matches, tenant-
     scoped via `tenant_scope()` exactly like `get()` — the one genuinely missing read path CP
@@ -181,16 +184,20 @@ def list_by_metric_code(
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(
             _LIST_BY_METRIC_CODE_SQL,
-            {"metric_code": metric_code, "period_start": period_start, "period_end": period_end},
+            {"metric_code": metric_code, "period_start": period_start, "period_end": period_end, "include_trial": include_trial},
         ).fetchall()
         return [dict(row._mapping) for row in rows]
 
 
-def get(tenant_id: UUID, result_id: UUID) -> dict[str, object] | None:
+def get(tenant_id: UUID, result_id: UUID, *, include_trial: bool = False) -> dict[str, object] | None:
     """Fetches one metric_result by its engine_result_ref, scoped to tenant_id. Returns None
     both when the row doesn't exist and when it belongs to another tenant — RLS makes those
     two cases indistinguishable by design (§9.1), which is correct: a cross-tenant existence
-    leak (404 vs "belongs to someone else") is itself an isolation violation."""
+    leak (404 vs "belongs to someone else") is itself an isolation violation.
+
+    **Trial results (engine spec §9.2, F2):** a result written by the G7 validation run (`is_trial = true`)
+    is invisible here unless the caller passes `include_trial=True` (an internal validation context only).
+    The same default applies to `list_by_metric_code`."""
     with tenant_scope(tenant_id) as conn:
-        row = conn.execute(_GET_SQL, {"id": str(result_id)}).first()
+        row = conn.execute(_GET_SQL, {"id": str(result_id), "include_trial": include_trial}).first()
         return dict(row._mapping) if row is not None else None

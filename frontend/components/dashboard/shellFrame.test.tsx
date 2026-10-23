@@ -162,7 +162,7 @@ describe("orientation: where am I, and where can I go", () => {
     const nav = screen.getByLabelText("Sections");
     for (const heading of ["Start", "Business", "System"]) expect(within(nav).getByText(heading)).toBeInTheDocument();
     const labels = within(nav).getAllByRole("link").map((l) => l.textContent?.trim());
-    expect(labels).toEqual(["Overview", "CEO Hub", "Action Center", "Products", "Competitors", "Profit & Finance", "Listings & Marketing", "Agents", "Settings"]);
+    expect(labels).toEqual(["Overview", "CEO Hub", "Action Center", "Products", "Competitors", "Profit & Finance", "Expense Tracker", "Profit Calculator", "Listings & Marketing", "Agents", "Settings"]);
     const current = within(nav).getAllByRole("link").filter((l) => l.getAttribute("aria-current") === "page");
     expect(current).toHaveLength(1);
     expect(current[0]).toHaveTextContent("Profit & Finance");

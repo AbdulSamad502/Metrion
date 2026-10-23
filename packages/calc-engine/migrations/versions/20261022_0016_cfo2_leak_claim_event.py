@@ -4,7 +4,7 @@ leak_claim_event   append-only: one row per state the SELLER reports for a discr
                    event; before any event it is the finding's own status. SELECT and INSERT only for the application role.
 
 Revision ID: 20261022_0016
-Revises: 20261022_0015
+Revises: 20261022_0015c
 Create Date: 2026-10-22
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20261022_0016"
-down_revision = "20261022_0015"
+down_revision = "20261022_0015c"
 branch_labels = None
 depends_on = None
 

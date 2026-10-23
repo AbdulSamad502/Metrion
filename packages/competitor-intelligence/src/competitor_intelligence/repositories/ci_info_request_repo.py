@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -57,7 +57,7 @@ def create(
                 "expires_at": now + expires_in,
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def get(tenant_id: UUID, request_id: UUID) -> dict[str, Any] | None:

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -53,7 +53,7 @@ def record(
                 "occurred_at": occurred_at or datetime.now(timezone.utc),
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def list_recent(tenant_id: UUID, *, limit: int = 50, object_type: str | None = None, object_id: UUID | None = None) -> list[dict[str, Any]]:

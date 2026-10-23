@@ -157,6 +157,8 @@ Resolution order mirrors `discount_bearer_config`/`reconciliation_tolerance_conf
 
 A fifth series is out of scope for V1 (B4) — adding one is a spec amendment, not an implementation-time decision.
 
+**Q27 caveat, required before release of the ledger feed** (approved 2026-10-15, `docs/decisions/phase1-decisions.md`; engine `deterministic-engine.md` §5.8.1; `expense-tracker.md` §6.13 rule 9, AC13, B.11). The margin series (`MARGIN_PCT`) is `ContributionMargin%`, which **excludes unallocated advertising and storage spend**; any margin alert or loss-making-SKU alert built on it must say so. A seller-facing release note is required when the contribution-profit definition changes. This paragraph changes no detector, threshold or behaviour.
+
 ### 6.2 Minimum series length — the resolution of Q7
 
 Each method's floor is grounded in ordinary statistical practice for the specific quantity that method estimates, not chosen arbitrarily:

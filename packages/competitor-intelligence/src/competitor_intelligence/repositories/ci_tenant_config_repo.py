@@ -4,7 +4,9 @@ seeded row this package doesn't own the decision to create."""
 
 from __future__ import annotations
 
+from datetime import time
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
@@ -41,7 +43,7 @@ def get_price_threshold_pct(tenant_id: UUID) -> Decimal:
         return row[0] if row else DEFAULT_PRICE_THRESHOLD_PCT
 
 
-def get_config(tenant_id: UUID) -> dict[str, object]:
+def get_config(tenant_id: UUID) -> dict[str, Any]:
     """Every `ci_tenant_config` column, defaulted per-field when no row exists yet —
     used by the alert-override resolution path and the CEO Hub's settings surface so
     neither has to know the no-row-yet case individually."""
@@ -144,7 +146,7 @@ def get_watchlist_limit(tenant_id: UUID) -> int | None:
     return None if row is None else row[0]
 
 
-def get_alert_settings(tenant_id: UUID) -> dict[str, object]:
+def get_alert_settings(tenant_id: UUID) -> dict[str, Any]:
     """Quiet hours (all three unset = none) and the dedup window (§6.26). A tenant with no row gets
     no quiet hours and the default window — never an invented window."""
     with tenant_scope(tenant_id) as conn:
@@ -164,8 +166,8 @@ def set_alert_settings(
     tenant_id: UUID,
     *,
     updated_by: UUID,
-    quiet_start=None,
-    quiet_end=None,
+    quiet_start: time | None = None,
+    quiet_end: time | None = None,
     quiet_tz: str | None = None,
     clear_quiet: bool = False,
     price_threshold_pct: Decimal | None = None,

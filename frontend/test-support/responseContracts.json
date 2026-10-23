@@ -535,6 +535,8 @@
   "dataRequestId": null
  },
  "POST /api/v1/cfo/pnl": {
+  "advertisingCostsPaise": null,
+  "advertisingEntered": null,
   "contributionProfit": {
    "asOfDate": null,
    "calculationBasis": null,
@@ -592,6 +594,608 @@
    "valueFraction": null,
    "valuePaise": null
   }
+ },
+ "POST /api/v1/cfo/pnl-scenario": {
+  "assumptions": [
+   {
+    "code": null,
+    "label": null
+   }
+  ],
+  "breakdown~": {
+   "chartUnavailableReason": null,
+   "lines": [
+    {
+     "amount": null,
+     "group": null,
+     "id": null,
+     "label": null,
+     "shareBps": null
+    }
+   ],
+   "profitShareBps": null,
+   "segments~": [
+    {
+     "amount": null,
+     "endBps": null,
+     "group": null,
+     "id": null,
+     "label": null,
+     "shareBps": null,
+     "startBps": null
+    }
+   ],
+   "topCosts": [
+    {
+     "amount": null,
+     "group": null,
+     "id": null,
+     "label": null,
+     "shareBps": null
+    }
+   ]
+  },
+  "estimateRef": null,
+  "formulaVersion": null,
+  "isExample": null,
+  "issues": [
+   {
+    "code": null,
+    "field": null,
+    "message": null,
+    "severity": null
+   }
+  ],
+  "kind": null,
+  "metrics~": {
+   "acosBps": null,
+   "breakEvenRoasBps": null,
+   "contributionMarginBps": null,
+   "effectiveFeeBps": null,
+   "gstRecoveredMonthly": null,
+   "gstRecoveredPerKept": null,
+   "maxCac": null,
+   "operatingMarginBps": null,
+   "roasBps": null,
+   "tacosBps": null
+  },
+  "missingCosts": null,
+  "monthly~": {
+   "contribution": null,
+   "lines": [
+    {
+     "amount": null,
+     "group": null,
+     "id": null,
+     "label": null
+    }
+   ],
+   "operatingExpenses": null,
+   "operatingProfit": null,
+   "revenue": null
+  },
+  "noKeptOrders": null,
+  "orders~": {
+   "kept": {
+    "den": null,
+    "exact": null,
+    "num": null,
+    "text": null
+   },
+   "placed": {
+    "den": null,
+    "exact": null,
+    "num": null,
+    "text": null
+   },
+   "returned": {
+    "den": null,
+    "exact": null,
+    "num": null,
+    "text": null
+   },
+   "rto": {
+    "den": null,
+    "exact": null,
+    "num": null,
+    "text": null
+   }
+  },
+  "perKept~": {
+   "contribution": null,
+   "lines": [
+    {
+     "amount": null,
+     "group": null,
+     "id": null,
+     "label": null
+    }
+   ],
+   "operatingExpenses": null,
+   "operatingProfit": null,
+   "revenue": null
+  },
+  "perPlaced~": {
+   "contribution": null,
+   "lines": [
+    {
+     "amount": null,
+     "group": null,
+     "id": null,
+     "label": null
+    }
+   ],
+   "operatingExpenses": null,
+   "operatingProfit": null,
+   "revenue": null
+  },
+  "persisted": null,
+  "scopeNote": null,
+  "solutions": [
+   {
+    "excludesMissingCosts": null,
+    "outcome": null,
+    "price": null,
+    "ranges": [
+     {
+      "from": null,
+      "to": null
+     }
+    ],
+    "reason": null,
+    "target": {
+     "basis": null,
+     "bps": null,
+     "kind": null
+    }
+   }
+  ],
+  "status": null,
+  "verification": null
+ },
+ "POST /api/v1/cfo/pnl-scenario-compare": {
+  "base": {
+   "assumptions": [
+    {
+     "code": null,
+     "label": null
+    }
+   ],
+   "breakdown~": {
+    "chartUnavailableReason": null,
+    "lines": [
+     {
+      "amount": null,
+      "group": null,
+      "id": null,
+      "label": null,
+      "shareBps": null
+     }
+    ],
+    "profitShareBps": null,
+    "segments~": [
+     {
+      "amount": null,
+      "endBps": null,
+      "group": null,
+      "id": null,
+      "label": null,
+      "shareBps": null,
+      "startBps": null
+     }
+    ],
+    "topCosts": [
+     {
+      "amount": null,
+      "group": null,
+      "id": null,
+      "label": null,
+      "shareBps": null
+     }
+    ]
+   },
+   "estimateRef": null,
+   "formulaVersion": null,
+   "isExample": null,
+   "issues": [
+    {
+     "code": null,
+     "field": null,
+     "message": null,
+     "severity": null
+    }
+   ],
+   "kind": null,
+   "metrics~": {
+    "acosBps": null,
+    "breakEvenRoasBps": null,
+    "contributionMarginBps": null,
+    "effectiveFeeBps": null,
+    "gstRecoveredMonthly": null,
+    "gstRecoveredPerKept": null,
+    "maxCac": null,
+    "operatingMarginBps": null,
+    "roasBps": null,
+    "tacosBps": null
+   },
+   "missingCosts": null,
+   "monthly~": {
+    "contribution": null,
+    "lines": [
+     {
+      "amount": null,
+      "group": null,
+      "id": null,
+      "label": null
+     }
+    ],
+    "operatingExpenses": null,
+    "operatingProfit": null,
+    "revenue": null
+   },
+   "noKeptOrders": null,
+   "orders~": {
+    "kept": {
+     "den": null,
+     "exact": null,
+     "num": null,
+     "text": null
+    },
+    "placed": {
+     "den": null,
+     "exact": null,
+     "num": null,
+     "text": null
+    },
+    "returned": {
+     "den": null,
+     "exact": null,
+     "num": null,
+     "text": null
+    },
+    "rto": {
+     "den": null,
+     "exact": null,
+     "num": null,
+     "text": null
+    }
+   },
+   "perKept~": {
+    "contribution": null,
+    "lines": [
+     {
+      "amount": null,
+      "group": null,
+      "id": null,
+      "label": null
+     }
+    ],
+    "operatingExpenses": null,
+    "operatingProfit": null,
+    "revenue": null
+   },
+   "perPlaced~": {
+    "contribution": null,
+    "lines": [
+     {
+      "amount": null,
+      "group": null,
+      "id": null,
+      "label": null
+     }
+    ],
+    "operatingExpenses": null,
+    "operatingProfit": null,
+    "revenue": null
+   },
+   "persisted": null,
+   "scopeNote": null,
+   "solutions": [
+    {
+     "excludesMissingCosts": null,
+     "outcome": null,
+     "price": null,
+     "ranges": [
+      {
+       "from": null,
+       "to": null
+      }
+     ],
+     "reason": null,
+     "target": {
+      "basis": null,
+      "bps": null,
+      "kind": null
+     }
+    }
+   ],
+   "status": null,
+   "verification": null
+  },
+  "comparison": {
+   "marginChangeBps": null,
+   "monthlyChange": null,
+   "perKeptChange": null,
+   "perPlacedChange": null
+  },
+  "kind": null,
+  "persisted": null,
+  "whatIf": {
+   "assumptions": [
+    {
+     "code": null,
+     "label": null
+    }
+   ],
+   "breakdown~": {
+    "chartUnavailableReason": null,
+    "lines": [
+     {
+      "amount": null,
+      "group": null,
+      "id": null,
+      "label": null,
+      "shareBps": null
+     }
+    ],
+    "profitShareBps": null,
+    "segments~": [
+     {
+      "amount": null,
+      "endBps": null,
+      "group": null,
+      "id": null,
+      "label": null,
+      "shareBps": null,
+      "startBps": null
+     }
+    ],
+    "topCosts": [
+     {
+      "amount": null,
+      "group": null,
+      "id": null,
+      "label": null,
+      "shareBps": null
+     }
+    ]
+   },
+   "estimateRef": null,
+   "formulaVersion": null,
+   "isExample": null,
+   "issues": [
+    {
+     "code": null,
+     "field": null,
+     "message": null,
+     "severity": null
+    }
+   ],
+   "kind": null,
+   "metrics~": {
+    "acosBps": null,
+    "breakEvenRoasBps": null,
+    "contributionMarginBps": null,
+    "effectiveFeeBps": null,
+    "gstRecoveredMonthly": null,
+    "gstRecoveredPerKept": null,
+    "maxCac": null,
+    "operatingMarginBps": null,
+    "roasBps": null,
+    "tacosBps": null
+   },
+   "missingCosts": null,
+   "monthly~": {
+    "contribution": null,
+    "lines": [
+     {
+      "amount": null,
+      "group": null,
+      "id": null,
+      "label": null
+     }
+    ],
+    "operatingExpenses": null,
+    "operatingProfit": null,
+    "revenue": null
+   },
+   "noKeptOrders": null,
+   "orders~": {
+    "kept": {
+     "den": null,
+     "exact": null,
+     "num": null,
+     "text": null
+    },
+    "placed": {
+     "den": null,
+     "exact": null,
+     "num": null,
+     "text": null
+    },
+    "returned": {
+     "den": null,
+     "exact": null,
+     "num": null,
+     "text": null
+    },
+    "rto": {
+     "den": null,
+     "exact": null,
+     "num": null,
+     "text": null
+    }
+   },
+   "perKept~": {
+    "contribution": null,
+    "lines": [
+     {
+      "amount": null,
+      "group": null,
+      "id": null,
+      "label": null
+     }
+    ],
+    "operatingExpenses": null,
+    "operatingProfit": null,
+    "revenue": null
+   },
+   "perPlaced~": {
+    "contribution": null,
+    "lines": [
+     {
+      "amount": null,
+      "group": null,
+      "id": null,
+      "label": null
+     }
+    ],
+    "operatingExpenses": null,
+    "operatingProfit": null,
+    "revenue": null
+   },
+   "persisted": null,
+   "scopeNote": null,
+   "solutions": [
+    {
+     "excludesMissingCosts": null,
+     "outcome": null,
+     "price": null,
+     "ranges": [
+      {
+       "from": null,
+       "to": null
+      }
+     ],
+     "reason": null,
+     "target": {
+      "basis": null,
+      "bps": null,
+      "kind": null
+     }
+    }
+   ],
+   "status": null,
+   "verification": null
+  }
+ },
+ "GET /api/v1/cfo/expense-ledger/categories": {
+  "categories": [
+   {
+    "costClass": null,
+    "id": null,
+    "label": null,
+    "treatment": null
+   }
+  ],
+  "channelTags": null,
+  "costClasses": null,
+  "limits": {
+   "amountMaxPaise": null,
+   "descriptionMax": null,
+   "pageSizeDefault": null,
+   "pageSizeMax": null,
+   "reasonMax": null,
+   "vendorMax": null
+  },
+  "paymentStatuses": null,
+  "reviewStates": null,
+  "treatments": null
+ },
+ "GET /api/v1/cfo/expense-ledger": {
+  "limit": null,
+  "offset": null,
+  "records": [
+   {
+    "amountPaise": null,
+    "category": null,
+    "categoryLabel": null,
+    "channelScope": null,
+    "correctsExpenseId": null,
+    "costClass": null,
+    "createdAt": null,
+    "description": null,
+    "effectiveDate": null,
+    "history?": [
+     {
+      "createdAt": null,
+      "kind": null,
+      "paidAmountPaise": null,
+      "paymentStatus": null,
+      "reason": null,
+      "reviewState": null,
+      "seq": null
+     }
+    ],
+    "id": null,
+    "identifier": null,
+    "origin": null,
+    "paidAmountPaise": null,
+    "paymentStatus": null,
+    "recurring": null,
+    "refundOfExpenseId": null,
+    "reviewReason": null,
+    "reviewState": null,
+    "sku": null,
+    "sourceReference": null,
+    "sourceValidated": null,
+    "treatment": null,
+    "vendor": null
+   }
+  ],
+  "total": null
+ },
+ "POST /api/v1/cfo/expense-ledger/summary": {
+  "asOfDate": null,
+  "byCategory": [
+   {
+    "asOfDate": null,
+    "category": null,
+    "engineResultRef": null,
+    "label": null,
+    "paise": null
+   }
+  ],
+  "byCostClass": [
+   {
+    "asOfDate": null,
+    "costClass": null,
+    "engineResultRef": null,
+    "paise": null
+   }
+  ],
+  "expenseTotal": {
+   "asOfDate": null,
+   "engineResultRef": null,
+   "paise": null
+  },
+  "gaps": null,
+  "includingUnresolved": {
+   "asOfDate": null,
+   "engineResultRef": null,
+   "paise": null
+  },
+  "notEntered": null,
+  "periodEnd": null,
+  "periodStart": null,
+  "recurringTotal": {
+   "asOfDate": null,
+   "engineResultRef": null,
+   "paise": null
+  },
+  "reviewQueue": {
+   "amountPaise": null,
+   "asOfDate": null,
+   "engineResultRef": null,
+   "items": [
+    {
+     "amountPaise": null,
+     "expenseId": null,
+     "reason": null
+    }
+   ]
+  },
+  "watermark": null
  },
  "GET /api/v1/ceo/findings": {
   "hidden": [
@@ -793,21 +1397,7 @@
   },
   "messages": [
    {
-    "choices~?": {
-     "kind": null,
-     "options": [
-      {
-       "form?": null,
-       "key": null,
-       "kind": null,
-       "label": null,
-       "reason": null,
-       "skip?": null
-      }
-     ],
-     "slot": null,
-     "version": null
-    },
+    "choices?": null,
     "content": null,
     "created_at": null,
     "failed?": null,

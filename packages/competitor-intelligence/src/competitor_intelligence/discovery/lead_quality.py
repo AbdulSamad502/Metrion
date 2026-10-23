@@ -74,7 +74,7 @@ def brand_of(title: str | None) -> str | None:
 
 def is_known_brand(title: str | None) -> bool:
     b = brand_of(title)
-    return bool(b) and b.split()[0].casefold() in KNOWN_BRANDS
+    return b is not None and b.split()[0].casefold() in KNOWN_BRANDS
 
 
 def lead_label(title: str | None, max_len: int = 70) -> str:

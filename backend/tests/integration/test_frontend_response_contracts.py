@@ -141,3 +141,22 @@ def test_a_conversation_turn_and_its_restoration_as_the_hub_reads_them(api):
     seen = check("GET /api/v1/ceo/investigations/{investigation_id}", detail)
     assert any(s.endswith(".messages") for s in seen) and any(s.endswith(".findings") for s in seen)  # the messages and findings items were really checked
     check("GET /api/v1/ceo/state/health", client.get("/api/v1/ceo/state/health", headers=ha).json())
+
+
+def test_the_expense_ledger_as_the_dashboard_reads_it(api):
+    """The Expense Tracker dashboard (kickoff S3c): the categories, a list with a record, and the engine summary, each checked against what the screen reads."""
+    client, ha, _, a, _ = api
+    base = "/api/v1/cfo/expense-ledger"
+    for body in (
+        {"effective_date": "2026-09-10", "category": "operating_overhead", "amount_paise": 125000, "vendor": "Acme Realty"},
+        {"effective_date": "2026-09-12", "category": "advertising", "amount_paise": "50000", "state": "pending_review"},
+    ):
+        assert client.post(base, json=body, headers=ha).status_code == 201
+    check("GET /api/v1/cfo/expense-ledger/categories", client.get(f"{base}/categories", headers=ha).json())
+    listed = client.get(base, headers=ha).json()
+    assert len(listed["records"]) == 2
+    assert "GET /api/v1/cfo/expense-ledger.records" in check("GET /api/v1/cfo/expense-ledger", listed)
+    resp = client.post(f"{base}/summary", json={"period_start": "2026-09-01", "period_end": "2026-09-30"}, headers=ha)
+    assert resp.status_code == 200, resp.text
+    seen = check("POST /api/v1/cfo/expense-ledger/summary", resp.json())
+    assert "POST /api/v1/cfo/expense-ledger/summary.byCostClass" in seen

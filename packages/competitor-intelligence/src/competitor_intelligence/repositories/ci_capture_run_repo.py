@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import contextvars
 import functools
+from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import ParamSpec, TypeVar
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
@@ -13,6 +15,9 @@ from competitor_intelligence import ownership
 from competitor_intelligence.repositories.tenant_context import tenant_scope
 from competitor_intelligence.types import RunStatus, Trigger
 
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 _OPENED: contextvars.ContextVar[list[tuple[UUID, UUID]] | None] = contextvars.ContextVar("ci_capture_runs_opened", default=None)
 
@@ -71,11 +76,11 @@ def finish_run(tenant_id: UUID, run_id: UUID, *, status: RunStatus, finished_at:
     ownership.release(run_id)  # after the terminal write, never before
 
 
-def settles_open_runs(fn):  # noqa: ANN001, ANN201 — a decorator over differently typed callables
+def settles_open_runs(fn: Callable[P, R]) -> Callable[P, R]:
     """If the wrapped call raises, every `ci_capture_run` it left RUNNING is marked FAILED (the process is alive, so nothing else would ever settle it)."""
 
     @functools.wraps(fn)
-    def wrapper(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         opened: list[tuple[UUID, UUID]] = []
         token = _OPENED.set(opened)
         try:

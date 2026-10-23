@@ -886,3 +886,9 @@ def cfo_planner_settings() -> dict[str, object]:
         "reverse_logistics_codes": _code_set_env("CFO_PLANNER_REVERSE_LOGISTICS_CODES", frozenset({"RETURN_SHIPPING_FEE"})),
         "non_refunded_fee_codes": _code_set_env("CFO_PLANNER_NON_REFUNDED_FEE_CODES", frozenset()),
     }
+
+def expense_ledger_feeds_pnl() -> bool:
+    """OPTIONAL `EXPENSE_LEDGER_FEEDS_PNL=true`: the expense ledger's engine feed (confirmed, non-voided rows) supplies the advertising and storage terms of the period P&L
+    and the unallocated lines shown beside contribution profit (expense-tracker.md F6/F7). DEFAULT OFF: any other value, or unset, leaves every P&L result and response exactly as
+    it was. Not cached, so a change takes effect on the next request."""
+    return (os.environ.get("EXPENSE_LEDGER_FEEDS_PNL") or "").strip().lower() == "true"

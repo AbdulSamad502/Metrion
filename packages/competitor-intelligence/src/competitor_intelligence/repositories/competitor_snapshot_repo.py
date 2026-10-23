@@ -10,7 +10,7 @@ tests for this module only pass once that migration is applied.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -67,7 +67,7 @@ def insert_snapshot(
                 "confidence": draft.confidence.value,
             },
         ).one()
-        return row[0]
+        return cast(UUID, row[0])
 
 
 def get_by_id(tenant_id: UUID, snapshot_id: UUID) -> dict[str, Any] | None:
