@@ -36,6 +36,9 @@ _MONTH_DAY = re.compile(r"^(?:on\s+)?([a-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,
 _SLASH_DATE = re.compile(r"^(?:on\s+)?(\d{1,2})[/-](\d{1,2})[/-](\d{4})$")
 _LAST_N_DAYS = re.compile(r"^(?:the\s+)?(?:last|past|previous)\s+(\d{1,3})\s+days?$")
 _RANGE_OF_DAYS = re.compile(r"^(?:from\s+)?(.+?)\s+(?:to|till|until|through|-|–)\s+(.+)$")
+_YEAR = re.compile(r"\b(\d{4})\b")
+_YEAR_ONLY = re.compile(r"^(?:in\s+|for\s+|during\s+|the\s+year\s+)?(\d{4})$")
+_MONTH_SPAN = re.compile(r"^(?:from\s+|between\s+)?([a-z]+)\.?(?:\s+(\d{4}))?\s+(?:to|till|until|through|and|&|-|–)\s+([a-z]+)\.?(?:\s+(\d{4}))?$")
 
 
 def single_day(raw: str, *, today: date) -> date | None:
@@ -111,7 +114,11 @@ def resolve_period(raw: str | None, *, today: date) -> ResolvedPeriod:
         return ResolvedPeriod(start, today, today, _echo(raw or "", start, today))
     m = _RANGE_OF_DAYS.match(text)
     if m and not _ISO_RANGE.match(text):
-        a, b = single_day(m.group(1), today=today), single_day(m.group(2), today=today)
+        first, last = m.group(1), m.group(2)
+        year = _YEAR.search(last)
+        if year and not _YEAR.search(first):
+            first = f"{first} {year.group(1)}"  # "1 September to 31 October 2025": the year written once belongs to both ends
+        a, b = single_day(first, today=today), single_day(last, today=today)
         if a is not None and b is not None:
             if b < a:
                 raise PeriodUnresolvable("the range ends before it starts")
@@ -153,4 +160,24 @@ def resolve_period(raw: str | None, *, today: date) -> ResolvedPeriod:
         end = min(end, today)
         return ResolvedPeriod(start, end, today, _echo(raw or "", start, end))
 
+    m = _MONTH_SPAN.match(text)
+    if m and m.group(1) in _MONTHS and m.group(3) in _MONTHS:  # "August and September 2025", "September to October 2025": the whole span, first day of the first month to the last day of the last
+        y2 = int(m.group(4) or m.group(2) or (today.year if _MONTHS[m.group(3)] <= today.month else today.year - 1))
+        y1 = int(m.group(2) or (y2 if _MONTHS[m.group(1)] <= _MONTHS[m.group(3)] else y2 - 1))
+        start, end = _month_range(y1, _MONTHS[m.group(1)])[0], _month_range(y2, _MONTHS[m.group(3)])[1]
+        if end < start:
+            raise PeriodUnresolvable("the range ends before it starts")
+        if start > today:
+            raise PeriodUnresolvable("that period has not started yet")
+        return ResolvedPeriod(start, min(end, today), today, _echo(raw or "", start, min(end, today)))
+    m = _YEAR_ONLY.match(text)
+    if m and 2000 <= int(m.group(1)) <= today.year:
+        start, end = date(int(m.group(1)), 1, 1), min(date(int(m.group(1)), 12, 31), today)
+        return ResolvedPeriod(start, end, today, _echo(raw or "", start, end))
+    if text in ("this year", "the current year", "current year", "year to date", "so far this year"):
+        start = date(today.year, 1, 1)
+        return ResolvedPeriod(start, today, today, _echo(raw or "", start, today))
+    if text in ("last year", "previous year", "the last year", "the previous year"):
+        start, end = date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)
+        return ResolvedPeriod(start, end, today, _echo(raw or "", start, end))
     raise PeriodUnresolvable("period not recognised")

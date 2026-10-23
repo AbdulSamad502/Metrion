@@ -329,3 +329,23 @@ def test_the_chat_never_accepts_a_record_id_typed_into_the_message(chat):
     r = say(c, inv, f"remove expense {uuid.uuid4()}")
     assert r["status"] == "CLARIFIED"  # a random id picks nothing: the seller is shown their own entries
     assert any(str(mine) == o["value"] for o in r["choices"]["options"] if o.get("value"))
+
+
+# ================================================================================================ one open question never swallows the next request (seen in real use)
+def test_a_new_short_request_is_not_taken_as_the_answer_to_an_open_period_question(chat):
+    c = chat
+    inv = new_investigation(c)
+    asked = say(c, inv, "show my expenses")
+    assert asked["status"] == "CLARIFIED" and "Which period" in asked["answer"]
+    r = say(c, inv, "Add ₹5,000 as office rent for yesterday")  # short, no question mark: it used to be read as the "period"
+    assert "Which period" not in r["answer"] and events(c) == 0  # nothing saved by asking
+    assert r["status"] in ("CLARIFIED", "PLANNED") and ("paid to" in r["answer"].lower() or r["status"] == "PLANNED"), r  # the add conversation, not the period question again
+
+
+def test_a_real_answer_to_the_period_question_still_runs_the_read(chat):
+    c = chat
+    seed(c.env.tenant, date(2026, 9, 6), "software", 100_000)
+    inv = new_investigation(c)
+    say(c, inv, "show my expenses")
+    r = say(c, inv, "September 2026")
+    assert r["status"] == "DELIVERED" and "₹1,000.00" in r["answer"]

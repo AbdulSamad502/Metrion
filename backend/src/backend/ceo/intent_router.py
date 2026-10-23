@@ -105,6 +105,10 @@ _EXPENSE_RULES: tuple[Rule, ...] = (
     Rule("cfo.expense_paid", "CFO", _rx(_NOT_HOWTO + r"(?=.*\b(?:mark|set|update|change|make)\b)(?=.*\b" + _EXP_NOUN + r"\b)(?=.*\b(?:as |to )?(?:paid|unpaid|partially paid|partly paid)\b)")),
     Rule("cfo.expense_correct", "CFO", _rx(_NOT_HOWTO + r"(?=.*\b(?:edit|change|correct|update|fix|modify|amend)\b)(?=.*\b" + _EXP_NOUN + r"\b)")),
     Rule("cfo.expense_add", "CFO", _rx(_NOT_HOWTO + r"(?=.*\b(?:add|record|log|enter|save|put|book|note down|insert)\b)(?=.*\b" + _EXP_NOUN + r"\b)")),
+    Rule("cfo.expense_add", "CFO", _rx(
+        _NOT_HOWTO + r"(?!.*(?:\?|\bshould i\b|\bif i\b|\bwhat if\b|\bcan i\b|\bwould i\b|\bplanning to\b|\bwill (?:pay|spend)\b|\bsold\b|\breceived\b|\brefund))"
+        r"(?=.*\b(?:add|record|log|enter|book|note down|insert)\b)(?=.*(?:₹|\brs\.?\s*\d|\binr\b|\d\s*(?:rupees?|rs\b|inr\b)))"
+        r"(?=.*\b(?:as|for|towards|under)\b[^.?!]*\b(?:rent|salary|salaries|wages|electricity|utility|utilities|internet|software|subscription|packaging|packing|tape|courier|freight|warehouse|storage|office|stationery|insurance|maintenance|transport|fuel|fees?|charges|interest|emi|tax(?:es)?)\b)")),
     Rule("cfo.expense_summary", "CFO", _rx(
         r"^(?!.*\b(?:ad|ads|advertising) spend\b)(?!.*\b(?:add|record|log|enter|remove|delete|void|correct|edit|mark)\b)(?:"
         r".*\bhow much\b[^.?!]*\b(?:spen[dt]|spending|expenses?)\b|.*\b(?:show|list|view|see|give|tell|what(?:'s| is| are| was| were)|display)\b[^.?!]*\b(?:my |our |the |all )?expenses?\b"
@@ -261,6 +265,11 @@ def _slots(rule: Rule, text: str) -> dict[str, str]:
         if product:
             out["product"] = product.group(1).strip()
     return out
+
+
+def matches_a_rule(text: str) -> bool:
+    """True when the message is plainly a request of its own (one of the plain rules reads it), so it is never taken as the answer to a question that was open."""
+    return any(r.pattern.search(text) for r in RULES)
 
 
 def route(text: str, cat: Catalog) -> Decision | None:

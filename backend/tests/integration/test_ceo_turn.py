@@ -241,9 +241,11 @@ def test_a_write_class_request_is_declined_with_no_side_effect(two_tenants, app_
     ctx = ctx_for(a, user_id=app_user)
     before = row_counts(a, "manual_adjustment", "metered_event")
     res = orchestrator.run_turn(ctx, rt, start(ctx, rt), msg)
-    assert res.route == "CLARIFY" and res.status == "CLARIFIED"  # not in any catalog -> nothing executed
+    assert res.route == "CLARIFY" and res.status == "CLARIFIED"  # nothing executed: the model's obedient answer is ignored
     assert children(a, res) == [] and row_counts(a, "manual_adjustment", "metered_event") == before
-    assert repo.get_turn(a, res.turn_id)["classifier_result"]["flags"] == ["OUT_OF_CATALOG"]
+    # Since the expense conversation (2026-10-23) a plain rule reads "record ... expense" itself, so the request starts the guided questions instead of being out of catalog. The injected
+    # model answer still changes nothing, and even the guided path saves nothing: an expense is only ever written after the seller presses Approve on an exact card.
+    assert repo.get_turn(a, res.turn_id)["classifier_result"]["flags"] == ["RULE_ROUTED"]
 
 
 def test_out_of_scope_is_explained_plainly(two_tenants, app_user):

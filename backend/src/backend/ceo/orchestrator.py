@@ -25,7 +25,7 @@ import logging
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -33,7 +33,7 @@ from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
 from backend.ceo.approval_gate import evaluate_playbook, plan_required
-from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_delegation, compound, conversational, deadlines, expense_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, profile_context, references
+from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_delegation, compound, conversational, deadlines, expense_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, periods, profile_context, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.billing import UnitDecision, unit_decision
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
@@ -192,11 +192,11 @@ FORM_TEXT = "This one needs exact prices and costs, which are entered in a form 
 BAD_FORM_TEXT = "That form could not be used, so nothing was run: "
 
 
-def _resume_plain_question(tenant: UUID, investigation_id: UUID, text: str) -> UiAction | None:
+def _resume_plain_question(tenant: UUID, investigation_id: UUID, text: str, today: date | None = None) -> UiAction | None:
     """When the CEO's last message is a plain question for one missing slot (a product, a marketplace, an amount, a period...), a SHORT reply is that slot's value and the
     task that asked resumes with it. A long message or a question is a new request and is routed normally. The slot value is still parsed by code like any other."""
-    if len(text) > 80 or len(text.split()) > 8 or text.rstrip().endswith("?"):
-        return None
+    if len(text) > 80 or len(text.split()) > 8 or text.rstrip().endswith("?") or intent_router.matches_a_rule(text):
+        return None  # a long message, a question or a request the plain rules read is a NEW request: one open question can never swallow what the seller asks next
     msgs = repo.list_messages(tenant, investigation_id)
     last = msgs[-1] if msgs else None
     if last is None or last["role"] != "CEO" or last["kind"] != "CLARIFICATION" or (last.get("choices") or {}).get("kind", "") not in ("", "PICK") or not last.get("turn_id"):  # a check-box card is answered by typing the same numbers
@@ -206,6 +206,11 @@ def _resume_plain_question(tenant: UUID, investigation_id: UUID, text: str) -> U
     pending, slot = result.get("pending"), result.get("pendingSlot")
     if not isinstance(pending, dict) or slot not in SLOT_VOCAB or pending.get("route") not in ("ACTION", "PLAYBOOK") or not pending.get("key"):
         return None
+    if slot == "period":
+        try:
+            periods.resolve_period(text.strip(), today=today or datetime.now(timezone.utc).date())
+        except periods.PeriodUnresolvable:
+            return None  # not a period at all: it is a new request, routed normally (and the period question is asked again only if that request needs one)
     return UiAction(str(pending["route"]), str(pending["key"]), {**(pending.get("slots") or {}), str(slot): text.strip()}, pending.get("refs") or {})
 
 
@@ -328,7 +333,7 @@ def _run_turn_locked(
     reply_meta: dict[str, Any] | None = None
     input_outcome: Any = None
     if clarification is None and ui_action is None and has_permission(role=ctx.role, permissions=ctx.permissions, key=INVESTIGATION_VIEW):
-        ui_action = _resume_plain_question(tenant, investigation_id, text)  # a short answer to the CEO's plain question resumes that task
+        ui_action = _resume_plain_question(tenant, investigation_id, text, runtime.clock().date())  # a short answer to the CEO's plain question resumes that task
     if clarification is None and ui_action is None and has_permission(role=ctx.role, permissions=ctx.permissions, key=INVESTIGATION_VIEW):
         # Guided input (spec 6.34): when the CEO's last message is an open input question, whatever the seller types is the ANSWER to it, parsed by code.
         tail = repo.list_messages(tenant, investigation_id)
