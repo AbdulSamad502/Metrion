@@ -231,6 +231,11 @@ def _open_workbook(path: Path, limits: StreamLimits) -> Any:
 
 
 def _sheet_rows(ws: Any) -> Iterator[list[str]]:
+    # Some exporters (the Meesho GST workbooks among them) write a sheet dimension of A1 although the sheet holds many columns; openpyxl's read-only mode then
+    # returns only column A. Forget the declared dimension and let the reader find the real extent.
+    reset = getattr(ws, "reset_dimensions", None)
+    if callable(reset):
+        reset()
     for row in ws.iter_rows(values_only=True):
         yield [_cell_to_str(v) for v in row]
 

@@ -99,6 +99,9 @@ class BaseAdapter:
     column_map: Mapping[str | tuple[str, int], ColumnBinding]
     enum_maps: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
     source_side: str = "INVOICE"  # default for sales-side adapters; meesho.payments.v1 overrides to "SETTLEMENT"
+    # Headers whose presence means the file is a DIFFERENT report type (for example the return report is the sales report plus a return-date column). A file containing
+    # one is not this adapter's file, which turns an otherwise ambiguous fit into a definite one without guessing.
+    excluded_columns: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         """Ambiguity validation at construction time, not per-row at parse time. A bare string
@@ -129,6 +132,10 @@ class BaseAdapter:
         expected = {key[0] if isinstance(key, tuple) else key for key in self.column_map}
         present = set(sample.columns)
         missing = tuple(sorted(expected - present))
+        clash = tuple(sorted(self.excluded_columns & present))
+        if clash:
+            return DetectionResult(matched=False, matched_columns=len(expected & present), expected_columns=len(expected),
+                                   missing_columns=tuple(f"(this report type must not contain {c!r})" for c in clash))
         return DetectionResult(
             matched=not missing,
             matched_columns=len(expected & present),

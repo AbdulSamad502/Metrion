@@ -144,6 +144,25 @@ def test_xlsx_streams_with_value_conversion(tmp_path: Path) -> None:
     assert r2["Item Price"] == "0.00001" and r2["Invoice Date"] == "2026-10-06 14:30:00"  # no scientific notation
 
 
+def test_xlsx_with_a_wrong_declared_dimension_still_yields_every_column(tmp_path: Path) -> None:
+    # The Meesho GST workbooks declare a sheet dimension of A1 although the sheet holds many columns; without ignoring it only column A is read.
+    rows = [["sub_order_num", "gst_rate", "total_taxable_sale_value"], ["O-1_1", "18.00", "100.5"], ["O-2_1", "5.00", "40"]]
+    src = make_xlsx(tmp_path / "ok.xlsx", sheets={"3609938": rows})
+    bad = tmp_path / "bad.xlsx"
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(bad, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename.startswith("xl/worksheets/sheet"):
+                import re
+
+                data = re.sub(rb'<dimension ref="[^"]*"\s*/>', b'<dimension ref="A1"/>', data)
+                assert b'<dimension ref="A1"/>' in data
+            zout.writestr(item, data)
+    s = open_xlsx(bad, LIM)
+    assert s.header.columns == ("sub_order_num", "gst_rate", "total_taxable_sale_value")
+    assert [r["total_taxable_sale_value"] for r in all_rows(s)] == ["100.5", "40"]
+
+
 def test_xlsx_header_offset_multi_sheet_selection_and_hidden_sheets(tmp_path: Path) -> None:
     p = make_xlsx(tmp_path / "m.xlsx", sheets={
         "Summary": [["Total", 5]],

@@ -6,9 +6,11 @@ import { FilterBar } from "@/components/cfo/v2/filters/FilterBar";
 import { SectionState } from "@/components/cfo/v2/SectionState";
 import { DataTable, FigureCell, type Column } from "@/components/cfo/v2/tables/DataTable";
 import { ExportButton } from "@/components/cfo/v2/tables/ExportButton";
+import { FigureView } from "@/components/cfo/v2/trust/FigureView";
 import {
   periodQuery,
   type BridgeResponse,
+  type CostBreakdownResponse,
   type MarketplaceRow,
   type MarketplacesResponse,
   type Period,
@@ -46,6 +48,7 @@ export function ProfitabilityTab({ period }: { period: Period }) {
   const skuQuery = `${base}&${new URLSearchParams({ page: String(page), page_size: "25", sort: sort.key, dir: sort.dir, sku: filters.sku }).toString()}`;
   const skus = useCfoData<SkusResponse>("/profitability/skus", skuQuery);
   const trend = useCfoData<TrendResponse>("/profitability/trend", base);
+  const breakdown = useCfoData<CostBreakdownResponse>("/profitability/cost-breakdown", base);
   const bridge = useCfoData<BridgeResponse>(cmp.start && cmp.end ? "/profitability/bridge" : null, `${base}&compare_start=${cmp.start}&compare_end=${cmp.end}`);
 
   return (
@@ -69,6 +72,18 @@ export function ProfitabilityTab({ period }: { period: Period }) {
                 </p>
               )}
             </>
+          )}
+        </SectionState>
+      </section>
+      <section aria-label="Cost breakdown" className="flex flex-col gap-3">
+        <h3 className="t-label">From Net Realized Revenue to Contribution Profit</h3>
+        <SectionState state={breakdown} title="the cost breakdown">
+          {(d) => (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {d.figures.map((f) => (
+                <FigureView key={f.label} figure={f} />
+              ))}
+            </div>
           )}
         </SectionState>
       </section>

@@ -95,3 +95,21 @@ export const NEXT_CLAIM_STEPS: Record<string, string[]> = {
   CLAIM_DRAFTED: ["SELLER_REPORTED_RAISED", "DISMISSED"],
   SELLER_REPORTED_RAISED: ["SELLER_REPORTED_RESOLVED", "DISMISSED"],
 };
+
+export type HealthResponse = {
+  status: "ANSWERED";
+  generatedAt: string;
+  overallBand: string | null;
+  perMetric: { label: string; band: string }[];
+  unavailableReason: string | null;
+  figures: import("./types").FigureData[];
+};
+export type ExpenseSummaryRow = { category: string; expenseClass: string; amount: CellFigure; engineResultRef: string | null };
+export type ExpenseSummaryResponse = { status: "ANSWERED"; ownerAccount: boolean; items: ExpenseSummaryRow[]; dataRequests: string[]; generatedAt: string; note: string | null };
+export type CostBreakdownResponse = { status: "ANSWERED"; figures: import("./types").FigureData[]; generatedAt: string; dataRequests: string[] };
+export type GoalResponse = {
+  status: "ANSWERED";
+  generatedAt: string;
+  current: import("./types").FigureData | null;
+  goal: { targetMarginPct: string | null; priorityCategory: string | null; note: string | null } | null;
+};

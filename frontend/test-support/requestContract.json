@@ -183,6 +183,28 @@
     "period_start"
    ]
   },
+  "GET /api/v1/cfo/expenses/owner-account": {
+   "query": [
+    "as_of_date",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
+    "period_end",
+    "period_start"
+   ]
+  },
+  "GET /api/v1/cfo/expenses/summary": {
+   "query": [
+    "as_of_date",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
+    "period_end",
+    "period_start"
+   ]
+  },
   "GET /api/v1/cfo/imports": {
    "query": [
     "limit"
@@ -201,6 +223,17 @@
     "limit"
    ],
    "requiredQuery": []
+  },
+  "GET /api/v1/cfo/intelligence/goal": {
+   "query": [
+    "as_of_date",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
+    "period_end",
+    "period_start"
+   ]
   },
   "GET /api/v1/cfo/jobs": {
    "query": [
@@ -267,6 +300,18 @@
     "period_start"
    ]
   },
+  "GET /api/v1/cfo/overview/health": {
+   "query": [
+    "as_of_date",
+    "marketplace",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
+    "period_end",
+    "period_start"
+   ]
+  },
   "GET /api/v1/cfo/payables": {
    "query": [
     "include_paid"
@@ -285,6 +330,18 @@
    "requiredQuery": [
     "compare_end",
     "compare_start",
+    "period_end",
+    "period_start"
+   ]
+  },
+  "GET /api/v1/cfo/profitability/cost-breakdown": {
+   "query": [
+    "as_of_date",
+    "marketplace",
+    "period_end",
+    "period_start"
+   ],
+   "requiredQuery": [
     "period_end",
     "period_start"
    ]

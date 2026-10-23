@@ -47,9 +47,16 @@ const overview = {
   labels: [],
 };
 
+const overviewExtras = {
+  "/cfo/overview/health": { status: "ANSWERED", generatedAt: "t", overallBand: "Watch", perMetric: [{ label: "Return rate", band: "Watch" }], unavailableReason: null, figures: [] },
+  "/leak/findings": { status: "ANSWERED", items: [], page: 1, pageSize: 3, total: 0, pageCount: 1, generatedAt: "t", note: "n" },
+  "/expenses/owner-account": { status: "ANSWERED", ownerAccount: true, items: [{ category: "Owner Draw", expenseClass: "OWNER_DRAWING", amount: { display: "₹900.00", status: "COMPLETE" }, engineResultRef: "e" }], dataRequests: [], generatedAt: "t", note: "Owner drawings are not a business expense and are in no profit figure." },
+  "/expenses/summary": { status: "ANSWERED", ownerAccount: false, items: [{ category: "Software", expenseClass: "OVERHEAD", amount: { display: "₹500.00", status: "COMPLETE" }, engineResultRef: "e" }], dataRequests: [], generatedAt: "t", note: null },
+};
+
 describe("Overview", () => {
   it("draws each figure through FigureView, explains what is missing and what was left out of a total", async () => {
-    serve({ "/cfo/overview": overview });
+    serve({ ...overviewExtras, "/cfo/overview": overview });
     const { container } = render(<OverviewTab period={PERIOD} />);
     expect(await screen.findByText("₹1,23,456.00")).toBeInTheDocument();
     expect(screen.getByLabelText("Operating Profit: not available")).toHaveTextContent("—");
@@ -60,8 +67,32 @@ describe("Overview", () => {
     noBanned(container);
   });
 
+  it("shows the health band, the first discrepancies, business expenses and - only to someone who may change data - the owner account", async () => {
+    serve({ ...overviewExtras, "/cfo/overview": overview }, true);
+    render(<OverviewTab period={PERIOD} />);
+    expect(await screen.findByText("Watch", { selector: "strong" })).toBeInTheDocument();
+    expect(await screen.findByText("Software")).toBeInTheDocument();
+    expect(screen.getByText("₹500.00")).toBeInTheDocument();
+    expect(await screen.findByText("Owner Draw")).toBeInTheDocument();
+    expect(screen.getByText(/in no profit figure/)).toBeInTheDocument();
+  });
+
+  it("a read-only member never sees the owner account (and the page does not even ask for it)", async () => {
+    const calls = serve({ ...overviewExtras, "/cfo/overview": overview }, false);
+    render(<OverviewTab period={PERIOD} />);
+    await screen.findByText("Software");
+    expect(screen.queryByText("Owner account")).toBeNull();
+    expect(calls.some((c) => c.url.includes("/expenses/owner-account"))).toBe(false);
+  });
+
+  it("no health band says why in words, never a made-up band", async () => {
+    serve({ ...overviewExtras, "/cfo/overview/health": { status: "ANSWERED", generatedAt: "t", overallBand: null, perMetric: [], unavailableReason: "no cost per unit yet", figures: [] }, "/cfo/overview": overview });
+    render(<OverviewTab period={PERIOD} />);
+    expect(await screen.findByText(/No health band for this period: no cost per unit yet/)).toBeInTheDocument();
+  });
+
   it("asks for the chosen period and marketplace, and shows a refusal or a failure in words", async () => {
-    const calls = serve({ "/cfo/overview": { status: "REFUSED", code: "X", message: "That period has no data." } });
+    const calls = serve({ ...overviewExtras, "/cfo/overview": { status: "REFUSED", code: "X", message: "That period has no data." } });
     render(<OverviewTab period={PERIOD} />);
     expect(await screen.findByText("That period has no data.")).toBeInTheDocument();
     expect(calls.find((c) => c.url.includes("/cfo/overview"))?.url).toContain("period_start=2026-07-01&period_end=2026-09-30");
@@ -87,6 +118,7 @@ describe("Profitability", () => {
 
   it("shows unavailable marketplaces as a dash (never 0), a provisional badge, and asks the server to sort and page", async () => {
     const calls = serve({
+      "/profitability/cost-breakdown": { status: "ANSWERED", figures: [fig({ label: "Marketplace fees" })], generatedAt: "t", dataRequests: [] },
       "/profitability/marketplaces": mp, "/profitability/skus": sku,
       "/profitability/trend": { status: "ANSWERED", points: [{ label: "2026-08", plot: 3, display: "₹30.00", status: "COMPLETE" }, { label: "2026-09", plot: null, display: null, status: "UNAVAILABLE" }], dataVersion: 1, generatedAt: "t" },
     });
@@ -95,6 +127,7 @@ describe("Profitability", () => {
     expect(within(table).getAllByLabelText("not available").length).toBe(4);
     expect(within(table).getByText("Provisional")).toBeInTheDocument();
     expect(await screen.findByRole("table", { name: "Contribution Profit by month as a table" })).toBeInTheDocument();
+    expect(await screen.findByText("Marketplace fees")).toBeInTheDocument(); // the cost breakdown draws each figure with its own provenance
     await screen.findByRole("table", { name: "Profit by SKU" });
     expect(screen.getByText(/Page 1 of 3 · 60 rows/)).toBeInTheDocument();
     await userEvent.click(within(screen.getByRole("navigation", { name: "Profit by SKU pages" })).getByRole("button", { name: "Next" }));
@@ -106,6 +139,7 @@ describe("Profitability", () => {
 
   it("the bridge waits for a second period, then shows drivers plus Other and flags a bridge that does not reconcile", async () => {
     serve({
+      "/profitability/cost-breakdown": { status: "ANSWERED", figures: [], generatedAt: "t", dataRequests: [] },
       "/profitability/marketplaces": { ...mp, items: [] }, "/profitability/skus": { ...sku, items: [], total: 0, pageCount: 1 }, "/profitability/trend": { status: "ANSWERED", points: [], dataVersion: 1, generatedAt: "t" },
       "/profitability/bridge": { status: "ANSWERED", reconciles: false, bridge: { deltaDisplay: "-₹4.50", otherDisplay: "₹0.00", otherRef: null, drivers: [{ metricId: "MARKETPLACE_FEES", deltaDisplay: "-₹1.00", ref: "r" }] } },
     });
@@ -181,14 +215,15 @@ describe("Cash & Tax", () => {
 
 describe("Intelligence", () => {
   it("lists recorded alerts with their trust label and gates the scan button", async () => {
-    serve({ "/intelligence/alerts": { status: "ANSWERED", generatedAt: "t", items: [{ id: "a1", agent: "CFO", kind: "RISK", subject: "margin", text: "Contribution margin fell against the previous month.", trustLabel: "Calculated by Metrion", createdAt: "2026-10-21" }] } }, false);
+    serve({ "/intelligence/goal": { status: "ANSWERED", generatedAt: "t", current: null, goal: { targetMarginPct: "25", priorityCategory: null, note: null } }, "/intelligence/alerts": { status: "ANSWERED", generatedAt: "t", items: [{ id: "a1", agent: "CFO", kind: "RISK", subject: "margin", text: "Contribution margin fell against the previous month.", trustLabel: "Calculated by Metrion", createdAt: "2026-10-21" }] } }, false);
     render(<IntelligenceTab period={PERIOD} />);
     expect(await screen.findByText("Contribution margin fell against the previous month.")).toBeInTheDocument();
     expect(screen.getByText(/Calculated by Metrion/)).toBeInTheDocument();
+    expect(await screen.findByText(/Target contribution margin you set: 25%/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Check my data now" })).toBeNull();
   });
   it("an empty list is said in words, and the scan sends the period end", async () => {
-    const calls = serve({ "/intelligence/alerts": { status: "ANSWERED", generatedAt: "t", items: [] }, "/risk-scan": { signals: [] } });
+    const calls = serve({ "/intelligence/goal": { status: "ANSWERED", generatedAt: "t", current: null, goal: null }, "/intelligence/alerts": { status: "ANSWERED", generatedAt: "t", items: [] }, "/risk-scan": { signals: [] } });
     render(<IntelligenceTab period={PERIOD} />);
     expect(await screen.findByText(/Nothing to flag/)).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "Check my data now" }));

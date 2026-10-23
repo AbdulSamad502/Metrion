@@ -194,3 +194,48 @@ def test_access_route_reports_whether_the_member_may_change_things(app_client, f
     assert app_client.get("/api/v1/cfo/access", headers=_register_owner(fake_clerk, a)).json() == {"canAdjust": True}
     assert app_client.get("/api/v1/cfo/access", headers=partner_with(fake_clerk, a, AGENT_CFO)).json() == {"canAdjust": False}
     assert app_client.get("/api/v1/cfo/access", headers=partner_with(fake_clerk, a)).status_code == 403
+
+
+def test_health_band_classifies_figures_for_exactly_this_period_and_names_why_when_it_cannot(app_client, fake_clerk, two_tenants):  # noqa: F811
+    a, b = two_tenants
+    _seed(a)
+    h = _register_owner(fake_clerk, a)
+    r = get(app_client, h, "/overview/health").json()
+    assert r["status"] == "ANSWERED"
+    assert (r["overallBand"] in ("Good", "Watch", "At risk") and r["perMetric"]) or r["unavailableReason"]  # a band, or the reason there is none - never a made-up GOOD
+    assert {f["label"] for f in r["figures"]} <= {"Contribution margin", "Marketplace fees against revenue", "Return rate"}
+    empty = get(app_client, _register_owner(fake_clerk, b), "/overview/health").json()
+    assert empty["overallBand"] is None and empty["unavailableReason"]
+
+
+def test_expense_summary_lists_categories_and_the_owner_account_is_separate_and_gated(app_client, fake_clerk, two_tenants):  # noqa: F811
+    from backend.auth.permissions import AGENT_CFO
+    from tests.integration.test_cfo_uploads_jobs import partner_with
+
+    a, _ = two_tenants
+    _seed(a)
+    h = _register_owner(fake_clerk, a)
+    app_client.post("/api/v1/cfo/ledger/entries", json={"entries": [{"entry_date": "2026-09-05", "amount_paise": 50_000, "category": "Software"}, {"entry_date": "2026-09-06", "amount_paise": 90_000, "category": "Owner Draw"}]}, headers=h)
+    app_client.post("/api/v1/cfo/ledger/classes", json={"class": "OVERHEAD", "category": "Software"}, headers=h)
+    app_client.post("/api/v1/cfo/ledger/classes", json={"class": "OWNER_DRAWING", "category": "Owner Draw"}, headers=h)
+    biz = get(app_client, h, "/expenses/summary").json()
+    cats = {i["category"]: i["amount"]["display"] for i in biz["items"]}
+    assert cats.get("Software") == "\u20b9500.00" and "Owner Draw" not in cats  # drawings are not a business expense
+    own = get(app_client, h, "/expenses/owner-account").json()
+    assert {i["category"]: i["amount"]["display"] for i in own["items"]} == {"Owner Draw": "\u20b9900.00"} and "no profit figure" in own["note"]
+    reader = partner_with(fake_clerk, a, AGENT_CFO)
+    assert get(app_client, reader, "/expenses/summary").status_code == 200
+    assert get(app_client, reader, "/expenses/owner-account").status_code == 403  # AC-DI10
+
+
+def test_cost_breakdown_and_goal_show_figures_with_their_own_provenance(app_client, fake_clerk, two_tenants):  # noqa: F811
+    a, _ = two_tenants
+    _seed(a)
+    h = _register_owner(fake_clerk, a)
+    cb = get(app_client, h, "/profitability/cost-breakdown").json()
+    labels = [f["label"] for f in cb["figures"]]
+    assert labels[0] == "Net Realized Revenue" and labels[-1] == "Contribution Profit"
+    assert all(f["engineResultRef"] or f["completeness"] == "UNAVAILABLE" for f in cb["figures"])
+    app_client.put("/api/v1/cfo/seller-goal", json={"target_margin_pct": "25", "priority_category": None, "note": None}, headers=h)
+    g = get(app_client, h, "/intelligence/goal").json()
+    assert g["goal"]["targetMarginPct"] == "25" and g["current"]["label"] == "Contribution margin now"

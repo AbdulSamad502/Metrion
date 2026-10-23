@@ -65,3 +65,15 @@ def test_old_guessed_header_no_longer_recognized():
     raw = RawFile(columns=("Sub Order No",), rows=[{"Sub Order No": "SUB1"}])
     row = list(meesho_tcs_sales_adapter.parse(raw))[0]
     assert row.unknown_columns == ("Sub Order No",)
+
+
+def test_a_file_with_the_return_date_column_is_the_return_report_not_this_one() -> None:
+    from data_foundation.adapters.meesho_tcs_sales_return_v1 import adapter as returns
+    from data_foundation.types import FileSample
+
+    sales_cols = ("sub_order_num", "gst_rate", "total_taxable_sale_value", "taxable_shipping")
+    ret_cols = (*sales_cols, "cancel_return_date")
+    assert meesho_tcs_sales_adapter.detect(FileSample(columns=sales_cols)).matched and not returns.detect(FileSample(columns=sales_cols)).matched
+    d = meesho_tcs_sales_adapter.detect(FileSample(columns=ret_cols))
+    assert not d.matched and "cancel_return_date" in d.missing_columns[0]  # said in words, never silently
+    assert returns.detect(FileSample(columns=ret_cols)).matched  # so the return file now has exactly one fit

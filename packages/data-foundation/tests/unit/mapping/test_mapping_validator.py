@@ -360,3 +360,14 @@ def test_grain_check_treats_a_sale_and_its_credit_note_as_different_events() -> 
 
     assert "M-GRN" not in run_grain(True).rules()  # the document type distinguishes the credit notes: one row per line event
     assert "M-GRN" in run_grain(False).rules()  # without it the same lines repeat: this really does look order-level or aggregated
+
+
+def test_day_month_name_two_digit_year_dates_read_as_day_first() -> None:
+    from datetime import date
+
+    from data_foundation.mapping.profile import parse_date_with
+
+    assert parse_date_with("15-Sep-25", "DATE_DMY") == date(2025, 9, 15)
+    assert parse_date_with("05 Jan 26", "DATE_DMY") == date(2026, 1, 5)
+    assert parse_date_with("15-Sep-2025", "DATE_DMY") == date(2025, 9, 15)
+    assert parse_date_with("15-Sep-25", "DATE_ISO") is None  # a month name is never an ISO date

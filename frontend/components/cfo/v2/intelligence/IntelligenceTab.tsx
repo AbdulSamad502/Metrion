@@ -7,7 +7,9 @@ import { SectionState } from "@/components/cfo/v2/SectionState";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { apiFetch } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
-import type { AlertsResponse, Period } from "@/lib/cfoV2/dashboard";
+import { FigureView } from "@/components/cfo/v2/trust/FigureView";
+import { periodQuery, type AlertsResponse, type GoalResponse, type Period } from "@/lib/cfoV2/dashboard";
+import { DEFAULT_FILTERS } from "@/lib/cfoV2/filters";
 import { useCanAdjust } from "@/lib/cfoV2/useCanAdjust";
 import { useCfoData } from "@/lib/cfoV2/useCfoData";
 
@@ -16,6 +18,7 @@ export function IntelligenceTab({ period }: { period: Period }) {
   const { getToken } = useAuth();
   const canAdjust = useCanAdjust();
   const alerts = useCfoData<AlertsResponse>("/intelligence/alerts", "limit=50");
+  const goal = useCfoData<GoalResponse>("/intelligence/goal", periodQuery(DEFAULT_FILTERS, period));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +46,19 @@ export function IntelligenceTab({ period }: { period: Period }) {
         )}
       </div>
       {error && <ErrorNotice message={error} />}
+      <section aria-label="Your goal" className="flex flex-col gap-3">
+        <h3 className="t-label">Your goal</h3>
+        <SectionState state={goal} title="your goal">
+          {(d) => (
+            <>
+              <p className="t-body">
+                {d.goal?.targetMarginPct ? `Target contribution margin you set: ${d.goal.targetMarginPct}%${d.goal.priorityCategory ? ` · priority category: ${d.goal.priorityCategory}` : ""}.` : "You have not set a goal yet; set one on the CFO tools."}
+              </p>
+              {d.current && <FigureView figure={d.current} />}
+            </>
+          )}
+        </SectionState>
+      </section>
       <SectionState state={alerts} title="alerts">
         {(d) =>
           d.items.length === 0 ? (

@@ -354,3 +354,74 @@ def csv_text(header: list[str], rows: list[list[object]]) -> str:
     everything: list[list[object]] = [list(header), *rows]
     return CRLF.join(",".join(_csv_cell(c) for c in r) for r in everything) + CRLF
 
+
+
+# ------------------------------------------------------------------------------------------------ overview extras, expenses, cost breakdown, goal
+_BAND_TEXT = {"GOOD": "Good", "WATCH": "Watch", "AT_RISK": "At risk"}
+_HEALTH_LABEL = {"CONTRIBUTION_MARGIN_PCT": "Contribution margin", "FEE_RATIO_PCT": "Marketplace fees against revenue", "RETURN_RATE_PCT": "Return rate"}
+
+
+def health(tenant_id: UUID, requested_by: UUID, scope: Scope) -> dict[str, Any]:
+    """The financial health band: a classification of three stored results against the configured thresholds. The three results are produced (and stored) by the same
+    planner pipeline first, so the band always classifies figures for exactly this period and filter."""
+    from backend.services.cfo_actions import FinancialHealthRequest, assemble_financial_health
+
+    res = run(tenant_id, requested_by, scope, [_metric(m) for m in _HEALTH_LABEL])
+    if not isinstance(res, PlannerAnswer):
+        return refused(res)
+    p = res.packet
+    outcome = assemble_financial_health(tenant_id, FinancialHealthRequest(scope.start, scope.end, scope.as_of))
+    return {
+        "status": "ANSWERED", "generatedAt": _now(), "dataVersion": p.data_version,
+        "overallBand": None if outcome.overall_band is None else _BAND_TEXT.get(outcome.overall_band.value, outcome.overall_band.value),
+        "perMetric": [{"label": _HEALTH_LABEL.get(m, m), "band": _BAND_TEXT.get(b.value, b.value)} for m, b in outcome.per_metric_bands.items()],
+        "unavailableReason": outcome.unavailable_reason,
+        "figures": [figure_data(f, _HEALTH_LABEL.get(f.metric_id, f.metric_id), p, period_text=_period_text(scope), generated_at=_now()) for f in p.figures],
+    }
+
+
+def _cell_pair(f: Figure) -> dict[str, Any]:
+    return {"amount": {"display": display_for(f), "status": completeness_of(f)}, "engineResultRef": f.engine_result_ref}
+
+
+def expense_summary(tenant_id: UUID, requested_by: UUID, scope: Scope, *, owner_account: bool) -> dict[str, Any]:
+    """Expenses by category from the ledger. The owner account (drawings) is a separate view and never part of the business expense list or any profit figure."""
+    steps: list[dict[str, Any]] = [{"op": "filter", "params": {"dimension": "expense_class", "op": "eq", "value": "OWNER_DRAWING"}}] if owner_account else []
+    steps += [{"op": "group_by", "params": {"dimensions": ["expense_category", "expense_class"]}}, {"op": "aggregate", "params": {"metric": "EXPENSE_BY_CATEGORY"}}]
+    periods = [PeriodRef(scope.start, scope.end, scope.as_of)]
+    res = answer_financial_query(tenant_id, requested_by=requested_by, question="dashboard", periods=periods, provider=FixedPlan(steps, periods, "EXPENSE_BREAKDOWN"))
+    if not isinstance(res, PlannerAnswer):
+        return refused(res)
+    p = res.packet
+    keep = (lambda c: c == "OWNER_DRAWING") if owner_account else (lambda c: c != "OWNER_DRAWING")
+    items = [{"category": dict(f.dimension_keys).get("expense_category", ""), "expenseClass": dict(f.dimension_keys).get("expense_class", ""), **_cell_pair(f)}
+             for f in p.figures if keep(dict(f.dimension_keys).get("expense_class", ""))]
+    items.sort(key=lambda r: (str(r["category"]), str(r["expenseClass"])))
+    return {"status": "ANSWERED", "ownerAccount": owner_account, "items": items, "dataRequests": list(p.data_requests), "generatedAt": _now(), "dataVersion": p.data_version,
+            "note": "Owner drawings are not a business expense and are in no profit figure." if owner_account else None}
+
+
+def cost_breakdown(tenant_id: UUID, requested_by: UUID, scope: Scope) -> dict[str, Any]:
+    """What sits between Net Realized Revenue and Contribution Profit, each figure with its own source and completeness."""
+    order = (("NET_REALIZED_REVENUE", "Net Realized Revenue"), ("MARKETPLACE_FEES", "Marketplace fees"), ("RETURN_RTO_LOSSES", "Return and RTO losses"),
+             ("AD_SPEND", "Advertising spend"), ("CONTRIBUTION_PROFIT", "Contribution Profit"))
+    res = run(tenant_id, requested_by, scope, [_metric(m) for m, _ in order])
+    if not isinstance(res, PlannerAnswer):
+        return refused(res)
+    p = res.packet
+    figs = _by(p)
+    out = [figure_data(figs[m], label, p, period_text=_period_text(scope), generated_at=_now()) for m, label in order if m in figs]
+    return {"status": "ANSWERED", "figures": out, "generatedAt": _now(), "dataVersion": p.data_version, "dataRequests": list(p.data_requests)}
+
+
+def goal(tenant_id: UUID, requested_by: UUID, scope: Scope) -> dict[str, Any]:
+    """The seller's stored goal next to the current figure it concerns. Both are shown as they are; progress is not computed here."""
+    from backend.services.cfo_actions import get_seller_goal
+
+    g = get_seller_goal(tenant_id)
+    res = run(tenant_id, requested_by, scope, [_metric("CONTRIBUTION_MARGIN_PCT")])
+    current = None
+    if isinstance(res, PlannerAnswer) and res.packet.figures:
+        current = figure_data(res.packet.figures[0], "Contribution margin now", res.packet, period_text=_period_text(scope), generated_at=_now())
+    return {"status": "ANSWERED", "generatedAt": _now(), "current": current,
+            "goal": None if g is None else {"targetMarginPct": g.target_margin_pct, "priorityCategory": g.priority_category, "note": g.note}}

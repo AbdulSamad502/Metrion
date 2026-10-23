@@ -22,7 +22,7 @@ _CURRENCY_SYMBOLS = re.compile(r"(?i)^\s*(?:₹|rs\.?|inr)\s*")
 _FOREIGN_CURRENCY = re.compile(r"(?i)(\$|usd|€|eur|£|gbp|aed)")
 _DATE_FORMATS: dict[str, tuple[str, ...]] = {
     "DATE_ISO": ("%Y-%m-%d", "%Y/%m/%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"),
-    "DATE_DMY": ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d/%m/%y", "%d-%m-%y", "%d %b %Y", "%d-%b-%Y", "%d/%m/%Y %H:%M:%S"),
+    "DATE_DMY": ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d/%m/%y", "%d-%m-%y", "%d %b %Y", "%d-%b-%Y", "%d-%b-%y", "%d %b %y", "%d/%m/%Y %H:%M:%S"),
     "DATE_MDY": ("%m/%d/%Y", "%m-%d-%Y", "%m/%d/%y", "%m/%d/%Y %H:%M:%S"),
 }
 _NUM_BODY = re.compile(r"^-?\d+(?:\.\d+)?$")

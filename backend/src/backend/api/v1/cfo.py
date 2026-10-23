@@ -3061,3 +3061,46 @@ def get_intelligence_alerts(limit: int = 25, ctx: AuthContext = require_auth(per
 def get_cfo_access(ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
     """What this member may change in the CFO workspace, so the page can hide actions they cannot take. The server still refuses every write they are not allowed to make."""
     return {"canAdjust": ctx.role is not None and has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST)}
+
+
+@router.get("/overview/health")
+def get_overview_health(period_start: date, period_end: date, as_of_date: date | None = None, marketplace: str = "ALL", ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    t = _dash_ctx(ctx)
+    return cfo_dashboard.health(t, ctx.app_user_id, _dash_scope(period_start, period_end, as_of_date, marketplace))
+
+
+@router.get("/expenses/summary")
+def get_expenses_summary(period_start: date, period_end: date, as_of_date: date | None = None, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    t = _dash_ctx(ctx)
+    return cfo_dashboard.expense_summary(t, ctx.app_user_id, _dash_scope(period_start, period_end, as_of_date, "ALL"), owner_account=False)
+
+
+@router.get("/expenses/owner-account")
+def get_expenses_owner_account(period_start: date, period_end: date, as_of_date: date | None = None, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    """The owner account (drawings), separate from business expenses and in no profit figure. Needs `financials.adjust`."""
+    from backend.services import cfo_dashboard
+
+    t = _dash_ctx(ctx)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FINANCIALS_ADJUST):
+        raise HTTPException(status_code=403, detail="financials.adjust permission required")
+    return cfo_dashboard.expense_summary(t, ctx.app_user_id, _dash_scope(period_start, period_end, as_of_date, "ALL"), owner_account=True)
+
+
+@router.get("/profitability/cost-breakdown")
+def get_cost_breakdown(period_start: date, period_end: date, as_of_date: date | None = None, marketplace: str = "ALL", ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    t = _dash_ctx(ctx)
+    return cfo_dashboard.cost_breakdown(t, ctx.app_user_id, _dash_scope(period_start, period_end, as_of_date, marketplace))
+
+
+@router.get("/intelligence/goal")
+def get_intelligence_goal(period_start: date, period_end: date, as_of_date: date | None = None, ctx: AuthContext = require_auth(permission=AGENT_CFO)) -> dict[str, object]:
+    from backend.services import cfo_dashboard
+
+    t = _dash_ctx(ctx)
+    return cfo_dashboard.goal(t, ctx.app_user_id, _dash_scope(period_start, period_end, as_of_date, "ALL"))

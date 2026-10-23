@@ -28,6 +28,7 @@ adapter = BaseAdapter(
     report_category="TAX",
     format_version="v1",
     date_formats={},
+    excluded_columns=frozenset({"cancel_return_date"}),  # the return report is this report plus a return date: a file with that column is the return report
     column_map={
         "sub_order_num": ColumnBinding(canonical_field="line_ref", component_code=None, is_verified=False),
         "gst_rate": ColumnBinding(canonical_field="gst_rate", component_code=None, is_verified=False),

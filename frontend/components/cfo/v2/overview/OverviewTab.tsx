@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FilterBar } from "@/components/cfo/v2/filters/FilterBar";
 import { SectionState } from "@/components/cfo/v2/SectionState";
 import { FigureView } from "@/components/cfo/v2/trust/FigureView";
+import { ExpensePools, HealthBand, LeakPreview, OwnerAccount } from "./OverviewExtras";
 import { periodQuery, type OverviewResponse, type Period } from "@/lib/cfoV2/dashboard";
 import { useCfoData } from "@/lib/cfoV2/useCfoData";
 import { useCfoFilters } from "@/lib/cfoV2/useCfoFilters";
@@ -57,6 +58,10 @@ export function OverviewTab({ period }: { period: Period }) {
                 </ul>
               </section>
             )}
+            <HealthBand filters={filters} period={period} />
+            <LeakPreview />
+            <ExpensePools filters={filters} period={period} />
+            <OwnerAccount filters={filters} period={period} />
             <p className="t-meta">
               <Link href="/dashboard/ceo-hub" className="underline">
                 Ask the CEO about these figures
