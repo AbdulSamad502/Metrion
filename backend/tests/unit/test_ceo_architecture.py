@@ -21,7 +21,7 @@ SPECIALIST_PREFIXES = ("backend.api", "backend.services", "backend.agents", "cfo
                        "slim_cmo", "calc_engine", "data_foundation", "market_signals")
 ALLOWED_SPECIALIST_IMPORTS: dict[str, tuple[str, ...]] = {
     # the registry is the ONLY module that imports specialist handlers
-    "registry.py": ("backend.api", "backend.services.ceo_expense_ops"),  # + the Expense Tracker handlers (owner decision 2026-10-23): thin wrappers over the tracker's own route functions
+    "registry.py": ("backend.api", "backend.services.ceo_expense_ops", "backend.services.ceo_import_ops", "backend.services.ceo_cash_ops", "backend.services.ceo_perf_ops"),  # + the Expense Tracker handlers (owner decision 2026-10-23): thin wrappers over the tracker's own route functions
     # persisted-derived reads: the single CFO service function (derived_reads) and read-only repositories
     "derived_reads.py": ("backend.services.cfo_actions",),
     # the CI / PI / CMO persisted reads come through ONE declared seam (`backend/services/ceo_reads.py`), never a direct specialist import
@@ -32,7 +32,7 @@ ALLOWED_SPECIALIST_IMPORTS: dict[str, tuple[str, ...]] = {
     "input_session.py": ("backend.services.ceo_reads", "backend.services.expense_ledger_rules"),  # real competitors and fee-rate combinations to offer, read through that seam (tenant-scoped, read-only)
     # the ONE declared write (spec 6.35, owner-approved): the research brief a seller confirmed in chat, saved through a single tenant-scoped service
     # and (spec 6.36, owner-approved) the supplier quote / batch budget a seller confirmed on a confirm card, saved through the CFO's own write path in one service
-    "orchestrator.py": ("backend.services.ceo_attachment_analysis", "backend.services.ceo_briefs", "backend.services.ceo_inputs", "backend.services.ceo_progress", "backend.services.cmo_ci_inputs", "backend.services.ceo_reads"),  # the attached-spreadsheet analysis: pure code over the seller's own file, no specialist, no ledger, no model
+    "orchestrator.py": ("backend.services.ceo_attachment_analysis", "backend.services.ceo_briefs", "backend.services.ceo_import_ops", "backend.services.ceo_inputs", "backend.services.ceo_progress", "backend.services.cmo_ci_inputs", "backend.services.ceo_reads"),  # the attached-spreadsheet analysis: pure code over the seller's own file, no specialist, no ledger, no model
     "pi_research.py": ("backend.services.ceo_pi_research",),  # ceo-pi-research-flow.md: choosing the five products, finalising the case and reading it back, through one tenant-scoped service
     "approval_run.py": ("backend.services.ceo_pi_research",),  # the same read, to write the five-product summary of an approved research plan
     "data_requests.py": ("backend.services.ceo_reads",),  # spec 6.37: reading an open data request and what is already stored, through that tenant-scoped seam
@@ -45,6 +45,7 @@ ALLOWED_SPECIALIST_IMPORTS: dict[str, tuple[str, ...]] = {
     "profile_context.py": ("backend.services.business_profile",),  # business-profile.md: the ONE read-only seam for the seller's self-declared profile (a short line built by code)
     "provenance.py": ("calc_engine.repositories", "competitor_intelligence.repositories"),
     # the Expense Tracker conversation (ceo-expense-tracker-chat.md): the seller's own entries through ONE read seam, plus the pure category rules
+    "import_chat.py": ("backend.services.ceo_import_ops",),  # adding attached reports to the records: the preview and the card text are read through ONE declared seam (cfo-3-growth-advisor.md Phase 0)
     "expense_chat.py": ("backend.services.ceo_expense_reads", "backend.services.expense_ledger_rules"),
 }
 # Brain 1 compute surfaces: NEVER importable from the CEO package.

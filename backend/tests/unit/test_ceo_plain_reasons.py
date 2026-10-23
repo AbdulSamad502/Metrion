@@ -42,3 +42,17 @@ def test_a_range_written_with_the_year_once_and_month_spans_are_read_exactly():
     assert got("August and September 2025") == ("2025-08-01", "2025-09-30")
     assert got("September to October 2025") == ("2025-09-01", "2025-10-31")
     assert got("2025") == ("2025-01-01", "2025-12-31") and got("last year") == ("2025-01-01", "2025-12-31")
+
+
+def test_a_question_of_its_own_is_never_the_answer_to_an_open_form_field():
+    from datetime import date
+    from uuid import uuid4
+
+    from backend.ceo import input_session as s
+
+    ctx = s.Ctx(uuid4(), date(2026, 10, 23), None)
+    card = {"playbook": "cfo.expense_add", "pending": {"key": "cfo.expense_add", "collected": {}}}
+    growth = "Based on my available financial data, what should I focus on to improve profitability and grow my business?"
+    assert s.is_unrelated_to_open_question(card, growth, ctx)
+    assert s.is_unrelated_to_open_question(card, "Show my expected marketplace settlements and my cash position", ctx)
+    assert not s.is_unrelated_to_open_question(card, "5,000", ctx) and not s.is_unrelated_to_open_question(card, "cancel", ctx)

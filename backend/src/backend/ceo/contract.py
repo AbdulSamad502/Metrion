@@ -53,6 +53,7 @@ class Effect(str, Enum):
     COMPUTE_PERSIST = "COMPUTE_PERSIST"  # deterministic computation that persists a derived result (not a seller input, not a marketplace write)
     GENERATE_METERED = "GENERATE_METERED"  # produces a seller-metered artefact
     RECORD_ENTRY = "RECORD_ENTRY"  # persists an entry the seller dictated in chat and approved on an exact plan card (an expense ledger record; ceo-expense-tracker-chat.md CE2); append-only and reversible by a void; never a marketplace write
+    IMPORT_DATA = "IMPORT_DATA"  # hands spreadsheets the seller attached to the existing CFO upload pipeline, only after the seller approves an exact plan card (cfo-3-growth-advisor.md Phase 0); never a marketplace write
     RECORD_CHOICE = "RECORD_CHOICE"  # persists the seller's own explicit selection inside a specialist workflow (title approval, niche/image-hint confirmation); not a financial input, not a marketplace write, free
 
 

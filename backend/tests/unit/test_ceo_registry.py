@@ -18,7 +18,7 @@ def registry() -> ActionRegistry:
 
 
 def test_there_is_no_write_effect():
-    assert {e.name for e in Effect} == {"READ", "COMPUTE_PERSIST", "GENERATE_METERED", "RECORD_CHOICE", "RECORD_ENTRY"}  # the only chat-prepared write is an Expense Tracker entry the seller approved on a plan card (owner decision 2026-10-23, ceo-expense-tracker-chat.md CE2); no other write is expressible (C21)
+    assert {e.name for e in Effect} == {"READ", "COMPUTE_PERSIST", "GENERATE_METERED", "RECORD_CHOICE", "RECORD_ENTRY", "IMPORT_DATA"}  # the only chat-prepared write is an Expense Tracker entry the seller approved on a plan card (owner decision 2026-10-23, ceo-expense-tracker-chat.md CE2); no other write is expressible (C21)
 
 
 def test_no_forbidden_write_class_key_is_registered(registry):

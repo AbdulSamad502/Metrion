@@ -33,7 +33,7 @@ from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
 from backend.ceo.approval_gate import evaluate_playbook, plan_required
-from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_delegation, compound, conversational, deadlines, expense_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, periods, profile_context, references
+from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_delegation, compound, conversational, deadlines, expense_chat, import_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, periods, profile_context, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.billing import UnitDecision, unit_decision
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
@@ -49,7 +49,7 @@ from backend.entitlement import meter_ceo_turn
 from backend.repositories import accounting_cutover_repo
 from backend.repositories import investigation_repo as repo
 from backend.repositories import ceo_need_repo
-from backend.services import ceo_attachment_analysis, ceo_briefs, ceo_inputs, ceo_progress, cmo_ci_inputs
+from backend.services import ceo_attachment_analysis, ceo_briefs, ceo_import_ops, ceo_inputs, ceo_progress, cmo_ci_inputs
 from backend.services.ceo_reads import product_facts as ceo_reads_product_facts
 
 logger = logging.getLogger(__name__)
@@ -217,7 +217,7 @@ def _resume_plain_question(tenant: UUID, investigation_id: UUID, text: str, toda
 def _with_request_key(done: Any, anchor: str) -> dict[str, Any]:
     """The collected inputs plus an idempotency key derived from the message that finished them: answering the same card twice reuses the finished result."""
     out = dict(done.inputs)
-    if done.playbook in input_session.CMO_SESSIONS or done.playbook in input_session.EXPENSE_SESSIONS:
+    if done.playbook in input_session.CMO_SESSIONS or done.playbook in input_session.EXPENSE_SESSIONS or done.playbook in input_session.IMPORT_SESSIONS:
         out["request_key"] = f"ceo-{anchor}"
     if done.playbook in ("pi.discover", "NEW_PRODUCT_DECISION"):
         out["ceo_ref"] = f"ceo-{anchor}"
@@ -248,6 +248,8 @@ def _clarification_text(slot: str) -> str:
 def _decision_needs_approval(d: classifier.Decision) -> bool:
     """The same approval check the turn applies to its own decision (D-8), offered to the compound-request analysis so each requirement is judged exactly as it would be alone."""
     if d.route == "ACTION" and d.key is not None and d.key in ACTIONS:
+        if d.key in expense_chat.WRITE_KEYS or d.key == import_chat.IMPORT_KEY:
+            return False  # these only ever become a card the seller approves (like approval_on below), so a message that holds one is not blocked as "approval not available"
         return plan_required([d.key])
     if d.route == "PLAYBOOK" and d.key is not None and d.key in PLAYBOOKS:
         return evaluate_playbook(PLAYBOOKS[d.key]).plan_required
@@ -555,7 +557,7 @@ def _run_admitted(
     if ui_action is None and not attachments and ceo_attachment_analysis.refers_to_earlier_file(text):  # "continue with the file I attached before": same conversation, newest spreadsheet, named
         reply = ceo_attachment_analysis.answer_from_earlier(tenant, inv_id, text)
         return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, reply, now, marker={"attachmentAnalysis": True, "earlierAttachment": True})
-    if ui_action is None and attachments and ceo_attachment_analysis.spreadsheets(attachments) and ceo_attachment_analysis.is_analysis_request(text):
+    if ui_action is None and attachments and ceo_attachment_analysis.spreadsheets(attachments) and ceo_attachment_analysis.is_analysis_request(text) and not intent_router.is_import_request(text):  # "add these to my dashboard" is an import request, planned below, not a reading
         # A question about an attached spreadsheet is answered from its own cells by code (no model, no ledger, nothing imported); a question about anything else goes on as before.
         reply = ceo_attachment_analysis.answer(tenant, inv_id, attachments, text)
         return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, reply, now, marker={"attachmentAnalysis": True, "attachments": [str(a["id"]) for a in attachments]})
@@ -570,7 +572,7 @@ def _run_admitted(
         except Exception:  # noqa: BLE001
             logger.exception("reference expansion failed")
     compound_plan: compound.CompoundPlan | None = None
-    if ui_action is None:  # one route per turn: when the message holds several requirements, one is handled and the rest are named, never dropped (hardening Fix 1)
+    if ui_action is None and not intent_router.is_import_request(routed_text):  # one route per turn: when the message holds several requirements, one is handled and the rest are named, never dropped (hardening Fix 1)
         try:
             compound_plan = compound.analyse(routed_text, cat, needs_approval=_decision_needs_approval)
         except Exception:  # noqa: BLE001
@@ -644,7 +646,7 @@ def _run_admitted(
     cmo_delegated = route == "ACTION" and key in cmo_delegation.DELEGATED_ACTIONS  # ceo-cmo-delegation.md: the CMO actions the seller reaches through the CEO
     # CMO actions always become a stored plan the seller approves on its card (never run unapproved); every other approval-required action follows CEO_APPROVAL_ENABLED
     # (OFF by default: the refusal below stays exactly as it was).
-    approval_on = cmo_delegated or (route == "ACTION" and key in expense_chat.WRITE_KEYS) or config.ceo_approval_enabled()  # + the expense ledger writes: they only ever become a plan card (ceo-expense-tracker-chat.md CE3)
+    approval_on = cmo_delegated or (route == "ACTION" and (key in expense_chat.WRITE_KEYS or key == import_chat.IMPORT_KEY)) or config.ceo_approval_enabled()  # + the expense ledger writes: they only ever become a plan card (ceo-expense-tracker-chat.md CE3)
     if compound_plan is not None and compound_plan.chosen_text is None:
         # "Handled: nothing": the message held several requests and none can start from it. The WHOLE text is never routed as if it were one of them (it would start a
         # question the block above says was not started); the seller gets the block, and nothing is asked, run or used.
@@ -704,7 +706,13 @@ def _run_admitted(
                 if prefill.get("marketplace") and normalise_marketplace(text) is None:  # a marketplace the seller did not write is never taken from a model: it is asked
                     prefill = {k: v for k, v in prefill.items() if k != "marketplace"}
                 carry = {**ceo_reads_product_facts(tenant, prefill.get("product")), **cmo_delegation.carried_facts(key, prefill.get("product"), all_plans)}  # saved profile first, this conversation's answers win
-            started = input_session.start(key, input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices), prefill=prefill, carry=carry, hidden=expense_chat.hidden_for(key, decision.slots, decision.flags))
+            hidden = expense_chat.hidden_for(key, decision.slots, decision.flags)
+            if key == import_chat.IMPORT_KEY:  # the preview of every file, read and described by code; nothing is written
+                prep = ceo_import_ops.prepare(tenant, inv_id, list(attachments))
+                if not import_chat.importable(prep["previews"]):
+                    return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, import_chat.nothing_to_import_text(prep["previews"]), now, marker={"importPreview": True})
+                hidden = import_chat.hidden_for(prep)
+            started = input_session.start(key, input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices), prefill=prefill, carry=carry, hidden=hidden)
             if isinstance(started, input_session.Ask) and cmo_delegated:
                 started = cmo_delegation.begin(started, action_key=key, now=now)
             if isinstance(started, input_session.Done):
@@ -1014,6 +1022,10 @@ def _plan_turn(
             title = "Read your attached photo"
             followup = {"action_key": image_followup["action_key"], "slots": dict(image_followup["slots"]), "attachment_id": str(image_followup["attachment"]["id"])}
             continue
+        if k == import_chat.IMPORT_KEY:  # what each file is and what the importer will do with it, in words written by code
+            d, compact, title = import_chat.plan_extras(slots, ctx.tenant_id)
+            details.extend(d)
+            continue
         if k in expense_chat.WRITE_KEYS:  # the exact values the seller is about to approve, in words written by code
             d, compact, title = expense_chat.plan_extras(k, slots, ctx.tenant_id)
             details.extend(d)
@@ -1272,7 +1284,7 @@ def _ci_direct(
         return None
     try:
         ruled = intent_router.route(text, cat)
-        if ruled is not None and str(ruled.key or "").startswith("cfo.expense"):
+        if ruled is not None and str(ruled.key or "").startswith(("cfo.expense", "cfo.import")):
             return None  # "add an expense of 500 ...": the expense ledger rules own this message; a competitor-name reading of "add <name>" must not take it
         other_agent = ruled is not None and not str(ruled.key or "").startswith("ci.") and ruled.route in ("ACTION", "PLAYBOOK")
         ceo_last = [m for m in repo.list_messages(tenant, inv_id) if m.get("role") == "CEO"]
