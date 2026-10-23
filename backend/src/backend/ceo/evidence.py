@@ -42,6 +42,10 @@ _METRIC_LABELS: Mapping[str, str] = {
     "MARGIN_AT_PRICE": "Margin at a candidate price",
     "LANDED_COST_PER_UNIT": "Landed cost per unit",
     "BATCH_CONSTRAINED_QUANTITY": "Most units your budget allows",
+    "EXPENSE_TOTAL": "Expenses in your Expense Tracker",
+    "EXPENSE_INCLUDING_UNRESOLVED": "Expenses including entries awaiting review",
+    "EXPENSE_REVIEW_QUEUE_AMOUNT": "Expenses awaiting your review",
+    "EXPENSE_RECURRING_TOTAL": "Recurring expenses",
 }
 # Stored results whose value is a unit COUNT carried in the money slot (shown as units, never as rupees).
 _UNIT_COUNT_METRICS = frozenset({"BATCH_CONSTRAINED_QUANTITY"})
@@ -55,6 +59,10 @@ def _label_for_row(code: str, row: Mapping[str, Any]) -> str:
     """The engine writes WHICH candidate price / supplier a row is for into its `calculation_basis`; the label says so, so several rows of one metric are never
     indistinguishable. Display text only: the stored value is untouched."""
     base = _METRIC_LABELS.get(code, code.replace("_", " ").capitalize())
+    if code in ("EXPENSE_BY_CATEGORY", "EXPENSE_BY_COST_CLASS") and row.get("target_ref"):  # one result per category / class: the name is part of what the figure is
+        from backend.ceo import expense_chat  # noqa: PLC0415
+
+        base = f"Expenses: {expense_chat.category_label(str(row['target_ref'])).split(' (')[0]}" if code == "EXPENSE_BY_CATEGORY" else f"Expenses ({str(row['target_ref']).lower()} costs)"
     basis = str(row.get("calculation_basis") or "")
     if code == "MARGIN_AT_PRICE" and (m := _CANDIDATE_PRICE_RE.search(basis)):
         return f"Margin if you sell at {format_paise(int(m.group(1)))}"
@@ -171,6 +179,8 @@ LEG_LABELS: Mapping[str, str] = {
     "cfo.anomaly_check": "The anomaly check",
     "cfo.strategic_briefing": "The CFO briefing",
     "cfo.query": "The answer to your financial question",
+    "cfo.expense_summary": "Your Expense Tracker",
+    "cfo.expense_add": "Adding your expense", "cfo.expense_correct": "Changing your expense", "cfo.expense_void": "Removing your expense", "cfo.expense_paid": "Updating your expense",
     "cfo.reconcile": "The marketplace reconciliation",
     "cfo.cash_reconciliation": "The cash reconciliation",
     "cfo.gst_lookup": "The GST rate lookup",
@@ -428,11 +438,50 @@ class EvidenceCollector:
             self._cmo_artefacts(payload)
         elif leg.action_key == "cfo.query":
             self._planner_result(payload)
+        elif leg.action_key == "cfo.expense_summary":
+            self._expense_summary(payload)
+        elif leg.action_key in ("cfo.expense_add", "cfo.expense_correct", "cfo.expense_void", "cfo.expense_paid"):
+            self._expense_write(leg.action_key, payload)
         elif leg.action_key == "cfo.strategic_briefing":
             for signal in payload.get("signals") or []:
                 self.add_fact(f"Briefing signal: {str(signal.get('category', 'signal')).replace('_', ' ').lower()}",
                               f"{str(signal.get('severityLabel', 'unrated')).lower()} severity; suggested action type "
                               f"{str(signal.get('recommendedActionType', 'none')).replace('_', ' ').lower()}")
+
+    def _expense_summary(self, payload: Mapping[str, Any]) -> None:
+        """Expenses from the seller's Expense Tracker. Totals arrive through their engine results (the leg's refs); each listed entry is a figure that points at its own record.
+        Sentences written here carry no digit; an empty period is said to be empty, never zero."""
+        from backend.ceo import expense_chat  # noqa: PLC0415
+
+        if not payload.get("entryCount"):
+            self.add_gap("Your Expense Tracker has no expenses recorded for that period.")
+            return
+        for e in payload.get("entries") or []:
+            self._add_figure(expense_chat.entry_figure(e))
+        if payload.get("truncated"):
+            self.add_gap("There are more entries than are shown here; the Expense Tracker page lists every one.")
+        if payload.get("breakdown") == "DAY":
+            self.add_fact("How this is cut", "one total for each day that has entries", "SOURCE_DERIVED")
+        elif payload.get("breakdown") == "MONTH":
+            self.add_fact("How this is cut", "one total for each calendar month", "SOURCE_DERIVED")
+        self.add_fact("Where this comes from", "the expenses you entered in your Expense Tracker; only confirmed entries are in the totals", "SOURCE_DERIVED")
+
+    def _expense_write(self, key: str, payload: Mapping[str, Any]) -> None:
+        """What an approved Expense Tracker change did, in words written by code, with the saved record as a figure that points at itself."""
+        from backend.ceo import expense_chat  # noqa: PLC0415
+
+        rec = payload.get("record")
+        replayed = bool(payload.get("replayed")) or payload.get("changed") is False
+        if key == "cfo.expense_add":
+            self.add_fact("Expense Tracker", "this was already saved earlier, so nothing was added twice" if replayed else "saved as a confirmed expense", "SOURCE_DERIVED")
+        elif key == "cfo.expense_correct":
+            self.add_fact("Expense Tracker", "the earlier entry was replaced by this corrected one and stays in the history", "SOURCE_DERIVED")
+        elif key == "cfo.expense_void":
+            self.add_fact("Expense Tracker", "this entry was already removed" if replayed else "the entry was removed from your totals; it is kept in the history with your reason", "SOURCE_DERIVED")
+        else:
+            self.add_fact("Expense Tracker", "the payment status is unchanged (it was already set)" if replayed else "the payment status was updated; it does not change any profit figure", "SOURCE_DERIVED")
+        if rec:
+            self._add_figure(expense_chat.entry_figure(rec, prefix="Removed: " if key == "cfo.expense_void" else ""))
 
     def _planner_result(self, payload: Mapping[str, Any]) -> None:
         """An answer from the CFO query planner (cfo-query-planner.md). The figures themselves arrive through their `engineResultRef`s (resolved against the stored result

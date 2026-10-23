@@ -78,6 +78,13 @@ ACTION_EFFECTS: Mapping[str, ActionEffects] = {
     "cfo.strategic_briefing": _NONE,  # include_narration pinned False by the registry
     "cfo.query": _NONE,  # the planner model is the operator-controlled local one; it receives the question and the catalog, never rows or figures
     "cfo.preview": _NONE,
+    # The Expense Tracker through the CEO (ceo-expense-tracker-chat.md): the read changes nothing; each write is a record the seller dictated, approved on an exact plan card,
+    # and can undo with a void. Nothing leaves Metrion and nothing is metered; the card is forced because a financial record is saved.
+    "cfo.expense_summary": _NONE,
+    "cfo.expense_add": ActionEffects(force_approval=True),
+    "cfo.expense_correct": ActionEffects(force_approval=True),
+    "cfo.expense_void": ActionEffects(force_approval=True),
+    "cfo.expense_paid": ActionEffects(force_approval=True),
     "cfo.period_comparison": _MODEL_NARRATION,  # always calls the LLM (api/v1/cfo.py post_period_comparison)
     # ---- GST: fixed public pages + a model call over the product title; no seller data in any HTTP request ----
     "cfo.gst_lookup": ActionEffects(external=External.PUBLIC_FETCH, destinations=("Public GST reference pages",), model_egress=("PRODUCT_TITLE",)),

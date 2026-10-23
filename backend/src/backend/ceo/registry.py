@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field, model_validator
 from backend.auth.context import AuthContext
 from backend.auth.permissions import (
     CATALOG_VIEW,
+    FINANCIALS_ADJUST,
     RESEARCH_MARKET_TRENDS,
     RESEARCH_NICHE_RUN,
     has_permission,
@@ -350,6 +351,26 @@ def build_default_registry() -> ActionRegistry:
             ActionSpec(
                 key=key, source="CFO", agent=AgentCode.CFO, effect=effect, description=f"CFO {key.split('.', 1)[1]}",
                 slot_model=_body_model(fn), invoke=_route_invoke(fn), entitlement=_cfo_entitlement(code), fixed_params=fixed,
+            )
+        )
+    # The Expense Tracker through the CEO (ceo-expense-tracker-chat.md). One READ, and the four chat-prepared writes (owner decision 2026-10-23, amending C21 for exactly these keys):
+    # each write is approval-gated (a plan card the seller approves), needs `financials.adjust`, and runs the tracker's own route function with the real context.
+    from backend.ceo.expense_chat import summary_refs as expense_summary_refs
+    from backend.services import ceo_expense_ops as expense_ops
+
+    expense_rows: list[tuple[str, Any, str, Effect, tuple[str, ...]]] = [
+        ("cfo.expense_summary", expense_ops.summary, "cfo.expense_ledger.read", Effect.READ, ()),
+        ("cfo.expense_add", expense_ops.add, "cfo.expense_ledger.write", Effect.RECORD_ENTRY, (FINANCIALS_ADJUST,)),
+        ("cfo.expense_correct", expense_ops.correct, "cfo.expense_ledger.write", Effect.RECORD_ENTRY, (FINANCIALS_ADJUST,)),
+        ("cfo.expense_void", expense_ops.void, "cfo.expense_ledger.write", Effect.RECORD_ENTRY, (FINANCIALS_ADJUST,)),
+        ("cfo.expense_paid", expense_ops.paid, "cfo.expense_ledger.write", Effect.RECORD_ENTRY, (FINANCIALS_ADJUST,)),
+    ]
+    for key, fn, code, effect, extra_perms in expense_rows:
+        specs.append(
+            ActionSpec(
+                key=key, source="CFO", agent=AgentCode.CFO, effect=effect, description=f"CFO {key.split('.', 1)[1]}", required_permissions=extra_perms,
+                slot_model=_body_model(fn), invoke=_route_invoke(fn), entitlement=_cfo_entitlement(code),
+                extract_refs=expense_summary_refs if key == "cfo.expense_summary" else None,
             )
         )
     # The gated preview is the entitlement-DENIAL surface for CFO-class results (spec C17): it still requires agent.cfo,

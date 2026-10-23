@@ -16,6 +16,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from backend.ceo import expense_chat
 from backend.ceo.classifier import Catalog, Decision, parse_decision
 from backend.ceo.plans import PLAYBOOKS
 
@@ -35,6 +36,7 @@ class Rule:
     pattern: re.Pattern[str]
     kind: str = "ACTION"  # a decision playbook is routed the same way (spec 6.36)
     addons: tuple[str, ...] = ()  # need keys the matching request also asks for (spec agent-needs 5.3)
+    flags: tuple[str, ...] = ()  # decision flags this rule adds (for example EXPENSE_MENTION)
 
 
 # Common misspellings of the CMO keywords are accepted; the wording is only used to pick a route, every value is still parsed by the session's own parsers.
@@ -93,7 +95,27 @@ BRIEFING_RULES: tuple[Rule, ...] = (
 _PRICE_DECISION = _rx(
     r"\b(?:should i|can i|could i|what if i|what happens if i|if i|is it worth|do i need to|how (?:can|do) i|what should i do)\b[^.?!]*\b(?:reduce|lower|cut|drop|decrease|raise|increase|match|beat|undercut|reprice|change|conquer|compete)\b[^.?!]*\b(?:price|prices|pricing)\b"
     r"|\b(?:conquer|beat|win against|compete with)\b[^.?!]*\b(?:competitors?|rivals?)\b[^.?!]*\b(?:price|pricing)\b|\bwhat should i do\b[^.?!]*\bpricing\b")
-RULES: tuple[Rule, ...] = (Rule("COMPETITOR_PRICE_IMPACT", "CI", _PRICE_DECISION, kind="PLAYBOOK"),) + BRIEFING_RULES + STATE_RULES + (
+
+# The Expense Tracker through the CEO (docs/specs/ceo-expense-tracker-chat.md). Plain rules, first: a request to add, change, remove or mark an expense, a question about recorded
+# expenses, and - last of these - a first-person payment STATEMENT, which only starts a question ("is this your expense?"), never a save.
+_EXP_NOUN = r"(?:an? |the |my |our |that |this |these |those |one |some |new )*expenses?"
+_NOT_HOWTO = r"^(?!\s*(?:how (?:do|does|can|to|would)|where|what (?:is|are|does)|why|is it|are there)\b)"
+_EXPENSE_RULES: tuple[Rule, ...] = (
+    Rule("cfo.expense_void", "CFO", _rx(_NOT_HOWTO + r"(?=.*\b(?:remove|delete|void|undo|discard|cancel)\b)(?=.*\b" + _EXP_NOUN + r"\b)(?!.*\b(?:competitors?|rivals?)\b)")),
+    Rule("cfo.expense_paid", "CFO", _rx(_NOT_HOWTO + r"(?=.*\b(?:mark|set|update|change|make)\b)(?=.*\b" + _EXP_NOUN + r"\b)(?=.*\b(?:as |to )?(?:paid|unpaid|partially paid|partly paid)\b)")),
+    Rule("cfo.expense_correct", "CFO", _rx(_NOT_HOWTO + r"(?=.*\b(?:edit|change|correct|update|fix|modify|amend)\b)(?=.*\b" + _EXP_NOUN + r"\b)")),
+    Rule("cfo.expense_add", "CFO", _rx(_NOT_HOWTO + r"(?=.*\b(?:add|record|log|enter|save|put|book|note down|insert)\b)(?=.*\b" + _EXP_NOUN + r"\b)")),
+    Rule("cfo.expense_summary", "CFO", _rx(
+        r"^(?!.*\b(?:ad|ads|advertising) spend\b)(?!.*\b(?:add|record|log|enter|remove|delete|void|correct|edit|mark)\b)(?:"
+        r".*\bhow much\b[^.?!]*\b(?:spen[dt]|spending|expenses?)\b|.*\b(?:show|list|view|see|give|tell|what(?:'s| is| are| was| were)|display)\b[^.?!]*\b(?:my |our |the |all )?expenses?\b"
+        r"|.*\b(?:month[- ]?wise|monthly|date[- ]?wise|day[- ]?wise|daily)\b[^.?!]*\bexpenses?\b|.*\bexpenses?\b[^.?!]*\b(?:month[- ]?wise|monthly|date[- ]?wise|day[- ]?wise|daily)\b"
+        r"|.*\bexpense (?:summary|report|breakdown|list|history)\b|.*\bwhat did (?:i|we) spend\b)")),
+    Rule("cfo.expense_add", "CFO", re.compile(
+        r"^(?!.*(?:\?|\bshould i\b|\bif i\b|\bwhat if\b|\bcan i\b|\bcould i\b|\bwould i\b|\bdo i\b|\bdid i\b|\bplanning to\b|\bgoing to\b|\bwant to\b|\bthinking of\b|\bwill (?:pay|spend)\b|\bsold\b|\breceived\b|\brefund))"
+        r"(?=.*\b(?:i|we)(?:'ve| have)?\s+(?:just\s+|already\s+|recently\s+)?(?:paid|spent|bought|purchased|booked|recharged|renewed|ordered)\b)"
+        r"(?=.*(?:₹|\brs\.?\s*\d|\binr\b|\d\s*(?:rupees?|rs\b|inr\b)))", re.IGNORECASE), flags=("EXPENSE_MENTION",)),
+)
+RULES: tuple[Rule, ...] = _EXPENSE_RULES + (Rule("COMPETITOR_PRICE_IMPACT", "CI", _PRICE_DECISION, kind="PLAYBOOK"),) + BRIEFING_RULES + STATE_RULES + (
     Rule("cmo.generate_description", "CMO", _rx(rf"(?=.*\b{_DESC}\b)(?=.*\bgst\b)(?=.*\b(?:with|along|also|and|plus|together)\b)"), "ACTION", ("GST_RATE_FOR_PRODUCT",)),
     # Description AND bullets together: the listing copy pack already writes both (plus keywords) as ONE artefact, one approval, one CMO unit.
     Rule("cmo.generate_listing_copy", "CMO", _rx(rf"^(?!.*\bgst\b)(?!\s*(?:tell me about|explain|what|how|why|were|are|is|do|does|did)\b)(?=.*\b{_BULLETS}\b)(?=.*\b{_DESC}\b)(?=.*\b{_WRITE}\b|.*\b(?:and|together|also|with|plus)\b)")),
@@ -183,6 +205,12 @@ def _slots(rule: Rule, text: str) -> dict[str, str]:
     out: dict[str, str] = {}
     if rule.kind == "BUSINESS_STATE":
         return out  # a state read takes no slots: the question type decides what is read
+    if rule.key == "cfo.expense_summary":
+        return expense_chat.read_slots(text)
+    if rule.key == "cfo.expense_add":
+        return expense_chat.slots_for_add(text)
+    if rule.key in ("cfo.expense_correct", "cfo.expense_void", "cfo.expense_paid"):
+        return expense_chat.entry_hint(text)
     if rule.key == "COMPETITOR_PRICE_IMPACT" and rule.pattern is _PRICE_DECISION:
         decided: dict[str, str] = {}
         target = re.search(r"\bto\s+((?:₹|rs\.?|inr)?\s*\d[\d,]*(?:\.\d+)?)", text, re.IGNORECASE)
@@ -253,6 +281,8 @@ def route(text: str, cat: Catalog) -> Decision | None:
             payload = {"route": rule.kind, "route_key": rule.key, "slots": _slots(rule, t), "needs_agent": None, "clarify_for": None}
         d = parse_decision(json.dumps(payload), cat)
         extra = {"GST_UNAVAILABLE"} if item is None and rule.key == "gst_lookup" else set()  # the wall for GST is code, never general knowledge
+        if item is not None:
+            extra |= set(rule.flags)
         return Decision(d.parse_ok, d.raw_route, d.raw_key, d.route, d.key, d.slots, d.needs_agent, d.clarify_for, frozenset({*d.flags, "RULE_ROUTED", *extra}),
                         addons=rule.addons if item is not None else ())
     return None

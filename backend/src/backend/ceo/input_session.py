@@ -19,7 +19,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
-from backend.ceo import memory, slot_resolvers
+from backend.ceo import expense_chat, memory, slot_resolvers
 from backend.ceo.periods import PeriodUnresolvable, resolve_period
 from backend.services import ceo_reads
 
@@ -88,8 +88,8 @@ def _sku(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     return t
 
 
-_FREE_TEXT_FIELDS = frozenset({"seller_title", "niche", "product_name", "category", "category_hint", "supplier_name", "notes"})
-_CANCEL_PHRASE = re.compile(r"\b(?:cancel|abort|never ?mind|forget (?:it|this|that)|stop (?:this|the|asking)|drop (?:this|it))\b", re.IGNORECASE)
+_FREE_TEXT_FIELDS = frozenset({"seller_title", "niche", "product_name", "category", "category_hint", "supplier_name", "notes", "expense_note", "expense_vendor", "expense_reason", "expense_pick"})
+_CANCEL_PHRASE = re.compile(r"\b(?:cancel|abort|never ?mind|forget (?:it|this|that)|stop (?:this|the|asking)|drop (?:this|it)|no thanks|not (?:my|an?) expense|(?:that'?s|that is|it'?s|it is) not (?:mine|an expense|my expense)|(?:do not|don'?t) add (?:it|this|that))\b", re.IGNORECASE)
 
 
 def is_cancel_request(text: str) -> bool:
@@ -800,11 +800,160 @@ DR_TREND_RUN: tuple[Field, ...] = (
     Field("confirm", lambda c, g: str(g.get("preview", "")), _yes, lambda c, g: (Option("Yes, run the research", "yes", "Sends exactly these searches"),)),
 )
 
+# ------------------------------------------------------------------------------------------------ the Expense Tracker through the CEO (docs/specs/ceo-expense-tracker-chat.md)
+# Every answer is parsed by code against ONE field; nothing is saved by answering. When the last field is collected the task becomes a plan card the seller approves.
+def _bad(r: Any) -> Any:
+    return Reject(r.why) if isinstance(r, expense_chat.Bad) else r
+
+
+def _exp_amount(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    return _bad(expense_chat.parse_amount(raw))
+
+
+def _exp_day(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    return _bad(expense_chat.parse_day(raw, ctx.today))
+
+
+def _exp_category(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    return _bad(expense_chat.parse_category(raw))
+
+
+def _exp_category_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    hint = " ".join(str(got.get(k) or "") for k in ("expense_note", "_hint"))
+    return tuple(Option(label.split(" (")[0], cid, "A category in your Expense Tracker") for cid, label in expense_chat.category_choices(ctx.tenant_id, hint))
+
+
+def _exp_day_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    return (Option("Today", "today"), Option("Yesterday", "yesterday"))
+
+
+def _exp_optional(parse: Callable[[str, Ctx, Mapping[str, Any]], Any]) -> Callable[[str, Ctx, Mapping[str, Any]], Any]:
+    """A detail of a correction the seller may leave as it is: 'skip' / 'same' / 'no change' keeps the stored value (None); anything else goes through the field's own parser."""
+    def run(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+        if raw.strip().casefold() in _SKIP_WORDS | {"same", "keep", "no change", "unchanged", "keep it", "as it is"}:
+            return None
+        return parse(raw, ctx, got)
+
+    return run
+
+
+def _exp_vendor(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    from backend.services import expense_ledger_rules as rules  # noqa: PLC0415
+
+    t = " ".join(raw.split())
+    if t.casefold() in _SKIP_WORDS:
+        return None
+    err = rules.vendor_error(t) if t else "Please type a name, or skip."
+    return Reject(err) if err else t
+
+
+def _exp_note(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = " ".join(raw.split())
+    if t.casefold() in _SKIP_WORDS:
+        return None
+    return t if 0 < len(t) <= 500 else Reject("Please answer in at most 500 characters, or skip.")
+
+
+def _exp_reason(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = " ".join(raw.split())
+    return t if 0 < len(t) <= 300 else Reject("Please give a short reason (at most 300 characters).")
+
+
+def _exp_pick(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    return _bad(expense_chat.parse_pick(raw, ctx.tenant_id, str(got.get("_hint") or "")))
+
+
+def _exp_pick_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    try:
+        return tuple(Option(label, text, reason) for label, text, reason in expense_chat.pick_options(ctx.tenant_id, str(got.get("_hint") or "")))
+    except Exception:  # noqa: BLE001 - offering is a convenience; the question is still asked
+        return ()
+
+
+def _exp_pick_blocked(ctx: Ctx, got: Mapping[str, Any]) -> str | None:
+    try:
+        return None if expense_chat.recent_entries(ctx.tenant_id, "", 1) else "You have no expenses in your Expense Tracker yet, so there is nothing to change. Nothing was saved."
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_PAYMENT_WORDS = {"paid": "paid", "fully paid": "paid", "unpaid": "unpaid", "not paid": "unpaid", "pending": "unpaid", "partially paid": "partially_paid", "partly paid": "partially_paid",
+                  "part paid": "partially_paid", "partial": "partially_paid", "unknown": "unknown"}
+
+
+def _exp_payment(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = " ".join(raw.casefold().replace("_", " ").split()).strip(" .")
+    return _PAYMENT_WORDS.get(t) or Reject("Say paid, unpaid or partially paid.")
+
+
+def _exp_mention_question(ctx: Ctx, got: Mapping[str, Any]) -> str:
+    said = expense_chat.mention_summary(got)
+    return (f"I noticed you mentioned an expense{f' ({said})' if said else ''}. Is this an expense of yours, and shall I add it to your Expense Tracker? "
+            "I will ask for anything that is missing, and nothing is saved until you press Approve on the card.")
+
+
+EXP_ADD: tuple[Field, ...] = (
+    Field("mention", _exp_mention_question, _yes, lambda c, g: (Option("Yes, add it", "yes"),), applies=lambda c, g: bool(g.get("_mention"))),
+    Field("expense_amount", lambda c, g: "How much was it, in rupees? For example 5,000 or 1,299.50.", _exp_amount),
+    Field("expense_date", lambda c, g: "Which day was it for? Pick one, or type a day like 5 October.", _exp_day, _exp_day_options),
+    Field("expense_category", lambda c, g: "Which category is it?", _exp_category, _exp_category_options),
+    Field("expense_vendor", lambda c, g: "Who was it paid to? You can skip this.", _exp_vendor, _SKIP("Not stated"), optional=True),
+    Field("expense_note", lambda c, g: "Anything to note, for example what it was for? You can skip this.", _exp_note, _SKIP("Not stated"), optional=True),
+)
+EXP_CORRECT: tuple[Field, ...] = (
+    Field("expense_pick", lambda c, g: "Which expense do you want to change?", _exp_pick, _exp_pick_options, unanswerable=_exp_pick_blocked),
+    Field("expense_amount", lambda c, g: "What is the correct amount, in rupees? Say 'same' to keep it.", _exp_optional(_exp_amount), _SKIP("Keep the current amount")),
+    Field("expense_date", lambda c, g: "What is the correct day? Say 'same' to keep it.", _exp_optional(_exp_day), _SKIP("Keep the current day")),
+    Field("expense_category", lambda c, g: "Which category should it be? Say 'same' to keep it.", _exp_optional(_exp_category), _exp_category_options),
+    Field("expense_vendor", lambda c, g: "Who was it paid to? Say 'same' to keep it.", _exp_optional(_exp_vendor), _SKIP("Keep the current vendor"), optional=True),
+)
+EXP_VOID: tuple[Field, ...] = (
+    Field("expense_pick", lambda c, g: "Which expense do you want to remove?", _exp_pick, _exp_pick_options, unanswerable=_exp_pick_blocked),
+    Field("expense_reason", lambda c, g: "Why are you removing it? A few words are enough; it is kept in the history.", _exp_reason,
+          lambda c, g: (Option("Entered by mistake", "Entered by mistake"), Option("Duplicate entry", "Duplicate entry"), Option("Not a business expense", "Not a business expense"))),
+)
+EXP_PAID: tuple[Field, ...] = (
+    Field("expense_pick", lambda c, g: "Which expense do you want to update?", _exp_pick, _exp_pick_options, unanswerable=_exp_pick_blocked),
+    Field("expense_status", lambda c, g: "Is it paid, unpaid or partially paid?", _exp_payment,
+          lambda c, g: (Option("Paid", "paid"), Option("Unpaid", "unpaid"), Option("Partially paid", "partially paid"))),
+    Field("expense_paid_amount", lambda c, g: "How much of it has been paid, in rupees?", _exp_amount, applies=lambda c, g: g.get("expense_status") == "partially_paid"),
+)
+EXPENSE_SESSIONS = ("cfo.expense_add", "cfo.expense_correct", "cfo.expense_void", "cfo.expense_paid")
+
+
+def _expense_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
+    """The frozen slots of the registry action, built only from what the seller answered (and, for a correction, the stored original)."""
+    if playbook == "cfo.expense_add":
+        out: dict[str, Any] = {"effective_date": c["expense_date"], "category": c["expense_category"], "amount_paise": c["expense_amount"]}
+        if c.get("expense_vendor"):
+            out["vendor"] = c["expense_vendor"]
+        if c.get("expense_note"):
+            out["description"] = c["expense_note"]
+        out["request_key"] = "pending"
+        return out
+    pick = c["expense_pick"]
+    if playbook == "cfo.expense_correct":
+        out = {"expense_id": pick["id"], "effective_date": c.get("expense_date") or pick["effective_date"], "category": c.get("expense_category") or pick["category"],
+               "amount_paise": c.get("expense_amount") or pick["amount_paise"], "reason": "Corrected through the CEO", "request_key": "pending"}
+        vendor = c.get("expense_vendor") or pick.get("vendor")
+        if vendor:
+            out["vendor"] = vendor
+        if pick.get("description"):
+            out["description"] = pick["description"]
+        return out
+    if playbook == "cfo.expense_void":
+        return {"expense_id": pick["id"], "reason": c["expense_reason"], "request_key": "pending"}
+    out = {"expense_id": pick["id"], "status": c["expense_status"], "request_key": "pending"}
+    if c.get("expense_paid_amount") is not None:
+        out["paid_amount_paise"] = c["expense_paid_amount"]
+    return out
+
+
 CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords", "cmo.generate_bullets", "cmo.generate_backend_terms",
                 "cmo.generate_listing_copy", "cmo.market_trends")
 # classifier slot name -> session field it can pre-fill (the seller already said it); the answer still goes through the same parser
-PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget", "candidate_prices_paise"),
-                                          "competitor": ("competitor",)}
+PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget", "candidate_prices_paise", "expense_amount"),
+                                          "competitor": ("competitor",), "period": ("expense_date",), "category": ("expense_category",), "note": ("expense_note", "expense_pick")}
 PLAYBOOK_PREFILL: Mapping[str, frozenset[str]] = {"NEW_PRODUCT_DECISION": frozenset({"sku"}), "COMPETITOR_PRICE_IMPACT": frozenset({"competitor", "candidate_prices_paise"})}  # what a decision playbook may be told up front
 
 SESSIONS: Mapping[str, tuple[Field, ...]] = {
@@ -812,6 +961,7 @@ SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "pi.discover": PI_DISCOVER,
     "cmo.market_trends": CMO_TRENDS, "dr.trend_run": DR_TREND_RUN,
     "dr.cogs_per_unit": DR_COGS, "dr.supplier_quote": DR_QUOTE, "dr.batch_budget": DR_BUDGET,
+    "cfo.expense_add": EXP_ADD, "cfo.expense_correct": EXP_CORRECT, "cfo.expense_void": EXP_VOID, "cfo.expense_paid": EXP_PAID,
     "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_DESCRIPTION, "cmo.generate_keywords": CMO_KEYWORDS,
     "cmo.generate_bullets": CMO_BULLETS, "cmo.generate_backend_terms": CMO_BACKEND_TERMS, "cmo.generate_listing_copy": CMO_LISTING,
 }
@@ -1050,6 +1200,8 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
 
 def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
     """The same shape `playbook_inputs.validate_inputs` checks for the form (§6.33). Nothing is added that the seller did not give."""
+    if playbook in EXPENSE_SESSIONS:
+        return _expense_inputs(playbook, c)
     if playbook == "dr.trend_run":
         return {}
     if playbook == "dr.cogs_per_unit":

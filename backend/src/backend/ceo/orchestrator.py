@@ -33,7 +33,7 @@ from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
 from backend.ceo.approval_gate import evaluate_playbook, plan_required
-from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_delegation, compound, conversational, deadlines, recovery, data_requests, findings, input_session, intent_router, memory, needs, profile_context, references
+from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_delegation, compound, conversational, deadlines, expense_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, profile_context, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.billing import UnitDecision, unit_decision
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
@@ -212,7 +212,7 @@ def _resume_plain_question(tenant: UUID, investigation_id: UUID, text: str) -> U
 def _with_request_key(done: Any, anchor: str) -> dict[str, Any]:
     """The collected inputs plus an idempotency key derived from the message that finished them: answering the same card twice reuses the finished result."""
     out = dict(done.inputs)
-    if done.playbook in input_session.CMO_SESSIONS:
+    if done.playbook in input_session.CMO_SESSIONS or done.playbook in input_session.EXPENSE_SESSIONS:
         out["request_key"] = f"ceo-{anchor}"
     if done.playbook in ("pi.discover", "NEW_PRODUCT_DECISION"):
         out["ceo_ref"] = f"ceo-{anchor}"
@@ -698,7 +698,7 @@ def _run_admitted(
                 if prefill.get("marketplace") and normalise_marketplace(text) is None:  # a marketplace the seller did not write is never taken from a model: it is asked
                     prefill = {k: v for k, v in prefill.items() if k != "marketplace"}
                 carry = {**ceo_reads_product_facts(tenant, prefill.get("product")), **cmo_delegation.carried_facts(key, prefill.get("product"), all_plans)}  # saved profile first, this conversation's answers win
-            started = input_session.start(key, input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices), prefill=prefill, carry=carry)
+            started = input_session.start(key, input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices), prefill=prefill, carry=carry, hidden=expense_chat.hidden_for(key, decision.slots, decision.flags))
             if isinstance(started, input_session.Ask) and cmo_delegated:
                 started = cmo_delegation.begin(started, action_key=key, now=now)
             if isinstance(started, input_session.Done):
@@ -1007,6 +1007,10 @@ def _plan_turn(
             compact = cmo_delegation.image_compact(image_followup["attachment"], model_label=label)
             title = "Read your attached photo"
             followup = {"action_key": image_followup["action_key"], "slots": dict(image_followup["slots"]), "attachment_id": str(image_followup["attachment"]["id"])}
+            continue
+        if k in expense_chat.WRITE_KEYS:  # the exact values the seller is about to approve, in words written by code
+            d, compact, title = expense_chat.plan_extras(k, slots, ctx.tenant_id)
+            details.extend(d)
             continue
         d, u = cmo_delegation.plan_extras(k, slots, preview)
         if d and k in cmo_delegation.CI_INFORMED:
