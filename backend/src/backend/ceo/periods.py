@@ -4,9 +4,11 @@ The classifier extracts a period as TEXT ("September", "last month"). It never p
 concrete range or refuses (`PeriodUnresolvable` -> the turn asks the seller, spec E22) — it never guesses. What it resolved is always
 echoed to the seller (`ResolvedPeriod.echo`).
 
-Supported, and only these: `last month` / `previous month`, `this month`, `<month name> [<year>]`, `YYYY-MM`, and an explicit
-`YYYY-MM-DD to YYYY-MM-DD`. A bare month name means its most recent occurrence not in the future. Quarters ("last quarter") are
-deliberately NOT supported: calendar and Indian fiscal quarters differ, so the seller is asked.
+Supported, and only these: `last month` / `previous month`, `this month`, `today`, `yesterday`, `last N days`, a single day
+(`YYYY-MM-DD`, `5 October [2026]`, `October 5 [2026]`, `5/10/2026` read day-first), a range of two such days (`<day> to <day>`),
+`<month name> [<year>]`, `YYYY-MM`, and an explicit `YYYY-MM-DD to YYYY-MM-DD`. A bare month name or a day without a year means its most
+recent occurrence not in the future. Quarters ("last quarter") are deliberately NOT supported: calendar and Indian fiscal quarters
+differ, so the seller is asked.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from __future__ import annotations
 import calendar
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 _MONTHS = {name.lower(): i for i, name in enumerate(calendar.month_name) if name}
 _MONTHS.update({name.lower(): i for i, name in enumerate(calendar.month_abbr) if name})
@@ -27,6 +29,43 @@ _MONTH_YEAR = re.compile(r"^(?:for\s+|in\s+|of\s+)?([a-z]+)\.?(?:\s+(\d{4}))?$")
 
 class PeriodUnresolvable(ValueError):
     pass
+
+
+_DAY_MONTH = re.compile(r"^(?:on\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]+)\.?(?:,?\s+(\d{4}))?$")
+_MONTH_DAY = re.compile(r"^(?:on\s+)?([a-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?$")
+_SLASH_DATE = re.compile(r"^(?:on\s+)?(\d{1,2})[/-](\d{1,2})[/-](\d{4})$")
+_LAST_N_DAYS = re.compile(r"^(?:the\s+)?(?:last|past|previous)\s+(\d{1,3})\s+days?$")
+_RANGE_OF_DAYS = re.compile(r"^(?:from\s+)?(.+?)\s+(?:to|till|until|through|-|–)\s+(.+)$")
+
+
+def single_day(raw: str, *, today: date) -> date | None:
+    """One calendar day written in a form we read exactly, or None. A day without a year is its most recent occurrence not in the future."""
+    text = " ".join((raw or "").strip().lower().split()).strip(" .,")
+    if text == "today":
+        return today
+    if text == "yesterday":
+        return today - timedelta(days=1)
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            return date.fromisoformat(text)
+        m = _SLASH_DATE.match(text)
+        if m:
+            return date(int(m.group(3)), int(m.group(2)), int(m.group(1)))  # day first
+        m = _DAY_MONTH.match(text)
+        day, month_name, year = (m.group(1), m.group(2), m.group(3)) if m else (None, None, None)
+        if not m:
+            m = _MONTH_DAY.match(text)
+            if m:
+                month_name, day, year = m.group(1), m.group(2), m.group(3)
+        if m and month_name in _MONTHS:
+            month = _MONTHS[month_name]
+            if year:
+                return date(int(year), month, int(day))
+            candidate = date(today.year, month, int(day))
+            return candidate if candidate <= today else date(today.year - 1, month, int(day))
+    except ValueError:
+        return None
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +100,25 @@ def resolve_period(raw: str | None, *, today: date) -> ResolvedPeriod:
         start = today.replace(day=1)
         return ResolvedPeriod(start, today, today, _echo(raw or "", start, today))
 
+    d = single_day(text, today=today)
+    if d is not None:
+        if d > today:
+            raise PeriodUnresolvable("that day has not come yet")
+        return ResolvedPeriod(d, d, today, _echo(raw or "", d, d))
+    m = _LAST_N_DAYS.match(text)
+    if m and 1 <= int(m.group(1)) <= 366:
+        start = today - timedelta(days=int(m.group(1)) - 1)
+        return ResolvedPeriod(start, today, today, _echo(raw or "", start, today))
+    m = _RANGE_OF_DAYS.match(text)
+    if m and not _ISO_RANGE.match(text):
+        a, b = single_day(m.group(1), today=today), single_day(m.group(2), today=today)
+        if a is not None and b is not None:
+            if b < a:
+                raise PeriodUnresolvable("the range ends before it starts")
+            if a > today:
+                raise PeriodUnresolvable("that period has not started yet")
+            b = min(b, today)
+            return ResolvedPeriod(a, b, today, _echo(raw or "", a, b))
     m = _ISO_RANGE.match(text)
     if m:
         try:

@@ -158,3 +158,12 @@ AC-L1 ✔ · AC-L2 ✔ · AC-L3 ✔ · AC-L4 ✔ · AC-L5 ✔ · AC-L6 ✔ · AC
 6. **No UI.** The review/confirm/release flows exist as API only (dashboard track).
 7. **Seller-facing GST, CA and category-default questions (PV-E1…E3) remain open.**
 
+
+
+### 14.4 Two expense models coexist after the 2026-10-23 merge (needs an owner decision)
+
+A teammate's Expense Tracker (`feat/expense-tracker-pnl-calculator`, merged into this branch) built a separate, event-sourced expense ledger: `expense_event`, `expense_status_event`, `expense_template`, `expense_assignment`, routes under `/cfo/expense-ledger/*`, a P&L feed behind `EXPENSE_LEDGER_FEEDS_PNL` (default off), CSV import/export, recurring/amortized templates and SKU splits, and the page `/dashboard/cfo/expenses`. This spec's ledger (`expense_entry`, `expense_class_assignment`, `expense_period_declaration`; routes `/cfo/ledger/*`; planner metrics `OPERATING_PROFIT` and `EXPENSE_BY_CATEGORY`; the CFO tab **Expenses**) is a different set of tables.
+
+* **Nothing collides:** table names, routes and migration chains are distinct (the migration lines are joined by `20261023_0017`; this branch's `20261022_0015` was renamed `20261022_0015c` because both lines had used that id).
+* **They do not see each other:** an expense entered in one is not in the other, so Operating Profit (this spec) and the teammate's P&L feed can disagree, and the same cost entered in both would be counted in each. Until one model is chosen, enter business expenses in one place only.
+* **Decision needed:** keep one. Recommended: keep this spec's ledger as the source for the planner/Operating Profit (it carries holds, suggest-only classes, cost-ownership arbitration and the per-marketplace coverage rules) and migrate the teammate's templates, amortization and SKU splits onto it, or the reverse after review. Not done here because it changes the data model of both.

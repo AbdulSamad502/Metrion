@@ -39,7 +39,7 @@ def test_period_resolution(text, start, end):
     assert start in p.echo and end in p.echo  # the interpretation is always echoed (AC17)
 
 
-@pytest.mark.parametrize("text", ["", None, "last quarter", "Q2", "recently", "yesterday", "2026-13", "2026-09-30 to 2026-09-01", "2027-03", "foo 2026"])
+@pytest.mark.parametrize("text", ["", None, "last quarter", "Q2", "recently", "tomorrow", "2026-13", "2026-09-30 to 2026-09-01", "2027-03", "foo 2026"])
 def test_an_unresolvable_period_is_refused_never_guessed(text):
     with pytest.raises(PeriodUnresolvable):
         resolve_period(text, today=TODAY)
@@ -124,3 +124,25 @@ def test_the_two_decision_playbooks_run_only_from_a_form():
 def test_business_briefing_has_no_legs_and_reads_only_persisted_state():
     pb = PLAYBOOKS["BUSINESS_BRIEFING"]
     assert pb.legs == () and "BS_PNL_LATEST" in pb.state_reads
+
+
+# ------------------------------------------------------------------------------------------------ single days and relative ranges (ceo-expense-tracker-chat.md)
+@pytest.mark.parametrize("text,start,end", [
+    ("today", "2026-10-23", "2026-10-23"), ("Yesterday", "2026-10-22", "2026-10-22"), ("last 7 days", "2026-10-17", "2026-10-23"), ("the last 30 days", "2026-09-24", "2026-10-23"),
+    ("2026-10-05", "2026-10-05", "2026-10-05"), ("5 october", "2026-10-05", "2026-10-05"), ("oct 5, 2026", "2026-10-05", "2026-10-05"), ("5th Oct", "2026-10-05", "2026-10-05"),
+    ("5/10/2026", "2026-10-05", "2026-10-05"), ("1 oct to 15 oct", "2026-10-01", "2026-10-15"), ("from 1 sept to 30 sept", "2026-09-01", "2026-09-30"),
+    ("30 december", "2025-12-30", "2025-12-30"),  # a day without a year is its most recent occurrence not in the future
+])
+def test_single_days_and_relative_ranges_are_read_exactly(text, start, end):
+    from datetime import date as d
+
+    r = resolve_period(text, today=d(2026, 10, 23))
+    assert (r.start.isoformat(), r.end.isoformat(), r.as_of) == (start, end, d(2026, 10, 23)) and "I read the period" in r.echo
+
+
+@pytest.mark.parametrize("text", ["tomorrow", "2026-11-05", "last 0 days", "last 400 days", "32 october", "15 oct to 1 oct", "5/13/2026", "soon"])
+def test_what_cannot_be_read_exactly_is_refused_never_guessed(text):
+    from datetime import date as d
+
+    with pytest.raises(PeriodUnresolvable):
+        resolve_period(text, today=d(2026, 10, 23))
