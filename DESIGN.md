@@ -35,6 +35,13 @@ Weight, colour and spacing carry any further hierarchy, never a fifth size. Trac
 ## Spacing
 8-point grid. Gaps, padding and margins are multiples of 8 (8, 16, 24, 32, 40, 48); 4 is allowed only inside a control. Touch targets are at least 40px. No other values.
 
+## Copy
+Plain words, short sentences, written for sellers, not specialists. Say it in fewer words when nothing is lost.
+- Prefer "Needs your input" to internal role names (CFO, CMO, CEO) in headings and labels.
+- Technical terms (engine-calculated, settlement-derived) get a short plain label; the exact term lives in a tooltip or detail view.
+- "Unavailable" and "Not yet calculable" stay distinct, each with a one-line reason.
+- Source, period and status stay on every figure, worded simply.
+
 ## Money display
 - Integer paise only. The display helper (formatPaise) formats with Indian digit grouping (₹4,25,000) and never does arithmetic.
 - Unavailable renders as "Unavailable" or "Not yet calculable", never 0.
