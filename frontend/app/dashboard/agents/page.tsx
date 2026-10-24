@@ -44,13 +44,12 @@ function Agents() {
       <Section title="Adding and removing agents" panel={false}>
         <div className="flex flex-wrap items-center gap-2.5">
           <span className="t-body-lg font-semibold" style={{ color: "var(--text-3)" }}>
-            Agent Cart and entitlements
+            Buying and removing agents
           </span>
           <StatusBadge tone="neutral">Not available yet</StatusBadge>
         </div>
         <p className="mt-2 max-w-[70ch] t-body leading-relaxed" style={{ color: "var(--text-4)" }}>
-          There is no entitlement or purchasing service in the backend yet, so Metrion cannot unlock, lock, add or remove an
-          agent. {agents && !error ? "The roster above is exactly what the backend reports — nothing on this page changes it." : "Nothing on this page changes the roster."}
+          There is no way to buy, add or remove agents in Metrion yet. {agents && !error ? "The roster above is exactly what the backend reports — nothing on this page changes it." : "Nothing on this page changes the roster."}
         </p>
       </Section>
     </div>

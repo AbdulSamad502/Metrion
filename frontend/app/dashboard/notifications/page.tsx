@@ -123,8 +123,7 @@ function Notifications() {
         </button>
       </div>
       <p className="t-body" style={{ color: "var(--text-5)" }}>
-        Shows competitor alerts from the last {ALERT_WINDOW_DAYS} days and data requests that are still open. Metrion does not
-        track read or unread yet, so nothing here can be marked as read.
+        Competitor alerts from the last {ALERT_WINDOW_DAYS} days and data requests still open. There is no read or unread state, so nothing here can be marked as read.
       </p>
       <TabPanel id="all" active={tab} idPrefix="notif">
         {list(all, ["alerts", "requests"], alertsHidden ? "No open data requests" : "You're all caught up", alertsHidden ? "The CFO is not waiting on any input from you. Competitor alerts are not shown for your role." : "No competitor alerts and no open data requests right now.")}
@@ -143,12 +142,12 @@ function Notifications() {
         subtitle={selected?.kind === "alert" ? "Competitor alert" : "Needs your input"}
         status={
           selAlert ? (
-            <StatusBadge tone={selAlert.thresholdBreached ? "negative" : "info"} dot>
-              {selAlert.thresholdBreached ? "Alert-worthy" : "Informational"}
+            <StatusBadge tone="neutral" dot>
+              {selAlert.thresholdBreached ? "Crossed alert threshold" : "Informational"}
             </StatusBadge>
           ) : selRequest ? (
             <StatusBadge tone="warning" dot>
-              {selRequest.status.toLowerCase()}
+              {requestStatusLabel(selRequest.status)}
             </StatusBadge>
           ) : undefined
         }
@@ -157,12 +156,17 @@ function Notifications() {
         {selRequest && <RequestDetail request={selRequest} />}
         {gone && (
           <p role="status" className="t-body" style={{ color: "var(--text-4)" }}>
-            {selected?.kind === "alert" ? "This alert is no longer in the last 14 days of alerts." : "This request is no longer open: it may have been answered."} The list has been updated.
+            {selected?.kind === "alert" ? `This alert is no longer in the last ${ALERT_WINDOW_DAYS} days of alerts.` : "This request is no longer open: it may have been answered."} The list has been updated.
           </p>
         )}
       </DetailDrawer>
     </div>
   );
+}
+
+/** `OPEN` is the one status the backend contract establishes for a data request; anything else is shown exactly as returned, never mapped to a guessed meaning. */
+function requestStatusLabel(status: string): string {
+  return status.toUpperCase() === "OPEN" ? "Open" : status;
 }
 
 function NotificationItem({ row, onOpen }: { row: Row; onOpen: () => void }) {
@@ -186,11 +190,11 @@ function NotificationItem({ row, onOpen }: { row: Row; onOpen: () => void }) {
             {row.request.reason}
           </span>
         )}
-        <time className="mt-1 block t-meta-sm" style={{ color: "var(--text-7)" }} dateTime={row.at}>
+        <time className="mt-1 block t-meta-sm" style={{ color: "var(--text-6)" }} dateTime={row.at}>
           {new Date(row.at).toLocaleString()}
         </time>
       </span>
-      <span className="mt-1 flex-shrink-0" style={{ color: "var(--text-6)" }}>
+      <span className="mt-1 inline-flex flex-shrink-0" style={{ color: "var(--text-6)", transform: "rotate(-90deg)" }} aria-hidden>
         <Icon name="chevron" size={16} />
       </span>
     </button>
@@ -253,7 +257,7 @@ function RequestDetail({ request }: { request: DataRequestItem }) {
       <Fact label="Needed">{request.requestedField}</Fact>
       <Fact label="Why">{request.reason ?? "No reason was recorded."}</Fact>
       {request.blockingMetric && <Fact label="Blocking this figure">{request.blockingMetric}</Fact>}
-      <Fact label="Status">{request.status.toLowerCase()}</Fact>
+      <Fact label="Status">{requestStatusLabel(request.status)}</Fact>
       <Link
         href="/dashboard/cfo#anomalies"
         className="mt-btn mt-focus inline-flex w-fit items-center rounded-lg px-3 py-2 t-body-sm font-bold"

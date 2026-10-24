@@ -24,7 +24,7 @@ import { useSubmitGuard } from "@/lib/useSubmitGuard";
 const SETTINGS_TABS = [
   { id: "account", label: "Account & security" },
   { id: "business", label: "Business" },
-  { id: "notifications", label: "Notifications" },
+  { id: "notifications", label: "Competitor digest" },
 ] as const;
 
 /** Settings. "Account & security" exists specifically to close the auth.md gap: a user who
@@ -32,7 +32,7 @@ const SETTINGS_TABS = [
  * add one — that tab is that path, using Clerk's own supported mechanism (`user.updatePassword`)
  * so it's the SAME Clerk user, tenant and membership throughout — never a second account.
  * "Business" shows the workspace and opens the mandatory Business details form (business-profile.md), and
- * "Notifications" edits the one preference the backend really stores (the CI digest
+ * "Competitor digest" (hash `#notifications`, kept so old links work) edits the one preference the backend really stores (the CI digest
  * subscription). Marketplace and WhatsApp settings are intentionally absent: no backend exists. */
 export default function SettingsPage() {
   return (
@@ -195,18 +195,17 @@ function DigestPreferenceCard() {
           <LoadingState label="Loading your preference…" />
         ) : (
           <>
-            <div role="radiogroup" aria-label="Digest frequency" aria-busy={saving} className="flex gap-2">
+            <div role="group" aria-label="Digest frequency" aria-busy={saving} className="flex flex-wrap gap-2">
               {FREQUENCIES.map((f) => {
                 const selected = sub.frequency === f.value;
                 return (
                   <button
                     key={f.value}
                     type="button"
-                    role="radio"
-                    aria-checked={selected}
+                    aria-pressed={selected}
                     disabled={saving}
                     onClick={() => void save(f.value)}
-                    className="mt-chip mt-focus rounded-xl px-4 py-2 t-body-sm font-semibold disabled:opacity-60"
+                    className="mt-chip mt-focus min-h-[40px] rounded-xl px-4 py-2 t-body-sm font-semibold disabled:opacity-60"
                     style={{
                       color: selected ? "var(--accent)" : "var(--text-4)",
                       background: selected ? "var(--accent-fill-default)" : "transparent",
@@ -410,7 +409,7 @@ function PasswordCard({ user, passwordEnabled }: { user: AppUser; passwordEnable
                 />
               ))}
             </div>
-            <span className="text-xs" style={{ color: "var(--text-7)" }}>
+            <span className="text-xs" style={{ color: "var(--text-6)" }}>
               {strength.label}
             </span>
           </div>
@@ -426,12 +425,12 @@ function PasswordCard({ user, passwordEnabled }: { user: AppUser; passwordEnable
         />
 
         {error && (
-          <p className="text-sm" style={{ color: "var(--negative)" }}>
+          <p role="alert" className="text-sm" style={{ color: "var(--negative)" }}>
             {error}
           </p>
         )}
         {success && (
-          <p className="text-sm" style={{ color: "var(--accent)" }}>
+          <p role="status" className="text-sm" style={{ color: "var(--accent)" }}>
             {passwordEnabled ? "Password updated." : "Password added — you can now sign in with either Google or email and password."}
           </p>
         )}

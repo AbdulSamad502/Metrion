@@ -1,7 +1,6 @@
 import { Card, CardCta } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
-import { agentMeta, agentTier, TIER_LABEL } from "@/lib/agents";
-import type { AgentStatus } from "@/lib/api";
+import { agentMeta, agentTier, LOCK_LABEL, TIER_LABEL, type RosterAgent } from "@/lib/agents";
 
 /** One agent, answering five questions in reading order: who is it, what does it do, is it
  * available, what did it last do, and where do I go next. Presence follows the tier — a wired
@@ -13,18 +12,21 @@ import type { AgentStatus } from "@/lib/api";
  *
  * `lastActivity`: an ISO timestamp when the backend records one for this agent, `null` when it does
  * but nothing has happened yet, `undefined` when the backend does not track it at all. */
-export function AgentCard({ agent, lastActivity }: { agent: AgentStatus; lastActivity?: string | null }) {
+export function AgentCard({ agent, lastActivity }: { agent: RosterAgent; lastActivity?: string | null }) {
   const meta = agentMeta(agent.id);
   const tier = agentTier(agent);
-  const live = tier === "connected";
-  const dead = tier === "unavailable";
+  const live = tier === "connected" && !agent.lock;
+  const locked = Boolean(agent.lock); // the backend says this member cannot use it: say so and offer no link
+  const dead = tier === "unavailable" || locked;
+  const href = locked ? undefined : meta.href;
+  const stateLabel = agent.lock ? LOCK_LABEL[agent.lock] : TIER_LABEL[tier];
 
   return (
     <Card
-      href={meta.href}
+      href={href}
       variant={live ? "elevated" : dead ? "locked" : "default"}
       selected={false}
-      ariaLabel={meta.href ? `${agent.name}, ${TIER_LABEL[tier]}. ${meta.workspaceLabel ?? "Open"}` : undefined}
+      ariaLabel={href ? `${agent.name}, ${stateLabel}. ${meta.workspaceLabel ?? "Open"}` : undefined}
       className="h-full"
     >
       <div className="flex h-full flex-col gap-3.5 p-4">
@@ -48,7 +50,7 @@ export function AgentCard({ agent, lastActivity }: { agent: AgentStatus; lastAct
                 className="h-1.5 w-1.5 rounded-full"
                 style={{ background: live ? "var(--accent)" : "transparent", border: live ? "none" : "1px solid var(--text-6)" }}
               />
-              {TIER_LABEL[tier]}
+              {stateLabel}
             </div>
           </div>
         </div>
@@ -60,7 +62,11 @@ export function AgentCard({ agent, lastActivity }: { agent: AgentStatus; lastAct
         <div className="mt-auto flex items-end justify-between gap-3">
           <div className="t-meta" style={{ color: "var(--text-5)" }}>
             {dead ? (
+              locked ? (
+              "Activity is not shown while this agent is locked for you."
+            ) : (
               "No activity — this agent does not exist yet."
+            )
             ) : lastActivity === undefined ? (
               "Activity is not recorded for this agent yet."
             ) : lastActivity === null ? (
@@ -71,11 +77,11 @@ export function AgentCard({ agent, lastActivity }: { agent: AgentStatus; lastAct
               </>
             )}
           </div>
-          {meta.href ? (
+          {href ? (
             <CardCta>{meta.workspaceLabel ?? "Open"}</CardCta>
           ) : (
             <span className="t-meta flex-shrink-0 font-semibold" style={{ color: "var(--text-6)" }}>
-              No workspace
+              {locked ? "Locked" : "No workspace"}
             </span>
           )}
         </div>

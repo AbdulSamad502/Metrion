@@ -62,6 +62,15 @@ export const TIER_LABEL: Record<AgentTier, string> = {
   unavailable: "Not built yet",
 };
 
+/** A roster entry as the Agents page uses it. `lock` is set by the UI when `GET /ceo/agents/availability` says this member cannot use the agent (`NOT_ENTITLED` = not in the plan, `NOT_PERMITTED` = the role lacks `agent.*`); the roster endpoint itself never returns it, so it is deliberately not part of `AgentStatus`, the roster's response type. */
+export type RosterAgent = AgentStatus & { lock?: "NOT_ENTITLED" | "NOT_PERMITTED" };
+
+/** What a locked agent is called, from the availability verdict the backend returned for this member. Not shown for an agent that is simply not wired to Ask Metrion. */
+export const LOCK_LABEL: Record<NonNullable<RosterAgent["lock"]>, string> = {
+  NOT_ENTITLED: "Not in your plan",
+  NOT_PERMITTED: "Your role can't use this",
+};
+
 export function agentMeta(id: string): AgentMeta {
   return AGENT_META[id] ?? FALLBACK;
 }
@@ -69,10 +78,11 @@ export function agentMeta(id: string): AgentMeta {
 /** The backend's roster (`GET /ceo-hub/agents`) is a fixed list that still marks Product Intelligence and the CFO as not connected, although the CEO registry has
  * wired actions for both. What the CEO can really run for this member is `GET /ceo/agents/availability` (permission, plan and wired chat actions), so an agent that
  * answers PRESENT with at least one chat action is shown as connected. An agent the member may not use, or one the plan excludes, is left as the roster says. */
-export function withChatAvailability(roster: AgentStatus[], availability: Partial<AgentAvailability> | null | undefined): AgentStatus[] {
+export function withChatAvailability(roster: AgentStatus[], availability: Partial<AgentAvailability> | null | undefined): RosterAgent[] {
   if (!availability) return roster;
   return roster.map((a) => {
     const live = (availability as Record<string, { status?: string; chatActions?: number } | undefined>)[a.id];
+    if (live && (live.status === "NOT_ENTITLED" || live.status === "NOT_PERMITTED")) return { ...a, lock: live.status }; // `status` is left as the roster says; only the card's wording and link change
     return live && live.status === "PRESENT" && typeof live.chatActions === "number" && live.chatActions > 0 ? { ...a, status: "CONNECTED" as const } : a;
   });
 }
@@ -82,7 +92,7 @@ export function withChatAvailability(roster: AgentStatus[], availability: Partia
  * per-investigation attachment, and the UI must not present it as either. */
 export function useAgentRoster() {
   const { getToken } = useAuth();
-  const [agents, setAgents] = useState<AgentStatus[] | null>(null);
+  const [agents, setAgents] = useState<RosterAgent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const alive = useRef(true); // a reply that arrives after the page is gone must not update it

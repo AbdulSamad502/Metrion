@@ -40,7 +40,7 @@ export function FormField({
             onClick={() => setReveal((r) => !r)}
             aria-label={reveal ? "Hide password" : "Show password"}
             aria-pressed={reveal}
-            className="mt-focus absolute right-2 top-1/2 inline-flex min-h-9 min-w-9 -translate-y-1/2 sm:min-h-6 sm:min-w-6 items-center justify-center rounded px-1.5 text-xs font-semibold"
+            className="mt-focus absolute right-2 top-1/2 inline-flex min-h-10 min-w-10 -translate-y-1/2 items-center justify-center rounded px-1.5 text-xs font-semibold"
             style={{ color: "var(--text-6)" }}
           >
             {reveal ? "Hide" : "Show"}
