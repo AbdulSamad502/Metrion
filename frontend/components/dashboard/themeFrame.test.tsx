@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,7 +10,7 @@ vi.mock("@clerk/nextjs", () => ({
   useClerk: () => ({ signOut: vi.fn() }),
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => pathname, useRouter: () => ({ replace: vi.fn() }) }));
-vi.mock("next/image", () => ({ default: (p: { alt: string }) => <span role="img" aria-label={p.alt} /> }));
+vi.mock("next/image", () => ({ default: (p: { alt: string; src: string; className?: string }) => <span role="img" aria-label={p.alt} data-src={p.src} className={p.className} /> }));
 
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { ShellFrame } from "@/components/dashboard/ShellFrame";
@@ -35,7 +35,10 @@ beforeEach(() => {
     return json([]);
   }));
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  cleanup(); // unmount first: a late state update must not run an effect after the globals it uses (ResizeObserver) have been removed
+  vi.unstubAllGlobals();
+});
 
 describe("theme in the signed-in frame", () => {
   it("is dark by default, and the toggle switches to light and back, reporting its state", async () => {
@@ -65,5 +68,14 @@ describe("theme in the signed-in frame", () => {
     expect(html()).toBe("light");
     unmount();
     expect(html()).toBeUndefined();
+  });
+
+  it("carries both brand marks in the sidebar, the transparent light one for CSS to pick on a light surface", async () => {
+    render(<ShellFrame>{page()}</ShellFrame>);
+    await screen.findByText("body");
+    const marks = screen.getAllByRole("img", { name: "Metrion", hidden: true }).filter((m) => m.getAttribute("data-src")?.includes("metrion-mark"));
+    expect(marks.map((m) => m.getAttribute("data-src")).sort()).toEqual(["/metrion-mark-light.png", "/metrion-mark.png"]);
+    expect(marks.find((m) => m.getAttribute("data-src") === "/metrion-mark.png")).toHaveClass("mt-brand-mark--dark");
+    expect(marks.find((m) => m.getAttribute("data-src") === "/metrion-mark-light.png")).toHaveClass("mt-brand-mark--light");
   });
 });

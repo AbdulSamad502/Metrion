@@ -18,3 +18,24 @@ describe("surfaces that look right in both themes", () => {
     expect(css).not.toMatch(/\n\.mt-pure-black\s*\{/);
   });
 });
+
+describe("the brand mark on a light surface", () => {
+  it("swaps to the transparent light mark by CSS only, leaving the dark mark untouched in the dark theme", () => {
+    expect(css).toMatch(/\.mt-brand-mark--light\s*\{\s*display:\s*none/);
+    expect(css).toMatch(/:root\[data-theme="light"\] \.mt-brand-mark--dark\s*\{\s*display:\s*none/);
+    expect(css).toMatch(/:root\[data-theme="light"\] \.mt-brand-mark--light\s*\{\s*display:\s*block/);
+  });
+  it("ships a transparent light mark (a PNG with an alpha channel), distinct from the opaque dark one", () => {
+    const png = (f: string) => readFileSync(join(process.cwd(), "public", f));
+    const colourType = (b: Buffer) => b[25]; // IHDR colour type: 6 = RGBA
+    expect(colourType(png("metrion-mark-light.png"))).toBe(6);
+    expect(png("metrion-mark-light.png").equals(png("metrion-mark.png"))).toBe(false);
+  });
+});
+
+describe("tab strip", () => {
+  it("fades only the edge that has more tabs", () => {
+    expect(css).toMatch(/\.mt-tabs\[data-more-end="true"\]\s*\{[^}]*mask-image/);
+    expect(css).toMatch(/\.mt-tabs\[data-more-start="true"\]\[data-more-end="true"\]\s*\{[^}]*mask-image/);
+  });
+});

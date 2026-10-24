@@ -99,13 +99,13 @@ export function Sidebar({
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
-    const ro = new ResizeObserver(placeIndicator);
-    ro.observe(nav);
-    nav.querySelectorAll<HTMLElement>(".mt-nav-item").forEach((el) => ro.observe(el));
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(placeIndicator) : null; // absent in very old browsers
+    ro?.observe(nav);
+    nav.querySelectorAll<HTMLElement>(".mt-nav-item").forEach((el) => ro?.observe(el));
     void document.fonts?.ready.then(placeIndicator);
     window.addEventListener("resize", placeIndicator);
     return () => {
-      ro.disconnect();
+      ro?.disconnect();
       window.removeEventListener("resize", placeIndicator);
     };
   }, [collapsed]);
@@ -136,7 +136,8 @@ export function Sidebar({
         } ${collapsed ? "lg:w-[76px]" : "lg:w-60"}`}
       >
         <div className={`flex items-center gap-2.5 px-5 pb-4 pt-5 ${collapsed ? "lg:justify-center lg:px-0" : ""}`}>
-          <Image src="/metrion-mark.png" alt="Metrion" width={44} height={28} className="flex-shrink-0" priority />
+          <Image src="/metrion-mark.png" alt="Metrion" width={44} height={28} className="mt-brand-mark--dark flex-shrink-0" priority />
+          <Image src="/metrion-mark-light.png" alt="Metrion" width={44} height={28} className="mt-brand-mark--light flex-shrink-0" loading="eager" />
           <div className={`min-w-0 ${collapsed ? "lg:hidden" : ""}`}>
             <div className="t-section font-bold leading-none" style={{ color: "var(--text-1)" }}>
               Metrion

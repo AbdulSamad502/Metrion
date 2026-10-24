@@ -815,6 +815,20 @@ select option:disabled {
   display: none;
 }
 
+/* Tabs that do not fit: the edge with more tabs fades out (see Tabs.tsx). The mask only appears while there is more to scroll to. */
+.mt-tabs[data-more-end="true"] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+.mt-tabs[data-more-start="true"] {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
+}
+.mt-tabs[data-more-start="true"][data-more-end="true"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+}
+
 .mt-tab {
   position: relative;
   display: flex;
@@ -1543,6 +1557,16 @@ body:has(.mt-galaxy)::before {
   color: var(--accent-on-fill);
   background: rgba(6, 32, 16, 0.16);
 }
+@media (max-width: 1023px) {
+  .mt-app-surface .mt-tab {
+    min-height: 40px; /* a touch target on tablets and phones */
+  }
+}
+@media (max-width: 479px) {
+  .mt-app-surface .mt-tab {
+    padding-inline: 12px; /* a little tighter on a phone, so more tabs fit before the strip needs to scroll */
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .mt-app-surface .mt-tab {
     transition: none;
@@ -1694,6 +1718,18 @@ body:has(.mt-galaxy)::before {
 }
 :root[data-theme="light"] .mt-app-surface::after {
   display: none; /* the film grain is a dark-theme texture */
+}
+
+/* Brand mark: the shipped PNG is opaque on black, which is a black tile on a light surface. The light theme shows a transparent, deeper-green copy of the same
+   mark instead. Both are in the page and CSS picks one, so there is no flash and no script. */
+.mt-brand-mark--light {
+  display: none;
+}
+:root[data-theme="light"] .mt-brand-mark--dark {
+  display: none;
+}
+:root[data-theme="light"] .mt-brand-mark--light {
+  display: block;
 }
 
 /* Toast: one quiet confirmation at a time. Opacity plus an 8px rise, 200ms; reduced motion turns it off. */

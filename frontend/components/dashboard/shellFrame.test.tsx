@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -29,7 +29,10 @@ beforeEach(() => {
     return json({});
   }));
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  cleanup(); // unmount first: a late state update must not run an effect after the globals it uses (ResizeObserver) have been removed
+  vi.unstubAllGlobals();
+});
 
 const page = (name: string) => (
   <DashboardShell title={`Page ${name}`} subtitle="">
@@ -119,6 +122,7 @@ describe("Settings and the dashboard share one frame", () => {
     const link = screen.getByRole("link", { name: /Settings/ });
     link.focus(); // the seller tabbed to the Settings link and pressed Enter
     expect(link).toHaveFocus();
+    await waitFor(() => expect(calls("/ci/alerts")).toBe(1)); // the first read has finished: a navigation made while one is running is folded into a single follow-up read (see useNotifications)
 
     pathname = "/settings"; // dashboard -> settings
     rerender(<AppFrame>{page("Settings")}</AppFrame>);
@@ -126,6 +130,8 @@ describe("Settings and the dashboard share one frame", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument(); // before: a full-screen "Loading…"
     expect(screen.getByLabelText("Primary")).toBe(sidebar); // before: a new sidebar element
     expect(link).toHaveFocus(); // before: focus fell to <body>
+
+    await waitFor(() => expect(calls("/ci/alerts")).toBe(2));
 
     pathname = "/dashboard/cfo"; // settings -> dashboard
     rerender(<AppFrame>{page("CFO")}</AppFrame>);

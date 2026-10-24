@@ -1,12 +1,17 @@
 "use client";
 
-import { useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 export type TabItem = { id: string; label: string; count?: number | null; disabled?: boolean };
 
 /** Accessible tab strip (WAI-ARIA tabs pattern): roving tabindex, Left/Right/Home/End keys,
  * `aria-selected`, and a matching `TabPanel`. Controlled — the page owns which tab is active,
- * so deep links / sub-navigation stay possible. */
+ * so deep links / sub-navigation stay possible.
+ *
+ * When the tabs do not fit (a narrow phone), the strip scrolls sideways and the edge that has more tabs fades out, so a cut-off tab reads as "more this
+ * way" and not as a layout fault. The fade is set from the scroll position straight on the element (`data-more-start` / `data-more-end`), with no
+ * re-render. Changing the active tab scrolls it fully into view. Every tab and count stays in the DOM and in the accessibility tree. */
+const EDGE = 32; // px kept clear of the fade around the active tab
 export function Tabs({
   tabs,
   active,
@@ -21,7 +26,44 @@ export function Tabs({
   idPrefix?: string;
 }) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const listRef = useRef<HTMLDivElement | null>(null);
   const enabled = tabs.filter((t) => !t.disabled);
+
+  // Which edges have more tabs beyond them. Written to the element, not to state: it follows the scroll position and must not re-render the page.
+  const markEdges = () => {
+    const box = listRef.current;
+    if (!box) return;
+    const max = box.scrollWidth - box.clientWidth;
+    box.dataset.moreStart = String(box.scrollLeft > 1);
+    box.dataset.moreEnd = String(max > 1 && box.scrollLeft < max - 1);
+  };
+  const tabKey = tabs.map((t) => `${t.id}:${t.label}:${t.count ?? ""}`).join("|"); // a changed label or count can change the width
+  useEffect(() => {
+    markEdges();
+    const box = listRef.current;
+    if (!box) return;
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(markEdges) : null;
+    ro?.observe(box);
+    window.addEventListener("resize", markEdges);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", markEdges);
+    };
+  }, [tabKey]);
+
+  // The active tab is brought fully into view, clear of the fade (instantly when the visitor prefers reduced motion).
+  useEffect(() => {
+    const box = listRef.current;
+    const el = refs.current[active];
+    if (!box || !el) return;
+    const left = el.offsetLeft - EDGE;
+    const right = el.offsetLeft + el.offsetWidth + EDGE - box.clientWidth;
+    const to = box.scrollLeft > left ? left : box.scrollLeft < right ? right : null;
+    if (to === null) return;
+    const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (typeof box.scrollTo === "function") box.scrollTo({ left: Math.max(0, to), behavior: reduced ? "auto" : "smooth" });
+    else box.scrollLeft = Math.max(0, to);
+  }, [active]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const i = enabled.findIndex((t) => t.id === active);
@@ -38,7 +80,7 @@ export function Tabs({
   };
 
   return (
-    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="mt-tabs">
+    <div ref={listRef} role="tablist" aria-label={label} onKeyDown={onKeyDown} onScroll={markEdges} className="mt-tabs">
       {tabs.map((t) => {
         const selected = t.id === active;
         return (
