@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
  * navigation, plus the few utility glyphs the dashboard needs. `currentColor` so a parent's
  * text color (active / hover / locked) drives the icon. Decorative by default (aria-hidden);
  * pass `label` when an icon stands alone. */
-export type IconName = "overview" | "ceo" | "products" | "competitors" | "orders" | "customers" | "finance" | "marketing" | "reports" | "agents" | "cart" | "settings" | "notifications" | "lock" | "check" | "plus" | "arrow" | "chevron" | "close" | "menu" | "collapse" | "logout" | "dot" | "alert" | "trash" | "sun" | "moon";
+export type IconName = "overview" | "ceo" | "products" | "competitors" | "orders" | "customers" | "finance" | "marketing" | "reports" | "tag" | "store" | "returns" | "target" | "agents" | "cart" | "settings" | "notifications" | "lock" | "check" | "plus" | "arrow" | "chevron" | "close" | "menu" | "collapse" | "logout" | "dot" | "alert" | "trash" | "sun" | "moon";
 
 const PATHS: Record<IconName, ReactNode> = {
   overview: <><rect x="2" y="2" width="7" height="7" rx="1.5" /><rect x="11" y="2" width="7" height="7" rx="1.5" /><rect x="2" y="11" width="7" height="7" rx="1.5" /><rect x="11" y="11" width="7" height="7" rx="1.5" /></>,
@@ -16,6 +16,10 @@ const PATHS: Record<IconName, ReactNode> = {
   finance: <><rect x="2" y="5" width="16" height="11" rx="2" /><path d="M2 8 H18" /><circle cx="14" cy="12" r="1.3" fill="currentColor" stroke="none" /></>,
   marketing: <><path d="M2 9 H6 L13 4 V16 L6 11 H2 Z" /><path d="M6 11 L7 16" /></>,
   reports: <><line x1="3" y1="17" x2="17" y2="17" /><rect x="4" y="10" width="3" height="7" /><rect x="8.5" y="6" width="3" height="11" /><rect x="13" y="12" width="3" height="5" /></>,
+  tag: <><path d="M3 3 H10.5 L17 9.5 L10.5 16 L4 9.5 Z" /><circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none" /></>,
+  store: <><path d="M3 8 L4.5 3 H15.5 L17 8" /><path d="M3 8 C3 9.7 4.2 10.5 5.5 10.5 C6.8 10.5 8 9.7 8 8 C8 9.7 9 10.5 10 10.5 C11 10.5 12 9.7 12 8 C12 9.7 13.2 10.5 14.5 10.5 C15.8 10.5 17 9.7 17 8" /><path d="M4.5 10.5 V17 H15.5 V10.5" /><path d="M8.5 17 V13 H11.5 V17" /></>,
+  returns: <><path d="M4 9 C4 5.7 6.7 3.5 10 3.5 C12.3 3.5 14.3 4.6 15.4 6.4" /><path d="M16 3 V6.8 H12.2" /><path d="M16 11 C16 14.3 13.3 16.5 10 16.5 C7.7 16.5 5.7 15.4 4.6 13.6" /><path d="M4 17 V13.2 H7.8" /></>,
+  target: <><circle cx="10" cy="10" r="7" /><circle cx="10" cy="10" r="3.6" /><circle cx="10" cy="10" r="0.9" fill="currentColor" stroke="none" /></>,
   agents: <><rect x="4" y="6" width="12" height="10" rx="2.5" /><circle cx="7.6" cy="11" r="1.15" fill="currentColor" stroke="none" /><circle cx="12.4" cy="11" r="1.15" fill="currentColor" stroke="none" /><line x1="10" y1="6" x2="10" y2="3.2" /><circle cx="10" cy="2.4" r="1" fill="currentColor" stroke="none" /></>,
   cart: <><circle cx="7" cy="17" r="1.3" fill="currentColor" stroke="none" /><circle cx="14" cy="17" r="1.3" fill="currentColor" stroke="none" /><path d="M2 3 H4 L6.5 13 H15.5 L17.5 6 H5.5" /></>,
   settings: <><circle cx="10" cy="10" r="6.2" /><circle cx="10" cy="10" r="2" fill="currentColor" stroke="none" /><line x1="10" y1="1.8" x2="10" y2="3.6" /><line x1="10" y1="16.4" x2="10" y2="18.2" /><line x1="1.8" y1="10" x2="3.6" y2="10" /><line x1="16.4" y1="10" x2="18.2" y2="10" /></>,
