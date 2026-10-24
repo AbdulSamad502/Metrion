@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Tabs } from "@/components/ui/Tabs";
 import { DetailDrawer } from "@/components/ui/DetailDrawer";
-import { AsyncBlock, Card, CopyButton, fmtDate, Hint, Pill, SectionCard, useAsync } from "@/components/cmo/showcaseUi";
+import { AsyncBlock, Card, CopyButton, fmtDate, Hint, Pill, SectionCard, ShowcaseRefreshProvider, useAsync, withLimit } from "@/components/cmo/showcaseUi";
+import { Spinner } from "@/components/ui/LoadingState";
 import {
   MARKETPLACES, type CopyPack, type Marketplace, type ShowcaseClient, type ShowcaseTitle, type TitleUsage, type TrendFinding, type TrendReport,
 } from "@/lib/cmoShowcase";
@@ -27,8 +28,19 @@ export function ShowcaseDashboard({ client, sample = false }: { client: Showcase
   }, [qInput]);
   const products = useAsync(() => client.products(), [client]);
   const filters = { sku: sku || undefined, q: q || undefined };
+  // "Refresh" re-reads every section for the SAME filters; the sections report when they are busy so the button can say so and cannot be pressed twice.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [busy, setBusy] = useState(0);
+  const busyIds = useRef(new Set<string>());
+  const report = useCallback((id: string, isBusy: boolean) => {
+    if (isBusy) busyIds.current.add(id);
+    else busyIds.current.delete(id);
+    setBusy(busyIds.current.size);
+  }, []);
+  const productLabel = sku ? (products.state.status === "ready" ? products.state.data.items.find((p) => p.sku === sku)?.label : undefined) ?? sku : null;
 
   return (
+    <ShowcaseRefreshProvider value={{ key: refreshKey, report }}>
     <div className="mt-content flex flex-col gap-5">
       {sample && (
         <div role="status" className="rounded-xl px-4 py-2.5 t-body-sm font-bold" style={{ background: "var(--warning-fill)", border: "1px solid var(--warning-border)", color: "var(--warning)" }}>
@@ -62,10 +74,21 @@ export function ShowcaseDashboard({ client, sample = false }: { client: Showcase
         </Link>
       </div>
 
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="cmo-context">
+        <p role="status" className="m-0 t-meta" style={{ color: "var(--text-5)" }}>
+          {busy > 0 ? "Refreshing… what is shown is the last result that loaded." : `Showing saved results for ${productLabel ?? "all products"}${q ? ` matching “${q}”` : ""}.`}
+        </p>
+        <button type="button" onClick={() => setRefreshKey((n) => n + 1)} disabled={busy > 0} className="mt-btn mt-btn-secondary mt-focus inline-flex min-h-[40px] items-center gap-2 rounded-lg px-3 py-1 t-meta font-bold disabled:cursor-not-allowed" style={{ opacity: busy > 0 ? 0.7 : 1 }}>
+          {busy > 0 && <Spinner size={12} />}
+          {busy > 0 ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
       <NewsSection client={client} />
       <TitlesAndPacks client={client} marketplace={marketplace} setMarketplace={setMarketplace} {...filters} />
       <HashtagsAndCompliance client={client} marketplace={marketplace} {...filters} />
     </div>
+    </ShowcaseRefreshProvider>
   );
 }
 
@@ -73,11 +96,11 @@ export function ShowcaseDashboard({ client, sample = false }: { client: Showcase
 type NewsItem = { key: string; finding: TrendFinding; section: string; report: TrendReport };
 
 function NewsSection({ client }: { client: ShowcaseClient }) {
-  const { state, reload } = useAsync(() => client.trends(), [client]);
+  const trends = useAsync(() => client.trends(), [client]);
   return (
     <SectionCard title="Market Trends & Fresh E-Commerce News" hint="From saved market-trend reports only">
       <AsyncBlock
-        state={state} reload={reload} label="market news"
+        a={trends} label="market news"
         isEmpty={(d) => d.items.length === 0}
         empty="No news fetched yet - ask the CEO for market news"
       >
@@ -162,12 +185,12 @@ function TitlesAndPacks({ client, marketplace, setMarketplace, sku, q }: { clien
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex overflow-hidden rounded-lg" role="group" aria-label="Title view" style={{ border: "1px solid var(--border-default)" }}>
               {(["recent", "frequent"] as const).map((v) => (
-                <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)} className="mt-focus px-3 py-1 t-meta font-bold" style={view === v ? { background: "var(--accent-fill-default)", color: "var(--accent)" } : { color: "var(--text-5)" }}>
+                <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)} className="mt-focus min-h-[40px] px-3 py-1 t-meta font-bold" style={view === v ? { background: "var(--accent-fill-default)", color: "var(--accent)" } : { color: "var(--text-5)" }}>
                   {v === "recent" ? "Recent" : "Frequently used"}
                 </button>
               ))}
             </div>
-            <label className="flex items-center gap-1.5 t-meta" style={{ color: "var(--text-5)" }}>
+            <label className="flex min-h-[40px] items-center gap-1.5 t-meta" style={{ color: "var(--text-5)" }}>
               <input type="checkbox" checked={approvedOnly} onChange={(e) => setApprovedOnly(e.target.checked)} /> Approved only
             </label>
           </div>
@@ -177,7 +200,7 @@ function TitlesAndPacks({ client, marketplace, setMarketplace, sku, q }: { clien
           <Tabs tabs={sectionTabs} active={marketplace} onChange={(id) => setMarketplace(id as Marketplace)} label="Marketplace" idPrefix="cmo-mp" />
         </div>
         <AsyncBlock
-          state={titles.state} reload={titles.reload} label="titles"
+          a={titles} label="titles"
           isEmpty={(d) => d.items.length === 0 || (view === "frequent" && !d.usage.available)}
           empty={view === "frequent" ? "Frequently used unavailable - usage is not recorded yet. Switch to Recent to see saved titles." : `No saved ${marketLabel} titles match. Ask the CEO to create titles.`}
         >
@@ -190,14 +213,14 @@ function TitlesAndPacks({ client, marketplace, setMarketplace, sku, q }: { clien
                     <Card accent={!!t.approved}>
                       <div className="flex flex-wrap items-center gap-2">
                         {t.approved && <Pill tone="accent" title={`Approved ${fmtDate(t.approved.approvedAt)}`}>Approved</Pill>}
-                        <span className="t-meta" style={{ color: "var(--text-6)" }}>{t.charCount} / {t.maxChars} chars</span>
+                        <span className="t-meta" style={{ color: "var(--text-6)" }}>{withLimit(t.charCount, t.maxChars, "chars")}</span>
                         <span className="t-meta" style={{ color: "var(--text-7)" }}>{t.productLabel} - {fmtDate(t.generatedAt)}</span>
                       </div>
                       <p className="mt-1.5 t-body font-bold" style={{ color: "var(--text-1)" }}>{t.titleText}</p>
                       {u && <p className="mt-1 t-meta" style={{ color: "var(--text-6)" }}>{u}</p>}
                       <div className="mt-2 flex gap-2">
                         <CopyButton text={t.titleText} onCopied={() => track(t.generationId, "COPIED", t.optionId, "TITLE")} />
-                        <button type="button" onClick={() => open({ kind: "title", item: t })} className="mt-btn mt-focus min-h-[32px] rounded-lg px-3 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-default)", color: "var(--text-4)" }}>Details</button>
+                        <button type="button" onClick={() => open({ kind: "title", item: t })} className="mt-btn mt-focus min-h-[40px] rounded-lg px-3 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-default)", color: "var(--text-4)" }}>Details</button>
                       </div>
                     </Card>
                   </li>
@@ -210,7 +233,7 @@ function TitlesAndPacks({ client, marketplace, setMarketplace, sku, q }: { clien
 
       <SectionCard title="Grounded Marketplace Copy Pack" hint={`${marketLabel}: bullets, description and search terms built from a saved title`}
         action={packItems[packIx] ? <CopyButton primary label="Copy Full Pack" text={packText(packItems[packIx])} onCopied={() => track(packItems[packIx].generationId, "COPIED", undefined, "FULL_PACK")} /> : undefined}>
-        <AsyncBlock state={packs.state} reload={packs.reload} label="copy packs" isEmpty={(d) => d.items.length === 0} empty={`No saved ${marketLabel} copy pack yet. Ask the CEO to create one.`}>
+        <AsyncBlock a={packs} label="copy packs" isEmpty={(d) => d.items.length === 0} empty={`No saved ${marketLabel} copy pack yet. Ask the CEO to create one.`}>
           {(d) => {
             const p = d.items[packIx];
             const gen = p.generationId;
@@ -219,7 +242,7 @@ function TitlesAndPacks({ client, marketplace, setMarketplace, sku, q }: { clien
                 {d.items.length > 1 && (
                   <div className="flex flex-wrap gap-1.5" role="group" aria-label="Saved packs">
                     {d.items.map((x, i) => (
-                      <button key={x.generationId} type="button" aria-pressed={i === packIx} onClick={() => setPackId(x.generationId)} className="mt-focus rounded-lg px-2.5 py-1 t-meta" style={i === packIx ? { background: "var(--accent-fill-default)", color: "var(--accent)" } : { border: "1px solid var(--border-default)", color: "var(--text-5)" }}>
+                      <button key={x.generationId} type="button" aria-pressed={i === packIx} onClick={() => setPackId(x.generationId)} className="mt-focus min-h-[40px] rounded-lg px-2.5 py-1 t-meta" style={i === packIx ? { background: "var(--accent-fill-default)", color: "var(--accent)" } : { border: "1px solid var(--border-default)", color: "var(--text-5)" }}>
                         {x.productLabel} - {fmtDate(x.generatedAt)}
                       </button>
                     ))}
@@ -232,7 +255,7 @@ function TitlesAndPacks({ client, marketplace, setMarketplace, sku, q }: { clien
                 {p.bullets.map((b, i) => (
                   <Card key={i}>
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0"><p className="t-body" style={{ color: "var(--text-2)" }}>{b.text}</p><p className="mt-1 t-micro" style={{ color: "var(--text-7)" }}>{b.chars} / {b.max} chars</p></div>
+                      <div className="min-w-0"><p className="t-body" style={{ color: "var(--text-2)" }}>{b.text}</p><p className="mt-1 t-micro" style={{ color: "var(--text-7)" }}>{withLimit(b.chars, b.max, "chars")}</p></div>
                       <CopyButton text={b.text} onCopied={() => track(gen, "COPIED", undefined, `BULLET_${i + 1}`)} />
                     </div>
                   </Card>
@@ -240,7 +263,7 @@ function TitlesAndPacks({ client, marketplace, setMarketplace, sku, q }: { clien
                 <PackRow heading="Product description" />
                 <Card>
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0"><p className="whitespace-pre-wrap t-body" style={{ color: "var(--text-2)" }}>{p.description.text}</p><p className="mt-1 t-micro" style={{ color: "var(--text-7)" }}>{p.description.chars} / {p.description.max} chars</p></div>
+                    <div className="min-w-0"><p className="whitespace-pre-wrap t-body" style={{ color: "var(--text-2)" }}>{p.description.text}</p><p className="mt-1 t-micro" style={{ color: "var(--text-7)" }}>{withLimit(p.description.chars, p.description.max, "chars")}</p></div>
                     <CopyButton text={p.description.text} onCopied={() => track(gen, "COPIED", undefined, "DESCRIPTION")} />
                   </div>
                 </Card>
@@ -249,14 +272,14 @@ function TitlesAndPacks({ client, marketplace, setMarketplace, sku, q }: { clien
                     <PackRow heading="Backend search terms" />
                     <Card>
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0"><p className="t-body" style={{ color: "var(--text-2)" }}>{p.backendTerms.text}</p><p className="mt-1 t-micro" style={{ color: "var(--text-7)" }}>{p.backendTerms.bytes} / {p.backendTerms.maxBytes} bytes</p></div>
+                        <div className="min-w-0"><p className="t-body" style={{ color: "var(--text-2)" }}>{p.backendTerms.text}</p><p className="mt-1 t-micro" style={{ color: "var(--text-7)" }}>{withLimit(p.backendTerms.bytes, p.backendTerms.maxBytes, "bytes")}</p></div>
                         <CopyButton text={p.backendTerms.text} onCopied={() => track(gen, "COPIED", undefined, "BACKEND_TERMS")} />
                       </div>
                     </Card>
                   </>
                 )}
                 {p.labels.length > 0 && <p className="t-micro" style={{ color: "var(--text-7)" }}>{p.labels.join(" - ")}</p>}
-                <div><button type="button" onClick={() => open({ kind: "pack", item: p })} className="mt-btn mt-focus min-h-[32px] rounded-lg px-3 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-default)", color: "var(--text-4)" }}>Pack details</button></div>
+                <div><button type="button" onClick={() => open({ kind: "pack", item: p })} className="mt-btn mt-focus min-h-[40px] rounded-lg px-3 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-default)", color: "var(--text-4)" }}>Pack details</button></div>
               </div>
             );
           }}
@@ -264,7 +287,7 @@ function TitlesAndPacks({ client, marketplace, setMarketplace, sku, q }: { clien
       </SectionCard>
 
       <DetailDrawer open={detail !== null} onClose={() => setDetail(null)} title={detail?.kind === "title" ? "Saved title" : "Saved copy pack"} subtitle={detail ? `${detail.item.productLabel} - ${detail.item.marketplace}` : undefined}>
-        {detail && <DetailBody detail={detail} onMarkUsed={(g, o) => track(g, "MARKED_USED", o, detail.kind === "title" ? "TITLE" : "FULL_PACK")} />}
+        {detail && <DetailBody detail={detail} onMarkUsed={(g, o) => client.recordUsage({ generationId: g, optionId: o, resultPart: detail.kind === "title" ? "TITLE" : "FULL_PACK", kind: "MARKED_USED", surface: "DASHBOARD" })} />}
       </DetailDrawer>
     </>
   );
@@ -283,8 +306,15 @@ function packText(p: CopyPack): string {
   ].join("\n");
 }
 
-function DetailBody({ detail, onMarkUsed }: { detail: { kind: "title"; item: ShowcaseTitle } | { kind: "pack"; item: CopyPack }; onMarkUsed: (generationId: string, optionId?: string) => void }) {
-  const [marked, setMarked] = useState(false);
+function DetailBody({ detail, onMarkUsed }: { detail: { kind: "title"; item: ShowcaseTitle } | { kind: "pack"; item: CopyPack }; onMarkUsed: (generationId: string, optionId?: string) => void | Promise<boolean> }) {
+  // "Marked as used" is shown only once the server has accepted the event; a refusal says so and can be retried.
+  const [mark, setMark] = useState<"idle" | "saving" | "done" | "failed">("idle");
+  const markUsed = async () => {
+    if (mark === "saving" || mark === "done") return;
+    setMark("saving");
+    const ok = await onMarkUsed(detail.item.generationId, detail.kind === "title" ? detail.item.optionId : undefined);
+    setMark(ok === false ? "failed" : "done");
+  };
   const rows: [string, string][] = [];
   const it = detail.item;
   rows.push(["Product", `${it.productLabel} (${it.sku})`], ["Marketplace", it.marketplace], ["Generated", fmtDate(it.generatedAt)], ["Created via", it.origin.kind === "CEO_CHAT" ? "CEO chat" : "Earlier workflow"], ["Generation id", it.generationId]);
@@ -292,23 +322,24 @@ function DetailBody({ detail, onMarkUsed }: { detail: { kind: "title"; item: Sho
   if (it.origin.turnId) rows.push(["Turn", it.origin.turnId]);
   if (detail.kind === "title") {
     const t = detail.item;
-    rows.push(["Length", `${t.charCount} / ${t.maxChars} chars`]);
+    rows.push(["Length", withLimit(t.charCount, t.maxChars, "chars")]);
     if (t.constraint) rows.push(["Limit source", `${t.constraint.sourceUrl ?? "not stated"} (verified ${fmtDate(t.constraint.verifiedAt)})`]);
     rows.push(["Approval", t.approved ? `Approved ${fmtDate(t.approved.approvedAt)}${t.approved.editedBySeller ? " (edited by seller)" : ""}` : "Not approved"]);
   } else {
     rows.push(["Grounded on", detail.item.groundedOn.titleText]);
   }
-  const optionId = detail.kind === "title" ? detail.item.optionId : undefined;
   return (
     <div className="flex flex-col gap-4">
       {detail.kind === "title" && <p className="t-body font-bold" style={{ color: "var(--text-1)" }}>{detail.item.titleText}</p>}
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 t-body-sm">
         {rows.map(([k, v]) => (<div key={k} className="contents"><dt style={{ color: "var(--text-6)" }}>{k}</dt><dd className="break-words" style={{ color: "var(--text-2)" }}>{v}</dd></div>))}
       </dl>
-      <div className="flex gap-2">
-        <button type="button" disabled={marked} onClick={() => { setMarked(true); onMarkUsed(detail.item.generationId, optionId); }} className="mt-btn mt-focus min-h-[36px] rounded-lg px-3 py-1 t-meta font-bold disabled:opacity-60" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>
-          {marked ? "Marked as used" : "Mark as used"}
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" disabled={mark === "saving" || mark === "done"} aria-busy={mark === "saving"} onClick={() => void markUsed()} className="mt-btn mt-focus inline-flex min-h-[40px] items-center gap-2 rounded-lg px-3 py-1 t-meta font-bold disabled:opacity-60" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>
+          {mark === "saving" && <Spinner size={12} />}
+          {mark === "saving" ? "Recording…" : mark === "done" ? "Marked as used" : mark === "failed" ? "Try again" : "Mark as used"}
         </button>
+        {mark === "failed" && <span role="alert" className="t-meta" style={{ color: "var(--warning)" }}>Could not record that. Nothing was published and nothing else changed.</span>}
       </div>
       <p className="t-meta" style={{ color: "var(--text-7)" }}>Marking as used only records that you used this yourself. Nothing is published for you.</p>
     </div>
@@ -321,7 +352,7 @@ function HashtagsAndCompliance({ client, marketplace, sku, q }: { client: Showca
   const comp = useAsync(() => client.compliance({ sku, marketplace }), [client, sku, marketplace]);
   return (
     <SectionCard title="Social Marketing Hashtags & Compliance Summary" hint="Separate marketing suggestions - not a marketplace listing field">
-      <AsyncBlock state={tags.state} reload={tags.reload} label="hashtags" isEmpty={(d) => d.items.length === 0} empty="No saved hashtag sets yet. Ask the CEO for social hashtags.">
+      <AsyncBlock a={tags} label="hashtags" isEmpty={(d) => d.items.length === 0} empty="No saved hashtag sets yet. Ask the CEO for social hashtags.">
         {(d) => (
           <ul className="flex flex-col gap-2.5">
             {d.items.map((h) => (
@@ -341,7 +372,7 @@ function HashtagsAndCompliance({ client, marketplace, sku, q }: { client: Showca
         )}
       </AsyncBlock>
       <h3 className="mb-2 mt-5 t-micro font-bold uppercase" style={{ color: "var(--text-6)" }}>Compliance summary (stored checks only)</h3>
-      <AsyncBlock state={comp.state} reload={comp.reload} label="compliance summary" isEmpty={(d) => !d.counts || d.counts.length === 0} empty="No stored validation results to summarise yet.">
+      <AsyncBlock a={comp} label="compliance summary" isEmpty={(d) => !d.counts || d.counts.length === 0} empty="No stored validation results to summarise yet.">
         {(d) => (
           <ul className="flex flex-col gap-1.5">
             {d.counts!.map((c) => (
