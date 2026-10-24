@@ -15,6 +15,7 @@ import { friendlyApiError } from "@/lib/apiErrors";
 import { BusinessDetailsDialog } from "@/components/profile/BusinessDetailsDialog";
 import { errorText } from "@/lib/clerkErrors";
 import { estimatePasswordStrength } from "@/lib/passwordStrength";
+import { useToast } from "@/components/ui/Toast";
 import { useShell } from "@/lib/ShellContext";
 import { useHashTab } from "@/lib/useHashTab";
 import { useSubmitGuard } from "@/lib/useSubmitGuard";
@@ -70,7 +71,7 @@ function SettingsWorkspace() {
 function BusinessCard({ email }: { email: string | null }) {
   const { session, displayName, roleLabel } = useShell();
   const [editing, setEditing] = useState(false);
-  const [savedAt, setSavedAt] = useState(false);
+  const toast = useToast();
   const rows: [string, string][] = [
     ["Name", displayName],
     ["Email", email ?? "Not available"],
@@ -89,22 +90,14 @@ function BusinessCard({ email }: { email: string | null }) {
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
           type="button"
-          onClick={() => {
-            setSavedAt(false);
-            setEditing(true);
-          }}
+          onClick={() => setEditing(true)}
           className="mt-btn mt-focus min-h-[44px] rounded-xl px-4 py-2 text-sm font-bold"
           style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}
         >
           Business details
         </button>
-        {savedAt && (
-          <span role="status" className="text-sm" style={{ color: "var(--accent)" }}>
-            Business details saved.
-          </span>
-        )}
       </div>
-      {editing && <BusinessDetailsDialog onClose={() => setEditing(false)} onSaved={() => setSavedAt(true)} />}
+      {editing && <BusinessDetailsDialog onClose={() => setEditing(false)} onSaved={() => toast.success("Business details saved.")} />}
       <dl className="mt-4 flex flex-col gap-2.5">
         {rows.map(([k, v]) => (
           <div

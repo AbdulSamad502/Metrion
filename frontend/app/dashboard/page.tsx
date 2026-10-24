@@ -43,11 +43,11 @@ export default function DashboardPage() {
 
 function Overview() {
   const ci = useCiSummary();
-  const { health, refresh } = useBusinessHealth();
+  const { health, refresh, refreshing } = useBusinessHealth();
   return (
     <div className="mt-content mt-stack" style={{ gap: 24 }}>
       <BusinessState health={health} />
-      <ProfitSnapshot health={health} onRefresh={refresh} />
+      <ProfitSnapshot health={health} onRefresh={refresh} refreshing={refreshing} />
       {/* Two balanced columns that each start at the top: attention + agent activity on the left, opportunities + market watch on the right.
           (Agent activity used to sit below the grid, so the shorter column left a tall empty gap above it.) */}
       <div className="grid grid-cols-1 items-start gap-x-8 gap-y-6 xl:grid-cols-12">
@@ -289,7 +289,7 @@ function WhatMattersNow() {
 /** The profit snapshot: the latest SAVED CFO results, shown exactly as the backend presented them (each with its period, as-of date and
  * provenance). It is not a portfolio headline: the backend has no portfolio-level revenue/profit/margin endpoint yet (tracked in
  * docs/design/ui-ux-phase1-audit.md §7), so nothing is summed or trended here. A missing result says so. */
-function ProfitSnapshot({ health, onRefresh }: { health: HealthState; onRefresh: () => void }) {
+function ProfitSnapshot({ health, onRefresh, refreshing }: { health: HealthState; onRefresh: () => void; refreshing: boolean }) {
   return (
     <Section
       title="Profit snapshot"
@@ -300,7 +300,7 @@ function ProfitSnapshot({ health, onRefresh }: { health: HealthState; onRefresh:
         </Link>
       }
     >
-      <HealthStrip health={health} onRefresh={onRefresh} />
+      <HealthStrip health={health} onRefresh={onRefresh} refreshing={refreshing} />
       <p className="t-meta mt-3 max-w-[70ch]" style={{ color: "var(--text-6)" }}>
         Each result is one saved calculation with its own period and source. A single combined profit trend is not available yet.
       </p>

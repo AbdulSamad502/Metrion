@@ -1588,6 +1588,81 @@ body:has(.mt-galaxy)::before {
 
 /* END PREMIUM APP LAYER — the rules below are the CEO Hub canvas, scoped by its own classes (.mt-galaxy, .mt-hub-*), not part of the layer above. */
 
+/* Toast: one quiet confirmation at a time. Opacity plus an 8px rise, 200ms; reduced motion turns it off. */
+.mt-toast-region {
+  position: fixed;
+  z-index: 70;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  pointer-events: none;
+}
+@media (min-width: 640px) {
+  .mt-toast-region {
+    left: auto;
+    right: 24px;
+    bottom: 24px;
+    width: 360px;
+  }
+}
+.mt-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--radius-surface, 14px);
+  background: var(--bg-popover);
+  border: 1px solid var(--border-default);
+  box-shadow: 0 16px 40px var(--shadow-popover);
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.5;
+  animation: mt-toast-in 0.2s ease-out both;
+}
+.mt-toast[data-kind="success"] .mt-toast__icon {
+  color: var(--accent);
+}
+.mt-toast[data-kind="error"] {
+  border-color: var(--negative);
+}
+.mt-toast[data-kind="error"] .mt-toast__icon {
+  color: var(--negative);
+}
+.mt-toast__text {
+  flex: 1;
+  min-width: 0;
+}
+.mt-toast__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  color: var(--text-5);
+}
+@keyframes mt-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mt-toast {
+    animation: none;
+  }
+}
+
 /* ---- CEO Hub "galaxy" canvas (docs/design/design_status.md: look is not final, so every hue below is a token) ----
    Cheap by construction: layered radial-gradients and one very slow opacity twinkle. No canvas, no images, no layout shift. */
 :root {

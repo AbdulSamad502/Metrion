@@ -8,6 +8,7 @@ import { useNotificationsFeed } from "@/lib/useNotifications";
 import { useSurfaceSheen } from "@/lib/useSurfaceSheen";
 import { Sidebar } from "./Sidebar";
 import { Icon } from "@/components/ui/Icon";
+import { ToastProvider } from "@/components/ui/Toast";
 
 const COLLAPSE_KEY = "metrion.sidebar.collapsed";
 
@@ -87,6 +88,7 @@ function OwnFrame({ children }: { children: ReactNode }) {
 
   return (
     <ShellProvider value={{ session, displayName, roleLabel, notifications }}>
+      <ToastProvider>
       <FrameContext.Provider value={{ openMenu: () => setDrawerOpenAt(pathname) }}>
         <div ref={surfaceRef} className="mt-app-surface flex">
           <a
@@ -123,6 +125,7 @@ function OwnFrame({ children }: { children: ReactNode }) {
           <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
         </div>
       </FrameContext.Provider>
+      </ToastProvider>
     </ShellProvider>
   );
 }
