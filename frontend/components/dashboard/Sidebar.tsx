@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { Icon } from "@/components/ui/Icon";
+import "./sidebar.css";
 import { FOOTER_NAV, NAV_GROUPS, SYSTEM_GROUP_LABEL, isActive, type NavItem } from "@/lib/navigation";
 
 /** The persistent app navigation (docs/design/frontend-design). Active state comes from the
@@ -131,38 +132,29 @@ export function Sidebar({
       <aside
         ref={asideRef}
         aria-label="Primary"
-        className={`mt-sidebar fixed inset-y-0 left-0 z-[70] flex h-screen w-[264px] flex-shrink-0 flex-col transition-[transform,width] duration-200 ${overlay ? "" : "lg:static lg:z-auto lg:translate-x-0"} ${
+        className={`mt-sidebar ${collapsed ? "sb-collapsed" : ""} fixed inset-y-0 left-0 z-[70] flex h-screen w-[264px] flex-shrink-0 flex-col transition-[transform,width] duration-200 ${overlay ? "" : "lg:static lg:z-auto lg:translate-x-0"} ${
           mobileOpen ? "translate-x-0" : `invisible -translate-x-full ${overlay ? "" : "lg:visible"}` // off-screen and out of the tab order until opened
         } ${collapsed ? "lg:w-[76px]" : "lg:w-60"}`}
       >
-        <div className={`flex items-center gap-2.5 px-5 pb-4 pt-5 ${collapsed ? "lg:justify-center lg:px-0" : ""}`}>
-          <Image src="/metrion-mark.png" alt="Metrion" width={44} height={28} className="mt-brand-mark--dark flex-shrink-0" priority />
-          <Image src="/metrion-mark-light.png" alt="Metrion" width={44} height={28} className="mt-brand-mark--light flex-shrink-0" loading="eager" />
+        <div className={`sb-brand ${collapsed ? "lg:justify-center" : ""}`}>
+          <Image src="/metrion-mark-transparent.png" alt="Metrion" width={44} height={28} className="sb-brand-mark mt-brand-mark--dark" priority />
+          <Image src="/metrion-mark-light.png" alt="Metrion" width={44} height={28} className="sb-brand-mark mt-brand-mark--light" loading="eager" />
           <div className={`min-w-0 ${collapsed ? "lg:hidden" : ""}`}>
-            <div className="t-section font-bold leading-none" style={{ color: "var(--text-1)" }}>
-              Metrion
-            </div>
-            <div className="mt-1 whitespace-nowrap t-nano font-semibold tracking-[0.11em]" style={{ color: "var(--text-tagline)" }}>
-              ENGINE OF GROWTH
-            </div>
+            <div className="sb-brand-name">Metrion</div>
+            <div className="sb-brand-tag">Engine of growth</div>
           </div>
         </div>
 
-        <nav ref={navRef} className="relative flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3" aria-label="Sections">
+        <nav ref={navRef} className="sb-nav sb-scroll relative flex-1 overflow-y-auto" aria-label="Sections">
           <div
             ref={indicatorRef}
             aria-hidden
-            className="mt-nav-indicator pointer-events-none absolute left-3 right-3 top-0 rounded-xl opacity-0"
+            className="mt-nav-indicator pointer-events-none absolute left-4 right-4 top-0 opacity-0"
             style={{ transition: "transform 0.28s cubic-bezier(.16,1,.3,1), height 0.2s ease, opacity 0.2s ease" }}
           />
           {NAV_GROUPS.map((group) => (
-            <div key={group.label} className="mb-0.5">
-              <div
-                className={`px-3 pb-1.5 pt-3 [@media(max-height:800px)]:pt-1.5 t-nano font-bold uppercase tracking-wider ${collapsed ? "lg:invisible lg:h-3 lg:p-0" : ""}`}
-                style={{ color: "var(--text-6)" }}
-              >
-                {group.label}
-              </div>
+            <div key={group.label} className="sb-group">
+              <div className={`sb-label ${collapsed ? "lg:invisible lg:h-2 lg:p-0" : ""}`}>{group.label}</div>
               {group.items.map((item) => (
                 <NavRow
                   key={item.id}
@@ -175,66 +167,53 @@ export function Sidebar({
             </div>
           ))}
 
-          <div className="flex-1" />
-          <div className="my-2 h-px [@media(max-height:800px)]:my-1" style={{ background: "var(--border-subtle)" }} />
-          <div
-            className={`px-3 pb-1.5 pt-1 t-nano font-bold uppercase tracking-wider ${collapsed ? "lg:invisible lg:h-0 lg:p-0" : ""}`}
-            style={{ color: "var(--text-6)" }}
-          >
-            {SYSTEM_GROUP_LABEL}
+          <div className="sb-system">
+            <div className="sb-group">
+              <div className={`sb-label ${collapsed ? "lg:invisible lg:h-0 lg:p-0" : ""}`}>{SYSTEM_GROUP_LABEL}</div>
+              {FOOTER_NAV.map((item) => (
+                <NavRow
+                  key={item.id}
+                  item={item}
+                  active={isActive(item, pathname)}
+                  collapsed={collapsed}
+                  attention={item.id === "notifications" ? attentionCount : 0}
+                />
+              ))}
+            </div>
           </div>
-          {FOOTER_NAV.map((item) => (
-            <NavRow
-              key={item.id}
-              item={item}
-              active={isActive(item, pathname)}
-              collapsed={collapsed}
-              attention={item.id === "notifications" ? attentionCount : 0}
-            />
-          ))}
         </nav>
 
-        <div className="hidden px-3 pb-2 lg:block">
+        <div className="sb-foot hidden lg:block">
           <button
             type="button"
             onClick={onToggleCollapsed}
             aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
             aria-pressed={collapsed}
-            className="mt-btn mt-focus flex w-full items-center justify-center gap-2 rounded-xl py-2 t-meta-sm font-semibold"
-            style={{ color: "var(--text-6)", border: "1px solid var(--border-subtle)" }}
+            className="sb-collapse mt-focus"
           >
             <span style={{ display: "inline-flex", transform: collapsed ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}>
-              <Icon name="collapse" size={14} />
+              <Icon name="collapse" size={18} />
             </span>
             {!collapsed && "Collapse"}
           </button>
         </div>
 
-        <div className={`flex items-center gap-2.5 p-3.5 ${collapsed ? "lg:justify-center lg:px-0" : ""}`} style={{ borderTop: "1px solid var(--border-subtle)" }}>
-          <div
-            className="flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-[14px] text-xs font-bold"
-            style={{ background: "var(--fill-hover)", color: "var(--text-3)" }}
-            title={collapsed ? `${userName} · ${roleLabel}` : undefined}
-          >
+        <div className="sb-user">
+          <div className="sb-avatar" title={collapsed ? `${userName} · ${roleLabel}` : undefined}>
             {initials || "?"}
           </div>
           <div className={`min-w-0 ${collapsed ? "lg:hidden" : ""}`}>
-            <div className="truncate t-body-sm font-semibold" style={{ color: "var(--text-2)" }}>
-              {userName}
-            </div>
-            <div className="truncate t-micro" style={{ color: "var(--text-5)" }}>
-              {roleLabel}
-            </div>
+            <div className="sb-user-name truncate">{userName}</div>
+            <div className="sb-user-role truncate">{roleLabel}</div>
           </div>
           <button
             type="button"
             onClick={() => signOut({ redirectUrl: "/" })}
             aria-label="Sign out"
             title="Sign out"
-            className={`mt-btn mt-focus ml-auto flex-shrink-0 rounded-lg p-1.5 ${collapsed ? "lg:hidden" : ""}`}
-            style={{ color: "var(--text-6)" }}
+            className={`sb-signout mt-focus ${collapsed ? "lg:hidden" : ""}`}
           >
-            <Icon name="logout" size={15} />
+            <Icon name="logout" size={18} />
           </button>
         </div>
       </aside>
@@ -259,13 +238,13 @@ function NavRow({
   const body = (
     <>
       <span className="flex-shrink-0" style={{ color: active ? "var(--accent)" : undefined }}>
-        <Icon name={item.icon} size={18} />
+        <Icon name={item.icon} size={20} />
       </span>
       {label}
       {item.soon && (
         <span
-          className={`rounded px-1.5 py-0.5 t-nano font-semibold ${collapsed ? "lg:hidden" : ""}`}
-          style={{ background: "var(--border-subtle)", color: "var(--text-7)" }}
+          className={`rounded-full px-2 py-0.5 text-[12px] font-semibold ${collapsed ? "lg:hidden" : ""}`}
+          style={{ background: "var(--border-subtle)", color: "var(--text-5)" }}
         >
           Soon
         </span>
@@ -282,7 +261,7 @@ function NavRow({
       )}
     </>
   );
-  const className = `mt-nav-item mt-focus flex min-h-[44px] items-center gap-3 rounded-xl px-3 py-2 lg:min-h-0 t-body ${collapsed ? "lg:justify-center lg:px-0" : ""}`;
+  const className = `mt-nav-item mt-focus flex items-center ${collapsed ? "lg:justify-center lg:px-0" : ""}`;
   const style: React.CSSProperties = {
     color: active ? "var(--text-1)" : item.soon ? "var(--text-6)" : "var(--text-4)",
     fontWeight: active ? 600 : 500,

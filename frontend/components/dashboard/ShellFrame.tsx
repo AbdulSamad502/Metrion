@@ -127,8 +127,8 @@ function OwnFrame({ children }: { children: ReactNode }) {
             aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
             title={collapsed ? "Expand navigation" : "Collapse navigation"}
             data-testid="sidebar-edge-toggle"
-            className="mt-btn mt-focus fixed top-1/2 z-[75] hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full transition-[left] duration-200 lg:flex"
-            style={{ left: collapsed ? 62 : 226, background: "var(--bg-popover)", border: "1px solid var(--border-hover)", color: "var(--text-3)" }}
+            className="mt-btn mt-focus fixed top-1/2 z-[75] hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full transition-[left] duration-200 lg:flex"
+            style={{ left: collapsed ? 56 : 220, background: "var(--bg-popover)", border: "1px solid var(--border-hover)", color: "var(--text-3)" }}
           >
             <span style={{ display: "inline-flex", transform: collapsed ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}>
               <Icon name="collapse" size={14} />

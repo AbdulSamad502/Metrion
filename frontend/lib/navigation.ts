@@ -19,16 +19,16 @@ export type NavGroup = { label: string; items: NavItem[] };
 /** What each page is called and what it is for, in plain words. The navigation labels ARE these titles (same constants), so a menu entry and the page it
  * opens can never disagree. Internal role names (CFO, CMO, CEO) belong inside the pages that explain them, not in the menu or the headings. */
 export const PAGE_COPY = {
-  overview: { title: "Overview", subtitle: "What is happening, what matters, and what to do next" },
+  overview: { title: "Overview", subtitle: "Your business today" },
   "ceo-hub": { title: "CEO Hub", subtitle: "Ask in plain words. Metrion answers from your data, or hands the question to the right specialist." },
-  notifications: { title: "Action Center", subtitle: "Competitor price alerts and information Metrion needs from you, each with its next step" },
-  products: { title: "Products", subtitle: "Find product ideas, check whether they are worth stocking, and shortlist suppliers" },
-  competitors: { title: "Competitors", subtitle: "What the CEO has found about your competitors: prices, changes and what customers say. Ask the CEO to do anything new" },
+  notifications: { title: "Action Center", subtitle: "What needs you" },
+  products: { title: "Products", subtitle: "Product ideas and suppliers" },
+  competitors: { title: "Competitors", subtitle: "Prices, changes and what customers say" },
   "pnl-calculator": { title: "Profit Calculator", subtitle: "Try prices, costs and fees before you commit. A what-if from the numbers you type, never your verified results" },
-  cfo: { title: "Profit & Finance", subtitle: "Profit, cash, GST and where money leaks, calculated from the reports you upload" },
-  cmo: { title: "Listings & Marketing", subtitle: "Titles, listing copy, catalog answers and market research, for you to copy and never published for you" },
-  agents: { title: "Agents", subtitle: "The specialists behind Metrion: what each one does and whether it is available to you" },
-  settings: { title: "Settings", subtitle: "Your account, business and notification preferences" },
+  cfo: { title: "Profit & Finance", subtitle: "Profit and where money leaks" },
+  cmo: { title: "Listings & Marketing", subtitle: "Titles and listing copy to copy" },
+  agents: { title: "Agents", subtitle: "Your specialists" },
+  settings: { title: "Settings", subtitle: "Account, business and alerts" },
 } as const satisfies Record<string, { title: string; subtitle: string }>;
 
 const label = (id: keyof typeof PAGE_COPY) => PAGE_COPY[id].title;

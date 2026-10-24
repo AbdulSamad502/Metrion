@@ -1,49 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
-import { Icon, type IconName } from "@/components/ui/Icon";
+import { Icon } from "@/components/ui/Icon";
 import type { HealthEntry, PresentationFigure } from "@/lib/ceo";
 import { agentMeta, agentTier, useAgentRoster } from "@/lib/agents";
 import { useShell } from "@/lib/ShellContext";
 import { useBusinessHealth, daysSince, latestAsOf, STALE_AFTER_DAYS } from "@/lib/useBusinessHealth";
 import { useCiSummary } from "@/lib/useCiSummary";
 import { ALERT_WINDOW_DAYS, isOpenRequest } from "@/lib/useNotifications";
-import { BAND_TONE, BAND_WORD, bandOf, dayLabel, flowShares, goalShare, isNegative, periodDays, periodLabel, plainBandLabel, readLeak, registerShort, registerWords } from "./format";
+import { BAND_TONE, BAND_WORD, bandOf, dayLabel, flowShares, goalShare, isNegative, periodDays, periodLabel, plainBandLabel, readLeak, registerShort, weight, registerWords } from "./format";
+import { Pill, RefreshButton, rise } from "./parts";
 import "./overview.css";
 
-const PNL_KEY = "BS_PNL_LATEST";
-const BANDS_KEY = "BS_HEALTH_BANDS";
-const LEAKS_KEY = "BS_LEAK_OPEN";
-const GAPS_KEY = "BS_DATA_GAPS";
-const GOAL_KEY = "BS_SELLER_CONTEXT";
-const HEADLINE = "Contribution profit";
+export const PNL_KEY = "BS_PNL_LATEST";
+export const BANDS_KEY = "BS_HEALTH_BANDS";
+export const LEAKS_KEY = "BS_LEAK_OPEN";
+export const GAPS_KEY = "BS_DATA_GAPS";
+export const GOAL_KEY = "BS_SELLER_CONTEXT";
+export const HEADLINE = "Contribution profit";
 const TIER_WORD = { connected: "In chat", available: "Own page", unavailable: "Soon" } as const;
 const TAGLINE: Record<string, string> = { CI: "Watches competitor prices", PI: "Finds products to sell", CFO: "Tracks your profit and cash", CMO: "Writes your listings" };
 
-const rise = (i: number): CSSProperties => ({ ["--i" as string]: i });
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-const figureOf = (e: HealthEntry | undefined, label: string) => e?.presentation?.figures.find((f) => f.label === label);
-
-function Pill({ tone, children, icon }: { tone?: "good" | "warn" | "bad" | "brand"; children: ReactNode; icon?: IconName }) {
-  return (
-    <span className={`ov-pill${tone ? ` ov-pill--${tone}` : ""}`}>
-      {icon && <Icon name={icon} size={12} strokeWidth={2} />}
-      {children}
-    </span>
-  );
-}
-
-function Refresh({ spinning, onClick }: { spinning: boolean; onClick: () => void }) {
-  return (
-    <button type="button" className="ov-icon-btn" onClick={onClick} disabled={spinning} aria-label={spinning ? "Refreshing" : "Refresh"} title="Refresh">
-      <svg className={spinning ? "ov-spin" : undefined} width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M16.5 10a6.5 6.5 0 1 1-2-4.7" />
-        <path d="M16.5 3.5v3.3h-3.3" />
-      </svg>
-    </button>
-  );
-}
+export const figureOf = (e: HealthEntry | undefined, label: string) => e?.presentation?.figures.find((f) => f.label === label);
 
 /* ------------------------------------------------------------------ greeting */
 
@@ -69,7 +48,7 @@ function Greeting({ checkedAt, refreshing, onRefresh }: { checkedAt: string | nu
           <ul className="ov-chips" aria-label="What needs attention">
             {requests > 0 && (
               <li>
-                <Link href="/dashboard/cfo#anomalies" className="ov-chip ov-chip--warn">
+                <Link href="/dashboard/cfo#requests" className="ov-chip ov-chip--warn">
                   <b>{requests}</b> {requests === 1 ? "request" : "requests"} <Icon name="arrow" size={12} strokeWidth={2} className="ov-arrow" />
                 </Link>
               </li>
@@ -91,7 +70,7 @@ function Greeting({ checkedAt, refreshing, onRefresh }: { checkedAt: string | nu
       </div>
       <div className="ov-head-r">
         {checkedAt && <span className="ov-meta">Updated {clock(checkedAt)}</span>}
-        <Refresh spinning={refreshing} onClick={onRefresh} />
+        <RefreshButton spinning={refreshing} onClick={onRefresh} />
       </div>
     </header>
   );
@@ -99,7 +78,7 @@ function Greeting({ checkedAt, refreshing, onRefresh }: { checkedAt: string | nu
 
 /* ------------------------------------------------------------------ hero */
 
-function Hero({ pnl, headline }: { pnl: HealthEntry; headline: PresentationFigure }) {
+export function Hero({ pnl, headline, financeLink = true }: { pnl: HealthEntry; headline: PresentationFigure; financeLink?: boolean }) {
   const figures = pnl.presentation!.figures;
   const revenue = figures.find((f) => f.label === "Net realized revenue");
   const fees = figures.find((f) => f.label === "Marketplace fees");
@@ -120,7 +99,7 @@ function Hero({ pnl, headline }: { pnl: HealthEntry; headline: PresentationFigur
 
       <div className="ov-hero-fig">
         <div className="ov-fig-lg" data-testid="figure-value" style={negative ? { color: "#ffd0d6" } : undefined}>{headline.value}</div>
-        <p className="ov-meta">{[period, headline.note ?? "From the reports you uploaded"].filter(Boolean).join(" · ")}</p>
+        <p className="ov-meta">{[period, "From your reports"].filter(Boolean).join(" · ")}</p>
       </div>
 
       {shares && revenue && fees && (
@@ -136,7 +115,7 @@ function Hero({ pnl, headline }: { pnl: HealthEntry; headline: PresentationFigur
           </div>
           <div className="ov-flow-legend">
             <div className="ov-flow-key"><span><i style={{ background: "#ffd48a" }} />Marketplace fees</span><b>{fees.value}</b></div>
-            <div className="ov-flow-key"><span><i style={{ background: "rgba(255,255,255,.4)" }} />Other costs</span><Link href="/dashboard/cfo#profitability" className="ov-flow-link">See breakdown <Icon name="arrow" size={12} strokeWidth={2} className="ov-arrow" /></Link></div>
+            <div className="ov-flow-key"><span><i style={{ background: "rgba(255,255,255,.4)" }} />Other costs</span><Link href="/dashboard/cfo" className="ov-flow-link">See breakdown <Icon name="arrow" size={12} strokeWidth={2} className="ov-arrow" /></Link></div>
             <div className="ov-flow-key"><span><i style={{ background: "#fff" }} />Profit</span><b>{headline.value}</b></div>
           </div>
           <p className="ov-meta">Out of {revenue.value} revenue.</p>
@@ -145,7 +124,7 @@ function Hero({ pnl, headline }: { pnl: HealthEntry; headline: PresentationFigur
 
       <div className="ov-hero-actions">
         <Link href="/dashboard/ceo-hub" className="ov-btn ov-btn--solid">Ask where profit leaks <Icon name="arrow" size={14} strokeWidth={2} className="ov-arrow" /></Link>
-        <Link href="/dashboard/cfo#profitability" className="ov-btn ov-btn--glass">Profit &amp; Finance</Link>
+        {financeLink && <Link href="/dashboard/cfo" className="ov-btn ov-btn--glass">Profit &amp; Finance</Link>}
       </div>
 
       <details className="ov-why">
@@ -163,7 +142,7 @@ function Hero({ pnl, headline }: { pnl: HealthEntry; headline: PresentationFigur
   );
 }
 
-function HeroSkeleton() {
+export function HeroSkeleton() {
   return (
     <section className="ov-card ov-hero ov-rise" style={rise(1)} aria-label="Loading your saved results" data-testid="health-loading">
       <span className="ov-skel" style={{ width: 160, height: 24 }} />
@@ -174,7 +153,7 @@ function HeroSkeleton() {
   );
 }
 
-function HeroEmpty({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+export function HeroEmpty({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
   return (
     <section className="ov-card ov-rise" style={rise(1)} data-testid={failed ? "health-unavailable" : "health-none-saved"}>
       <div className="ov-empty">
@@ -182,13 +161,13 @@ function HeroEmpty({ failed, onRetry }: { failed: boolean; onRetry: () => void }
         <div>
           <h3 className="ov-h">{failed ? "Couldn’t load your results" : "Let’s get your first numbers"}</h3>
           <p className="ov-body" style={{ marginTop: 8, maxWidth: "48ch" }}>
-            {failed ? "Try again in a moment." : "Upload your sales and settlement reports. Your profit shows up here."}
+            {failed ? "Try again in a moment." : "Upload your reports to see your profit."}
           </p>
         </div>
         {failed ? (
           <button type="button" className="ov-btn" onClick={onRetry}>Try again</button>
         ) : (
-          <Link href="/dashboard/cfo#import" className="ov-btn" style={{ background: "var(--ov-brand)", color: "#fff" }}>Upload reports <Icon name="arrow" size={14} strokeWidth={2} className="ov-arrow" /></Link>
+          <Link href="/dashboard/cfo#reports" className="ov-btn" style={{ background: "var(--ov-brand)", color: "#fff" }}>Upload reports <Icon name="arrow" size={14} strokeWidth={2} className="ov-arrow" /></Link>
         )}
       </div>
     </section>
@@ -197,7 +176,7 @@ function HeroEmpty({ failed, onRetry }: { failed: boolean; onRetry: () => void }
 
 /* ------------------------------------------------------------------ side cards */
 
-function Health({ entry }: { entry: HealthEntry }) {
+export function Health({ entry }: { entry: HealthEntry }) {
   const p = entry.presentation;
   if (!p) return null;
   const overall = bandOf(p.facts.find((f) => /overall/i.test(f.label))?.text);
@@ -221,37 +200,39 @@ function Health({ entry }: { entry: HealthEntry }) {
   );
 }
 
-function Leaks({ entry }: { entry: HealthEntry }) {
+export function Leaks({ entry }: { entry: HealthEntry }) {
   const p = entry.presentation;
   if (!p || p.figures.length === 0) return null;
   const leaks = p.figures.map(readLeak);
+  const biggest = Math.max(1, ...leaks.map((l) => Math.abs(weight(l.amount) ?? 0)));
   const more = p.gaps.length > 0;
   return (
     <section className="ov-card ov-rise" style={rise(3)} aria-labelledby="ov-leaks" data-testid={`health-${entry.key}`}>
       <div className="ov-card-head">
         <h3 id="ov-leaks" className="ov-title">Money slipping away</h3>
-        <Link href="/dashboard/cfo#profitability" className="ov-btn ov-btn--ghost" aria-label="See all open leaks">See all <Icon name="arrow" size={12} strokeWidth={2} className="ov-arrow" /></Link>
+        <Link href="/dashboard/cfo" className="ov-btn ov-btn--ghost" aria-label="See all open leaks">See all <Icon name="arrow" size={12} strokeWidth={2} className="ov-arrow" /></Link>
       </div>
       <ul className="ov-rows">
         {leaks.map((l) => (
           <li key={l.key}>
-            <Link href="/dashboard/cfo#profitability" className="ov-row">
+            <Link href="/dashboard/cfo" className="ov-row">
               <span className={`ov-badge-circle ov-badge-circle--${l.severity === "High" ? "bad" : l.severity === "Medium" ? "warn" : ""}`}><Icon name="alert" size={18} /></span>
               <span className="ov-row-main">
                 <span className="ov-title">{l.title}</span>
                 <span className="ov-meta">{[l.where, l.severity ? `${l.severity} priority` : null].filter(Boolean).join(" · ")}</span>
               </span>
               <span className="ov-row-end"><span className="ov-amount">{l.amount}</span></span>
+              <span className="ov-leakbar" aria-hidden><i style={{ width: `${Math.max(4, ((weight(l.amount) ?? 0) / biggest) * 100)}%` }} /></span>
             </Link>
           </li>
         ))}
       </ul>
-      {more && <p className="ov-meta">There are more. They’re in Profit &amp; Finance.</p>}
+      {more && <p className="ov-meta">More in Profit &amp; Finance.</p>}
     </section>
   );
 }
 
-function Goal({ entry, pnl }: { entry: HealthEntry; pnl: HealthEntry | undefined }) {
+export function Goal({ entry, pnl }: { entry: HealthEntry; pnl: HealthEntry | undefined }) {
   const goal = entry.presentation?.figures.find((f) => /goal/i.test(f.label));
   if (!goal) return null;
   const profit = figureOf(pnl, HEADLINE);
@@ -309,13 +290,13 @@ function NeedsYou({ inputs }: { inputs: { label: string; text: string }[] }) {
           {rows === 0 && failed.length === 0 ? (
             <div className="ov-empty">
               <span className="ov-badge-circle ov-badge-circle--good"><Icon name="check" size={24} /></span>
-              <p className="ov-body">Nothing needs you. New alerts and requests show up here.</p>
+              <p className="ov-body">Nothing needs you.</p>
             </div>
           ) : (
             <ul className="ov-rows">
               {shownRequests.map((r) => (
                 <li key={r.id}>
-                  <Link href="/dashboard/cfo#anomalies" className="ov-row">
+                  <Link href="/dashboard/cfo#requests" className="ov-row">
                     <span className="ov-badge-circle ov-badge-circle--warn"><Icon name="finance" size={18} /></span>
                     <span className="ov-row-main">
                       <span className="ov-title">{r.requestedField}</span>
@@ -339,7 +320,7 @@ function NeedsYou({ inputs }: { inputs: { label: string; text: string }[] }) {
               ))}
               {shownInputs.map((i) => (
                 <li key={i.label}>
-                  <Link href="/dashboard/cfo#import" className="ov-row">
+                  <Link href="/dashboard/cfo#reports" className="ov-row">
                     <span className="ov-badge-circle ov-badge-circle--warn"><Icon name="tag" size={18} /></span>
                     <span className="ov-row-main">
                       <span className="ov-title">{i.label}</span>
@@ -462,7 +443,7 @@ export function Overview() {
       {stale && (
         <div className="ov-note ov-rise" style={rise(1)} role="status" data-testid="data-freshness">
           <span>Your saved results are {age} days old.</span>
-          <Link href="/dashboard/cfo#import" className="ov-btn">Upload new reports</Link>
+          <Link href="/dashboard/cfo#reports" className="ov-btn">Upload new reports</Link>
         </div>
       )}
       {health.status === "error" && !empty && (

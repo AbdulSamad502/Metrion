@@ -63,7 +63,7 @@ describe("Overview", () => {
     state = notifications({ alerts: [alert], dataRequests: [req], attentionCount: 2 });
     render(<DashboardPage />);
     expect(screen.getByText("2 things need you.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /1 request/ })).toHaveAttribute("href", "/dashboard/cfo#anomalies");
+    expect(screen.getByRole("link", { name: /1 request/ })).toHaveAttribute("href", "/dashboard/cfo#requests");
     expect(screen.getByRole("link", { name: /1 competitor alert/ })).toHaveAttribute("href", "/dashboard/competitors");
     await screen.findByTestId("market-watch");
   });
@@ -113,7 +113,7 @@ describe("Overview", () => {
     stub({ health: { entries: [] } });
     const none = render(<DashboardPage />);
     expect(await screen.findByTestId("health-none-saved")).toHaveTextContent("Let’s get your first numbers");
-    expect(screen.getByRole("link", { name: /Upload reports/ })).toHaveAttribute("href", "/dashboard/cfo#import");
+    expect(screen.getByRole("link", { name: /Upload reports/ })).toHaveAttribute("href", "/dashboard/cfo#reports");
     none.unmount();
 
     stub({ healthStatus: 500, health: "boom" });
@@ -137,7 +137,7 @@ describe("Overview", () => {
     expect(card).toHaveTextContent("Short settlement");
     expect(card).toHaveTextContent("Amazon · SHG-STL-12 · High priority");
     expect(card).toHaveTextContent("₹18,640.00");
-    expect(card).toHaveTextContent("There are more.");
+    expect(card).toHaveTextContent("More in Profit & Finance.");
   });
 
   it("shows market-watch counts from the backend only", async () => {

@@ -74,8 +74,8 @@ describe("theme in the signed-in frame", () => {
     render(<ShellFrame>{page()}</ShellFrame>);
     await screen.findByText("body");
     const marks = screen.getAllByRole("img", { name: "Metrion", hidden: true }).filter((m) => m.getAttribute("data-src")?.includes("metrion-mark"));
-    expect(marks.map((m) => m.getAttribute("data-src")).sort()).toEqual(["/metrion-mark-light.png", "/metrion-mark.png"]);
-    expect(marks.find((m) => m.getAttribute("data-src") === "/metrion-mark.png")).toHaveClass("mt-brand-mark--dark");
+    expect(marks.map((m) => m.getAttribute("data-src")).sort()).toEqual(["/metrion-mark-light.png", "/metrion-mark-transparent.png"]);
+    expect(marks.find((m) => m.getAttribute("data-src") === "/metrion-mark-transparent.png")).toHaveClass("mt-brand-mark--dark");
     expect(marks.find((m) => m.getAttribute("data-src") === "/metrion-mark-light.png")).toHaveClass("mt-brand-mark--light");
   });
 });

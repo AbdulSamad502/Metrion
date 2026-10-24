@@ -6,14 +6,50 @@ import type { InputHTMLAttributes } from "react";
 export function FormField({
   label,
   error,
+  soft = false,
   ...inputProps
 }: {
   label: string;
   error?: string;
+  /** The softer, rounder look the redesigned screens use. The default is unchanged. */
+  soft?: boolean;
 } & InputHTMLAttributes<HTMLInputElement>) {
   const id = useId();
   const [reveal, setReveal] = useState(false);
   const isPassword = inputProps.type === "password";
+
+  if (soft) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, textAlign: "left" }}>
+        <label htmlFor={id} className="ov-meta" style={{ fontWeight: 700 }}>
+          {label}
+        </label>
+        <div style={{ position: "relative" }}>
+          <input
+            {...inputProps}
+            type={isPassword && reveal ? "text" : inputProps.type}
+            id={id}
+            aria-invalid={error ? true : undefined}
+            className="ov-input"
+            style={isPassword ? { paddingRight: 72 } : undefined}
+          />
+          {isPassword && (
+            <button
+              type="button"
+              onClick={() => setReveal((r) => !r)}
+              aria-label={reveal ? "Hide password" : "Show password"}
+              aria-pressed={reveal}
+              className="ov-btn ov-btn--ghost min-h-10 min-w-10"
+              style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", minHeight: 40, minWidth: 40 }}
+            >
+              {reveal ? "Hide" : "Show"}
+            </button>
+          )}
+        </div>
+        {error && <span className="ov-meta" style={{ color: "var(--ov-bad)" }}>{error}</span>}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1.5 text-left">

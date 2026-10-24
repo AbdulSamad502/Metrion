@@ -1,0 +1,80 @@
+/* Sidebar — calm, roomy, and never crushed.
+   Two type sizes (12 and 15), spacing in multiples of 8 (4 inside a control), rows that scroll instead of shrinking. */
+
+.mt-sidebar { --sb-s1: 12px; --sb-s2: 15px; }
+
+/* brand */
+.sb-brand { display: flex; align-items: center; gap: 12px; padding: 24px 24px 16px; }
+.sb-brand-mark { flex: none; width: 44px; height: auto; }
+.sb-brand-name { font-size: var(--sb-s2); font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; color: var(--text-1); }
+.sb-brand-tag { font-size: var(--sb-s1); font-weight: 600; color: var(--text-5); line-height: 1.3; }
+
+/* groups */
+.sb-nav { display: flex; flex-direction: column; gap: 4px; padding: 0 16px 16px; }
+.sb-nav > * { flex-shrink: 0; }
+.sb-group { display: flex; flex-direction: column; gap: 4px; }
+.sb-group + .sb-group { margin-top: 16px; }
+.sb-label { padding: 8px 12px 4px; font-size: var(--sb-s1); font-weight: 700; color: var(--text-5); letter-spacing: 0.01em; }
+@media (max-height: 760px) { .sb-group + .sb-group { margin-top: 8px; } .sb-brand { padding-top: 16px; padding-bottom: 8px; } }
+
+/* rows */
+.mt-sidebar .mt-nav-item {
+  min-height: 40px; padding: 0 12px; gap: 12px; border-radius: 12px;
+  font-size: var(--sb-s2); font-weight: 600; letter-spacing: -0.005em;
+  transition: background 160ms ease, color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.mt-sidebar .mt-nav-item:active { transform: scale(0.98); }
+.mt-sidebar .mt-nav-item svg { flex: none; }
+.mt-sidebar .mt-nav-indicator { border-radius: 12px; background: var(--accent-fill-default); }
+.mt-sidebar .mt-nav-indicator::before { display: none; } /* the soft tint says "you are here"; no second marker */
+.mt-sidebar .mt-nav-item[aria-current="page"] { color: var(--text-1); font-weight: 700; }
+
+/* system group + footer pinned together */
+.sb-system { margin-top: auto; padding-top: 16px; }
+.sb-system .sb-group { padding-top: 8px; border-top: 1px solid var(--border-subtle); }
+
+.sb-foot { padding: 8px 16px 0; }
+.sb-collapse {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 40px; padding: 0 12px; border-radius: 12px;
+  background: transparent; border: 0; color: var(--text-5); font: inherit; font-size: var(--sb-s2); font-weight: 600; cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.sb-collapse:active { transform: scale(0.98); }
+@media (hover: hover) and (pointer: fine) { .sb-collapse:hover { background: var(--fill-hover); color: var(--text-2); } }
+
+.sb-user { display: flex; align-items: center; gap: 12px; padding: 16px 16px 16px 24px; margin-top: 8px; border-top: 1px solid var(--border-subtle); }
+.sb-avatar {
+  display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--accent-fill-default); color: var(--text-1); font-size: var(--sb-s1); font-weight: 800;
+}
+.sb-user-name { font-size: var(--sb-s2); font-weight: 700; color: var(--text-1); line-height: 1.25; }
+.sb-user-role { font-size: var(--sb-s1); font-weight: 600; color: var(--text-5); line-height: 1.25; }
+.sb-signout {
+  display: grid; place-items: center; flex: none; width: 40px; height: 40px; margin-left: auto; border-radius: 50%;
+  background: transparent; border: 0; color: var(--text-5); cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.sb-signout:active { transform: scale(0.94); }
+@media (hover: hover) and (pointer: fine) { .sb-signout:hover { background: var(--fill-hover); color: var(--text-1); } }
+
+/* the thin scrollbar only shows when there is something to scroll */
+.sb-scroll { scrollbar-width: thin; scrollbar-color: var(--border-default) transparent; overscroll-behavior: contain; }
+
+@media (min-width: 1024px) {
+  .mt-sidebar.sb-collapsed .sb-brand { justify-content: center; padding-left: 0; padding-right: 0; }
+  .mt-sidebar.sb-collapsed .sb-nav { padding-left: 12px; padding-right: 12px; }
+  .mt-sidebar.sb-collapsed .sb-user { justify-content: center; padding-left: 0; padding-right: 0; }
+  .mt-sidebar.sb-collapsed .sb-signout { display: none; }
+  .mt-sidebar.sb-collapsed .sb-collapse { justify-content: center; padding: 0; }
+  .mt-sidebar.sb-collapsed .sb-foot { padding-left: 12px; padding-right: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mt-sidebar .mt-nav-item, .sb-collapse, .sb-signout { transition: none; }
+  .mt-sidebar .mt-nav-item:active, .sb-collapse:active, .sb-signout:active { transform: none; }
+}
+
+/* the page header shares the same four sizes as everything else */
+.mt-topbar .mt-eyebrow { font-size: 12px; letter-spacing: 0.01em; text-transform: none; font-weight: 700; }
+.mt-topbar .t-page-title { font-size: 24px; }
+.mt-topbar a, .mt-topbar button { font-size: 15px; }

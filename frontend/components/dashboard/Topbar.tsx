@@ -31,7 +31,7 @@ export function Topbar({
 }) {
   return (
     <header
-      className="mt-topbar sticky top-0 z-10 flex flex-shrink-0 items-center gap-3 px-4 py-3.5 sm:gap-5 sm:px-8"
+      className="mt-topbar sticky top-0 z-10 flex flex-shrink-0 items-center gap-4 px-4 py-4 sm:px-8"
     >
       <button
         type="button"
@@ -52,7 +52,7 @@ export function Topbar({
         <h1 className="t-page-title truncate" style={{ color: "var(--text-1)" }}>
           {title}
         </h1>
-        <p className="t-body-sm mt-0.5 hidden truncate md:block" style={{ color: "var(--text-5)" }}>
+        <p className="t-meta mt-1 hidden truncate md:block" style={{ color: "var(--text-5)" }}>
           {subtitle}
         </p>
       </div>
@@ -60,7 +60,7 @@ export function Topbar({
       <div className="hidden min-w-0 flex-1 items-center justify-center lg:flex">{context}</div>
       <div className="flex-1 lg:hidden" />
 
-      <div className="flex flex-shrink-0 items-center gap-2.5">
+      <div className="flex flex-shrink-0 items-center gap-2">
         {actions}
         <span className="hidden sm:inline-flex">
           <ThemeToggle />
@@ -84,7 +84,7 @@ export function Topbar({
         {showCeoShortcut && (
           <Link
             href="/dashboard/ceo-hub"
-            className="mt-btn mt-btn-secondary mt-focus flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 t-body font-semibold"
+            className="mt-btn mt-btn-secondary mt-focus flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 t-body font-semibold"
           >
             <span className="hidden sm:inline">CEO Hub</span>
             <span className="sm:hidden">CEO</span>
