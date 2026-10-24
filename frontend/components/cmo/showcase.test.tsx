@@ -30,7 +30,7 @@ function fake(over: Partial<ShowcaseClient> = {}): ShowcaseClient {
 describe("CMO showcase (read-only)", () => {
   it("shows honest empty states, the ask-the-CEO hint, and no generation controls", async () => {
     render(<ShowcaseDashboard client={fake()} />);
-    expect(await screen.findByText("No news fetched yet - ask the CEO for market news")).toBeInTheDocument();
+    expect(await screen.findByText("No news yet. Ask the CEO.")).toBeInTheDocument();
     expect(screen.getByText(/To create or change anything, ask the CEO/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ask the CEO" })).toHaveAttribute("href", "/dashboard/ceo-hub");
     expect(screen.queryByRole("button", { name: /generate|regenerate|select|lock|approve/i })).toBeNull();
@@ -56,7 +56,7 @@ describe("CMO showcase (read-only)", () => {
     render(<ShowcaseDashboard client={fake({ titles })} />);
     await screen.findByText("Stored title <b>x</b>");
     await userEvent.click(screen.getByRole("button", { name: "Frequently used" }));
-    expect(await screen.findByText(/Frequently used unavailable/)).toBeInTheDocument();
+    expect(await screen.findByText(/Not available yet: no copies recorded/)).toBeInTheDocument();
     expect(screen.queryByText("Stored title <b>x</b>")).toBeNull();
   });
 
@@ -199,7 +199,7 @@ describe("CMO showcase: results stay trustworthy while loading", () => {
     await userEvent.click(screen.getAllByRole("button", { name: "Retry" })[0]);
     expect(screen.getByText("Loading market news…")).toBeInTheDocument();
     gate.resolve({ items: [] });
-    expect(await screen.findByText("No news fetched yet - ask the CEO for market news")).toBeInTheDocument();
+    expect(await screen.findByText("No news yet. Ask the CEO.")).toBeInTheDocument();
   });
 
   it("states a missing limit as 'no limit stated', never as a blank or 'null'", async () => {
@@ -269,7 +269,7 @@ describe("CMO showcase: copy and mark-as-used say only what happened", () => {
 });
 
 describe("CMO showcase: one strong action, and copy behaviour is unchanged", () => {
-  const solid = (el: HTMLElement) => (el.getAttribute("style") ?? "").includes("background: var(--accent)");
+  const solid = (el: HTMLElement) => el.classList.contains("ov-btn--brand"); // the one filled button
   const pack = {
     generationId: "p1", marketplace: "AMAZON" as const, sku: "S1", productLabel: "Bottle", groundedOn: { approvalId: "a1", titleText: "Stored title", basis: "SELLER_APPROVED" },
     bullets: [{ text: "Bullet one", chars: 10, max: 250 }], description: { text: "A description", chars: 13, max: 2000 }, backendTerms: null,
@@ -277,7 +277,7 @@ describe("CMO showcase: one strong action, and copy behaviour is unchanged", () 
   };
   const tags = { generationId: "h1", sku: "S1", productLabel: "Bottle", hashtags: ["#One", "#Two"], generatedAt: "2026-10-10T00:00:00Z", origin };
 
-  it("leaves 'Ask the CEO' as the one solid-green control; Copy Full Pack is a calm button", async () => {
+  it("leaves 'Ask the CEO' as the one solid control; Copy Full Pack is a calm button", async () => {
     render(<ShowcaseDashboard client={fake({ copyPacks: async () => ({ items: [pack] }), hashtags: async () => ({ items: [tags] }) })} />);
     const full = await screen.findByRole("button", { name: "Copy Full Pack" });
     expect(solid(full)).toBe(false);

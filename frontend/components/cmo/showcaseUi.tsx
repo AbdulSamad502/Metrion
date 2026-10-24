@@ -1,10 +1,12 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ErrorNotice } from "@/components/ui/ErrorNotice";
-import { LoadingState, Spinner } from "@/components/ui/LoadingState";
+import { ErrorBanner, LoadingLines, Pill as BasePill } from "@/components/overview/parts";
+import { Spinner } from "@/components/ui/LoadingState";
 import { useToast } from "@/components/ui/Toast";
 import { explainShowcaseError } from "@/lib/cmoShowcase";
+import "@/components/overview/overview.css";
+import "./cmo.css";
 
 /** Small read-only building blocks for the CMO showcase. Nothing here collects input except the search box and filters. */
 
@@ -62,17 +64,17 @@ export function AsyncBlock<T>({ a, isEmpty, empty, label, children }: {
   a: AsyncView<T>; isEmpty: (d: T) => boolean; empty: ReactNode; label: string; children: (d: T) => ReactNode;
 }) {
   const { state, reload, refreshing, refreshError } = a;
-  if (state.status === "loading" || (state.status === "error" && refreshing)) return <LoadingState lines={3} label={`Loading ${label}`} />;
-  if (state.status === "error") return state.notConfigured ? <Hint>{state.message}</Hint> : <ErrorNotice message={state.message} onRetry={reload} />;
+  if (state.status === "loading" || (state.status === "error" && refreshing)) return <LoadingLines lines={3} label={`Loading ${label}`} />;
+  if (state.status === "error") return state.notConfigured ? <Hint>{state.message}</Hint> : <ErrorBanner message={state.message} onRetry={reload} />;
   return (
     <div aria-busy={refreshing}>
       {refreshError && (
-        <div className="mb-3">
-          <ErrorNotice message={`${refreshError} Showing the last ${label} that loaded.`} onRetry={reload} />
+        <div style={{ marginBottom: 16 }}>
+          <ErrorBanner message={`${refreshError} Showing the last ${label} that loaded.`} onRetry={reload} />
         </div>
       )}
       {refreshing && (
-        <p role="status" className="mb-3 inline-flex items-center gap-2 t-meta" style={{ color: "var(--text-5)" }}>
+        <p role="status" className="ov-meta" style={{ marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 8 }}>
           <Spinner size={12} /> Updating {label}…
         </p>
       )}
@@ -86,41 +88,43 @@ export const withLimit = (n: number, max: number | null | undefined, unit: strin
 
 export function Hint({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded-lg px-3 py-3 t-body-sm" role="status" style={{ color: "var(--text-6)", background: "var(--fill-hover)", border: "1px dashed var(--border-default)" }}>
+    <p className="cmo-hint" role="status">
       {children}
     </p>
   );
 }
 
 export function Pill({ children, tone = "neutral", title }: { children: ReactNode; tone?: "accent" | "neutral" | "warning"; title?: string }) {
-  const c = tone === "accent" ? "var(--accent)" : tone === "warning" ? "var(--warning)" : "var(--text-5)";
   return (
-    <span title={title} className="t-micro inline-block whitespace-nowrap rounded px-1.5 py-0.5 font-bold uppercase" style={{ color: c, border: `1px solid ${tone === "accent" ? "var(--accent-border-default)" : "var(--border-default)"}`, background: tone === "accent" ? "var(--accent-fill-subtle)" : "transparent" }}>
-      {children}
+    <span title={title}>
+      <BasePill tone={tone === "accent" ? "brand" : tone === "warning" ? "warn" : undefined}>{children}</BasePill>
     </span>
   );
 }
 
 export function Card({ children, accent = false, className = "" }: { children: ReactNode; accent?: boolean; className?: string }) {
+  return <div className={`cmo-card${accent ? " cmo-card--accent" : ""} ${className}`}>{children}</div>;
+}
+
+/** A thin bar for "how much of the limit this uses". Decorative: the numbers beside it say the same thing, so it is hidden from screen readers. */
+export function LengthMeter({ n, max }: { n: number; max: number | null | undefined }) {
+  if (max == null || max <= 0) return null;
   return (
-    <div className={`rounded-xl p-3.5 ${className}`} style={{ background: "var(--bg-card)", border: `1px solid ${accent ? "var(--accent-border-strong)" : "var(--border-subtle)"}` }}>
-      {children}
-    </div>
+    <span className="cmo-meter" aria-hidden>
+      <i style={{ width: `${Math.min(100, (n / max) * 100)}%` }} />
+    </span>
   );
 }
 
 export function SectionCard({ title, hint, action, children }: { title: string; hint?: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-2xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--accent-border-subtle)" }} aria-label={title}>
-      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <section className="ov-card ov-rise" aria-label={title}>
+      <header className="ov-card-head" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
         <div className="min-w-0">
-          <h2 className="flex items-center gap-2 t-card-title font-bold" style={{ color: "var(--text-1)" }}>
-            <span className="h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} aria-hidden />
-            {title}
-          </h2>
-          {hint && <p className="mt-1 t-meta" style={{ color: "var(--text-6)" }}>{hint}</p>}
+          <h2 className="ov-title">{title}</h2>
+          {hint && <p className="ov-meta" style={{ marginTop: 4 }}>{hint}</p>}
         </div>
-        {action && <div className="flex items-center gap-2">{action}</div>}
+        {action && <div style={{ display: "flex", alignItems: "center", gap: 8 }}>{action}</div>}
       </header>
       {children}
     </section>
@@ -150,8 +154,7 @@ export function CopyButton({ text, label = "Copy", onCopied, primary = false }: 
     <button
       type="button"
       onClick={copy}
-      className="mt-btn mt-focus min-h-[40px] rounded-lg px-3 py-1 t-meta font-bold"
-      style={primary ? { background: "var(--accent)", color: "var(--accent-on-fill)" } : { border: "1px solid var(--border-hover)", color: "var(--text-2)" }}
+      className={`ov-btn min-h-10${primary ? " ov-btn--brand" : ""}`}
       aria-label={done ? "Copied" : label}
     >
       {done ? "Copied" : label}
