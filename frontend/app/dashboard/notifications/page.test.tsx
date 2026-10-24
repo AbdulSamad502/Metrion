@@ -27,7 +27,7 @@ describe("Action Center", () => {
   it("shows a loading state while either source is loading", () => {
     state = notifications({ alertsStatus: "loading" });
     render(<NotificationsPage />);
-    expect(screen.getAllByRole("status")[0]).toHaveAttribute("aria-busy", "true");
+    expect(screen.getAllByRole("status").some((el) => el.getAttribute("aria-busy") === "true")).toBe(true);
   });
 
   it("is empty in plain words when nothing needs attention", () => {
@@ -90,5 +90,78 @@ describe("Action Center", () => {
     const dlg = await screen.findByRole("dialog", { name: "Data request" });
     expect(within(dlg).getByText("Net margin")).toBeInTheDocument();
     expect(within(dlg).getByRole("link", { name: "Open in CFO" })).toHaveAttribute("href", "/dashboard/cfo#anomalies");
+  });
+});
+
+describe("Action Center tells the truth about what it could and could not read", () => {
+  it("does not say 'all caught up' when a list could not be loaded", () => {
+    state = notifications({ alertsStatus: "error", alertsError: "boom", dataRequestsStatus: "error", dataRequestsError: "boom" });
+    render(<NotificationsPage />);
+    expect(screen.queryByText("You're all caught up")).toBeNull();
+    expect(screen.getByText(/This is not an all-clear/)).toBeInTheDocument();
+    expect(screen.getAllByRole("alert").length).toBe(2);
+  });
+
+  it("keeps the last list and says so when a refresh fails", () => {
+    state = notifications({ alerts: [alert("a1")], alertsStatus: "error", alertsError: "boom" });
+    render(<NotificationsPage />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Competitor alerts: boom Showing the last alerts that loaded.");
+    expect(screen.getByRole("button", { name: /Rival a1 cut its price/ })).toBeInTheDocument();
+    expect(screen.queryByText(/not an all-clear/)).toBeNull();
+  });
+
+  it("shows a refresh in progress, keeps the list, and cannot be started twice", async () => {
+    const reload = vi.fn();
+    state = notifications({ alerts: [alert("a1")], refreshing: true, reload });
+    render(<NotificationsPage />);
+    expect(screen.getByTestId("notif-context")).toHaveTextContent(/Refreshing… what is shown is the last list that loaded/);
+    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Rival a1 cut its price/ })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Refreshing…" }));
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("says how many items there are and when they were checked, and Refresh asks for a re-read", async () => {
+    const reload = vi.fn();
+    state = notifications({ alerts: [alert("a1")], dataRequests: [request("r1")], checkedAt: "9:41 AM", reload });
+    render(<NotificationsPage />);
+    expect(screen.getByTestId("notif-context")).toHaveTextContent("2 items · checked 9:41 AM");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Refresh" }));
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not turn a hidden alerts feed into 'no competitor alerts'", async () => {
+    state = notifications({ alertsStatus: "forbidden" });
+    render(<NotificationsPage />);
+    expect(screen.getByText("No open data requests")).toBeInTheDocument(); // the all tab names what it could check
+    expect(screen.getByText(/Competitor alerts are not shown for your role/)).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("tab", { name: /Competitor alerts/ }));
+    expect(screen.queryByText("No competitor alerts")).toBeNull();
+  });
+});
+
+describe("the open details always match the current list", () => {
+  it("says a request is no longer open, and shows none of its old details, once a refresh removes it", async () => {
+    state = notifications({ dataRequests: [request("r1")] });
+    const { rerender } = render(<NotificationsPage />);
+    await userEvent.setup().click(screen.getByRole("button", { name: /Cost of SKU r1/ }));
+    const dlg = await screen.findByRole("dialog", { name: "Data request" });
+    expect(within(dlg).getByText("Net margin")).toBeInTheDocument();
+    state = notifications({ dataRequests: [request("r1", "RESOLVED")] });
+    rerender(<NotificationsPage />);
+    expect(within(await screen.findByRole("dialog", { name: "Data request" })).getByText(/This request is no longer open/)).toBeInTheDocument();
+    expect(screen.queryByText("Net margin")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open in CFO" })).toBeNull();
+  });
+
+  it("shows the refreshed text of an alert that is still there", async () => {
+    state = notifications({ alerts: [alert("a1")] });
+    const { rerender } = render(<NotificationsPage />);
+    await userEvent.setup().click(screen.getByRole("button", { name: /Rival a1 cut its price/ }));
+    const dlg = await screen.findByRole("dialog", { name: "Rival a1" });
+    expect(within(dlg).getAllByText("Rival a1 cut its price").length).toBeGreaterThan(0);
+    state = notifications({ alerts: [alert("a1", { message: "Rival a1 cut its price again" })] });
+    rerender(<NotificationsPage />);
+    expect(within(await screen.findByRole("dialog", { name: "Rival a1" })).getAllByText("Rival a1 cut its price again").length).toBeGreaterThan(0);
   });
 });
