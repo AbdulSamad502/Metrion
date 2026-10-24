@@ -34,7 +34,10 @@ describe("Agents page", () => {
     stub(() => (++n === 1 ? json("down", 503) : json([{ id: "CFO", name: "CFO", status: "CONNECTED" }])));
     render(<AgentsPage />);
     expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByText(/The roster above/)).toBeNull(); // there is no roster above to point at while it failed to load
+    expect(screen.getByText(/Nothing on this page changes the roster\./)).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("CFO")).toBeInTheDocument();
+    expect(screen.getByText(/The roster above is exactly what the backend reports/)).toBeInTheDocument();
   });
 });

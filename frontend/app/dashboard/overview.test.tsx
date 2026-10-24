@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shellData, notifications, TestShell } from "@/test-support/shellMock";
 import type { Layer1Alert } from "@/lib/api";
@@ -130,6 +131,19 @@ describe("Overview", () => {
     stub({ ciStatus: 503, ci: "backend down" });
     render(<DashboardPage />);
     expect(await screen.findByText(/not set up on the server yet/i)).toBeInTheDocument();
+  });
+
+  it("offers a retry when the competitor counts fail to load, and shows them once it works", async () => {
+    const routes: Routes = { ciStatus: 503, ci: "backend down" };
+    stub(routes);
+    render(<DashboardPage />);
+    const notice = await screen.findByText(/not set up on the server yet/i);
+    expect(screen.queryByTestId("market-watch")).toBeNull(); // nothing loaded yet: no counts are shown
+    routes.ciStatus = undefined;
+    routes.ci = undefined;
+    await userEvent.setup().click(within(notice.closest("[role=alert]") as HTMLElement).getByRole("button", { name: "Retry" }));
+    expect(await screen.findByTestId("market-watch")).toHaveTextContent("Competitors tracked");
+    expect(screen.queryByText(/not set up on the server yet/i)).toBeNull();
   });
 
   it("states honestly what agents are wired to the CEO and when activity is not recorded", async () => {

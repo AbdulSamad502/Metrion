@@ -50,7 +50,7 @@ function Agents() {
         </div>
         <p className="mt-2 max-w-[70ch] t-body leading-relaxed" style={{ color: "var(--text-4)" }}>
           There is no entitlement or purchasing service in the backend yet, so Metrion cannot unlock, lock, add or remove an
-          agent. The roster above is exactly what the backend reports — nothing on this page changes it.
+          agent. {agents && !error ? "The roster above is exactly what the backend reports — nothing on this page changes it." : "Nothing on this page changes the roster."}
         </p>
       </Section>
     </div>

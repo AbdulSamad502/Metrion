@@ -157,9 +157,12 @@ function MarketWatch({ ci }: { ci: ReturnType<typeof useCiSummary> }) {
   if (ci.forbidden) return null;
   return (
     <Section title="Market watch" panel={false}>
-      {ci.error ? (
-        <ErrorNotice message={ci.error} />
-      ) : (
+      {ci.error && (
+        <div className="mb-3">
+          <ErrorNotice message={summary ? `${ci.error} Showing the last counts that loaded.` : ci.error} onRetry={ci.reload} />
+        </div>
+      )}
+      {ci.error && !summary ? null : (
         <div className="grid grid-cols-2 gap-x-4 gap-y-5" data-testid="market-watch">
           <Stat
             label="Competitors tracked"
