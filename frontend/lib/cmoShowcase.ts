@@ -4,6 +4,7 @@
  * fire-and-forget (failures are ignored and never block the seller). There is nothing here that generates, approves, uploads or
  * writes to a marketplace, and nothing computes a figure: char/byte counts come from the API as stored. */
 
+import { demoActive } from "@/lib/demo/mode";
 import { apiFetch } from "@/lib/api";
 
 export type Marketplace = "AMAZON" | "FLIPKART" | "MEESHO";
@@ -124,6 +125,7 @@ export function createShowcaseClient(getToken: GetToken): ShowcaseClient {
     compliance: (f) => get(`${BASE}/compliance` + qs({ sku: f.sku, marketplace: f.marketplace })),
     recordUsage: async (e) => {
       try {
+        if (demoActive()) return false; // sample data records nothing, and this call bypasses apiFetch
         const token = await getToken();
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}${BASE}/usage-events`, {
           method: "POST",

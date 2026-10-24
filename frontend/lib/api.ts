@@ -2,6 +2,8 @@
  * token as a bearer token — the backend's `require_auth()` (auth.md §7.1) verifies it
  * server-side; nothing here is a security boundary of its own. */
 
+import { demoActive } from "@/lib/demo/mode";
+
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
@@ -18,6 +20,12 @@ export async function apiFetch<T>(
   token: string | null,
   init?: RequestInit,
 ): Promise<T> {
+  if (demoActive()) {
+    // Sample-data preview (dev/preview builds only): see lib/demo/mode.ts. Loaded on demand so a normal session never fetches the fixtures.
+    const { demoRespond } = await import("@/lib/demo/respond");
+    const out = demoRespond<T>(path, init);
+    if (out.handled) return out.body;
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
@@ -37,6 +45,7 @@ export async function apiFetch<T>(
  * JSON Content-Type, which breaks a multipart boundary header. Used only by the evidence
  * upload endpoint (Step 4). */
 export async function apiFetchForm<T>(path: string, token: string | null, formData: FormData): Promise<T> {
+  if (demoActive() && !path.startsWith("/api/v1/ceo/")) throw new ApiError(400, "Sample data is on: uploads are not accepted and nothing is saved.");
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,

@@ -10,6 +10,7 @@ import { useSurfaceSheen } from "@/lib/useSurfaceSheen";
 import { Sidebar } from "./Sidebar";
 import { Icon } from "@/components/ui/Icon";
 import { ToastProvider } from "@/components/ui/Toast";
+import { DemoBadge } from "@/components/demo/DemoBadge";
 
 const COLLAPSE_KEY = "metrion.sidebar.collapsed";
 
@@ -134,6 +135,7 @@ function OwnFrame({ children }: { children: ReactNode }) {
             </span>
           </button>}
           <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+          <DemoBadge />
         </div>
       </FrameContext.Provider>
       </ToastProvider>

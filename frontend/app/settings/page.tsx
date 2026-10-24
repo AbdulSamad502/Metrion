@@ -20,6 +20,7 @@ import { getServerTheme, getTheme, setTheme, subscribeTheme, type Theme } from "
 import { useShell } from "@/lib/ShellContext";
 import { useHashTab } from "@/lib/useHashTab";
 import { useSubmitGuard } from "@/lib/useSubmitGuard";
+import { DEMO_AVAILABLE, setDemo, useDemo } from "@/lib/demo/mode";
 
 const SETTINGS_TABS = [
   { id: "account", label: "Account & security" },
@@ -56,6 +57,7 @@ function SettingsWorkspace() {
       <TabPanel id="account" active={tab} idPrefix="settings">
         <div className="flex flex-col gap-6">
           <AppearanceCard />
+          {DEMO_AVAILABLE && <SampleDataCard />}
           <SignInMethodsCard googleConnected={!!googleAccount} passwordEnabled={user.passwordEnabled} />
           <PasswordCard user={user} passwordEnabled={user.passwordEnabled} />
         </div>
@@ -275,6 +277,36 @@ function AppearanceCard() {
             {o.label}
           </button>
         ))}
+      </div>
+    </Card>
+  );
+}
+
+/** Preview only (`NEXT_PUBLIC_ENABLE_DEMO_DATA=1`): fills the dashboards with hand-written sample responses so every page can be seen filled in. Sample figures are
+ * fictional, nothing is saved, the CEO Hub never shows them, and a "Sample data" label stays on screen while it is on. */
+function SampleDataCard() {
+  const on = useDemo();
+  return (
+    <Card>
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-base font-bold" style={{ color: "var(--text-2)" }}>
+          Sample data
+        </div>
+        <StatusBadge tone="warning">Preview only</StatusBadge>
+      </div>
+      <div className="mt-1 text-xs" style={{ color: "var(--text-6)" }}>
+        Fill the dashboards with made-up sample figures to see how they look once a seller has uploaded reports. They are not your numbers, nothing is saved, and the CEO Hub does not use them.
+      </div>
+      <div className="mt-4">
+        <button
+          type="button"
+          aria-pressed={on}
+          onClick={() => setDemo(!on)}
+          className="mt-btn mt-focus min-h-[40px] rounded-xl px-4 text-sm font-bold"
+          style={on ? { background: "var(--accent)", color: "var(--accent-on-fill)" } : { border: "1px solid var(--border-hover)", color: "var(--text-3)" }}
+        >
+          {on ? "Sample data is on — turn off" : "Fill with sample data"}
+        </button>
       </div>
     </Card>
   );

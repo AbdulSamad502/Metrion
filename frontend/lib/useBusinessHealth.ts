@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCeoClient, type HealthEntry } from "@/lib/ceo";
 import type { HealthState } from "@/lib/useCeoHub";
+import { demoActive } from "@/lib/demo/mode";
 
 /** The Overview's profit snapshot: the same persisted, backend-presented results the CEO Hub's "business at a glance" shows
  * (`GET /api/v1/ceo/state/health` — CFO bands and the latest saved P&L as verified display snapshots). Nothing is computed here.
@@ -27,7 +28,8 @@ export function useBusinessHealth(): { health: HealthState; refresh: () => void;
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const { entries } = await client.getHealth();
+      // Sample-data preview (dev/preview builds only). This is the Overview's own hook; the CEO Hub's reads of the same endpoint are untouched.
+      const { entries } = demoActive() ? (await import("@/lib/demo/fixtures/health")).demoHealth() : await client.getHealth();
       if (alive.current) {
         setHealth({ status: "ready", entries });
         setCheckedAt(new Date().toISOString());

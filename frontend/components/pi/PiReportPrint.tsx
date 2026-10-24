@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useDemo } from "@/lib/demo/mode";
 import { evidenceOf, explainPiError, formatPaise, imageDomain, safeHref, SOURCE_LABEL, type PiCase, type PiClient, type PiProduct } from "@/lib/piShowcase";
 
 /** The print / Save-as-PDF layout of one saved Product Intelligence report (docs/specs/ceo-pi-research-flow.md C7). Black on white, no app chrome, nothing that starts research.
@@ -124,8 +125,14 @@ export function PiReportPrint({ client, runId }: { client: PiClient; runId: stri
 
 function Body({ c }: { c: PiCase }) {
   const b = c.brief;
+  const sample = useDemo(); // sample-data preview (dev/preview builds only): the report is made up, and the paper copy must say so
   return (
     <>
+      {sample && (
+        <p role="note" className="mb-2 font-bold" style={{ border: `2px solid ${ink}`, padding: "4px 8px" }}>
+          SAMPLE DATA: this report is fictional and is not a real research result.
+        </p>
+      )}
       <header className="mb-3 flex flex-wrap items-start justify-between gap-3" style={{ borderBottom: `2px solid ${ink}`, paddingBottom: 8 }}>
         <div>
           <div style={{ fontSize: 10, letterSpacing: 1, color: muted, fontWeight: 700 }}>METRION · PRODUCT INTELLIGENCE REPORT</div>

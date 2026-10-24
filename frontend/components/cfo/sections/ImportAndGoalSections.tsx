@@ -1,5 +1,6 @@
 "use client";
 
+import { demoActive } from "@/lib/demo/mode";
 import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Section } from "@/components/ui/Section";
@@ -33,6 +34,7 @@ export function IngestUploadSection({
     setError(null);
     setResult(null);
     try {
+      if (demoActive()) throw new ApiError(400, "Sample data is on: uploads are not accepted and nothing is saved."); // this call bypasses apiFetch, so it needs its own guard
       const token = await getToken();
       const form = new FormData();
       form.append("file", file);
