@@ -4,7 +4,7 @@
 Operate mode: scanability and trust over expression. Brand lives in precise detail. Theme direction (dark vs light) is undecided; the near-black below is today's implementation, not a commitment. Express every colour as a token so a light theme stays possible.
 
 ## Colour (verified against frontend/app/globals.css)
-- Surfaces: --bg-base #0A0B0A, --bg-panel #0D0B08, --bg-popover #14150F, cards rgba(32,36,30,.30) / elevated .40
+- Surfaces: --bg-base #020302, --bg-panel #0D0B08, --bg-popover #14150F, cards rgba(32,36,30,.30) / elevated .40
 - Borders: --border-subtle rgba(255,255,255,.06), --border-default .11
 - Text: --text-1 #F7FAF6, --text-2 #F2F4F0, --text-3 #DADFD6, --text-4 #C7CDC2, --text-5 #8F968C, --text-6 #8B9288 (all >=4.5:1, tested by app/textTokens.contrast.test.ts)
 - Decoration only, never essential text or numbers: --text-7 #6B7268 (3.45:1), --text-8 #5E655B (2.85:1), --text-group-label #4E534B (2.17:1). Measured with the test's formula; not covered by the test.
