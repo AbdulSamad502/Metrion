@@ -27,11 +27,11 @@ const CFO_TABS = [
 ] as const;
 
 const CFO_TAB_BLURBS: Record<(typeof CFO_TABS)[number]["id"], string> = {
-  overview: "Financial health, the strategic briefing, a Leak Shield preview and the goal everything is measured against.",
-  profitability: "True contribution profit, period comparison, price/margin curves, landed cost, suppliers and batch sizing.",
-  cash: "Reconcile settlements to invoices, track expenses against a budget, and check funding readiness.",
-  gst: "Line-level GST analysis, period summaries and HSN/rate lookup. Informational — not tax advice.",
-  anomalies: "Statistical anomaly checks, and the inputs the CFO is asking you for.",
+  overview: "Rate your financial health, build a strategic briefing, try a free Leak Shield preview and note your goal. The goal only gives background to the written summary.",
+  profitability: "Contribution profit for a period, how two results compare, margin at different prices, landed cost, supplier quotes and batch size.",
+  cash: "Check settlements against invoices, run a cash reconciliation, track expenses against a budget and check funding readiness.",
+  gst: "GST by line, GST for a period and a rate lookup. Informational only, not tax advice.",
+  anomalies: "Check for unusual changes, and answer what Metrion needs from you.",
   import: "Upload marketplace reports. Metrion reads files you upload — it never connects to a marketplace account.",
 };
 

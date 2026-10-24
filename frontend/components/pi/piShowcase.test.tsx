@@ -347,3 +347,34 @@ describe("PI saved-research list refreshes without losing what loaded", () => {
     expect(client.history).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("PI showcase: one strong action, and the research stays read-only", () => {
+  const solid = (el: Element) => ((el as HTMLElement).getAttribute("style") ?? "").includes("background: var(--accent)");
+
+  it("leaves '+ New Discovery' as the one solid-green control; batch size and supplier links are calm", async () => {
+    const lead = { id: "l1", candidate_id: "c1", supplier_name: "Acme Supply", source: "TAVILY", source_url: "https://acme.example/p", locality: "Delhi", contact_email: null, contact_phone: null, contact_website: null, published_price: null, moq: null, fetched_at: "2026-10-10T00:00:00Z" } as never;
+    const withLead = caseOf(RUN_A, { products: [1, 2, 3, 4, 5].map((n) => (n === 1 ? { ...product(n), supplierLeads: [lead], bestSupplierLeadId: "l1" } : product(n))) });
+    render(<PiShowcase client={fake({ report: async () => withLead })} />);
+    await screen.findByRole("heading", { name: /Recent Investigation/ });
+    const strong = [...document.querySelectorAll("a, button")].filter((e) => solid(e) && !e.hasAttribute("aria-current")); // the active carousel dot marks position, it is not an action
+    expect(strong.map((e) => e.textContent)).toEqual(["+ New Discovery"]);
+    expect(solid(screen.getByRole("link", { name: /Ask the CEO for batch size/ }))).toBe(false);
+  });
+
+  it("shows the saved score as plain text, not as a positive state", async () => {
+    render(<PiShowcase client={fake()} />);
+    await screen.findByRole("heading", { name: /Recent Investigation/ });
+    const topScore = screen.getAllByText(/^Score 89.00\/100$/)[0];
+    expect(topScore.getAttribute("style") ?? "").not.toContain("var(--accent)");
+    expect(screen.getByText("Rank #1").getAttribute("style") ?? "").not.toContain("var(--accent)");
+  });
+
+  it("puts the product's name first in its information card and keeps the section heading", async () => {
+    render(<PiShowcase client={fake()} />);
+    const card = await screen.findByLabelText("Product information: Watch 1");
+    expect(within(card).getByRole("heading", { name: "Product Information" })).toBeInTheDocument();
+    expect(within(card).getByText("Watch 1", { selector: "p" })).toBeInTheDocument();
+    expect(card).toHaveTextContent(/opportunity candidate from public web signal/);
+  });
+});
+

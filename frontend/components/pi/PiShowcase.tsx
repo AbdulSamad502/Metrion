@@ -165,11 +165,11 @@ function TopPicks({ items, onOpen }: { items: PiHistoryItem[]; onOpen: (runId: s
           {picks.map((i) => (
             <li key={i.runId}>
               <button type="button" onClick={() => onOpen(i.runId, 1)} className="mt-btn mt-focus flex w-full items-center gap-3 rounded-xl p-3 text-left" style={card}>
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full t-body font-bold" style={{ border: "1px solid var(--accent-border-default)", color: "var(--accent)" }} aria-hidden>1</span>
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full t-body font-bold" style={{ border: "1px solid var(--border-default)", color: "var(--text-3)" }} aria-hidden>1</span>
                 <span className="min-w-0">
                   <span className="block truncate t-body-sm font-bold" style={{ color: "var(--text-1)" }}>{i.topProducts[0].title ?? "Untitled product"}</span>
                   <span className="block truncate t-meta" style={{ color: "var(--text-5)" }}>{i.category ?? "Investigation"} · {fmtDate(i.completedAt)}</span>
-                  <span className="block t-meta font-bold" style={{ color: "var(--accent)" }}>Score {score(i.topProducts[0].finalScore)}</span>
+                  <span className="block t-meta font-bold" style={{ color: "var(--text-2)" }}>Score {score(i.topProducts[0].finalScore)}</span>
                 </span>
               </button>
             </li>
@@ -287,7 +287,7 @@ function CurrentInvestigation({ runId, client, cache, rank, setRank, isLatest, o
           <h3 className="flex flex-wrap items-center gap-2 t-card-title font-bold" style={{ color: "var(--text-1)" }}>
             <span className="h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} aria-hidden />
             {isLatest ? "Recent Investigation" : "Investigation"}: {c.brief.category ?? "Saved research"}
-            <Badge>{isLatest ? "Current" : "Selected"}</Badge>
+            <Badge tone={isLatest ? "accent" : "neutral"}>{isLatest ? "Current" : "Selected"}</Badge>
             {c.status === "PARTIAL" && <Badge tone="neutral">Partial</Badge>}
           </h3>
           <p className="mt-1 t-meta" style={{ color: "var(--text-6)" }}>{briefLine(c.brief, `Top ${products.length} Shortlist`)} · saved {fmtDate(c.completedAt)}</p>
@@ -363,10 +363,10 @@ function Carousel({ products, idx, onSelect }: { products: PiProduct[]; idx: num
       <div className="flex items-stretch gap-3">
         {neighbour(prev, idx - 1, "previous")}
         <figure className="relative min-w-0 flex-1 rounded-2xl p-3" style={{ ...card, border: "1px solid var(--accent-border-default)" }} aria-label={`Rank ${p.rank}: ${p.candidate.candidate_title}`}>
-          <span className="absolute left-3 top-3 z-10"><Badge>Rank #{p.rank}</Badge></span>
+          <span className="absolute left-3 top-3 z-10"><Badge tone="neutral">Rank #{p.rank}</Badge></span>
           <div className="grid place-items-center pt-6" style={{ minHeight: 240 }}><ProductImage product={p} large /></div>
           <figcaption className="mt-2">
-            <span className="block truncate t-body-sm font-bold" style={{ color: "var(--accent)" }}>{p.candidate.candidate_title}</span>
+            <span className="block truncate t-body-sm font-bold" style={{ color: "var(--text-1)" }}>{p.candidate.candidate_title}</span>
             {safeHref(p.candidate.image_url) && <span className="block t-micro" style={{ color: "var(--text-7)" }}>image from {imageDomain(p.candidate.image_source_url)}</span>}
           </figcaption>
         </figure>
@@ -421,8 +421,9 @@ function ProductInformation({ product, brief }: { product: PiProduct; brief: PiC
   const unitsT = tile(units, `Needs your confirmed quote (with minimum order or delivery time) - say "how many units should I buy of #${product.rank}?" in the CEO chat`);
   return (
     <div className="rounded-2xl p-4" style={{ ...card, border: "1px solid var(--accent-border-default)" }} aria-label={`Product information: ${c.candidate_title}`}>
-      <h4 className="t-body font-bold" style={{ color: "var(--text-1)" }}>Product Information</h4>
-      <p className="t-meta" style={{ color: "var(--text-5)" }}>{c.candidate_title}{c.observed_category ? ` · ${c.observed_category}` : ""} · score {score(product.finalScore)} · opportunity candidate from public web signal</p>
+      <h4 className="t-meta font-bold uppercase" style={{ color: "var(--text-5)", letterSpacing: "var(--ls-label)" }}>Product Information</h4>
+      <p className="m-0 mt-1 t-headline" style={{ color: "var(--text-1)" }}>{c.candidate_title}</p>
+      <p className="t-meta mt-1" style={{ color: "var(--text-5)" }}>{c.observed_category ? `${c.observed_category} · ` : ""}score {score(product.finalScore)} · opportunity candidate from public web signal</p>
 
       <div className="mt-3 grid grid-cols-2 gap-3 border-y py-3 md:grid-cols-4" style={{ borderColor: "var(--border-subtle)" }}>
         <Tile label="Selling price" value={band ?? (web?.average_paise != null ? formatPaise(web.average_paise) : "Unavailable")} sub={band ? (web?.average_paise != null ? `Web ref: ${formatPaise(web.average_paise)} (not verified)` : "Your target band") : web ? "Web-mentioned reference, not verified" : "No target price stated"} missing={!band && !web} />
@@ -452,10 +453,10 @@ function ProductInformation({ product, brief }: { product: PiProduct; brief: PiC
             <div className="t-body font-bold" style={{ color: "var(--text-1)" }}>{href ? <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" style={{ color: "var(--accent)" }}>{lead.supplier_name}</a> : lead.supplier_name}</div>
             <div>{lead.locality ?? "Location not stated"} · {SOURCE_LABEL[lead.source] ?? lead.source}</div>
             <div>Phone: {lead.contact?.phone ?? "not published"} · MOQ: {lead.contact?.moq ? "published by the supplier" : "not published"}</div>
-            {published && <div className="font-bold" style={{ color: "var(--accent)" }}>Published price: {published.low_paise === published.high_paise ? formatPaise(published.low_paise) : `${formatPaise(published.low_paise)} - ${formatPaise(published.high_paise)}`} per {published.unit} (the supplier&apos;s own page, {fmtDate(published.captured_at)}; not a quote)</div>}
+            {published && <div className="font-bold" style={{ color: "var(--text-2)" }}>Published price: {published.low_paise === published.high_paise ? formatPaise(published.low_paise) : `${formatPaise(published.low_paise)} - ${formatPaise(published.high_paise)}`} per {published.unit} (the supplier&apos;s own page, {fmtDate(published.captured_at)}; not a quote)</div>}
             {lead.fetched_at && <div style={{ color: "var(--text-6)" }}>Found {fmtDate(lead.fetched_at)}. Contact and price details are not checked by Metrion.</div>}
           </div>
-          {href && <a href={href} target="_blank" rel="noopener noreferrer" className="mt-btn mt-focus rounded-lg px-3 py-1.5 t-meta font-bold" style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}>Supplier Link ↗</a>}
+          {href && <a href={href} target="_blank" rel="noopener noreferrer" className="mt-btn mt-btn-secondary mt-focus inline-flex min-h-10 items-center rounded-lg px-3 t-meta font-bold">Supplier Link ↗</a>}
         </div>
       ) : <p className="mt-1 t-meta" style={{ color: "var(--text-6)" }}>No supplier lead was found for this product.</p>}
 
@@ -499,8 +500,8 @@ function Recommendation({ c }: { c: PiCase }) {
   return (
     <div className="mt-4 rounded-xl p-4" style={{ ...card, border: "1px solid var(--accent-border-default)" }} aria-label="Recommendation from the saved research">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h4 className="t-body font-bold" style={{ color: "var(--text-1)" }}><Badge>PI</Badge> Recommendation for this investigation{c.brief.category ? ` (${c.brief.category})` : ""}</h4>
-        <Link href="/dashboard/ceo-hub" className="mt-btn mt-focus rounded-lg px-3 py-1.5 t-meta font-bold" style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}>Ask the CEO for batch size →</Link>
+        <h4 className="t-body font-bold" style={{ color: "var(--text-1)" }}><Badge tone="neutral">PI</Badge> Recommendation for this investigation{c.brief.category ? ` (${c.brief.category})` : ""}</h4>
+        <Link href="/dashboard/ceo-hub" className="mt-btn mt-btn-secondary mt-focus inline-flex min-h-10 items-center rounded-lg px-3 t-meta font-bold">Ask the CEO for batch size →</Link>
       </div>
       {c.overall && <p className="mt-2 t-body-sm" style={{ color: "var(--text-2)" }}><strong>Strongest opportunity: {c.overall.title}</strong> - {c.overall.reason}.</p>}
       <p className="mt-1 t-meta" style={{ color: "var(--text-5)" }}>Consider them in this order. Nothing here is a purchase instruction.</p>
@@ -515,7 +516,7 @@ function Recommendation({ c }: { c: PiCase }) {
           const cons = p.recommendation.cons;
           return (
             <li key={p.candidate.id} className="rounded-lg p-3" style={{ border: "1px solid var(--border-default)" }}>
-              <div className="t-body font-bold" style={{ color: "var(--text-1)" }}>{p.rank}. {p.candidate.candidate_title} <span className="t-meta" style={{ color: "var(--accent)" }}>· score {score(p.finalScore)}</span></div>
+              <div className="t-body font-bold" style={{ color: "var(--text-1)" }}>{p.rank}. {p.candidate.candidate_title} <span className="t-meta" style={{ color: "var(--text-4)" }}>· score {score(p.finalScore)}</span></div>
               <dl className="mt-1 grid gap-1 t-body-sm" style={{ color: "var(--text-3)" }}>
                 <div><dt className="inline font-bold" style={{ color: "var(--text-2)" }}>Supplier: </dt><dd className="inline">{lead ? (href ? <a href={href} target="_blank" rel="noopener noreferrer" className="font-bold underline underline-offset-2" style={{ color: "var(--accent)" }}>{lead.supplier_name} ↗</a> : lead.supplier_name) : "no supplier lead found"}{published ? <strong style={{ color: "var(--accent)" }}> · published price {published.low_paise === published.high_paise ? formatPaise(published.low_paise) : `${formatPaise(published.low_paise)} - ${formatPaise(published.high_paise)}`} per {published.unit} (not a quote)</strong> : ""}</dd></div>
                 <div><dt className="inline font-bold" style={{ color: "var(--text-2)" }}>Landed cost: </dt><dd className="inline">{landed ?? "not calculated yet"}</dd></div>
@@ -543,7 +544,7 @@ function OldInvestigation({ item, client, cache, onOpen, onPinChanged }: {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h3 className="flex flex-wrap items-center gap-2 t-card-title font-bold" style={{ color: "var(--text-1)" }}>
-            Old Investigation <Badge tone="neutral">Historical</Badge> {item.pinned && <Badge>Pinned</Badge>}
+            Old Investigation <Badge tone="neutral">Historical</Badge> {item.pinned && <Badge tone="neutral">Pinned</Badge>}
           </h3>
           <p className="mt-1 t-meta" style={{ color: "var(--text-6)" }}>{item.category ?? "Saved research"} · {fmtDate(item.completedAt)} · {briefLine(item)}</p>
         </div>
@@ -574,7 +575,7 @@ function OldInvestigation({ item, client, cache, onOpen, onPinChanged }: {
               </ul>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl p-3" style={card}>
                 <p className="t-meta" style={{ color: "var(--text-3)" }}><strong>Recommendation summary:</strong> {state.data.overall ? `${state.data.overall.title} - ${state.data.overall.reason}.` : "No product had enough signal for an overall pick."}</p>
-                <Link href={`/reports/pi/${encodeURIComponent(item.runId)}/print`} target="_blank" rel="noopener noreferrer" className="t-meta font-bold" style={{ color: "var(--accent)" }}>Full Audit Report ↗</Link>
+                <Link href={`/reports/pi/${encodeURIComponent(item.runId)}/print`} target="_blank" rel="noopener noreferrer" className="mt-focus inline-flex min-h-10 items-center t-meta font-bold underline underline-offset-2" style={{ color: "var(--text-3)" }}>Full Audit Report ↗</Link>
               </div>
             </>
           )}

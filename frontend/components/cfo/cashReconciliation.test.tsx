@@ -18,7 +18,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 async function fill(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("Marketplace"), "FLIPKART");
+  await user.selectOptions(screen.getByLabelText("Marketplace"), "FLIPKART");
   await user.type(screen.getByLabelText("Period start"), "2026-09-01");
   await user.type(screen.getByLabelText("Period end"), "2026-09-30");
   await user.type(screen.getByLabelText("As-of date"), "2026-09-30");

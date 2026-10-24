@@ -34,13 +34,18 @@ function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: "ac
   );
 }
 
-function AskCeo({ href, label, quiet = false }: { href: string; label: string; quiet?: boolean }) {
+/** A link into the CEO Hub. Three levels so one view has one strong action: `primary` is the single next step (solid green), `secondary` is a visible but calm action
+ * (a bordered button), and `quiet` is for the rest (a lighter border). `quiet` as a flag is the same as `variant="quiet"`. */
+function AskCeo({ href, label, quiet = false, variant }: { href: string; label: string; quiet?: boolean; variant?: "primary" | "secondary" | "quiet" }) {
+  const level = variant ?? (quiet ? "quiet" : "primary");
+  const style =
+    level === "primary"
+      ? { background: "var(--accent)", color: "var(--accent-on-fill)" }
+      : level === "secondary"
+        ? { border: "1px solid var(--border-hover)", color: "var(--text-2)" }
+        : { border: "1px solid var(--border-default)", color: "var(--text-3)" };
   return (
-    <Link
-      href={href}
-      className="mt-btn mt-focus inline-block whitespace-nowrap rounded-lg px-3 py-1.5 t-meta font-bold"
-      style={quiet ? { border: "1px solid var(--accent-border-subtle)", color: "var(--accent)" } : { background: "var(--accent)", color: "var(--accent-on-fill)" }}
-    >
+    <Link href={href} className="mt-btn mt-focus inline-flex min-h-10 items-center whitespace-nowrap rounded-lg px-3 t-meta font-bold" style={style}>
       {label}
     </Link>
   );
@@ -167,11 +172,11 @@ export function CiDashboard({ client }: { client: CiClient }) {
                   if (pending?.kind === "switch" && pending.productId === p.productId) return;
                   void load(p.productId, "switch");
                 }}
-                className="mt-focus rounded-full px-3 py-1 t-meta font-bold"
+                className="mt-focus min-h-10 rounded-full px-3.5 t-meta font-bold"
                 style={{
-                  color: p.productId === (pending?.kind === "switch" ? pending.productId : ws.selectedProductId) ? "var(--accent-on-fill)" : "var(--text-3)",
-                  background: p.productId === (pending?.kind === "switch" ? pending.productId : ws.selectedProductId) ? "var(--accent)" : "var(--fill-hover)",
-                  border: "1px solid var(--border-default)",
+                  color: p.productId === (pending?.kind === "switch" ? pending.productId : ws.selectedProductId) ? "var(--accent)" : "var(--text-3)",
+                  background: p.productId === (pending?.kind === "switch" ? pending.productId : ws.selectedProductId) ? "var(--accent-fill-default)" : "var(--fill-hover)",
+                  border: `1px solid ${p.productId === (pending?.kind === "switch" ? pending.productId : ws.selectedProductId) ? "var(--accent-border-strong)" : "var(--border-default)"}`,
                 }}
               >
                 {productLabel(p)}
@@ -180,10 +185,10 @@ export function CiDashboard({ client }: { client: CiClient }) {
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={askHref("research", null)} className="mt-btn mt-focus rounded-lg px-4 py-2 t-body-sm font-bold" style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}>
+          <Link href={askHref("research", null)} className="mt-btn mt-focus inline-flex min-h-10 items-center rounded-lg px-4 t-body-sm font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>
             Find competitors
           </Link>
-          <Link href={askHref("track", null)} className="mt-btn mt-focus rounded-lg px-4 py-2 t-body-sm font-bold" style={{ border: "1px solid var(--accent-border-subtle)", color: "var(--accent)" }}>
+          <Link href={askHref("track", null)} className="mt-btn mt-focus inline-flex min-h-10 items-center rounded-lg px-4 t-body-sm font-bold" style={{ border: "1px solid var(--border-default)", color: "var(--text-3)" }}>
             Track a competitor
           </Link>
         </div>
@@ -236,7 +241,7 @@ export function CiDashboard({ client }: { client: CiClient }) {
             icon="competitors"
             title="No competitors tracked yet"
             description="Competitor Intelligence finds rivals for your products, reads the screenshots you send, and shows what changed. It all starts in a conversation with the CEO. Nothing here is estimated or sample data."
-            action={<AskCeo href={askHref("research", subject)} label="Find competitors" />}
+            action={<AskCeo href={askHref("research", subject)} label="Find competitors" variant="secondary" />}
           />
         </div>
       ) : (
@@ -285,7 +290,7 @@ export function CiDashboard({ client }: { client: CiClient }) {
                   compact
                   title="Compare your price with these competitors"
                   description="These competitors are tracked for a category, not for one of your products. Tell the CEO your selling price and it compares it with every competitor that has a verified price."
-                  action={<AskCeo href={askHref("compare", null)} label="Compare my price" />}
+                  action={<AskCeo href={askHref("compare", null)} label="Compare my price" variant="secondary" />}
                 />
               ) : marketLoading ? (
                 <LoadingState lines={2} label="Loading the price band" />
@@ -491,7 +496,8 @@ function CompetitorTable({ rows, productId }: { rows: CiCompetitor[]; productId:
             <th scope="col">Match</th>
             <th scope="col">Last evidence</th>
             <th scope="col">Status</th>
-            <th scope="col"><span className="sr-only">Actions</span></th>
+            {/* relative: the hidden text is absolutely positioned and must stay inside the table's scroll box, or it widens the page on phones */}
+            <th scope="col" className="relative"><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
@@ -538,7 +544,7 @@ function CompetitorTable({ rows, productId }: { rows: CiCompetitor[]; productId:
               <td><Badge tone={c.priceStatus === "VERIFIED" ? "accent" : "warn"}>{PRICE_STATUS_LABEL[c.priceStatus]}</Badge></td>
               <td>
                 <div className="flex flex-wrap gap-2">
-                  <AskCeo href={askHref("verify", c.label)} label={c.priceStatus === "VERIFIED" ? "Update price" : "Verify price"} />
+                  <AskCeo href={askHref("verify", c.label)} label={c.priceStatus === "VERIFIED" ? "Update price" : "Verify price"} variant="secondary" />
                   <AskCeo href={askHref("stop", c.label)} label="Stop tracking" quiet />
                 </div>
               </td>
@@ -569,7 +575,7 @@ function CandidateList({ rows, subject }: { rows: CiCandidate[]; subject: string
               {c.relevanceBand && c.relevanceScore !== null ? `Match: ${c.relevanceBand.charAt(0) + c.relevanceBand.slice(1).toLowerCase()}` : "Not scored"} · not verified yet
             </div>
           </div>
-          <AskCeo href={askHref("trackone", c.title ?? "this competitor")} label="Track this" />
+          <AskCeo href={askHref("trackone", c.title ?? "this competitor")} label="Track this" variant="secondary" />
         </li>
       ))}
     </ul>

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Section } from "@/components/ui/Section";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, apiFetch, type UploadOutcome, type ManualAdjustmentIdResponse } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
-import { ErrorText, Field, FileInput, SubmitButton, TextInput } from "@/components/cfo/primitives";
+import { ErrorText, Field, FileInput, SubmitButton, TextInput, PeriodPresets } from "@/components/cfo/primitives";
 
 // --- Ingestion, seller goal, financial health, strategic briefing (cfo-agent.md §6.16/§7.5) --
 
@@ -56,7 +57,7 @@ export function IngestUploadSection({
   };
 
   return (
-    <Section title="Upload marketplace report (CSV)">
+    <Section title="Upload a marketplace report (CSV)">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Marketplace"><TextInput value={marketplace} onChange={setMarketplace} /></Field>
@@ -139,7 +140,7 @@ export function SellerGoalSection({ getToken }: { getToken: () => Promise<string
   const hasGoal = current !== null && (current.targetMarginPct || current.priorityCategory || current.note);
 
   return (
-    <Section title="Seller goal (context for Strategic Briefing narration only)">
+    <Section title="Your goal" hint="Used only as background for the written summary in the strategic briefing. It does not change any figure.">
       <div className="flex flex-col gap-3">
         <div className="t-body-sm" style={{ color: "var(--text-5)" }} data-testid="current-goal">
           {loadError
@@ -151,14 +152,48 @@ export function SellerGoalSection({ getToken }: { getToken: () => Promise<string
                 : "No goal is saved yet."}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <Field label="Target margin % (optional)"><TextInput value={targetMarginPct} onChange={setTargetMarginPct} placeholder="15.00" /></Field>
-          <Field label="Priority category (optional)"><TextInput value={priorityCategory} onChange={setPriorityCategory} placeholder="reduce_fees" /></Field>
+          <Field label="Target margin % (optional)"><TextInput value={targetMarginPct} onChange={setTargetMarginPct} placeholder="e.g. 15" /></Field>
+          <Field label="Priority category (optional)"><TextInput value={priorityCategory} onChange={setPriorityCategory} placeholder="e.g. reduce fees" /></Field>
           <Field label="Note (optional)"><TextInput value={note} onChange={setNote} /></Field>
         </div>
         <div><SubmitButton onClick={submit} busy={busy} label="Save goal" busyLabel="Saving…" /></div>
         <ErrorText>{error}</ErrorText>
       </div>
     </Section>
+  );
+}
+
+
+/** The backend's band names and metric codes, in plain words. A band or metric this list does not know is shown exactly as the backend sent it, never guessed. */
+const BAND_VIEW: Record<string, { label: string; tone: "accent" | "warning" | "negative" }> = {
+  GOOD: { label: "Good", tone: "accent" },
+  WATCH: { label: "Watch", tone: "warning" },
+  AT_RISK: { label: "At risk", tone: "negative" },
+};
+const BAND_METRICS: Record<string, string> = { CONTRIBUTION_MARGIN_PCT: "Contribution margin", FEE_RATIO_PCT: "Fee ratio", RETURN_RATE_PCT: "Return rate" };
+
+function HealthBands({ result }: { result: Record<string, unknown> }) {
+  const overall = result.overallBand == null ? null : String(result.overallBand);
+  const per = Object.entries((result.perMetricBands ?? {}) as Record<string, unknown>);
+  const view = (band: string) => BAND_VIEW[band] ?? { label: band, tone: "warning" as const };
+  return (
+    <div className="flex flex-col gap-3" data-testid="health-bands-result">
+      <div className="flex flex-wrap items-center gap-2 t-body" style={{ color: "var(--text-3)" }}>
+        <span>Overall</span>
+        {overall ? <StatusBadge tone={view(overall).tone} dot>{view(overall).label}</StatusBadge> : <StatusBadge tone="neutral">Not available</StatusBadge>}
+        {result.unavailableReason ? <span className="t-body-sm" style={{ color: "var(--text-5)" }}>{String(result.unavailableReason)}</span> : null}
+      </div>
+      {per.length > 0 && (
+        <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Band for each measure">
+          {per.map(([code, band]) => (
+            <li key={code} className="flex flex-wrap items-center justify-between gap-2 t-body-sm" style={{ color: "var(--text-3)" }}>
+              <span>{BAND_METRICS[code] ?? code}</span>
+              <StatusBadge tone={view(String(band)).tone} dot>{view(String(band)).label}</StatusBadge>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -192,21 +227,18 @@ export function FinancialHealthSection({ getToken }: { getToken: () => Promise<s
   };
 
   return (
-    <Section title="Financial Health Band">
+    <Section title="Financial health" hint="Rates your saved margin, fee and return figures for a period as Good, Watch or At risk. It uses figures already calculated; nothing new is worked out.">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
+          <PeriodPresets onPick={(s, e) => { setPeriodStart(s); setPeriodEnd(e); }} />
         </div>
         <div><SubmitButton onClick={submit} busy={busy} label="Compute" busyLabel="Computing…" /></div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="t-body" style={{ color: "var(--text-3)" }}>
-            Overall band: <strong>{String(result.overallBand ?? "UNAVAILABLE")}</strong>
-            {result.unavailableReason ? <span style={{ color: "var(--text-6)" }}> — {String(result.unavailableReason)}</span> : null}
-            <pre className="mt-2 t-meta" style={{ color: "var(--text-5)" }}>{JSON.stringify(result.perMetricBands, null, 2)}</pre>
-          </div>
+          <HealthBands result={result} />
         )}
       </div>
     </Section>
@@ -262,16 +294,17 @@ export function StrategicBriefingSection({ getToken }: { getToken: () => Promise
   };
 
   return (
-    <Section title="Strategic Briefing (deterministic signals + one narration call)">
+    <Section title="Strategic briefing" hint="Signals found by fixed rules from your saved results. A short written summary is optional.">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
+          <PeriodPresets onPick={(s, e) => { setPeriodStart(s); setPeriodEnd(e); }} />
         </div>
         <label className="flex min-h-6 items-center gap-2 t-body-sm" style={{ color: "var(--text-6)" }}>
           <input type="checkbox" checked={includeNarration} onChange={(e) => setIncludeNarration(e.target.checked)} />
-          Include narration (calls the local LLM — slower)
+          Include a written summary (written by a local AI model, so it takes longer)
         </label>
         <div><SubmitButton onClick={submit} busy={busy} label="Build briefing" busyLabel="Building…" /></div>
         <ErrorText>{error}</ErrorText>

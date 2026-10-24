@@ -267,3 +267,41 @@ describe("CMO showcase: copy and mark-as-used say only what happened", () => {
     } finally { globalThis.fetch = orig; }
   });
 });
+
+describe("CMO showcase: one strong action, and copy behaviour is unchanged", () => {
+  const solid = (el: HTMLElement) => (el.getAttribute("style") ?? "").includes("background: var(--accent)");
+  const pack = {
+    generationId: "p1", marketplace: "AMAZON" as const, sku: "S1", productLabel: "Bottle", groundedOn: { approvalId: "a1", titleText: "Stored title", basis: "SELLER_APPROVED" },
+    bullets: [{ text: "Bullet one", chars: 10, max: 250 }], description: { text: "A description", chars: 13, max: 2000 }, backendTerms: null,
+    generatedAt: "2026-10-10T00:00:00Z", origin, labels: [],
+  };
+  const tags = { generationId: "h1", sku: "S1", productLabel: "Bottle", hashtags: ["#One", "#Two"], generatedAt: "2026-10-10T00:00:00Z", origin };
+
+  it("leaves 'Ask the CEO' as the one solid-green control; Copy Full Pack is a calm button", async () => {
+    render(<ShowcaseDashboard client={fake({ copyPacks: async () => ({ items: [pack] }), hashtags: async () => ({ items: [tags] }) })} />);
+    const full = await screen.findByRole("button", { name: "Copy Full Pack" });
+    expect(solid(full)).toBe(false);
+    expect(solid(screen.getByRole("link", { name: "Ask the CEO" }))).toBe(true);
+    expect([...document.querySelectorAll("button, a")].filter((e) => solid(e as HTMLElement)).length).toBe(1);
+  });
+
+  it("does not colour saved hashtag suggestions as if they were verified", async () => {
+    render(<ShowcaseDashboard client={fake({ hashtags: async () => ({ items: [tags] }) })} />);
+    const text = await screen.findByText("#One #Two");
+    expect(text.getAttribute("style")).not.toMatch(/mint|accent/);
+  });
+
+  it("still copies the whole pack and records one COPIED event only after the copy worked", async () => {
+    const u = userEvent.setup();
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const recordUsage = vi.fn();
+    render(<ShowcaseDashboard client={fake({ copyPacks: async () => ({ items: [pack] }), recordUsage })} />);
+    await u.click(await screen.findByRole("button", { name: "Copy Full Pack" }));
+    await waitFor(() => expect(recordUsage).toHaveBeenCalledTimes(1));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(recordUsage.mock.calls[0][0]).toMatchObject({ generationId: "p1", kind: "COPIED" });
+    vi.unstubAllGlobals();
+  });
+});
+

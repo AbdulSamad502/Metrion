@@ -469,7 +469,8 @@ export type CfoPreviewResponse = {
   headlineTotalPaise: number | null;
   headlineEngineResultRef: string | null;
   affectedSkuCount: number | null;
-  affectedSkuCountUnavailable: string | null;
+  /** The backend sends a boolean (`CfoPreviewOutcome.affected_sku_count_unavailable`): true means findings exist but none says which SKU it belongs to. It is never text. */
+  affectedSkuCountUnavailable: boolean;
   revealedFinding: CfoPreviewFinding | null;
   lockedFindingsCount: number;
 };

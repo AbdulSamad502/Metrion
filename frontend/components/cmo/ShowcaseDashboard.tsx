@@ -110,7 +110,7 @@ function NewsSection({ client }: { client: ShowcaseClient }) {
           return (
             <>
               <p className="mb-3 t-meta" style={{ color: "var(--text-6)" }}>
-                {latest.nicheTerms.length > 0 && <>Niche: <strong style={{ color: "var(--text-mint)" }}>{latest.nicheTerms.join(", ")}</strong> - </>}
+                {latest.nicheTerms.length > 0 && <>Niche: <strong style={{ color: "var(--text-1)" }}>{latest.nicheTerms.join(", ")}</strong> - </>}
                 Updated {fmtDate(latest.createdAt)}{latest.interpretationLabel ? ` - ${latest.interpretationLabel}` : ""}
               </p>
               {items.length === 0 ? (
@@ -123,7 +123,7 @@ function NewsSection({ client }: { client: ShowcaseClient }) {
                       <li key={key}>
                         <Card className="h-full">
                           <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                            <Pill tone="accent">{section}</Pill>
+                            <Pill tone="neutral">{section}</Pill>
                             <span className="t-meta" style={{ color: "var(--text-5)" }}>
                               {href ? <a href={href} target="_blank" rel="noreferrer noopener" className="underline">{finding.sourceName}</a> : finding.sourceName}
                             </span>
@@ -232,7 +232,7 @@ function TitlesAndPacks({ client, marketplace, setMarketplace, sku, q }: { clien
       </SectionCard>
 
       <SectionCard title="Grounded Marketplace Copy Pack" hint={`${marketLabel}: bullets, description and search terms built from a saved title`}
-        action={packItems[packIx] ? <CopyButton primary label="Copy Full Pack" text={packText(packItems[packIx])} onCopied={() => track(packItems[packIx].generationId, "COPIED", undefined, "FULL_PACK")} /> : undefined}>
+        action={packItems[packIx] ? <CopyButton label="Copy Full Pack" text={packText(packItems[packIx])} onCopied={() => track(packItems[packIx].generationId, "COPIED", undefined, "FULL_PACK")} /> : undefined}>
         <AsyncBlock a={packs} label="copy packs" isEmpty={(d) => d.items.length === 0} empty={`No saved ${marketLabel} copy pack yet. Ask the CEO to create one.`}>
           {(d) => {
             const p = d.items[packIx];
@@ -361,7 +361,7 @@ function HashtagsAndCompliance({ client, marketplace, sku, q }: { client: Showca
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="t-meta" style={{ color: "var(--text-7)" }}>{h.productLabel} - {fmtDate(h.generatedAt)}</p>
-                      <p className="mt-1 break-words t-body font-bold" style={{ color: "var(--text-mint)" }}>{h.hashtags.join(" ")}</p>
+                      <p className="mt-1 break-words t-body font-bold" style={{ color: "var(--text-1)" }}>{h.hashtags.join(" ")}</p>
                     </div>
                     <CopyButton text={h.hashtags.join(" ")} onCopied={() => client.recordUsage({ generationId: h.generationId, resultPart: "HASHTAGS", kind: "COPIED", surface: "DASHBOARD" })} />
                   </div>

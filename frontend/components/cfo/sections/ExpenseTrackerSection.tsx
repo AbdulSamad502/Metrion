@@ -161,7 +161,7 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
   };
 
   return (
-    <Section title="Expense Tracker">
+    <Section title="Expense tracker">
       <div className="flex flex-col gap-6">
         <div>
           <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Add expense</div>

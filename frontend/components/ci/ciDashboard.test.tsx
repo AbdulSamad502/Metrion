@@ -378,3 +378,43 @@ describe("what the dashboard does when data is loading, refreshing or failing", 
     expect(await screen.findByText("Typical low")).toBeInTheDocument();
   });
 });
+
+describe("CI: one strong action per view, with every link still going to the same place", () => {
+  const solid = (el: HTMLElement) => (el.getAttribute("style") ?? "").includes("background: var(--accent)");
+
+  it("keeps a single solid-green link: the next step. Row actions and shortcuts are calm", async () => {
+    render(<CiDashboard client={client(FULL)} />);
+    await screen.findByTestId("ci-dashboard");
+    const links = screen.getAllByRole("link");
+    const strong = links.filter(solid);
+    expect(strong.map((l) => l.textContent)).toEqual(["Confirm in chat"]); // the "What to do next" action
+    for (const name of ["Find competitors", "Track a competitor", "Verify price", "Track this", "Stop tracking", "Explain this"]) {
+      for (const l of screen.getAllByRole("link", { name })) expect(solid(l), name).toBe(false);
+    }
+  });
+
+  it("still sends each action to the CEO Hub with the same structured link as before", async () => {
+    render(<CiDashboard client={client(FULL)} />);
+    await screen.findByTestId("ci-dashboard");
+    expect(screen.getAllByRole("link", { name: "Find competitors" })[0]).toHaveAttribute("href", askHref("research", null));
+    expect(screen.getByRole("link", { name: "Track a competitor" })).toHaveAttribute("href", askHref("track", null));
+    expect(screen.getAllByRole("link", { name: "Verify price" })[0]).toHaveAttribute("href", askHref("verify", "Fossil Grant"));
+    expect(screen.getAllByRole("link", { name: "Stop tracking" })[0]).toHaveAttribute("href", askHref("stop", "Titan Octane"));
+  });
+
+  it("keeps every shortcut at least 40px tall, and the selected product reads as selected without relying on a solid fill", async () => {
+    render(<CiDashboard client={client(FULL)} />);
+    await screen.findByTestId("ci-dashboard");
+    for (const l of screen.getAllByRole("link", { name: /Find competitors|Track a competitor|Verify price|Stop tracking|Explain this/ })) expect(l.className).toMatch(/min-h-10/);
+    const selected = screen.getByRole("button", { name: /Emerald Chrono/ });
+    expect(selected).toHaveAttribute("aria-pressed", "true");
+    expect(solid(selected)).toBe(false);
+  });
+
+  it("keeps the table's hidden 'Actions' heading inside the table so it cannot widen the page on a phone", async () => {
+    render(<CiDashboard client={client(FULL)} />);
+    await screen.findByTestId("ci-dashboard");
+    expect(screen.getByText("Actions").closest("th")).toHaveClass("relative");
+  });
+});
+
