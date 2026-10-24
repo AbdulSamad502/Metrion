@@ -81,7 +81,7 @@ describe("PI showcase (read-only)", () => {
     await screen.findByText("Rank #1");
     expect(screen.getAllByText("Unavailable").length).toBeGreaterThanOrEqual(3);
     expect(screen.getByText(/Needs your supplier quote/)).toBeInTheDocument();
-    expect(screen.getByText(/Needs your cost and a selling price after fees and tax/)).toBeInTheDocument();
+    expect(screen.getByText(/Needs your cost and selling price/)).toBeInTheDocument();
     expect(screen.getByText(/Missing evidence: no supplier lead was found/)).toBeInTheDocument();
     expect(screen.queryByText("₹0")).toBeNull();
   });
@@ -133,10 +133,10 @@ describe("PI showcase (read-only)", () => {
     render(<PiShowcase client={fake({ report: async () => withFin })} />);
     await screen.findAllByText("Siddhi");
     expect(screen.getAllByText("₹255").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("380 units")).toBeInTheDocument();
-    expect(screen.getAllByText(/From your confirmed supplier quote \(CFO result\)/).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText(/a budget ceiling, not a forecast/)).toBeInTheDocument();
-    expect(screen.getByText(/Published price: ₹450 - ₹520 per piece \(the supplier's own page, .*; not a quote\)/)).toBeInTheDocument();
+    expect(screen.getAllByText("380 units").length).toBeGreaterThanOrEqual(1); // in the ledger row and in the product tile
+    expect(screen.getAllByText(/From your quote/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/a ceiling, not a forecast/)).toBeInTheDocument();
+    expect(screen.getByText(/Published price: ₹450 - ₹520 per piece \(their own page, .*; not a quote\)/)).toBeInTheDocument();
   });
 
   it("names why a CFO result is missing instead of showing zero", async () => {
@@ -349,9 +349,9 @@ describe("PI saved-research list refreshes without losing what loaded", () => {
 });
 
 describe("PI showcase: one strong action, and the research stays read-only", () => {
-  const solid = (el: Element) => ((el as HTMLElement).getAttribute("style") ?? "").includes("background: var(--accent)");
+  const solid = (el: Element) => el.classList.contains("ov-btn--brand") && el.tagName === "A"; // the pinned toggle is a button; only a link can be the solid next step
 
-  it("leaves '+ New Discovery' as the one solid-green control; batch size and supplier links are calm", async () => {
+  it("leaves '+ New Discovery' as the one solid control; batch size and supplier links are calm", async () => {
     const lead = { id: "l1", candidate_id: "c1", supplier_name: "Acme Supply", source: "TAVILY", source_url: "https://acme.example/p", locality: "Delhi", contact_email: null, contact_phone: null, contact_website: null, published_price: null, moq: null, fetched_at: "2026-10-10T00:00:00Z" } as never;
     const withLead = caseOf(RUN_A, { products: [1, 2, 3, 4, 5].map((n) => (n === 1 ? { ...product(n), supplierLeads: [lead], bestSupplierLeadId: "l1" } : product(n))) });
     render(<PiShowcase client={fake({ report: async () => withLead })} />);
