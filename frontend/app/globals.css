@@ -1114,11 +1114,11 @@ aside nav {
 /* Ambient depth for the glass to sit on: two very faint, neutral/accent pools on a fixed layer,
    so blur has something to refract. Opaque near-black remains the base. */
 .mt-app-surface {
-  /* Transparent so the fixed body starfield (body::before) shows through; the near-black base is on body. */
+  /* Transparent so the CEO Hub starfield (body:has(.mt-galaxy)::before) shows through there; the near-black base is on body. */
   background-color: transparent;
 }
 
-/* Sparse starfield: pure near-black with a handful of 1px dots, far apart. Each layer tiles a single dot at a
+/* Sparse starfield, CEO Hub only (it shows only while a .mt-galaxy is on the page): pure near-black with a handful of 1px dots, far apart. Each layer tiles a single dot at a
    different (coprime-ish) tile size, so the pattern never reads as a grid. Fixed, behind content, no pointer events. */
 :root {
   --star: rgba(255, 255, 255, 0.85);
@@ -1127,7 +1127,7 @@ aside nav {
 body {
   position: relative;
 }
-body::before {
+body:has(.mt-galaxy)::before {
   content: "";
   position: fixed;
   inset: 0;
