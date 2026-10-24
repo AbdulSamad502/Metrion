@@ -9,11 +9,12 @@ import type { HealthState } from "@/lib/useCeoHub";
  * (`GET /api/v1/ceo/state/health` — CFO bands and the latest saved P&L as verified display snapshots). Nothing is computed here.
  * There is still no portfolio-level profit/margin endpoint; until one exists this is the only honest source, and a missing result
  * says so instead of showing a number. */
-export function useBusinessHealth(): { health: HealthState; refresh: () => void; refreshing: boolean } {
+export function useBusinessHealth(): { health: HealthState; refresh: () => void; refreshing: boolean; checkedAt: string | null } {
   const { getToken } = useAuth();
   const client = useMemo(() => createCeoClient(getToken), [getToken]);
   const [health, setHealth] = useState<HealthState>({ status: "loading", entries: [] });
   const [refreshing, setRefreshing] = useState(false); // a retry in flight: the shown results stay put, the button says so
+  const [checkedAt, setCheckedAt] = useState<string | null>(null); // when the last read that WORKED finished (this browser's clock); a failed read does not move it
 
   const alive = useRef(true); // a reply that arrives after the page is gone must not update it
   useEffect(() => {
@@ -27,7 +28,10 @@ export function useBusinessHealth(): { health: HealthState; refresh: () => void;
     setRefreshing(true);
     try {
       const { entries } = await client.getHealth();
-      if (alive.current) setHealth({ status: "ready", entries });
+      if (alive.current) {
+        setHealth({ status: "ready", entries });
+        setCheckedAt(new Date().toISOString());
+      }
     } catch {
       if (alive.current) setHealth((h) => ({ status: "error", entries: h.entries }));
     } finally {
@@ -41,7 +45,7 @@ export function useBusinessHealth(): { health: HealthState; refresh: () => void;
     })();
   }, [refresh]);
 
-  return { health, refresh: () => void refresh(), refreshing };
+  return { health, refresh: () => void refresh(), refreshing, checkedAt };
 }
 
 /** The most recent as-of date among the saved results (ISO string comparison only; no arithmetic), for the freshness line. */

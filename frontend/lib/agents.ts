@@ -32,14 +32,14 @@ const AGENT_META: Record<string, AgentMeta> = {
   },
   PI: {
     role: "Product Intelligence",
-    description: "Finds niches and candidate products, checks feasibility against your costs, shortlists suppliers.",
+    description: "Finds product opportunities and supplier leads from public web signals, with the evidence behind each. Research starts in the CEO Hub; this agent never calculates money.",
     icon: "products",
     href: "/dashboard/pi",
     workspaceLabel: `Open ${PAGE_COPY.products.title}`,
   },
   CFO: {
     role: "Finance",
-    description: "Reconciles settlements, computes true contribution profit, GST and leaks from your uploaded reports.",
+    description: "Reconciles settlements and computes contribution profit, indicative GST and discrepancies (leaks) from your uploaded reports. It recommends only: it files nothing.",
     icon: "finance",
     href: "/dashboard/cfo",
     workspaceLabel: `Open ${PAGE_COPY.cfo.title}`,

@@ -8,8 +8,9 @@ import type { NotificationsState } from "@/lib/useNotifications";
 let state: NotificationsState;
 vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ getToken: async () => "t" }) }));
 vi.mock("@/components/dashboard/HeaderContext", () => ({ HeaderContext: () => null }));
+let shellProps: Record<string, unknown> = {};
 vi.mock("@/components/dashboard/DashboardShell", () => ({
-  DashboardShell: ({ children }: { children: React.ReactNode }) => <TestShell value={shellData(state)}>{children}</TestShell>,
+  DashboardShell: ({ children, ...rest }: { children: React.ReactNode }) => { shellProps = rest; return <TestShell value={shellData(state)}>{children}</TestShell>; },
 }));
 
 import DashboardPage from "@/app/dashboard/page";
@@ -110,6 +111,24 @@ describe("Overview", () => {
     stub({ healthStatus: 500, health: "boom" });
     render(<DashboardPage />);
     expect(await screen.findByText("Saved results unavailable")).toBeInTheDocument();
+  });
+
+  it("does not repeat the alert counts in the page header: they are said once, with their links, in the summary", async () => {
+    stub({});
+    state = notifications({ alerts: [alert], dataRequests: [req], attentionCount: 2 });
+    render(<DashboardPage />);
+    expect(shellProps.context).toBeUndefined();
+    expect(screen.getAllByRole("link", { name: /1 data request from the CFO/ })).toHaveLength(1);
+    await waitFor(() => expect(screen.getByText("Competitors tracked")).toBeInTheDocument());
+  });
+
+  it("describes Product Intelligence as research that starts in the CEO Hub, not as something Products runs", async () => {
+    stub({});
+    render(<DashboardPage />);
+    const text = (await screen.findByText(/Product Intelligence finds product opportunities/)).textContent ?? "";
+    expect(text).toMatch(/Research starts in the CEO Hub/);
+    expect(text).not.toMatch(/run a discovery|against your own costs/i);
+    await screen.findByText("Competitors tracked");
   });
 
   it("shows market-watch counts from the backend only", async () => {
