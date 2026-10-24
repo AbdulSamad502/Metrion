@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { PiShowcase } from "@/components/pi/PiShowcase";
+import { ToastProvider } from "@/components/ui/Toast";
 import { formatPaise, type PiCase, type PiClient, type PiHistoryItem, type PiProduct } from "@/lib/piShowcase";
 
 vi.mock("next/link", () => ({ default: ({ href, children, ...r }: { href: string; children: React.ReactNode }) => <a href={href} {...r}>{children}</a> }));
@@ -212,5 +213,137 @@ describe("PI page contracts", () => {
     const src = [join(__dirname, "../../app/dashboard/pi/page.tsx"), join(__dirname, "../../lib/piShowcase.ts"), join(__dirname, "PiShowcase.tsx")].map((f) => readFileSync(f, "utf8")).join("\n");
     expect(src).not.toMatch(/\/pi\/discover|\/pi\/supplier-lookup|\/pi\/niche-briefs/);
     expect(src).not.toMatch(/dangerouslySetInnerHTML/);
+  });
+});
+
+const deferred = <T,>() => {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => ((resolve = res), (reject = rej)));
+  return { promise, resolve, reject };
+};
+const current = () => screen.getByRole("region", { name: /Investigation: mens watches/ });
+
+describe("PI pinning keeps the open report in place", () => {
+  it("never blanks the report while the pin is confirmed, shows the backend's answer at once, and confirms it with the toast", async () => {
+    const reload = deferred<PiCase>();
+    let reports = 0;
+    const client = fake({ report: vi.fn(async (id: string) => (++reports === 1 ? caseOf(id) : reload.promise)) });
+    render(<ToastProvider><PiShowcase client={client} /></ToastProvider>);
+    await screen.findByText("Rank #1");
+    await userEvent.click(within(current()).getByRole("button", { name: "Pin" }));
+    expect(await within(current()).findByRole("button", { name: "Pinned" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Report pinned.")).toBeInTheDocument();
+    expect(screen.getByText("Rank #1")).toBeInTheDocument(); // the report is still there while it is re-read
+    expect(screen.queryByLabelText("Loading investigation")).toBeNull();
+    expect(within(current()).getByText("Updating…")).toBeInTheDocument();
+    reload.resolve(caseOf(RUN_A, { pinned: true }));
+    await waitFor(() => expect(within(current()).queryByText("Updating…")).toBeNull());
+    expect(within(current()).getByRole("button", { name: "Pinned" })).toBeInTheDocument();
+  });
+
+  it("sends one request for a double press", async () => {
+    const gate = deferred<{ runId: string; pinned: boolean }>();
+    const client = fake({ pin: vi.fn(() => gate.promise) });
+    render(<PiShowcase client={client} />);
+    await screen.findByText("Rank #1");
+    const pin = within(current()).getByRole("button", { name: "Pin" });
+    fireEvent.click(pin);
+    fireEvent.click(pin);
+    expect(client.pin).toHaveBeenCalledTimes(1);
+    gate.resolve({ runId: RUN_A, pinned: true });
+    await within(current()).findByRole("button", { name: "Pinned" });
+  });
+
+  it("says why a pin failed and stays unpinned, with no success toast", async () => {
+    const client = fake({ pin: vi.fn(async () => { throw Object.assign(new Error("x"), { status: 500 }); }) });
+    render(<ToastProvider><PiShowcase client={client} /></ToastProvider>);
+    await screen.findByText("Rank #1");
+    await userEvent.click(within(current()).getByRole("button", { name: "Pin" }));
+    expect(await within(current()).findByRole("alert")).toHaveTextContent(/could not load/i);
+    expect(within(current()).getByRole("button", { name: "Pin" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByText("Report pinned.")).toBeNull();
+  });
+
+  it("keeps the report and says so when re-reading it fails", async () => {
+    let reports = 0;
+    const client = fake({ report: vi.fn(async (id: string) => { if (++reports > 1) throw Object.assign(new Error("x"), { status: 500 }); return caseOf(id); }) });
+    render(<PiShowcase client={client} />);
+    await screen.findByText("Rank #1");
+    await userEvent.click(within(current()).getByRole("button", { name: "Pin" }));
+    expect(await within(current()).findByText(/Showing the last copy of this report that loaded/)).toBeInTheDocument();
+    expect(screen.getByText("Rank #1")).toBeInTheDocument();
+    await userEvent.click(within(current()).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(client.report).toHaveBeenCalledTimes(3));
+  });
+});
+
+describe("PI saved-research list refreshes without losing what loaded", () => {
+  it("names how many reports it shows and when it was checked", async () => {
+    render(<PiShowcase client={fake()} />);
+    expect(await screen.findByTestId("pi-context")).toHaveTextContent(/2 saved reports · checked /);
+  });
+
+  it("keeps the list and says it is the last one that loaded when a refresh fails", async () => {
+    let fail = false;
+    const client = fake({ history: async () => { if (fail) throw Object.assign(new Error("x"), { status: 500 }); return { items: [hist(RUN_A), hist(RUN_B, { category: "jars" })] }; } });
+    render(<PiShowcase client={client} />);
+    await screen.findByText("Rank #1");
+    fail = true;
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Showing the last list that loaded/);
+    expect(screen.getByText("Rank #1")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /Old investigation: jars/ })).toBeInTheDocument();
+  });
+
+  it("shows a refresh in progress, keeps the list, and cannot start a second refresh", async () => {
+    const slow = deferred<{ items: PiHistoryItem[] }>();
+    let calls = 0;
+    const client = fake({ history: vi.fn(() => (++calls === 1 ? Promise.resolve({ items: [hist(RUN_A)] }) : slow.promise)) });
+    render(<PiShowcase client={client} />);
+    await screen.findByText("Rank #1");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    expect(screen.getByTestId("pi-context")).toHaveTextContent(/Refreshing… what is shown is the last list that loaded/);
+    expect(screen.getByText("Rank #1")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Refreshing…" }));
+    expect(client.history).toHaveBeenCalledTimes(2);
+    slow.resolve({ items: [hist(RUN_A)] });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled());
+  });
+
+  it("ignores an older list that arrives after a newer one", async () => {
+    const slow = deferred<{ items: PiHistoryItem[] }>();
+    let calls = 0;
+    const client = fake({
+      history: vi.fn(() => {
+        calls++;
+        if (calls === 1) return Promise.resolve({ items: [hist(RUN_A)] });
+        if (calls === 2) return slow.promise; // the manual refresh: slow, and old
+        return Promise.resolve({ items: [hist(RUN_A), hist(RUN_B, { category: "jars" })] }); // the re-read after the pin: newer
+      }),
+    });
+    render(<PiShowcase client={client} />);
+    await screen.findByText("Rank #1");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await userEvent.click(within(current()).getByRole("button", { name: "Pin" }));
+    await waitFor(() => expect(screen.getByTestId("pi-context")).toHaveTextContent(/2 saved reports/));
+    slow.resolve({ items: [hist(RUN_A)] }); // arrives last, and is dropped
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId("pi-context")).toHaveTextContent(/2 saved reports/);
+    expect(screen.getByRole("region", { name: /Old investigation: jars/ })).toBeInTheDocument();
+  });
+
+  it("offers a retry when the first load fails, which cannot be pressed twice", async () => {
+    const gate = deferred<{ items: PiHistoryItem[] }>();
+    let calls = 0;
+    const client = fake({ history: vi.fn(() => (++calls === 1 ? Promise.reject(Object.assign(new Error("x"), { status: 500 })) : gate.promise)) });
+    render(<PiShowcase client={client} />);
+    await screen.findByRole("alert");
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(screen.getByRole("button", { name: "Try again" })).toBeDisabled();
+    gate.resolve({ items: [hist(RUN_A)] });
+    expect(await screen.findByText("Rank #1")).toBeInTheDocument();
+    expect(client.history).toHaveBeenCalledTimes(2);
   });
 });

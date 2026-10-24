@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Spinner } from "@/components/ui/LoadingState";
+import { useToast } from "@/components/ui/Toast";
 import {
   evidenceOf, explainPiError, formatPaise, imageDomain, safeHref, SOURCE_LABEL,
   type PiCase, type PiClient, type PiHistoryItem, type PiProduct,
@@ -49,24 +51,39 @@ export function PiShowcase({ client, initialRunId = null }: { client: PiClient; 
   const [rank, setRank] = useState(1);
   const [cache] = useState(() => new Map<string, PiCase>());
 
+  const [refreshing, setRefreshing] = useState(false);
+  const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const seq = useRef(0); // only the latest history request may change the screen
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const loadHistory = useCallback(async () => {
+    const mine = ++seq.current;
+    setRefreshing(true);
     try {
       const { items } = await client.history();
+      if (!mounted.current || mine !== seq.current) return;
       setHistory(items);
       setHistoryError(null);
+      setCheckedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
       setCurrentId((cur) => cur ?? [...items].sort(sortDesc)[0]?.runId ?? null);
     } catch (e) {
-      setHistoryError(explainPiError(e).message);
+      // A failed refresh keeps the last list that loaded; the notice below says so.
+      if (mounted.current && mine === seq.current) setHistoryError(explainPiError(e).message);
+    } finally {
+      if (mounted.current && mine === seq.current) setRefreshing(false);
     }
   }, [client]);
   useEffect(() => {
-    let live = true;
-    client.history().then(
-      ({ items }) => { if (live) { setHistory(items); setHistoryError(null); setCurrentId((cur) => cur ?? [...items].sort(sortDesc)[0]?.runId ?? null); } },
-      (e) => { if (live) setHistoryError(explainPiError(e).message); },
-    );
-    return () => { live = false; };
-  }, [client]);
+    (async () => {
+      await loadHistory();
+    })();
+  }, [loadHistory]);
 
   const open = (runId: string, wantedRank = 1) => {
     setCurrentId(runId);
@@ -88,10 +105,22 @@ export function PiShowcase({ client, initialRunId = null }: { client: PiClient; 
         </Link>
       </header>
 
+      {history !== null && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="pi-context">
+          <p role="status" className="m-0 t-meta" style={{ color: "var(--text-5)" }}>
+            {refreshing ? "Refreshing… what is shown is the last list that loaded." : `${history.length} saved ${history.length === 1 ? "report" : "reports"}${checkedAt ? ` · checked ${checkedAt}` : ""}`}
+          </p>
+          <button type="button" onClick={() => void loadHistory()} disabled={refreshing} className="mt-btn mt-btn-secondary mt-focus inline-flex min-h-[40px] items-center gap-2 rounded-lg px-3 py-1 t-meta font-bold disabled:cursor-not-allowed" style={{ opacity: refreshing ? 0.7 : 1 }}>
+            {refreshing && <Spinner size={12} />}
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+      )}
+
       {historyError && (
         <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 t-body-sm" style={{ ...card, color: "var(--text-3)" }}>
-          {historyError}
-          <button type="button" onClick={() => void loadHistory()} className="mt-btn mt-focus rounded-lg px-3 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>Try again</button>
+          {history !== null ? "Could not refresh your saved research. Showing the last list that loaded." : historyError}
+          <button type="button" onClick={() => void loadHistory()} disabled={refreshing} className="mt-btn mt-focus min-h-[40px] rounded-lg px-3 py-1 t-meta font-bold disabled:cursor-not-allowed" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>Try again</button>
         </div>
       )}
 
@@ -153,26 +182,38 @@ function TopPicks({ items, onOpen }: { items: PiHistoryItem[]; onOpen: (runId: s
 
 // ---------------------------------------------------------------------------------------------------- pin control
 function PinButton({ pinned, runId, client, onChanged }: { pinned: boolean; runId: string; client: PiClient; onChanged: () => void }) {
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // What the backend itself answered to the last pin or unpin, kept only while the list still carries the value it was asked about, so the button never
+  // flips back to the old state in the gap before the list is re-read, and never shows a state the backend has not confirmed.
+  const [confirmed, setConfirmed] = useState<{ base: boolean; value: boolean } | null>(null);
+  const inFlight = useRef(false); // a second press in the same instant is dropped, before any re-render
+  const shown = confirmed && confirmed.base === pinned ? confirmed.value : pinned;
   const toggle = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
-      await (pinned ? client.unpin(runId) : client.pin(runId));
+      const res = await (shown ? client.unpin(runId) : client.pin(runId));
+      setConfirmed({ base: pinned, value: res.pinned });
+      toast.success(res.pinned ? "Report pinned." : "Report unpinned.");
       onChanged();
     } catch (e) {
       setError(explainPiError(e).message);
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
   return (
     <span className="inline-flex items-center gap-2">
-      <button type="button" aria-pressed={pinned} disabled={busy} onClick={() => void toggle()} className="mt-btn mt-focus min-h-[32px] rounded-lg px-3 py-1 t-meta font-bold" style={pinned ? { background: "var(--accent-fill-subtle)", border: "1px solid var(--accent-border-strong)", color: "var(--accent)" } : { border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>
-        {pinned ? "Pinned" : "Pin"}
+      <button type="button" aria-pressed={shown} disabled={busy} onClick={() => void toggle()} className="mt-btn mt-focus inline-flex min-h-[40px] items-center gap-2 rounded-lg px-3 py-1 t-meta font-bold disabled:cursor-not-allowed" style={shown ? { background: "var(--accent-fill-default)", color: "var(--accent)", border: "1px solid var(--accent-border-default)" } : { border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
+        {busy && <Spinner size={12} />}
+        {shown ? "Pinned" : "Pin"}
       </button>
-      {error && <span role="alert" className="t-micro" style={{ color: "var(--warning)" }}>{error}</span>}
+      {error && <span role="alert" className="t-meta" style={{ color: "var(--warning)" }}>{error}</span>}
     </span>
   );
 }
@@ -183,6 +224,16 @@ function useCase(client: PiClient, cache: Map<string, PiCase>, runId: string, en
     return hit ? { status: "ready", data: hit } : { status: "loading" };
   });
   const [tick, setTick] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const alive = useRef(true);
+  const reloading = useRef(false);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   useEffect(() => {
     if (!enabled) return;
     let live = true;
@@ -192,15 +243,32 @@ function useCase(client: PiClient, cache: Map<string, PiCase>, runId: string, en
     );
     return () => { live = false; };
   }, [client, cache, runId, enabled, tick]);
-  return { state, retry: () => { setState({ status: "loading" }); setTick((n) => n + 1); } };
+  // A background re-read of a report that is already on screen: it stays visible, a failure leaves it in place and says so, and only one runs at a time.
+  const reload = useCallback(async () => {
+    if (reloading.current) return;
+    reloading.current = true;
+    setRefreshing(true);
+    setRefreshError(null);
+    try {
+      const data = await client.report(runId);
+      cache.set(runId, data);
+      if (alive.current) setState({ status: "ready", data });
+    } catch (e) {
+      if (alive.current) setRefreshError(explainPiError(e).message);
+    } finally {
+      reloading.current = false;
+      if (alive.current) setRefreshing(false);
+    }
+  }, [client, cache, runId]);
+  return { state, refreshing, refreshError, reload, retry: () => { setState({ status: "loading" }); setTick((n) => n + 1); } };
 }
 
 // ---------------------------------------------------------------------------------------------------- current investigation
 function CurrentInvestigation({ runId, client, cache, rank, setRank, isLatest, onPinChanged }: {
   runId: string; client: PiClient; cache: Map<string, PiCase>; rank: number; setRank: (n: number) => void; isLatest: boolean; onPinChanged: () => void;
 }) {
-  const { state, retry } = useCase(client, cache, runId);
-  const refresh = () => { cache.delete(runId); retry(); onPinChanged(); };
+  const { state, retry, reload, refreshing, refreshError } = useCase(client, cache, runId);
+  const refresh = () => { void reload(); onPinChanged(); }; // re-read in place: the open report stays on screen while its pinned state is confirmed
   if (state.status === "loading") return <section className="rounded-2xl p-6" style={panel} aria-label="Loading investigation"><p role="status" className="t-body-sm" style={{ color: "var(--text-6)" }}>Loading this investigation…</p></section>;
   if (state.status === "error") return (
     <section className="rounded-2xl p-6" style={panel} aria-label="Investigation unavailable">
@@ -225,12 +293,20 @@ function CurrentInvestigation({ runId, client, cache, rank, setRank, isLatest, o
           <p className="mt-1 t-meta" style={{ color: "var(--text-6)" }}>{briefLine(c.brief, `Top ${products.length} Shortlist`)} · saved {fmtDate(c.completedAt)}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {refreshing && <span role="status" className="inline-flex items-center gap-1.5 t-meta" style={{ color: "var(--text-5)" }}><Spinner size={12} /> Updating…</span>}
           <PinButton pinned={c.pinned} runId={runId} client={client} onChanged={refresh} />
-          <Link href={`/reports/pi/${encodeURIComponent(runId)}/print`} target="_blank" rel="noopener noreferrer" className="mt-btn mt-focus min-h-[32px] rounded-lg px-3 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>
+          <Link href={`/reports/pi/${encodeURIComponent(runId)}/print`} target="_blank" rel="noopener noreferrer" className="mt-btn mt-focus min-h-[40px] rounded-lg px-3 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>
             Print / Export PDF
           </Link>
         </div>
       </header>
+
+      {refreshError && (
+        <div role="alert" className="mb-3 flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 t-body-sm" style={{ color: "var(--text-3)", background: "var(--fill-hover)", border: "1px solid var(--border-default)" }}>
+          {refreshError} Showing the last copy of this report that loaded.
+          <button type="button" onClick={() => void reload()} className="mt-btn mt-focus min-h-[40px] rounded-lg px-3 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>Try again</button>
+        </div>
+      )}
 
       {products.length === 0 ? (
         <Note>This report has no shortlisted products{c.gaps.length ? `: ${c.gaps.join("; ")}` : ""}.</Note>
@@ -473,7 +549,7 @@ function OldInvestigation({ item, client, cache, onOpen, onPinChanged }: {
         </div>
         <div className="flex items-center gap-2">
           <PinButton pinned={item.pinned} runId={item.runId} client={client} onChanged={() => { cache.delete(item.runId); onPinChanged(); }} />
-          <button type="button" aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpanded((v) => !v)} className="mt-btn mt-focus min-h-[32px] rounded-lg px-3 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>
+          <button type="button" aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpanded((v) => !v)} className="mt-btn mt-focus min-h-[40px] rounded-lg px-3 py-1 t-meta font-bold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-2)" }}>
             {expanded ? "Collapse" : "Expand Window"}
           </button>
         </div>
