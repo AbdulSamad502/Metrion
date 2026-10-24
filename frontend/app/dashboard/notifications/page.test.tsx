@@ -67,7 +67,7 @@ describe("Action Center", () => {
   it("explains a forbidden alerts source as a permission, not an error", () => {
     state = notifications({ alertsStatus: "forbidden" });
     render(<NotificationsPage />);
-    expect(screen.getByText(/your role does not have access to Competitor Intelligence/)).toBeInTheDocument();
+    expect(screen.getByText(/Alerts are hidden for your role/)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -89,7 +89,7 @@ describe("Action Center", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: /Cost of SKU r1/ }));
     const dlg = await screen.findByRole("dialog", { name: "Data request" });
     expect(within(dlg).getByText("Net margin")).toBeInTheDocument();
-    expect(within(dlg).getByRole("link", { name: "Open in CFO" })).toHaveAttribute("href", "/dashboard/cfo#anomalies");
+    expect(within(dlg).getByRole("link", { name: "Open in CFO" })).toHaveAttribute("href", "/dashboard/cfo#requests");
   });
 });
 
@@ -98,7 +98,7 @@ describe("Action Center tells the truth about what it could and could not read",
     state = notifications({ alertsStatus: "error", alertsError: "boom", dataRequestsStatus: "error", dataRequestsError: "boom" });
     render(<NotificationsPage />);
     expect(screen.queryByText("You're all caught up")).toBeNull();
-    expect(screen.getByText(/This is not an all-clear/)).toBeInTheDocument();
+    expect(screen.getByText(/This isn’t an all-clear/)).toBeInTheDocument();
     expect(screen.getAllByRole("alert").length).toBe(2);
   });
 
@@ -134,7 +134,7 @@ describe("Action Center tells the truth about what it could and could not read",
     state = notifications({ alertsStatus: "forbidden" });
     render(<NotificationsPage />);
     expect(screen.getByText("No open data requests")).toBeInTheDocument(); // the all tab names what it could check
-    expect(screen.getByText(/Competitor alerts are not shown for your role/)).toBeInTheDocument();
+    expect(screen.getByText(/Alerts aren’t shown for your role/)).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("tab", { name: /Competitor alerts/ }));
     expect(screen.queryByText("No competitor alerts")).toBeNull();
   });

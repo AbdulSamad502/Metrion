@@ -51,7 +51,7 @@ describe("Settings: competitor digest preference", () => {
   it("explains a forbidden role without an error", async () => {
     stub(() => json("forbidden", 403));
     render(<SettingsPage />);
-    expect(await screen.findByText(/does not have access to Competitor Intelligence/)).toBeInTheDocument();
+    expect(await screen.findByText(/no access to Competitor Intelligence/)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

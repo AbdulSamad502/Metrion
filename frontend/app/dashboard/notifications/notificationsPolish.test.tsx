@@ -47,22 +47,20 @@ describe("Action Center presentation (mocked feed)", () => {
     expect(within(dlg2).queryByText("Open")).toBeNull();
   });
 
-  it("uses the readable text token for timestamps and a right-pointing chevron on rows that open the drawer", () => {
+  it("uses the readable meta style for timestamps and a right-pointing arrow on rows that open the drawer", () => {
     state = notifications({ alerts: [alert] });
     render(<NotificationsPage />);
     const row = screen.getByRole("button", { name: /Rival cut its price/ });
     const time = row.querySelector("time") as HTMLElement;
-    expect(time.style.color).toBe("var(--text-6)");
-    expect(time.style.color).not.toContain("text-7");
-    const chevron = row.querySelector("svg")?.parentElement as HTMLElement;
-    expect(chevron.style.transform).toBe("rotate(-90deg)"); // the shared chevron points down; rotated it points right
+    expect(time).toHaveClass("ov-meta"); // the readable 12px meta colour, not a faint decoration token
+    expect(row.querySelector(".ov-arrow")).not.toBeNull(); // the arrow points right: this row opens something
   });
 
   it("says one thing once: the window comes from ALERT_WINDOW_DAYS and the no-read-state notice stays", () => {
     state = notifications({ alerts: [alert], checkedAt: "2:16 PM" });
     render(<NotificationsPage />);
-    expect(screen.getByText(new RegExp(`last ${ALERT_WINDOW_DAYS} days and data requests still open`))).toBeInTheDocument();
-    expect(screen.getByText(/no read or unread state, so nothing here can be marked as read/)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`last ${ALERT_WINDOW_DAYS} days and open data requests`))).toBeInTheDocument();
+    expect(screen.getByText(/Nothing is marked read/)).toBeInTheDocument();
     expect(screen.getByText(/1 item · checked 2:16 PM/)).toBeInTheDocument();
   });
 });
