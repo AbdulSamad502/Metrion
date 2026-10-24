@@ -133,7 +133,7 @@ describe("what the dashboard states, and what it refuses to", () => {
     render(<CiDashboard client={client(FULL)} />);
     await screen.findByTestId("ci-dashboard");
     expect(screen.getAllByText(/not verified yet/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Search leads\. They are not verified prices/)).toBeInTheDocument();
+    expect(screen.getByText(/Search leads\. Not verified prices/)).toBeInTheDocument();
     expect(document.querySelectorAll('a[href*="flipkart.com"], a[href*="amazon.in"]')).toHaveLength(0);
   });
 
@@ -142,7 +142,7 @@ describe("what the dashboard states, and what it refuses to", () => {
     await screen.findByTestId("ci-dashboard");
     expect(screen.getByText("Titan Octane: price down 9.2%")).toBeInTheDocument();
     expect(screen.getByText(/from the screenshot of/)).toBeInTheDocument();
-    expect(screen.getByText(/not watched between your screenshots/)).toBeInTheDocument();
+    expect(screen.getByText(/aren’t watched in between/)).toBeInTheDocument();
   });
 
   it("shows review themes with how many reviews were read, and pending confirmations", async () => {
@@ -380,9 +380,9 @@ describe("what the dashboard does when data is loading, refreshing or failing", 
 });
 
 describe("CI: one strong action per view, with every link still going to the same place", () => {
-  const solid = (el: HTMLElement) => (el.getAttribute("style") ?? "").includes("background: var(--accent)");
+  const solid = (el: HTMLElement) => el.classList.contains("ov-btn--solid"); // the one white-on-indigo button of the "What to do next" card
 
-  it("keeps a single solid-green link: the next step. Row actions and shortcuts are calm", async () => {
+  it("keeps a single solid link: the next step. Row actions and shortcuts are calm", async () => {
     render(<CiDashboard client={client(FULL)} />);
     await screen.findByTestId("ci-dashboard");
     const links = screen.getAllByRole("link");
