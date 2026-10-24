@@ -1,0 +1,59 @@
+/* The advanced CFO tools, in the Overview's look. These rules only apply inside .cfo-skin, so no other page changes.
+   They restyle the classes the tools already use; no tool logic or wording changes. */
+.cfo-skin { max-width: 1232px; }
+.cfo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
+@media (max-width: 1100px) { .cfo-grid { grid-template-columns: 1fr; } }
+.cfo-stack, .cfo-skin .mt-stack { display: flex; flex-direction: column; gap: 24px; }
+
+/* every tool is a card */
+.cfo-skin :is(.cfo-grid, .cfo-stack) > section {
+  display: flex; flex-direction: column; gap: 16px; padding: 24px; border-radius: 24px;
+  background: var(--ov-card); border: 1px solid var(--ov-line); box-shadow: var(--ov-shadow); min-width: 0;
+}
+.cfo-skin .mt-section__head { border: 0; padding: 0; margin: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.cfo-skin .mt-section__title { font-size: var(--ov-s2); font-weight: 800; color: var(--ov-ink); letter-spacing: -0.005em; margin: 0; }
+.cfo-skin .mt-section__hint { font-size: var(--ov-s1); font-weight: 600; color: var(--ov-ink-3); margin: 4px 0 0; }
+.cfo-skin .mt-panel { background: transparent; border: 0; box-shadow: none; padding: 0; border-radius: 0; backdrop-filter: none; }
+
+/* fields */
+.cfo-skin .mt-input, .cfo-skin select, .cfo-skin input[type="date"], .cfo-skin input[type="text"], .cfo-skin input[type="number"], .cfo-skin textarea {
+  min-height: 48px; border-radius: 16px; border: 1px solid var(--ov-line); background: var(--ov-card); color: var(--ov-ink);
+  font: inherit; font-size: var(--ov-s2); font-weight: 500; padding: 0 16px; box-shadow: none;
+  transition: border-color 160ms, box-shadow 160ms;
+}
+.cfo-skin .mt-input:focus-visible, .cfo-skin select:focus-visible, .cfo-skin input:focus-visible { outline: none; border-color: var(--ov-brand); box-shadow: 0 0 0 3px var(--ov-brand-soft); }
+.cfo-skin label { font-size: var(--ov-s1); font-weight: 700; color: var(--ov-ink-3); }
+
+/* buttons and chips */
+.cfo-skin .mt-btn, .cfo-skin .mt-btn-secondary, .cfo-skin .mt-chip {
+  min-height: 40px; border-radius: 999px; font-size: var(--ov-s2); font-weight: 700; border: 0;
+  background: var(--ov-soft); color: var(--ov-ink); box-shadow: none;
+  transition: transform 160ms var(--ov-ease), background 160ms, box-shadow 160ms;
+}
+.cfo-skin .mt-btn:active, .cfo-skin .mt-chip:active { transform: scale(0.97); }
+.cfo-skin .mt-btn:not(.mt-btn-secondary)[style*="background: var(--accent)"] { background: var(--ov-brand) !important; color: var(--ov-on-brand) !important; }
+@media (hover: hover) and (pointer: fine) { .cfo-skin .mt-btn:hover, .cfo-skin .mt-chip:hover { background: color-mix(in srgb, var(--ov-soft) 78%, var(--ov-brand) 22%); } }
+.cfo-skin a:focus-visible, .cfo-skin button:focus-visible { outline: 2px solid var(--ov-brand); outline-offset: 2px; }
+
+/* results */
+.cfo-skin .mt-ledger__row { border-radius: 16px; background: var(--ov-soft); padding: 16px; border: 0; }
+.cfo-skin .mt-ledger__meta { color: var(--ov-ink-3); font-size: var(--ov-s1); }
+.cfo-skin .mt-table-wrap { border: 0; border-radius: 16px; background: transparent; }
+.cfo-skin .mt-table th { background: transparent; color: var(--ov-ink-3); font-size: var(--ov-s1); font-weight: 600; border: 0; text-transform: none; letter-spacing: 0; }
+.cfo-skin .mt-table td { border-color: var(--ov-line); font-size: var(--ov-s2); color: var(--ov-ink); }
+
+/* four sizes, whatever size class a tool asked for */
+.cfo-skin :is(.t-body, .t-body-lg, .t-body-sm, .t-card-title, .t-section) { font-size: var(--ov-s2); }
+.cfo-skin :is(.t-meta, .t-meta-sm, .t-micro, .t-nano, .t-label) { font-size: var(--ov-s1); text-transform: none; letter-spacing: 0; }
+.cfo-skin :is(.t-headline, .t-page-title, .t-metric, .t-metric-lg) { font-size: var(--ov-s3); }
+
+@media (prefers-reduced-motion: reduce) { .cfo-skin .mt-btn, .cfo-skin .mt-chip { transition: none; } .cfo-skin .mt-btn:active, .cfo-skin .mt-chip:active { transform: none; } }
+
+/* "Ask the CEO" tiles */
+.ci-asks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+@media (max-width: 1100px) { .ci-asks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .ci-asks { grid-template-columns: 1fr; } }
+.pi-link { color: var(--ov-brand-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+.cfo-skin .uppercase { text-transform: none; letter-spacing: 0; }
+.cfo-skin .mt-eyebrow { font-size: var(--ov-s1); text-transform: none; letter-spacing: 0; }

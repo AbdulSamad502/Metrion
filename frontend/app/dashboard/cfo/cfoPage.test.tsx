@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@clerk/nextjs", () => ({ useAuth: () => ({ getToken: async () => "t" }) }));
 vi.mock("@/components/dashboard/DashboardShell", () => ({ DashboardShell: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 
-import CfoPage from "@/app/dashboard/cfo/page";
+import CfoPage from "@/app/dashboard/cfo/tools/page";
 
 const stubAll = (status: number, body: unknown) =>
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
