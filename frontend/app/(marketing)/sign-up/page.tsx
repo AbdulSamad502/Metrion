@@ -175,7 +175,7 @@ export default function SignUpPage() {
             onChange={(e) => setCode(e.target.value)}
           />
           {globalError && (
-            <p className="text-sm" style={{ color: "var(--negative)" }}>
+            <p role="alert" className="text-sm" style={{ color: "var(--negative)" }}>
               {globalError}
             </p>
           )}
@@ -186,7 +186,7 @@ export default function SignUpPage() {
             type="button"
             onClick={resendCode}
             disabled={resendCooldown > 0 || submitting}
-            className="text-xs font-semibold disabled:opacity-50"
+            className="min-h-10 text-xs font-semibold disabled:opacity-50"
             style={{ color: "var(--text-6)" }}
           >
             {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
@@ -203,7 +203,7 @@ export default function SignUpPage() {
       footer={
         <span style={{ color: "var(--text-6)" }}>
           Already have an account?{" "}
-          <Link href="/sign-in" style={{ color: "var(--accent)", fontWeight: 700 }}>
+          <Link href="/sign-in" className="inline-flex min-h-10 items-center" style={{ color: "var(--accent)", fontWeight: 700 }}>
             Sign in
           </Link>
         </span>
@@ -265,18 +265,18 @@ export default function SignUpPage() {
                 />
               ))}
             </div>
-            <span className="text-xs" style={{ color: "var(--text-7)" }}>
+            <span className="text-xs" style={{ color: "var(--text-6)" }}>
               {strength.label}
             </span>
           </div>
         )}
-        <p className="-mt-2 text-xs" style={{ color: "var(--text-7)" }}>
+        <p className="-mt-2 text-xs" style={{ color: "var(--text-6)" }}>
           At least 10 characters — no special characters required. We check new passwords
           against known data breaches.
         </p>
 
         {accountExists && (
-          <p className="text-sm" style={{ color: "var(--negative)" }}>
+          <p role="alert" className="text-sm" style={{ color: "var(--negative)" }}>
             An account with this email already exists.{" "}
             <Link href="/sign-in" style={{ color: "var(--accent)", fontWeight: 700 }}>
               Sign in instead
@@ -285,7 +285,7 @@ export default function SignUpPage() {
         )}
 
         {!accountExists && globalError && (
-          <p className="text-sm" style={{ color: "var(--negative)" }}>
+          <p role="alert" className="text-sm" style={{ color: "var(--negative)" }}>
             {globalError}
           </p>
         )}

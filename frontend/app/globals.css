@@ -1891,7 +1891,8 @@ body:has(.mt-galaxy)::before {
    redefined for paper inside the area so every colour stays legible. Warnings (example data, provisional, hypothetical estimate) are part of the area and print too. */
 .mt-print-only { display: none; }
 @media print {
-  body * { visibility: hidden; }
+  /* Only a page that HAS a print area hides the rest; `:where()` keeps the old (low) specificity so the visible rule below still wins. A page without one (the PI report) prints normally. */
+  :where(body:has(.mt-print-area)) * { visibility: hidden; }
   .mt-print-area, .mt-print-area * { visibility: visible; }
   .mt-print-area {
     position: absolute; left: 0; top: 0; width: 100%; padding: 0 12mm;

@@ -18,9 +18,9 @@ const score = (s: string | null) => (s ? `${s}/100` : "no score");
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid gap-x-3 py-0.5" style={{ gridTemplateColumns: "9.5rem 1fr" }}>
+    <div className="grid gap-x-3 py-0.5" style={{ gridTemplateColumns: "9.5rem minmax(0, 1fr)" }}>
       <div style={{ color: muted, fontWeight: 600 }}>{label}</div>
-      <div>{children}</div>
+      <div style={{ overflowWrap: "anywhere" }}>{children}</div>
     </div>
   );
 }
@@ -112,7 +112,7 @@ export function PiReportPrint({ client, runId }: { client: PiClient; runId: stri
 
   return (
     <div style={{ background: "#fff", color: ink, minHeight: "100vh", fontSize: 12, lineHeight: 1.45 }}>
-      <style>{"@page { margin: 14mm; } @media print { .pi-no-print { display: none !important; } }"}</style>
+      <style>{"@page { margin: 14mm; } @media print { html:root { background: #fff !important; color-scheme: light !important; } .pi-no-print { display: none !important; } }"}</style>
       <main className="mx-auto max-w-[800px] px-6 py-6">
         {state.status === "loading" && <p role="status">Loading the saved report…</p>}
         {state.status === "error" && <p role="alert">{state.message}</p>}

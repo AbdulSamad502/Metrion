@@ -136,12 +136,18 @@ export default function OnboardingPage() {
       subtitle={session?.onboardingState === "ACTIVE" && session.profileComplete === false ? "A few quick questions so Metrion can tailor its advice" : "Let's set up your workspace"}
     >
       {error && (
-        <p className="mb-4 text-sm" style={{ color: "var(--negative)" }}>
+        <p role="alert" className="mb-4 text-sm" style={{ color: "var(--negative)" }}>
           {error}
         </p>
       )}
 
-      {showLoading && !error && <p style={{ color: "var(--text-5)" }}>Loading…</p>}
+      {error && !session && (
+        <Button type="button" variant="secondary" onClick={() => { setError(null); void loadSession(); }}>
+          Try again
+        </Button>
+      )}
+
+      {showLoading && !error && <p role="status" style={{ color: "var(--text-5)" }}>Loading…</p>}
 
       {session?.onboardingState === "PENDING_EMAIL_VERIFICATION" && (
         <p style={{ color: "var(--text-3)" }}>Check your email to verify your address before continuing.</p>
