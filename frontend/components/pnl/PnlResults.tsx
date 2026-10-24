@@ -126,7 +126,7 @@ function Solution({ s, onUsePrice }: { s: PnlSolution; onUsePrice?: (paise: stri
         </p>
       )}
       {s.outcome === "price" && s.price && onUsePrice && (
-        <button type="button" onClick={() => onUsePrice(s.price as string)} className="mt-btn mt-focus mt-3 min-h-10 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--accent-border-strong)", color: "var(--accent)" }}>
+        <button type="button" onClick={() => onUsePrice(s.price as string)} className="mt-btn mt-focus mt-no-print mt-3 min-h-10 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--accent-border-strong)", color: "var(--accent)" }}>
           Use this price
         </button>
       )}
@@ -243,12 +243,12 @@ export function PnlResults({ result, stale, busy, onUsePrice }: { result: PnlSce
 
       {result.perKept || result.perPlaced ? (
         <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
-          <div className="flex min-w-0 flex-col gap-6">
+          <div className="flex min-w-0 flex-col gap-6 xl:col-start-1">
             <Hero result={result} beforeMissing={beforeMissing} />
             {result.breakdown && <WhereEachRupeeGoes breakdown={result.breakdown} marginBps={m?.contributionMarginBps ?? null} beforeMissing={beforeMissing !== undefined} />}
             {result.breakdown && <WhatIsKillingYourMargin costs={result.breakdown.topCosts} beforeMissing={beforeMissing !== undefined} />}
           </div>
-          <div className="flex min-w-0 flex-col gap-6">
+          <div className="flex min-w-0 flex-col gap-6 xl:col-start-2 xl:row-span-2 xl:row-start-1">
             <Section title="Profit and loss statement" hint={result.orders ? `${result.orders.placed.text} placed, ${result.orders.kept.text} kept (${result.orders.rto.text} RTO, ${result.orders.returned.text} returned).` : undefined} panel={false}>
               <div className="rounded-2xl p-4" style={CARD}>
                 {tabs.length > 1 && <Tabs tabs={tabs} active={activeId} onChange={setView} label="Profit view" idPrefix="pnl-view" />}
@@ -273,6 +273,8 @@ export function PnlResults({ result, stale, busy, onUsePrice }: { result: PnlSce
                 </div>
               </Section>
             )}
+          </div>
+          <div className="flex min-w-0 flex-col gap-6 xl:col-start-1">
             {blankAssumptions.length > 0 && (
               <Section title="Assumed because an input was left blank" hint="Enter the real value to replace each one." panel={false}>
                 <ul className="m-0 list-disc rounded-2xl py-4 pl-9 pr-4 t-body-sm" style={{ ...CARD, color: "var(--text-4)" }}>

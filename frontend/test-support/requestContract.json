@@ -82,54 +82,6 @@
    "query": [],
    "requiredQuery": []
   },
-  "GET /api/v1/cfo/expense-ledger": {
-   "query": [
-    "category",
-    "channel_scope",
-    "cost_class",
-    "date_from",
-    "date_to",
-    "include_voided",
-    "limit",
-    "offset",
-    "payment_status",
-    "review_state"
-   ],
-   "requiredQuery": []
-  },
-  "GET /api/v1/cfo/expense-ledger/categories": {
-   "query": [],
-   "requiredQuery": []
-  },
-  "GET /api/v1/cfo/expense-ledger/export": {
-   "query": [
-    "history"
-   ],
-   "requiredQuery": []
-  },
-  "GET /api/v1/cfo/expense-ledger/import/template": {
-   "query": [],
-   "requiredQuery": []
-  },
-  "GET /api/v1/cfo/expense-ledger/lines": {
-   "query": [
-    "include_voided",
-    "period_end",
-    "period_start"
-   ],
-   "requiredQuery": [
-    "period_end",
-    "period_start"
-   ]
-  },
-  "GET /api/v1/cfo/expense-ledger/templates": {
-   "query": [],
-   "requiredQuery": []
-  },
-  "GET /api/v1/cfo/expense-ledger/{expense_id}": {
-   "query": [],
-   "requiredQuery": []
-  },
   "GET /api/v1/cfo/expenses": {
    "query": [
     "category",
@@ -453,109 +405,6 @@
   "POST /api/v1/cfo/cash-reconciliation": {
    "body": {
     "$ref": "#/components/schemas/CashReconciliationHttpRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger": {
-   "body": {
-    "$ref": "#/components/schemas/CreateRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/import/commit": {
-   "multipart": true,
-   "query": [
-    "skip_invalid"
-   ],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/import/preview": {
-   "multipart": true,
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/summary": {
-   "body": {
-    "$ref": "#/components/schemas/SummaryRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/templates": {
-   "body": {
-    "$ref": "#/components/schemas/TemplateRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/templates/materialise": {
-   "body": {
-    "$ref": "#/components/schemas/MaterialiseRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/templates/{template_key}/end": {
-   "body": {
-    "$ref": "#/components/schemas/EndRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/templates/{template_key}/refund": {
-   "body": {
-    "$ref": "#/components/schemas/TemplateRefundRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/templates/{template_key}/version": {
-   "body": {
-    "$ref": "#/components/schemas/TemplateRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/{expense_id}/assign": {
-   "body": {
-    "$ref": "#/components/schemas/AssignRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/{expense_id}/correct": {
-   "body": {
-    "$ref": "#/components/schemas/CorrectRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/{expense_id}/payment": {
-   "body": {
-    "$ref": "#/components/schemas/PaymentRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/{expense_id}/refund": {
-   "body": {
-    "$ref": "#/components/schemas/RefundRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/{expense_id}/review": {
-   "body": {
-    "$ref": "#/components/schemas/ReviewRequest"
-   },
-   "query": [],
-   "requiredQuery": []
-  },
-  "POST /api/v1/cfo/expense-ledger/{expense_id}/void": {
-   "body": {
-    "$ref": "#/components/schemas/VoidRequest"
    },
    "query": [],
    "requiredQuery": []
@@ -1157,37 +1006,6 @@
    "title": "ApproveBody",
    "type": "object"
   },
-  "AssignRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "basis": {
-     "enum": [
-      "EQUAL",
-      "EXPLICIT_SHARES",
-      "NET_REVENUE",
-      "UNITS",
-      "ORDERS"
-     ],
-     "title": "Basis",
-     "type": "string"
-    },
-    "shares": {
-     "items": {
-      "$ref": "#/components/schemas/SkuShare"
-     },
-     "maxItems": 20,
-     "minItems": 1,
-     "title": "Shares",
-     "type": "array"
-    }
-   },
-   "required": [
-    "basis",
-    "shares"
-   ],
-   "title": "AssignRequest",
-   "type": "object"
-  },
   "AttachBody": {
    "properties": {
     "attached": {
@@ -1689,133 +1507,6 @@
    "title": "ConfirmHintBody",
    "type": "object"
   },
-  "CorrectRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "amount_paise": {
-     "anyOf": [
-      {
-       "type": "integer"
-      },
-      {
-       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
-       "type": "string"
-      }
-     ],
-     "title": "Amount Paise"
-    },
-    "category": {
-     "title": "Category",
-     "type": "string"
-    },
-    "channel_scope": {
-     "anyOf": [
-      {
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Channel Scope"
-    },
-    "cost_class": {
-     "anyOf": [
-      {
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Cost Class"
-    },
-    "description": {
-     "anyOf": [
-      {
-       "maxLength": 500,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Description"
-    },
-    "effective_date": {
-     "format": "date",
-     "title": "Effective Date",
-     "type": "string"
-    },
-    "idempotency_key": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "minLength": 1,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Idempotency Key"
-    },
-    "reason": {
-     "anyOf": [
-      {
-       "maxLength": 500,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Reason"
-    },
-    "sku": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Sku"
-    },
-    "treatment": {
-     "anyOf": [
-      {
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Treatment"
-    },
-    "vendor": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Vendor"
-    }
-   },
-   "required": [
-    "effective_date",
-    "category",
-    "amount_paise"
-   ],
-   "title": "CorrectRequest",
-   "type": "object"
-  },
   "CostEntryHttpRequest": {
    "description": "One `cogs_per_unit` weighted-average-cost data point (\u00a77.2.1) \u2014 `CostEntry`'s own shape.",
    "properties": {
@@ -1974,131 +1665,6 @@
     }
    },
    "title": "CreateNicheBriefRequest",
-   "type": "object"
-  },
-  "CreateRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "amount_paise": {
-     "anyOf": [
-      {
-       "type": "integer"
-      },
-      {
-       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
-       "type": "string"
-      }
-     ],
-     "title": "Amount Paise"
-    },
-    "category": {
-     "title": "Category",
-     "type": "string"
-    },
-    "channel_scope": {
-     "anyOf": [
-      {
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Channel Scope"
-    },
-    "cost_class": {
-     "anyOf": [
-      {
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Cost Class"
-    },
-    "description": {
-     "anyOf": [
-      {
-       "maxLength": 500,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Description"
-    },
-    "effective_date": {
-     "format": "date",
-     "title": "Effective Date",
-     "type": "string"
-    },
-    "idempotency_key": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "minLength": 1,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Idempotency Key"
-    },
-    "sku": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Sku"
-    },
-    "state": {
-     "default": "confirmed",
-     "enum": [
-      "draft",
-      "pending_review",
-      "confirmed"
-     ],
-     "title": "State",
-     "type": "string"
-    },
-    "treatment": {
-     "anyOf": [
-      {
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Treatment"
-    },
-    "vendor": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Vendor"
-    }
-   },
-   "required": [
-    "effective_date",
-    "category",
-    "amount_paise"
-   ],
-   "title": "CreateRequest",
    "type": "object"
   },
   "DecisionKind": {
@@ -2295,21 +1861,6 @@
     "depth"
    ],
    "title": "DiscoverRequest",
-   "type": "object"
-  },
-  "EndRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "effective_to": {
-     "format": "date",
-     "title": "Effective To",
-     "type": "string"
-    }
-   },
-   "required": [
-    "effective_to"
-   ],
-   "title": "EndRequest",
    "type": "object"
   },
   "EnterExpenseBudgetHttpRequest": {
@@ -3138,21 +2689,6 @@
    "title": "Marketplace",
    "type": "string"
   },
-  "MaterialiseRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "through_month": {
-     "format": "date",
-     "title": "Through Month",
-     "type": "string"
-    }
-   },
-   "required": [
-    "through_month"
-   ],
-   "title": "MaterialiseRequest",
-   "type": "object"
-  },
   "MoneyEntry": {
    "additionalProperties": false,
    "description": "Paise.",
@@ -3235,54 +2771,6 @@
     "decision"
    ],
    "title": "NicheDecisionBody",
-   "type": "object"
-  },
-  "PaymentRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "idempotency_key": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "minLength": 1,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Idempotency Key"
-    },
-    "paid_amount_paise": {
-     "anyOf": [
-      {
-       "type": "integer"
-      },
-      {
-       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Paid Amount Paise"
-    },
-    "status": {
-     "enum": [
-      "unpaid",
-      "partially_paid",
-      "paid",
-      "unknown"
-     ],
-     "title": "Status",
-     "type": "string"
-    }
-   },
-   "required": [
-    "status"
-   ],
-   "title": "PaymentRequest",
    "type": "object"
   },
   "PeriodComparisonHttpRequest": {
@@ -3899,7 +3387,6 @@
        "type": "number"
       },
       {
-       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
        "type": "string"
       },
       {
@@ -4189,59 +3676,6 @@
    "title": "RecoveryIn",
    "type": "object"
   },
-  "RefundRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "amount_paise": {
-     "anyOf": [
-      {
-       "type": "integer"
-      },
-      {
-       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
-       "type": "string"
-      }
-     ],
-     "title": "Amount Paise"
-    },
-    "description": {
-     "anyOf": [
-      {
-       "maxLength": 500,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Description"
-    },
-    "effective_date": {
-     "format": "date",
-     "title": "Effective Date",
-     "type": "string"
-    },
-    "idempotency_key": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "minLength": 1,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Idempotency Key"
-    }
-   },
-   "required": [
-    "effective_date",
-    "amount_paise"
-   ],
-   "title": "RefundRequest",
-   "type": "object"
-  },
   "RequestPriceScenarioRequest": {
    "properties": {
     "competitor_url_id": {
@@ -4283,7 +3717,6 @@
        "type": "number"
       },
       {
-       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
        "type": "string"
       },
       {
@@ -4341,38 +3774,6 @@
     "resolution_note"
    ],
    "title": "ResolveBody",
-   "type": "object"
-  },
-  "ReviewRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "idempotency_key": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "minLength": 1,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Idempotency Key"
-    },
-    "state": {
-     "enum": [
-      "draft",
-      "pending_review",
-      "confirmed"
-     ],
-     "title": "State",
-     "type": "string"
-    }
-   },
-   "required": [
-    "state"
-   ],
-   "title": "ReviewRequest",
    "type": "object"
   },
   "ReviewResearchRequest": {
@@ -4465,33 +3866,6 @@
     "value"
    ],
    "title": "SellerProductAttribute",
-   "type": "object"
-  },
-  "SkuShare": {
-   "additionalProperties": false,
-   "properties": {
-    "bp": {
-     "anyOf": [
-      {
-       "type": "integer"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Bp"
-    },
-    "sku": {
-     "maxLength": 120,
-     "minLength": 1,
-     "title": "Sku",
-     "type": "string"
-    }
-   },
-   "required": [
-    "sku"
-   ],
-   "title": "SkuShare",
    "type": "object"
   },
   "StartDiscoveryRunRequest": {
@@ -4598,39 +3972,6 @@
     "as_of_date"
    ],
    "title": "StrategicBriefingHttpRequest",
-   "type": "object"
-  },
-  "SummaryRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "as_of_date": {
-     "anyOf": [
-      {
-       "format": "date",
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "As Of Date"
-    },
-    "period_end": {
-     "format": "date",
-     "title": "Period End",
-     "type": "string"
-    },
-    "period_start": {
-     "format": "date",
-     "title": "Period Start",
-     "type": "string"
-    }
-   },
-   "required": [
-    "period_start",
-    "period_end"
-   ],
-   "title": "SummaryRequest",
    "type": "object"
   },
   "SupplierLookupRequest": {
@@ -4758,199 +4099,6 @@
     "kind"
    ],
    "title": "TargetIn",
-   "type": "object"
-  },
-  "TemplateRefundRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "amount_paise": {
-     "anyOf": [
-      {
-       "type": "integer"
-      },
-      {
-       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
-       "type": "string"
-      }
-     ],
-     "title": "Amount Paise"
-    },
-    "effective_date": {
-     "format": "date",
-     "title": "Effective Date",
-     "type": "string"
-    }
-   },
-   "required": [
-    "effective_date",
-    "amount_paise"
-   ],
-   "title": "TemplateRefundRequest",
-   "type": "object"
-  },
-  "TemplateRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "amortization_months": {
-     "anyOf": [
-      {
-       "type": "integer"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Amortization Months"
-    },
-    "amount_paise": {
-     "anyOf": [
-      {
-       "type": "integer"
-      },
-      {
-       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Amount Paise"
-    },
-    "category": {
-     "title": "Category",
-     "type": "string"
-    },
-    "channel_scope": {
-     "anyOf": [
-      {
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Channel Scope"
-    },
-    "cost_class": {
-     "anyOf": [
-      {
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Cost Class"
-    },
-    "description": {
-     "anyOf": [
-      {
-       "maxLength": 500,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Description"
-    },
-    "effective_from": {
-     "format": "date",
-     "title": "Effective From",
-     "type": "string"
-    },
-    "effective_to": {
-     "anyOf": [
-      {
-       "format": "date",
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Effective To"
-    },
-    "kind": {
-     "enum": [
-      "MONTHLY",
-      "AMORTIZED",
-      "PER_ORDER",
-      "PER_UNIT"
-     ],
-     "title": "Kind",
-     "type": "string"
-    },
-    "rate_paise": {
-     "anyOf": [
-      {
-       "type": "integer"
-      },
-      {
-       "pattern": "^(0|-?[1-9][0-9]{0,15})$",
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Rate Paise"
-    },
-    "sku": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Sku"
-    },
-    "start_month": {
-     "anyOf": [
-      {
-       "format": "date",
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Start Month"
-    },
-    "treatment": {
-     "anyOf": [
-      {
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Treatment"
-    },
-    "vendor": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Vendor"
-    }
-   },
-   "required": [
-    "kind",
-    "category",
-    "effective_from"
-   ],
-   "title": "TemplateRequest",
    "type": "object"
   },
   "TitleSetsBody": {
@@ -5331,7 +4479,6 @@
        "type": "number"
       },
       {
-       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
        "type": "string"
       },
       {
@@ -5569,35 +4716,6 @@
     "surface"
    ],
    "title": "UsageEventBody",
-   "type": "object"
-  },
-  "VoidRequest": {
-   "additionalProperties": false,
-   "properties": {
-    "idempotency_key": {
-     "anyOf": [
-      {
-       "maxLength": 120,
-       "minLength": 1,
-       "type": "string"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Idempotency Key"
-    },
-    "reason": {
-     "maxLength": 500,
-     "minLength": 1,
-     "title": "Reason",
-     "type": "string"
-    }
-   },
-   "required": [
-    "reason"
-   ],
-   "title": "VoidRequest",
    "type": "object"
   }
  }

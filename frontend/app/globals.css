@@ -1904,6 +1904,7 @@ body:has(.mt-galaxy)::before {
   .mt-print-area .mt-no-print, .mt-no-print { display: none !important; }
   .mt-print-only { display: block !important; }
   .mt-print-area table { page-break-inside: avoid; }
+  .mt-print-area .mt-dash-card { background: #fff !important; box-shadow: none !important; backdrop-filter: none !important; border: 1px solid #bbb !important; }
   html, body { background: #fff !important; overflow: visible !important; height: auto !important; }
 }
 
