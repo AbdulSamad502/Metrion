@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Section } from "@/components/ui/Section";
+import { useToast } from "@/components/ui/Toast";
 import { ApiError, apiFetch, type UploadOutcome, type ManualAdjustmentIdResponse } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
 import { ErrorText, Field, FileInput, SubmitButton, TextInput } from "@/components/cfo/primitives";
@@ -89,7 +90,7 @@ export function SellerGoalSection({ getToken }: { getToken: () => Promise<string
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const toast = useToast();
   const [current, setCurrent] = useState<SellerGoal | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -112,7 +113,6 @@ export function SellerGoalSection({ getToken }: { getToken: () => Promise<string
 
   const submit = async () => {
     setError(null);
-    setSaved(false);
     if (targetMarginPct.trim() && !MARGIN_PATTERN.test(targetMarginPct.trim())) {
       setError("Target margin must be a percentage between 0 and 100, like 15 or 15.50. Nothing was saved.");
       return;
@@ -127,8 +127,8 @@ export function SellerGoalSection({ getToken }: { getToken: () => Promise<string
           note: note.trim() || null,
         }),
       });
-      setSaved(true);
       await load(); // confirm by reading it back
+      toast.success("Goal saved.");
     } catch (e) {
       setError(friendlyApiError(e, "Could not save the goal"));
     } finally {
@@ -157,7 +157,6 @@ export function SellerGoalSection({ getToken }: { getToken: () => Promise<string
         </div>
         <div><SubmitButton onClick={submit} busy={busy} label="Save goal" busyLabel="Saving…" /></div>
         <ErrorText>{error}</ErrorText>
-        {saved && !error && <div role="status" className="t-body-sm" style={{ color: "var(--accent)" }}>Saved.</div>}
       </div>
     </Section>
   );

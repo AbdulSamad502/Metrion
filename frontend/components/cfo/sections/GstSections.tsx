@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Section } from "@/components/ui/Section";
+import { useToast } from "@/components/ui/Toast";
 import { apiFetch, type AnalyzeGstLinesResponse, type GstLookupResponse, type GstLookupResult, type GstPeriodSummaryResponse, type ManualAdjustmentIdResponse } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
 import { rupeesToPaise } from "@/lib/costInput";
@@ -269,7 +271,8 @@ export function GstLookupSection({ getToken }: { getToken: () => Promise<string 
   const [acceptEffectiveFrom, setAcceptEffectiveFrom] = useState("");
   const [acceptBusy, setAcceptBusy] = useState(false);
   const [acceptError, setAcceptError] = useState<string | null>(null);
-  const [acceptResult, setAcceptResult] = useState<ManualAdjustmentIdResponse | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const toast = useToast();
 
   const lookup = async () => {
     if (!productTitle.trim()) {
@@ -279,7 +282,7 @@ export function GstLookupSection({ getToken }: { getToken: () => Promise<string 
     setBusy(true);
     setError(null);
     setResult(null);
-    setAcceptResult(null);
+    setConfirming(false);
     setAcceptError(null);
     try {
       const res = await apiFetch<GstLookupResponse>("/api/v1/cfo/gst-lookup", await getToken(), {
@@ -299,14 +302,19 @@ export function GstLookupSection({ getToken }: { getToken: () => Promise<string 
     }
   };
 
-  const accept = async (lookupResult: GstLookupResult) => {
+  // Accepting changes the rate Metrion uses for that SKU from now on, so it is confirmed first (nothing is sent until then).
+  const review = () => {
     if (!acceptSku.trim()) {
       setAcceptError("Enter the SKU to accept this rate for first.");
       return;
     }
+    setAcceptError(null);
+    setConfirming(true);
+  };
+
+  const accept = async (lookupResult: GstLookupResult) => {
     setAcceptBusy(true);
     setAcceptError(null);
-    setAcceptResult(null);
     try {
       const res = await apiFetch<ManualAdjustmentIdResponse>("/api/v1/cfo/gst-lookup/accept", await getToken(), {
         method: "POST",
@@ -317,7 +325,8 @@ export function GstLookupSection({ getToken }: { getToken: () => Promise<string 
           effective_from: acceptEffectiveFrom || null,
         }),
       });
-      setAcceptResult(res);
+      setConfirming(false);
+      toast.success(`GST rate accepted for ${acceptSku.trim()} (ref ${res.manualAdjustmentId.slice(0, 8)}).`);
     } catch (e) {
       setAcceptError(friendlyApiError(e, "Could not accept this GST rate"));
     } finally {
@@ -365,18 +374,29 @@ export function GstLookupSection({ getToken }: { getToken: () => Promise<string 
                 <TextInput type="date" value={acceptEffectiveFrom} onChange={setAcceptEffectiveFrom} />
               </div>
               <div className="mt-2">
-                <SubmitButton
-                  onClick={() => accept(result.result as GstLookupResult)}
-                  busy={acceptBusy}
-                  label="Accept rate"
-                  busyLabel="Accepting…"
-                />
+                <SubmitButton onClick={review} busy={acceptBusy} label="Accept rate" busyLabel="Accepting…" />
               </div>
-              <ErrorText>{acceptError}</ErrorText>
-              {acceptResult && (
-                <div className="mt-1" style={{ color: "var(--accent)" }}>
-                  Accepted — manual adjustment <code>{acceptResult.manualAdjustmentId.slice(0, 8)}</code>
-                </div>
+              {!confirming && <ErrorText>{acceptError}</ErrorText>}
+              {confirming && (
+                <ConfirmDialog
+                  title={`Use ${result.result.likelyRatePct ?? "this"}% GST for ${acceptSku.trim()}?`}
+                  confirmLabel="Accept rate"
+                  busyLabel="Accepting…"
+                  busy={acceptBusy}
+                  onConfirm={() => void accept(result.result as GstLookupResult)}
+                  onCancel={() => {
+                    setConfirming(false);
+                    setAcceptError(null);
+                  }}
+                >
+                  <p>
+                    Metrion will use this rate for that SKU{acceptEffectiveFrom ? ` from ${acceptEffectiveFrom}` : ""} in your GST figures. The earlier record is kept, and
+                    you can accept a different rate later. This is a lookup, not tax advice.
+                  </p>
+                  <div className="mt-3">
+                    <ErrorText>{acceptError}</ErrorText>
+                  </div>
+                </ConfirmDialog>
               )}
             </div>
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useId } from "react";
+import { createContext, useContext, useId, useRef } from "react";
+import { Spinner } from "@/components/ui/LoadingState";
 import { rupeesToPaise } from "@/lib/costInput";
 import { type MetricResult, type PeriodPnlMetricResult } from "@/lib/api";
 
@@ -75,21 +76,35 @@ export function SubmitButton({
   busyLabel,
   primary = false,
 }: {
-  onClick: () => void;
+  onClick: () => void | Promise<void>;
   busy: boolean;
   label: string;
   busyLabel: string;
   /** The one green action of a view; every other submit is a neutral secondary button. */
   primary?: boolean;
 }) {
+  // `busy` only disables the button after the parent re-renders, so a fast double-click could send two requests. This ref drops the second click at once.
+  const inFlight = useRef(false);
+  const press = () => {
+    if (busy || inFlight.current) return;
+    inFlight.current = true;
+    const done = () => {
+      inFlight.current = false;
+    };
+    const out = onClick();
+    if (out instanceof Promise) void out.finally(done);
+    else done();
+  };
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={press}
       disabled={busy}
-      className={`mt-btn mt-focus w-fit rounded-lg px-4 py-2 t-body font-bold disabled:cursor-not-allowed ${primary ? "" : "mt-btn-secondary"}`}
+      aria-busy={busy}
+      className={`mt-btn mt-focus inline-flex w-fit items-center gap-2 rounded-lg px-4 py-2 t-body font-bold disabled:cursor-not-allowed ${primary ? "" : "mt-btn-secondary"}`}
       style={primary ? { background: "var(--accent)", color: "var(--accent-on-fill)", opacity: busy ? 0.6 : 1 } : { opacity: busy ? 0.6 : 1 }}
     >
+      {busy && <Spinner size={12} />}
       {busy ? busyLabel : label}
     </button>
   );
