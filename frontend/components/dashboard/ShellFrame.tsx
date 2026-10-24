@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ShellProvider } from "@/lib/ShellContext";
 import { useAppSession } from "@/lib/useAppSession";
 import { useNotificationsFeed } from "@/lib/useNotifications";
@@ -40,7 +40,7 @@ function OwnFrame({ children }: { children: ReactNode }) {
   // The chosen theme applies to the signed-in app only, and never to the CEO Hub, which keeps its own dark canvas.
   const chosen = useSyncExternalStore(subscribeTheme, getTheme, getServerTheme);
   const theme = focusMode ? "dark" : chosen;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = theme;
     return () => {

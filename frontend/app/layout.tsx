@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AppFrame } from "@/components/dashboard/AppFrame";
+import { InlineScript } from "@/components/InlineScript";
+import { themeInitScript } from "@/lib/theme";
 
 const inter = Inter({
   variable: "--font-geist-sans",
@@ -33,7 +35,10 @@ const clerkAppearance = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <InlineScript html={themeInitScript} />
+      </head>
       <body className="min-h-full flex flex-col" style={{ background: "var(--bg-base)" }}>
         {/* Metrion's backend creates the Clerk org during onboarding (auth.md §6.2), so if the
             Clerk instance leaves a new session "pending" on choose-organization, route it to

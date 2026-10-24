@@ -1,5 +1,6 @@
 export type Theme = "dark" | "light";
-const KEY = "metrion.theme";
+export const THEME_KEY = "metrion.theme";
+const KEY = THEME_KEY;
 const listeners = new Set<() => void>();
 
 /** The seller's chosen theme for the signed-in app. Dark stays the default (the shipped look); light is opt-in and remembered in this browser only.
@@ -43,3 +44,7 @@ export function resetThemeForTests(): void {
   loaded = false;
   current = "dark";
 }
+
+/** Runs in <head> before the first paint, so a seller who chose light never sees the dark default flash. It must agree with ShellFrame: light only inside
+ * the signed-in app (/dashboard, /settings) and never on the CEO Hub. It sets only the attribute; ShellFrame keeps it current after hydration. */
+export const themeInitScript = `(function(){try{var p=location.pathname;var app=p==="/settings"||p.indexOf("/settings/")===0||p==="/dashboard"||p.indexOf("/dashboard/")===0;var hub=p.indexOf("/dashboard/ceo-hub")===0;if(app&&!hub&&localStorage.getItem("${THEME_KEY}")==="light")document.documentElement.setAttribute("data-theme","light")}catch(e){}})()`;

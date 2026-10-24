@@ -32,3 +32,36 @@ describe("theme choice", () => {
     expect(getTheme()).toBe("light");
   });
 });
+
+describe("first-paint script", () => {
+  const run = async (path: string, stored: string | null) => {
+    const { themeInitScript } = await import("./theme");
+    document.documentElement.removeAttribute("data-theme");
+    window.history.replaceState(null, "", path);
+    window.localStorage.clear();
+    if (stored) window.localStorage.setItem("metrion.theme", stored);
+    new Function(themeInitScript)();
+    return document.documentElement.getAttribute("data-theme");
+  };
+  it("sets light inside the signed-in app when light was chosen", async () => {
+    expect(await run("/dashboard", "light")).toBe("light");
+    expect(await run("/dashboard/cfo", "light")).toBe("light");
+    expect(await run("/settings", "light")).toBe("light");
+  });
+  it("leaves the CEO Hub, marketing and sign-in pages dark", async () => {
+    expect(await run("/dashboard/ceo-hub", "light")).toBeNull();
+    expect(await run("/", "light")).toBeNull();
+    expect(await run("/sign-in", "light")).toBeNull();
+    expect(await run("/dashboardx", "light")).toBeNull();
+  });
+  it("does nothing for dark or an unset choice, and never throws when storage is blocked", async () => {
+    expect(await run("/dashboard", "dark")).toBeNull();
+    expect(await run("/dashboard", null)).toBeNull();
+    window.history.replaceState(null, "", "/dashboard");
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("denied");
+    });
+    const { themeInitScript } = await import("./theme");
+    expect(() => new Function(themeInitScript)()).not.toThrow();
+  });
+});

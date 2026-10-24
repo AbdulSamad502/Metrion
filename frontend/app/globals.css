@@ -1104,7 +1104,10 @@ aside nav {
   -webkit-backdrop-filter: var(--glass-elevated-blur);
   backdrop-filter: var(--glass-elevated-blur);
   border-left: 1px solid var(--glass-elevated-border);
-  box-shadow: -14px 0 36px rgba(0, 0, 0, 0.42);
+  box-shadow: none; /* closed: the panel sits just off-screen, and a shadow would show as a grey strip on the right edge in the light theme */
+}
+.mt-drawer-panel[data-open="true"] {
+  box-shadow: -14px 0 36px var(--shadow-popover);
 }
 
 .mt-drawer-scrim {
@@ -1686,7 +1689,7 @@ body:has(.mt-galaxy)::before {
 }
 @media (max-width: 1023px) {
   :root[data-theme="light"] .mt-sidebar {
-    background: rgba(255, 255, 255, 0.98);
+    background: var(--bg-popover); /* opaque: page text must not show through the open mobile drawer */
   }
 }
 :root[data-theme="light"] .mt-app-surface::after {
@@ -1797,7 +1800,7 @@ body:has(.mt-galaxy)::before {
 /* Pure-black scope (Agents page, CEO Hub): surfaces are black alpha only, with no olive/green tint, and no
    backdrop blur, so the global starfield stays crisp behind them. Set on a wrapper; the --glass-* tokens are
    overridden directly because .mt-app-surface has already resolved them from --bg-card. */
-.mt-pure-black {
+:root:not([data-theme="light"]) .mt-pure-black {
   --bg-card: rgba(0, 0, 0, 0.45);
   --bg-card-elevated: rgba(0, 0, 0, 0.6);
   --bg-card-locked: rgba(0, 0, 0, 0.3);
