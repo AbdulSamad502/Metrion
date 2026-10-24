@@ -2,7 +2,7 @@
 
 import { PAGE_COPY } from "@/lib/navigation";
 import { useAuth, useUser } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { Button } from "@/components/ui/Button";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
@@ -16,6 +16,7 @@ import { BusinessDetailsDialog } from "@/components/profile/BusinessDetailsDialo
 import { errorText } from "@/lib/clerkErrors";
 import { estimatePasswordStrength } from "@/lib/passwordStrength";
 import { useToast } from "@/components/ui/Toast";
+import { getServerTheme, getTheme, setTheme, subscribeTheme, type Theme } from "@/lib/theme";
 import { useShell } from "@/lib/ShellContext";
 import { useHashTab } from "@/lib/useHashTab";
 import { useSubmitGuard } from "@/lib/useSubmitGuard";
@@ -54,6 +55,7 @@ function SettingsWorkspace() {
       <Tabs tabs={[...SETTINGS_TABS]} active={tab} onChange={setTab} label="Settings sections" idPrefix="settings" />
       <TabPanel id="account" active={tab} idPrefix="settings">
         <div className="flex flex-col gap-6">
+          <AppearanceCard />
           <SignInMethodsCard googleConnected={!!googleAccount} passwordEnabled={user.passwordEnabled} />
           <PasswordCard user={user} passwordEnabled={user.passwordEnabled} />
         </div>
@@ -239,6 +241,43 @@ function Card({ children }: { children: React.ReactNode }) {
     <div className="mt-panel" style={{ padding: "22px 24px" }}>
       {children}
     </div>
+  );
+}
+
+/** Dark is the default look; light is opt-in. The choice is kept in this browser only, and the CEO Hub always stays dark. */
+function AppearanceCard() {
+  const theme = useSyncExternalStore(subscribeTheme, getTheme, getServerTheme);
+  const options: { value: Theme; label: string }[] = [
+    { value: "dark", label: "Dark" },
+    { value: "light", label: "Light" },
+  ];
+  return (
+    <Card>
+      <div className="text-base font-bold" style={{ color: "var(--text-2)" }}>
+        Appearance
+      </div>
+      <div className="mt-1 text-xs" style={{ color: "var(--text-6)" }}>
+        Saved on this device. The CEO Hub stays dark.
+      </div>
+      <div className="mt-4 flex gap-2" role="group" aria-label="Theme">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={theme === o.value}
+            onClick={() => setTheme(o.value)}
+            className="mt-btn mt-focus min-h-[40px] rounded-xl px-4 text-sm font-bold"
+            style={
+              theme === o.value
+                ? { background: "var(--accent)", color: "var(--accent-on-fill)" }
+                : { border: "1px solid var(--border-hover)", color: "var(--text-3)" }
+            }
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </Card>
   );
 }
 

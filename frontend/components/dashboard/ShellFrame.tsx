@@ -1,10 +1,11 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ShellProvider } from "@/lib/ShellContext";
 import { useAppSession } from "@/lib/useAppSession";
 import { useNotificationsFeed } from "@/lib/useNotifications";
+import { getServerTheme, getTheme, subscribeTheme } from "@/lib/theme";
 import { useSurfaceSheen } from "@/lib/useSurfaceSheen";
 import { Sidebar } from "./Sidebar";
 import { Icon } from "@/components/ui/Icon";
@@ -36,6 +37,16 @@ function OwnFrame({ children }: { children: ReactNode }) {
   const mobileOpen = drawerOpenAt === pathname;
   // The CEO Hub is a full-screen workspace: the navigation is closed by default there (an overlay opened from the menu button in the hub's own header), at every width.
   const focusMode = pathname.startsWith("/dashboard/ceo-hub");
+  // The chosen theme applies to the signed-in app only, and never to the CEO Hub, which keeps its own dark canvas.
+  const chosen = useSyncExternalStore(subscribeTheme, getTheme, getServerTheme);
+  const theme = focusMode ? "dark" : chosen;
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.theme = theme;
+    return () => {
+      delete root.dataset.theme; // marketing and sign-in pages are always dark
+    };
+  }, [theme]);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   useSurfaceSheen(surfaceRef, Boolean(session) && !error); // the surface div only exists once the session has loaded
 

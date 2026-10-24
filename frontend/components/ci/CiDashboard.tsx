@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNotice } from "@/components/ui/ErrorNotice";
+import { LoadingState, Spinner } from "@/components/ui/LoadingState";
 import { ApiError, type MarketOverview, type MetricResult } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
 import {
-  askFindingHref, askHref, eventLabel, groupEvents, findingText, fmtDate, FRESHNESS_LABEL, offersLine, PRICE_STATUS_LABEL, productLabel, RELATIONSHIP_LABEL, themeList, unavailableWords,
+  askFindingHref, askHref, eventLabel, groupEvents, findingText, fmtDate, fmtDateTime, FRESHNESS_LABEL, offersLine, PRICE_STATUS_LABEL, productLabel, RELATIONSHIP_LABEL, themeList, unavailableWords,
   type CiCandidate, type CiCompetitor, type CiWorkspace,
 } from "@/lib/ciWorkspace";
 import { formatPaise } from "@/lib/piShowcase";
@@ -74,31 +75,57 @@ function Box({ title, subtitle, children, action }: { title: string; subtitle?: 
 
 const bandRow = (rows: MetricResult[], key: string) => rows.find((r) => r.isAvailable && (r.calculationBasis ?? "").includes(`PriceBand ${key} `));
 
+type Pending = { productId: string | null; kind: "switch" | "refresh" };
+type LoadFailure = { message: string; productId: string | null; kind: "switch" | "refresh" };
+
 export function CiDashboard({ client }: { client: CiClient }) {
   const [ws, setWs] = useState<CiWorkspace | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [market, setMarket] = useState<MarketOverview | null>(null);
   const [marketNote, setMarketNote] = useState<string | null>(null);
+  const [marketLoading, setMarketLoading] = useState(false);
+  // What this page did last: a switch or refresh in flight, the last one that failed, and when the shown data was last fetched (this browser's clock).
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [failure, setFailure] = useState<LoadFailure | null>(null);
+  const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const seq = useRef(0); // only the latest request may change the screen: a slower, older reply is dropped
+  const hasData = useRef(false);
 
   const load = useCallback(
-    async (productId: string | null) => {
+    async (productId: string | null, kind: "initial" | "switch" | "refresh" = "initial") => {
+      const mine = ++seq.current;
+      if (kind !== "initial") setPending({ productId, kind });
+      setFailure(null);
       try {
         const data = await client.workspace(productId);
+        if (mine !== seq.current) return;
+        hasData.current = true;
         setWs(data);
         setError(null);
         setMarket(null);
         setMarketNote(null);
+        setCheckedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+        setPending(null);
         if (data.selectedProductId && !data.selectedProductId.startsWith("category:")) {
+          setMarketLoading(true);
           try {
-            setMarket(await client.market(data.selectedProductId));
+            const m = await client.market(data.selectedProductId);
+            if (mine === seq.current) setMarket(m);
           } catch (e) {
-            setMarketNote(friendlyApiError(e, "The market band could not be loaded."));
+            if (mine === seq.current) setMarketNote(friendlyApiError(e, "The market band could not be loaded."));
+          } finally {
+            if (mine === seq.current) setMarketLoading(false);
           }
         }
       } catch (e) {
+        if (mine !== seq.current) return;
+        setPending(null);
         if (e instanceof ApiError && e.status === 403) setForbidden(true);
-        else setError(friendlyApiError(e, "Could not load the competitor workspace."));
+        else if (hasData.current && kind !== "initial") {
+          // What is already on screen stays, and says so: a failed switch or refresh must not blank a workspace that did load.
+          setFailure({ message: friendlyApiError(e, "Could not load the competitor workspace."), productId, kind });
+        } else setError(friendlyApiError(e, "Could not load the competitor workspace."));
       }
     },
     [client],
@@ -111,7 +138,7 @@ export function CiDashboard({ client }: { client: CiClient }) {
   }, [load]);
 
   if (forbidden) return <EmptyState title="Your role does not include Competitor Intelligence" description="Ask the account owner to give you access." />;
-  if (error) return <div role="alert" className="t-body-sm" style={{ color: "var(--negative)" }}>{error}</div>;
+  if (error && !ws) return <ErrorNotice message={error} onRetry={() => void load(null)} />;
   if (!ws) return <LoadingState lines={4} label="Loading competitor intelligence" />;
 
   const selected = ws.products.find((p) => p.productId === ws.selectedProductId) ?? null;
@@ -132,12 +159,18 @@ export function CiDashboard({ client }: { client: CiClient }) {
               <button
                 key={p.productId}
                 type="button"
-                aria-pressed={p.productId === ws.selectedProductId}
-                onClick={() => void load(p.productId)}
+                aria-pressed={p.productId === (pending?.kind === "switch" ? pending.productId : ws.selectedProductId)}
+                aria-busy={pending?.kind === "switch" && pending.productId === p.productId}
+                onClick={() => {
+                  // The product on screen, or the one already being loaded, needs no second request.
+                  if (p.productId === ws.selectedProductId && !pending) return;
+                  if (pending?.kind === "switch" && pending.productId === p.productId) return;
+                  void load(p.productId, "switch");
+                }}
                 className="mt-focus rounded-full px-3 py-1 t-meta font-bold"
                 style={{
-                  color: p.productId === ws.selectedProductId ? "var(--accent-on-fill)" : "var(--text-3)",
-                  background: p.productId === ws.selectedProductId ? "var(--accent)" : "var(--fill-hover)",
+                  color: p.productId === (pending?.kind === "switch" ? pending.productId : ws.selectedProductId) ? "var(--accent-on-fill)" : "var(--text-3)",
+                  background: p.productId === (pending?.kind === "switch" ? pending.productId : ws.selectedProductId) ? "var(--accent)" : "var(--fill-hover)",
                   border: "1px solid var(--border-default)",
                 }}
               >
@@ -156,6 +189,34 @@ export function CiDashboard({ client }: { client: CiClient }) {
         </div>
       </div>
 
+      {/* where this data comes from: which product, as of when, and whether it is being replaced right now */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="ci-context">
+        <p role="status" className="m-0 t-meta" style={{ color: "var(--text-5)" }}>
+          {pending?.kind === "switch"
+            ? `Loading ${ws.products.find((p) => p.productId === pending.productId)?.title ?? "the next product"}… the ${subject ?? "tracked competitors"} view below is the previous one.`
+            : pending?.kind === "refresh"
+              ? "Refreshing… what is shown is the last result that loaded."
+              : `Showing ${subject ?? "all tracked competitors"} · Data as of ${fmtDateTime(ws.asOf)}${checkedAt ? ` · checked ${checkedAt}` : ""}`}
+        </p>
+        <button
+          type="button"
+          onClick={() => void load(ws.selectedProductId, "refresh")}
+          disabled={pending !== null}
+          className="mt-btn mt-btn-secondary mt-focus inline-flex min-h-[40px] items-center gap-2 rounded-lg px-3 py-1 t-meta font-bold disabled:cursor-not-allowed"
+          style={{ opacity: pending ? 0.7 : 1 }}
+        >
+          {pending?.kind === "refresh" && <Spinner size={12} />}
+          {pending?.kind === "refresh" ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+      {failure && (
+        <ErrorNotice
+          message={`${failure.message} ${failure.kind === "switch" ? `Still showing ${subject ?? "the previous view"}.` : "What is shown may be out of date."}`}
+          onRetry={() => void load(failure.productId, failure.kind)}
+        />
+      )}
+
+      <div className="flex flex-col gap-6 transition-opacity" style={{ opacity: pending ? 0.6 : 1 }} aria-busy={pending !== null}>
       {/* the CEO's next step: plain facts from the counts above, one link into the conversation */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl p-4" style={panel}>
         <div>
@@ -226,6 +287,8 @@ export function CiDashboard({ client }: { client: CiClient }) {
                   description="These competitors are tracked for a category, not for one of your products. Tell the CEO your selling price and it compares it with every competitor that has a verified price."
                   action={<AskCeo href={askHref("compare", null)} label="Compare my price" />}
                 />
+              ) : marketLoading ? (
+                <LoadingState lines={2} label="Loading the price band" />
               ) : bandAvailable && market ? (
                 <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {[["Q1", "Q1"], ["Q3", "Q3"], ["Typical low", "TYPICAL_LOW"], ["Typical high", "TYPICAL_HIGH"]].map(([label, key]) => (
@@ -354,6 +417,7 @@ export function CiDashboard({ client }: { client: CiClient }) {
       </section>
         </>
       )}
+      </div>
     </div>
   );
 }

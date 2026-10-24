@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeToggle } from "./ThemeToggle";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Icon } from "@/components/ui/Icon";
@@ -61,6 +62,9 @@ export function Topbar({
 
       <div className="flex flex-shrink-0 items-center gap-2.5">
         {actions}
+        <span className="hidden sm:inline-flex">
+          <ThemeToggle />
+        </span>
         <Link
           href="/dashboard/notifications"
           aria-label={attentionCount > 0 ? `Action Center — ${attentionCount} need attention` : "Action Center"}

@@ -1588,6 +1588,111 @@ body:has(.mt-galaxy)::before {
 
 /* END PREMIUM APP LAYER — the rules below are the CEO Hub canvas, scoped by its own classes (.mt-galaxy, .mt-hub-*), not part of the layer above. */
 
+/* ---- Light theme (opt-in; the signed-in app only, never the CEO Hub) -----------------------------------------------------------------
+   Same token names, warm paper surfaces, and a deeper green so text and filled buttons keep WCAG AA contrast on a light ground
+   (the dark-theme green #3ECF74 is only ~1.7:1 on white). Set by ShellFrame as <html data-theme="light">. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-base: #F6F4EF;
+  --bg-panel: #FFFFFF;
+  --bg-card: rgba(255, 255, 255, 0.78);
+  --bg-card-elevated: rgba(255, 255, 255, 0.95);
+  --bg-popover: #FFFFFF;
+  --bg-input: rgba(255, 255, 255, 0.92);
+  --bg-sidebar: rgba(255, 255, 255, 0.72);
+  --bg-header: rgba(255, 255, 255, 0.72);
+  --bg-card-glass: rgba(255, 255, 255, 0.85);
+  --bg-nav-scrolled: rgba(246, 244, 239, 0.86);
+  --bg-nav-open: rgba(246, 244, 239, 0.96);
+  --border-subtle: rgba(24, 28, 22, 0.08);
+  --border-default: rgba(24, 28, 22, 0.14);
+  --border-hover: rgba(24, 28, 22, 0.22);
+  --fill-hover: rgba(24, 28, 22, 0.05);
+  --accent: #1A7A44;
+  --accent-hover: #14673A;
+  --accent-on-fill: #FFFFFF;
+  --accent-border-subtle: rgba(26, 122, 68, 0.2);
+  --accent-border-default: rgba(26, 122, 68, 0.32);
+  --accent-border-strong: rgba(26, 122, 68, 0.5);
+  --accent-fill-subtle: rgba(26, 122, 68, 0.07);
+  --accent-fill-default: rgba(26, 122, 68, 0.11);
+  --warning: #8A5600;
+  --warning-fill: rgba(138, 86, 0, 0.08);
+  --warning-border: rgba(138, 86, 0, 0.28);
+  --negative: #B42318;
+  --negative-fill: rgba(180, 35, 24, 0.09);
+  --shadow-float: 0 16px 36px rgba(24, 28, 22, 0.16);
+  --text-1: #14170F;
+  --text-2: #1C2018;
+  --text-3: #2C3128;
+  --text-4: #3F453B;
+  --text-5: #565D52;
+  --text-6: #5E655A;
+  --text-7: #8A9086;
+  --text-8: #A2A79E;
+  --text-group-label: #A0A59B;
+  --divider-dot: #C9CCC3;
+  --text-mint: #17703E;
+  --text-green-muted: #3C7A52;
+  --text-bright: #0F2A18;
+  --text-inactive: #6A7066;
+  --link-hover: #14673A;
+  --bg-card-locked: rgba(255, 255, 255, 0.5);
+  --connector-inactive: rgba(24, 28, 22, 0.22);
+  --shadow-popover: rgba(24, 28, 22, 0.18);
+  --info: #1A5FB4;
+  --info-fill: rgba(26, 95, 180, 0.09);
+  --info-border: rgba(26, 95, 180, 0.3);
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg-hover: rgba(255, 255, 255, 0.9);
+  --glass-bg-active: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(24, 28, 22, 0.11);
+  --glass-border-hover: rgba(24, 28, 22, 0.2);
+  --glass-shadow: 0 1px 2px rgba(24, 28, 22, 0.06), 0 6px 18px rgba(24, 28, 22, 0.06);
+  --glass-shadow-hover: 0 2px 4px rgba(24, 28, 22, 0.08), 0 12px 28px rgba(24, 28, 22, 0.1);
+  --glass-elevated-bg: rgba(255, 255, 255, 0.95);
+  --glass-elevated-border: rgba(24, 28, 22, 0.16);
+  --glass-input-bg: rgba(255, 255, 255, 0.92);
+  --glass-sidebar-bg: rgba(255, 255, 255, 0.82);
+  --glass-topbar-bg: rgba(246, 244, 239, 0.86);
+  --glass-drawer-bg: rgba(255, 255, 255, 0.97);
+  --glass-scrim: rgba(24, 28, 22, 0.4);
+  --glass-fallback-bg: #FFFFFF;
+  --glass-fallback-sidebar: #FFFFFF;
+}
+/* The app surface re-declares its glass tokens from --bg-card and white alpha; in light they must follow the light values above. */
+:root[data-theme="light"] .mt-app-surface {
+  --glass-bg: var(--bg-card);
+  --glass-bg-hover: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(24, 28, 22, 0.12);
+  --glass-border-hover: rgba(24, 28, 22, 0.22);
+  --glass-shadow: 0 1px 2px rgba(24, 28, 22, 0.06), 0 6px 18px rgba(24, 28, 22, 0.06);
+  --glass-shadow-hover: 0 2px 4px rgba(24, 28, 22, 0.08), 0 12px 28px rgba(24, 28, 22, 0.1);
+  --glass-elevated-bg: var(--bg-card-elevated);
+  --glass-elevated-border: rgba(24, 28, 22, 0.18);
+  --glass-input-bg: var(--bg-input);
+  --glass-topbar-bg: rgba(246, 244, 239, 0.86);
+  --glass-sidebar-bg: rgba(255, 255, 255, 0.82);
+}
+:root[data-theme="light"] select,
+:root[data-theme="light"] .mt-app-surface {
+  color-scheme: light;
+}
+:root[data-theme="light"] * {
+  scrollbar-color: rgba(24, 28, 22, 0.28) transparent;
+}
+:root[data-theme="light"] .mt-sidebar {
+  background: var(--glass-sidebar-bg);
+}
+@media (max-width: 1023px) {
+  :root[data-theme="light"] .mt-sidebar {
+    background: rgba(255, 255, 255, 0.98);
+  }
+}
+:root[data-theme="light"] .mt-app-surface::after {
+  display: none; /* the film grain is a dark-theme texture */
+}
+
 /* Toast: one quiet confirmation at a time. Opacity plus an 8px rise, 200ms; reduced motion turns it off. */
 .mt-toast-region {
   position: fixed;

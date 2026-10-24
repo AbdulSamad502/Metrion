@@ -74,3 +74,21 @@ describe("Settings: competitor digest preference", () => {
     expect(screen.queryByText("Saved.")).toBeNull();
   });
 });
+
+describe("Settings: appearance", () => {
+  it("shows the current theme as pressed, switches it, and keeps it for next time", async () => {
+    window.localStorage.clear();
+    const { resetThemeForTests } = await import("@/lib/theme");
+    resetThemeForTests();
+    window.history.replaceState(null, "", "/settings#account");
+    stub(() => json({}));
+    render(<SettingsPage />);
+    const user = userEvent.setup();
+    expect(await screen.findByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Light" }));
+    expect(screen.getByRole("button", { name: "Light" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "false");
+    expect(window.localStorage.getItem("metrion.theme")).toBe("light");
+    resetThemeForTests();
+  });
+});
