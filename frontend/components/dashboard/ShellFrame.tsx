@@ -12,6 +12,7 @@ import { Icon } from "@/components/ui/Icon";
 import { ToastProvider } from "@/components/ui/Toast";
 import { DemoBadge } from "@/components/demo/DemoBadge";
 import "./typography.css";
+import "./interaction.css";
 
 const COLLAPSE_KEY = "metrion.sidebar.collapsed";
 
