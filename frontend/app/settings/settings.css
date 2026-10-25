@@ -1,4 +1,4 @@
-.set-stack { display: flex; flex-direction: column; gap: 24px; }
+.set-stack { display: flex; flex-direction: column; gap: var(--ov-gap); }
 .set-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border-radius: 16px; background: var(--ov-soft); min-height: 56px; border: 1px solid var(--ov-line); }
 .set-row dt, .set-row > span:first-child { font-size: var(--ov-s2); font-weight: 600; color: var(--ov-ink-2); }
