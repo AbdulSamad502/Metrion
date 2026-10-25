@@ -372,7 +372,6 @@ a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px;
   transition: transform 160ms var(--ov-ease), background 160ms, box-shadow 160ms;
 }
 .ov-tile:active { transform: scale(0.98); }
-@media (hover: hover) and (pointer: fine) { .ov-tile:hover { transform: translateY(-2px); border-color: var(--ov-brand); } }
 .ov-tile-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ov-tile--warn .ov-fig { color: var(--ov-warn); }
 
@@ -387,7 +386,6 @@ a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px;
   transition: transform 200ms var(--ov-ease), box-shadow 200ms var(--ov-ease);
 }
 .ov-agent:active { transform: scale(0.985); }
-@media (hover: hover) and (pointer: fine) { .ov-agent:hover { transform: translateY(-2px); border-color: var(--ov-brand); } }
 .ov-agent-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ov-agent-top > .ov-badge-circle { background: var(--ov-brand-soft); color: var(--ov-brand-ink); }
 .ov-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ov-ink-3); flex: none; }

@@ -52,7 +52,7 @@ function OwnFrame({ children }: { children: ReactNode }) {
     };
   }, [theme]);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
-  useSurfaceSheen(surfaceRef, Boolean(session) && !error); // the surface div only exists once the session has loaded
+  useSurfaceSheen(surfaceRef, false); // the cursor-following glow on cards is switched off; nothing glows under the pointer // the surface div only exists once the session has loaded
 
   // The app reads as a browser at 80%: on a desktop-width window everything is drawn at four-fifths size (see .mt-zoom in sidebar.css).
   useLayoutEffect(() => {

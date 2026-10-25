@@ -43,7 +43,6 @@
 .cmo-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
 @media (max-width: 900px) { .cmo-rules { grid-template-columns: 1fr; } }
 .cmo-item { padding: 16px; border: 1px solid var(--ov-line); border-radius: 16px; background: var(--ov-soft); position: relative; transition: border-color 160ms; }
-@media (hover: hover) and (pointer: fine) { .cmo-item:hover { border-color: var(--ov-brand); } }
 .cmo-item-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; row-gap: 8px; min-width: 0; align-items: start; }
 .cmo-item-body > * { grid-column: 1; min-width: 0; }
 .cmo-item-body > .cmo-actions { grid-column: 2; grid-row: 1 / span 3; flex-direction: column; margin-top: 0; }
