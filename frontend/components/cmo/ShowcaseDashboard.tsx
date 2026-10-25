@@ -51,7 +51,7 @@ export function ShowcaseDashboard({ client, sample = false }: { client: Showcase
 
       <header className="ov-head ov-rise">
         <div className="min-w-0">
-          <h2 className="ov-h">Slim CMO Dashboard</h2>
+          <h2 className="ov-h">Your listing copy</h2>
           <p className="ov-body" style={{ marginTop: 4 }}>Read-only. Ask the CEO to create or change anything.</p>
         </div>
         <Link href="/dashboard/ceo-hub" className="ov-btn ov-btn--brand min-h-10">
@@ -269,7 +269,7 @@ function TitlesAndPacks({ client, marketplace, sku, q }: { client: ShowcaseClien
                   </div>
                 ))}
                 <PackRow heading="Product description" />
-                <div className="cmo-block">
+                <div className="cmo-block cmo-block--wide">
                   <div className="cmo-row">
                     <div className="cmo-row-main"><p className="ov-body" style={{ color: "var(--ov-ink)", whiteSpace: "pre-wrap" }}>{p.description.text}</p><p className="ov-meta">{withLimit(p.description.chars, p.description.max, "chars")}</p><LengthMeter n={p.description.chars} max={p.description.max} /></div>
                     <CopyButton text={p.description.text} onCopied={() => track(gen, "COPIED", undefined, "DESCRIPTION")} />
@@ -278,7 +278,7 @@ function TitlesAndPacks({ client, marketplace, sku, q }: { client: ShowcaseClien
                 {p.backendTerms && (
                   <>
                     <PackRow heading="Backend search terms" />
-                    <div className="cmo-block">
+                    <div className="cmo-block cmo-block--wide">
                       <div className="cmo-row">
                         <div className="cmo-row-main"><p className="ov-body" style={{ color: "var(--ov-ink)" }}>{p.backendTerms.text}</p><p className="ov-meta">{withLimit(p.backendTerms.bytes, p.backendTerms.maxBytes, "bytes")}</p><LengthMeter n={p.backendTerms.bytes} max={p.backendTerms.maxBytes} /></div>
                         <CopyButton text={p.backendTerms.text} onCopied={() => track(gen, "COPIED", undefined, "BACKEND_TERMS")} />

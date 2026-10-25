@@ -37,12 +37,11 @@
 @media (prefers-reduced-motion: reduce) { .cmo-meter > i { animation: none; } .cmo-seg button { transition: none; } .cmo-seg button:active { transform: none; } }
 
 /* the workspace: titles on the left, the copy pack on the right */
-.cmo-work { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--ov-gap); align-items: start; }
-@media (max-width: 1100px) { .cmo-work { grid-template-columns: 1fr; } }
-@media (min-width: 1101px) { .cmo-work > section:last-of-type { position: sticky; top: 96px; } }
+.cmo-work { display: grid; grid-template-columns: 1fr; gap: var(--ov-gap); }
 
 /* rows split by a rule, inside one card */
-.cmo-rules { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.cmo-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+@media (max-width: 900px) { .cmo-rules { grid-template-columns: 1fr; } }
 .cmo-item { padding: 16px; border: 1px solid var(--ov-line); border-radius: 16px; background: var(--ov-soft); position: relative; transition: border-color 160ms; }
 @media (hover: hover) and (pointer: fine) { .cmo-item:hover { border-color: var(--ov-brand); } }
 .cmo-item-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; row-gap: 8px; min-width: 0; align-items: start; }
@@ -56,7 +55,9 @@
 @media (max-width: 900px) { .cmo-news { grid-template-columns: 1fr; } }
 
 /* the pack */
-.cmo-pack { display: flex; flex-direction: column; gap: 16px; }
+.cmo-pack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.cmo-pack > *:not(.cmo-block) , .cmo-pack > .cmo-block--wide { grid-column: 1 / -1; }
+@media (max-width: 900px) { .cmo-pack { grid-template-columns: 1fr; } }
 .cmo-block { padding: 16px; border: 1px solid var(--ov-line); border-radius: 16px; background: var(--ov-soft); }
 .cmo-hero { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 24px 32px; }
 .cmo-hero-head { display: flex; flex-direction: column; gap: 4px; }
@@ -69,3 +70,10 @@
 .cmo-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 .cmo-meta-row .cmo-meter { width: 120px; flex: none; }
 .cmo-item-body > .cmo-meter { display: none; }
+
+@media (max-width: 640px) {
+  .cmo-filters, .cmo-filters label { width: 100%; }
+  .cmo-filters label { flex-direction: column; align-items: stretch; }
+  .cmo-filters .cmo-input, .cmo-filters select { width: 100% !important; max-width: 100%; }
+  .cmo-hero-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; width: 100%; }
+}
