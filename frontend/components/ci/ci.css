@@ -5,7 +5,7 @@
 
 /* hero (compact) */
 .ci-next { gap: 16px; padding: 32px; justify-content: space-between; }
-.ci-next .ov-h { color: #fff; }
+.ci-next .ov-h { color: var(--ov-hero-ink); }
 .ci-next-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* KPI tiles use the Overview's tile; this adds a segmented meter (N of 5) */
@@ -54,7 +54,7 @@
 .ci-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* changes: a centred bar, down to the left and up to the right */
-.ci-change { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 16px; background: var(--ov-soft); }
+.ci-change { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 16px; background: var(--ov-soft); border: 1px solid var(--ov-line); }
 .ci-diverge { position: relative; height: 8px; border-radius: 999px; background: var(--ov-line); }
 .ci-diverge::after { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ov-ink-3); border-radius: 2px; }
 .ci-diverge i { position: absolute; top: 0; bottom: 0; border-radius: 999px; transform-origin: center; animation: ov-grow 640ms var(--ov-ease) 280ms both; }
@@ -62,7 +62,7 @@
 .ci-diverge i.up { left: 50%; background: var(--ov-good); transform-origin: left; }
 
 .ci-list { display: flex; flex-direction: column; gap: 8px; }
-.ci-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 16px; border-radius: 16px; background: var(--ov-soft); }
+.ci-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 16px; border-radius: 16px; background: var(--ov-soft); border: 1px solid var(--ov-line); }
 .ci-item-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 240px; }
 
 .ci-timeline { display: flex; flex-direction: column; gap: 16px; }
@@ -94,7 +94,7 @@
   .ci-table { min-width: 0; display: block; }
   .ci-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .ci-table tbody { display: flex; flex-direction: column; gap: 16px; }
-  .ci-table tr { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 16px; background: var(--ov-soft); }
+  .ci-table tr { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 16px; background: var(--ov-soft); border: 1px solid var(--ov-line); }
   .ci-table td, .ci-table td:first-child, .ci-table td:last-child { display: grid; grid-template-columns: 112px minmax(0, 1fr); column-gap: 16px; padding: 0; background: transparent; border-radius: 0; min-width: 0 !important; text-align: right; align-items: start; justify-items: end; }
   .ci-table td > * { grid-column: 2; }
   .ci-table td[data-label]::before { content: attr(data-label); grid-column: 1; grid-row: 1; justify-self: start; font-size: var(--ov-s1); font-weight: 600; color: var(--ov-ink-3); text-align: left; }

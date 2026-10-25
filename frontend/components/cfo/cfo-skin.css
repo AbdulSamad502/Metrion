@@ -8,7 +8,7 @@
 /* every tool is a card */
 .cfo-skin :is(.cfo-grid, .cfo-stack) > section {
   display: flex; flex-direction: column; gap: 16px; padding: 24px; border-radius: 24px;
-  background: var(--ov-card); border: 1px solid var(--ov-line); box-shadow: var(--ov-shadow); min-width: 0;
+  background: var(--ov-card); border: 1px solid var(--ov-edge); box-shadow: var(--ov-shadow); min-width: 0;
 }
 .cfo-skin .mt-section__head { border: 0; padding: 0; margin: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .cfo-skin .mt-section__title { font-size: var(--ov-s2); font-weight: 800; color: var(--ov-ink); letter-spacing: -0.005em; margin: 0; }
@@ -17,7 +17,7 @@
 
 /* fields */
 .cfo-skin .mt-input, .cfo-skin select, .cfo-skin input[type="date"], .cfo-skin input[type="text"], .cfo-skin input[type="number"], .cfo-skin textarea {
-  min-height: 48px; border-radius: 16px; border: 1px solid var(--ov-line); background: var(--ov-card); color: var(--ov-ink);
+  min-height: 48px; border-radius: 16px; border: 1px solid var(--ov-field-edge); background: var(--ov-card); color: var(--ov-ink);
   font: inherit; font-size: var(--ov-s2); font-weight: 500; padding: 0 16px; box-shadow: none;
   transition: border-color 160ms, box-shadow 160ms;
 }
@@ -36,7 +36,7 @@
 .cfo-skin a:focus-visible, .cfo-skin button:focus-visible { outline: 2px solid var(--ov-brand); outline-offset: 2px; }
 
 /* results */
-.cfo-skin .mt-ledger__row { border-radius: 16px; background: var(--ov-soft); padding: 16px; border: 0; }
+.cfo-skin .mt-ledger__row { border-radius: 16px; background: var(--ov-soft); padding: 16px; border: 1px solid var(--ov-line); }
 .cfo-skin .mt-ledger__meta { color: var(--ov-ink-3); font-size: var(--ov-s1); }
 .cfo-skin .mt-table-wrap { border: 0; border-radius: 16px; background: transparent; }
 .cfo-skin .mt-table th { background: transparent; color: var(--ov-ink-3); font-size: var(--ov-s1); font-weight: 600; border: 0; text-transform: none; letter-spacing: 0; }

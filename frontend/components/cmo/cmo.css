@@ -1,6 +1,6 @@
 /* Listings & Marketing — the Overview's design language (components/overview/overview.css). */
 
-.cmo-hint { margin: 0; padding: 16px; border-radius: 16px; background: var(--ov-soft); color: var(--ov-ink-2); font-size: var(--ov-s2); font-weight: 500; }
+.cmo-hint { margin: 0; padding: 16px; border-radius: 16px; background: var(--ov-soft); color: var(--ov-ink-2); font-size: var(--ov-s2); font-weight: 500; border: 1px solid var(--ov-line); }
 .cmo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
 @media (max-width: 1100px) { .cmo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .cmo-grid { grid-template-columns: 1fr; } }
@@ -15,7 +15,7 @@
 .cmo-meter > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-brand); transform-origin: left; animation: ov-grow 640ms var(--ov-ease) 200ms both; }
 
 .cmo-input {
-  min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--ov-line); background: var(--ov-card); color: var(--ov-ink);
+  min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--ov-edge); background: var(--ov-card); color: var(--ov-ink);
   font: inherit; font-size: var(--ov-s2); font-weight: 600;
   transition: border-color 160ms, box-shadow 160ms;
 }

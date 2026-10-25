@@ -9,6 +9,7 @@ import { useBusinessHealth, daysSince, latestAsOf, STALE_AFTER_DAYS } from "@/li
 import { useCiSummary } from "@/lib/useCiSummary";
 import { ALERT_WINDOW_DAYS, isOpenRequest } from "@/lib/useNotifications";
 import { BAND_TONE, BAND_WORD, bandOf, dayLabel, flowShares, goalShare, isNegative, periodDays, periodLabel, plainBandLabel, readLeak, registerShort, weight, registerWords } from "./format";
+import { Donut } from "./charts";
 import { Pill, RefreshButton, rise } from "./parts";
 import "./overview.css";
 
@@ -176,17 +177,35 @@ export function HeroEmpty({ failed, onRetry }: { failed: boolean; onRetry: () =>
 
 /* ------------------------------------------------------------------ side cards */
 
+const BAND_KEY = { GOOD: "good", WATCH: "to watch", AT_RISK: "at risk" } as const;
+const BAND_COLOR = { GOOD: "var(--ov-good)", WATCH: "var(--ov-warn)", AT_RISK: "var(--ov-bad)" } as const;
+
 export function Health({ entry }: { entry: HealthEntry }) {
   const p = entry.presentation;
   if (!p) return null;
   const overall = bandOf(p.facts.find((f) => /overall/i.test(f.label))?.text);
   const rows = p.figures.map((f) => ({ f, band: bandOf(f.value) }));
+  const counted = rows.filter((r) => r.band).length;
+  const counts = counted >= 2 ? { GOOD: rows.filter((r) => r.band === "GOOD").length, WATCH: rows.filter((r) => r.band === "WATCH").length, AT_RISK: rows.filter((r) => r.band === "AT_RISK").length } : null;
   return (
     <section className="ov-card ov-rise" style={rise(2)} aria-labelledby="ov-health" data-testid={`health-${entry.key}`}>
       <div className="ov-card-head">
         <h3 id="ov-health" className="ov-title">Business health</h3>
         {overall && <Pill tone={BAND_TONE[overall]} icon={overall === "GOOD" ? "check" : "alert"}>{BAND_WORD[overall]}</Pill>}
       </div>
+      {counts && (
+        <div className="ov-chart">
+          <Donut
+            parts={(["GOOD", "WATCH", "AT_RISK"] as const).filter((b) => counts[b] > 0).map((b) => ({ key: b, label: BAND_WORD[b], share: counts[b] / counted, color: BAND_COLOR[b] }))}
+            summary={`${counts.GOOD} of ${counted} checks are good, ${counts.WATCH} to watch, ${counts.AT_RISK} at risk.`}
+            size={144}
+            center={<><span className="ov-fig">{counts.GOOD}/{counted}</span><span className="ov-meta">good</span></>}
+          />
+          <ul className="ov-chart-key">
+            {(["GOOD", "WATCH", "AT_RISK"] as const).map((b) => <li key={b}><i style={{ background: BAND_COLOR[b] }} aria-hidden />{BAND_KEY[b]}<b>{counts[b]}</b></li>)}
+          </ul>
+        </div>
+      )}
       <ul className="ov-rows">
         {rows.map(({ f, band }) => (
           <li key={f.label} className="ov-row" style={{ minHeight: 48 }}>
