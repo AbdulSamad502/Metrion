@@ -114,3 +114,17 @@ svg path[data-testid^="edge-"] { transition: stroke 0.3s ease, stroke-opacity 0.
 .ceo-composer { background: var(--ov-card, #0e0e10); border: 1px solid var(--ov-edge); min-height: 56px; align-items: center; }
 .ceo-composer:focus-within { border-color: var(--ov-field-edge); }
 .ceo-composer textarea { min-height: 40px; }
+
+/* the connect / remove control on each specialist card: the hub is drawn small, so the button is made large enough to hit comfortably (about 20px on screen), with a wider invisible hit area */
+[data-testid^="remove-"], [data-testid^="attach-"] { width: 30px !important; height: 30px !important; top: -15px !important; cursor: pointer; }
+[data-testid^="remove-"] svg, [data-testid^="attach-"] svg { width: 16px; height: 16px; }
+[data-testid^="remove-"]::after, [data-testid^="attach-"]::after { content: ""; position: absolute; inset: -8px; }
+
+/* the top bar reads larger: the hub is drawn small, so its main controls are scaled up */
+.ceo-top { padding-top: 8px; }
+.ceo-tab { font-size: 17px !important; min-height: 52px !important; padding-inline: 18px !important; }
+.ceo-tab[data-on="true"]::after { left: 18px; right: 18px; height: 3px; }
+.ceo-action { font-size: 17px !important; min-height: 48px; padding: 0 16px; gap: 8px; }
+.ceo-action svg { width: 20px; height: 20px; }
+.ceo-icon { width: 48px; height: 48px; }
+.ceo-icon svg { width: 22px; height: 22px; }
