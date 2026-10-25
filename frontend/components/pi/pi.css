@@ -141,3 +141,8 @@
 .pi-evidence .pi-facts-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 .pi-signals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 @media (max-width: 900px) { .pi-evidence .pi-facts-list, .pi-signals { grid-template-columns: 1fr; gap: 16px; } }
+
+/* "Customers say" cell: the written percentage with a bar under it. Green = positive sentiment only. */
+.pi-pos { display: inline-flex; flex-direction: column; gap: 8px; min-width: 96px; }
+.pi-pos .pi-bar { width: 96px; }
+.pi-bar--good > i { background: var(--ov-good); }

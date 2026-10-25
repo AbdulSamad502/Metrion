@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Tabs } from "@/components/ui/Tabs";
+import { Bars, Donut } from "@/components/overview/charts";
 import { DetailDrawer } from "@/components/ui/DetailDrawer";
 import { AsyncBlock, CopyButton, fmtDate, Hint, LengthMeter, Pill, SectionCard, ShowcaseRefreshProvider, useAsync, withLimit } from "@/components/cmo/showcaseUi";
 import { RefreshButton } from "@/components/overview/parts";
@@ -15,8 +16,8 @@ import {
  * no generate / regenerate / select-to-run / approve control and no call to a CMO POST route: the only write is the fire-and-forget
  * usage event a copy or "mark as used" emits (CD14). Every number shown (chars, bytes, limits, counts) is stored by the backend. */
 
-const safeHref = (u: string | null) => (u && /^https?:\/\//i.test(u) ? u : null);
 const sectionTabs = MARKETPLACES.map((m) => ({ id: m.id, label: m.label }));
+const safeHref = (u: string | null) => (u && /^https?:\/\//i.test(u) ? u : null);
 
 export function ShowcaseDashboard({ client, sample = false }: { client: ShowcaseClient; sample?: boolean }) {
   const [sku, setSku] = useState("");
@@ -199,6 +200,8 @@ function TitlesAndPacks({ client, marketplace, sku, q }: { client: ShowcaseClien
           empty={view === "frequent" ? "Not available yet: no copies recorded. Switch to Recent." : `No saved ${marketLabel} titles. Ask the CEO.`}
         >
           {(d) => (
+            <>
+            <TitleSummary items={d.items} showApproved={!approvedOnly} />
             <ul className="cmo-rules">
               {d.items.map((t) => (
                 <li key={t.optionId} className="cmo-item">
@@ -217,6 +220,7 @@ function TitlesAndPacks({ client, marketplace, sku, q }: { client: ShowcaseClien
                 </li>
               ))}
             </ul>
+            </>
           )}
         </AsyncBlock>
       </SectionCard>
@@ -346,6 +350,8 @@ function HashtagsAndCompliance({ client, marketplace, sku, q }: { client: Showca
     <SectionCard title="Hashtags & compliance" hint="Not a listing field">
       <AsyncBlock a={tags} label="hashtags" isEmpty={(d) => d.items.length === 0} empty="No hashtag sets yet. Ask the CEO.">
         {(d) => (
+          <>
+          <TagCounts sets={d.items.map((h) => h.hashtags)} />
           <ul className="cmo-rules">
             {d.items.map((h) => (
               <li key={h.generationId + h.sku + h.generatedAt} className="cmo-item">
@@ -361,6 +367,7 @@ function HashtagsAndCompliance({ client, marketplace, sku, q }: { client: Showca
               </li>
             ))}
           </ul>
+          </>
         )}
       </AsyncBlock>
       <h3 className="cmo-label" style={{ marginTop: 16 }}>Compliance summary (stored checks only)</h3>
@@ -379,5 +386,50 @@ function HashtagsAndCompliance({ client, marketplace, sku, q }: { client: Showca
       </AsyncBlock>
       <p className="ov-meta" style={{ marginTop: 16 }}>Nothing is sent to a marketplace.</p>
     </SectionCard>
+  );
+}
+
+/** Tags repeated across saved sets, as bars. The counts are tallies of saved sets, not money; shown only when a tag repeats. */
+function TagCounts({ sets }: { sets: string[][] }) {
+  const tally = new Map<string, number>();
+  sets.forEach((set) => new Set(set).forEach((t) => tally.set(t, (tally.get(t) ?? 0) + 1)));
+  const rows = [...tally.entries()].filter(([, n]) => n > 1).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <h3 className="cmo-label">Most repeated</h3>
+      <Bars summary="Hashtags used in more than one saved set" rows={rows.map(([t, n]) => ({ key: t, label: t, value: `${n} sets`, size: n }))} />
+    </div>
+  );
+}
+
+/** Above the title list: every title's length against its marketplace limit, and how many are approved. Counts and lengths are the backend's;
+ *  a title whose source states no limit is left out of the strip rather than drawn against a made-up one. */
+function TitleSummary({ items, showApproved }: { items: ShowcaseTitle[]; showApproved: boolean }) {
+  const measured = items.filter((t) => t.maxChars != null && t.maxChars > 0).slice(0, 8);
+  const approved = items.filter((t) => t.approved).length;
+  if (items.length < 2) return null;
+  const within = measured.filter((t) => t.charCount <= (t.maxChars as number)).length;
+  return (
+    <div className="cmo-summary">
+      {measured.length >= 2 && (
+        <figure className="cmo-strip" aria-label={`${within} of ${measured.length} titles are within their limit`}>
+          <div className="cmo-strip-bars" aria-hidden>
+            {measured.map((t) => {
+              const over = t.charCount > (t.maxChars as number);
+              return <span key={t.optionId} className="cmo-strip-col"><i className={over ? "is-over" : undefined} style={{ height: `${Math.max(6, Math.min(100, (t.charCount / (t.maxChars as number)) * 100))}%` }} /></span>;
+            })}
+            <b className="cmo-strip-limit" />
+          </div>
+          <figcaption className="ov-meta">Length vs limit: {within} of {measured.length} within it</figcaption>
+        </figure>
+      )}
+      {showApproved && (
+        <div className="cmo-ring">
+          <Donut size={72} summary={`${approved} of ${items.length} titles approved`} parts={[{ key: "a", label: "Approved", share: approved / items.length, color: "var(--ov-brand)" }]} />
+          <span className="ov-meta">{approved} of {items.length} approved</span>
+        </div>
+      )}
+    </div>
   );
 }

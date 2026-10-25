@@ -107,3 +107,14 @@
 
 .ci-fresh { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
 @media (max-width: 760px) { .ci-fresh { grid-template-columns: 1fr; } }
+
+/* Match: three pips plus the word (the word always carries the meaning) */
+.ci-match { display: inline-flex; align-items: center; gap: 8px; }
+.ci-pips { display: inline-flex; gap: 4px; }
+.ci-pips i { width: 8px; height: 16px; border-radius: 3px; background: var(--ov-line); }
+.ci-pips i.is-on { background: var(--ov-brand); }
+
+/* freshness: a bar that is full for the newest screenshot and shorter the further behind it is */
+.ci-age { display: block; height: 6px; margin-top: 8px; border-radius: 999px; background: var(--ov-soft); overflow: hidden; }
+.ci-age > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-good); }
+.ci-age > i.is-old { background: var(--ov-warn); }

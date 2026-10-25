@@ -385,6 +385,11 @@ function Ledger({ products, idx, onSelect }: { products: PiProduct[]; idx: numbe
     return hit ? String(hit[1]) : null;
   };
   const best = Math.max(1, ...products.map((p) => Number.parseFloat(p.finalScore ?? "0") || 0));
+  /** "78%" read only to size a bar; the written percentage is the backend's. */
+  const posShare = (t: string) => {
+    const n = Number.parseFloat(t);
+    return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
+  };
   return (
     <div className="pi-ledger-wrap">
       <table className="pi-ledger" aria-label="Shortlisted products">
@@ -419,7 +424,7 @@ function Ledger({ products, idx, onSelect }: { products: PiProduct[]; idx: numbe
                 <td className="num">
                   <span className="pi-score"><b>{q.finalScore ?? "—"}</b>{!Number.isNaN(num) && <span className="pi-bar" aria-hidden><i style={{ width: `${(num / best) * 100}%` }} /></span>}</span>
                 </td>
-                <td>{pos ? <span className="ov-body" style={{ color: "var(--ov-ink)" }}>{pos} positive</span> : <span className="ov-meta">No commentary</span>}</td>
+                <td>{pos ? <span className="pi-pos"><span className="ov-body" style={{ color: "var(--ov-ink)" }}>{pos} positive</span>{posShare(pos) !== null && <span className="pi-bar pi-bar--good" aria-hidden><i style={{ width: `${posShare(pos)}%` }} /></span>}</span> : <span className="ov-meta">No commentary</span>}</td>
                 <td>{q.recommendation.supplier_option ? <span className="ov-body" style={{ color: "var(--ov-ink)" }}>{q.recommendation.supplier_option.supplier_name}</span> : <span className="ov-meta">None found</span>}</td>
                 <td className="num">{fin(/landed cost/i) ?? <span className="ov-meta">Needs quote</span>}</td>
                 <td className="num">{fin(/units/i) ?? <span className="ov-meta">Needs quote</span>}</td>

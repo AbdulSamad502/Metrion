@@ -81,3 +81,13 @@
 
 /* an odd one out spans the row instead of leaving a gap beside it */
 .cmo-rules > :last-child:nth-child(odd), .cmo-news > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+/* title summary: length-vs-limit strip and approved ring */
+.cmo-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--ov-line); }
+.cmo-strip { margin: 0; display: flex; flex-direction: column; gap: 8px; flex: 0 1 320px; min-width: 200px; }
+.cmo-strip-bars { position: relative; display: flex; align-items: flex-end; gap: 8px; height: 56px; }
+.cmo-strip-col { flex: 1; height: 100%; display: flex; align-items: flex-end; border-radius: 4px; background: var(--ov-soft); }
+.cmo-strip-col > i { display: block; width: 100%; border-radius: 4px; background: var(--ov-brand); }
+.cmo-strip-col > i.is-over { background: var(--ov-bad); }
+.cmo-strip-limit { position: absolute; inset: 0 0 auto 0; border-top: 1px dashed var(--ov-field-edge); }
+.cmo-ring { display: flex; align-items: center; gap: 16px; }

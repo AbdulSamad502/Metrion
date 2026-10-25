@@ -341,15 +341,19 @@ export function CiDashboard({ client }: { client: CiClient }) {
                     <EmptyState compact title="Nothing to check yet" description="Shows once a competitor is tracked." />
                   ) : (
                     <ul className="ov-rows ci-fresh">
-                      {ws.competitors.map((c) => (
+                      {ws.competitors.map((c) => {
+                        const behind = daysBehind(c.evidenceDate, ws.competitors.map((x) => x.evidenceDate));
+                        return (
                         <li key={c.id} className="ov-row" style={{ minHeight: 56 }}>
                           <span className="ov-row-main">
                             <span className="ov-title">{c.label ?? "Competitor"}</span>
-                            <span className="ov-meta">{c.evidenceDate ? fmtDate(c.evidenceDate) : "no screenshot yet"}</span>
+                            <span className="ov-meta">{c.evidenceDate ? fmtDate(c.evidenceDate) : "no screenshot yet"}{behind && behind.days > 0 ? ` · ${behind.days} day${behind.days === 1 ? "" : "s"} behind the newest` : ""}</span>
+                            {behind && <span className="ci-age" aria-hidden><i className={c.freshness === "FRESH" ? undefined : "is-old"} style={{ width: `${Math.max(4, 100 - behind.share * 100)}%` }} /></span>}
                           </span>
                           <Pill tone={c.freshness === "FRESH" ? "good" : "warn"} icon={c.freshness === "FRESH" ? "check" : "alert"}>{FRESHNESS_LABEL[c.freshness]}</Pill>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
                 </Box>
@@ -532,7 +536,10 @@ function CompetitorTable({ rows }: { rows: CiCompetitor[] }) {
               </td>
               <td data-label="Match">
                 {c.relevanceBand && c.relevanceScore !== null ? (
-                  <span className="ci-name" title={c.relationshipClass !== "UNKNOWN" ? RELATIONSHIP_LABEL[c.relationshipClass] : undefined}>{c.relevanceBand.charAt(0) + c.relevanceBand.slice(1).toLowerCase()}</span>
+                  <span className="ci-match" title={c.relationshipClass !== "UNKNOWN" ? RELATIONSHIP_LABEL[c.relationshipClass] : undefined}>
+                    <span className="ci-pips" aria-hidden>{[0, 1, 2].map((n) => <i key={n} className={n < ({ LOW: 1, MEDIUM: 2, HIGH: 3 } as Record<string, number>)[c.relevanceBand as string] ? "is-on" : undefined} />)}</span>
+                    <span className="ci-name">{c.relevanceBand.charAt(0) + c.relevanceBand.slice(1).toLowerCase()}</span>
+                  </span>
                 ) : (
                   <span className="ci-sub">Not scored</span>
                 )}
@@ -580,4 +587,17 @@ function CandidateList({ rows }: { rows: CiCandidate[] }) {
       ))}
     </ul>
   );
+}
+
+/** How far behind the newest screenshot one competitor's evidence is, in whole days, with its share of the longest gap. Dates only, no clock and no
+ *  stale threshold (the page is not sent one); the Fresh / Getting old word beside it is the backend's call. Null when there is no dated evidence. */
+function daysBehind(date: string | null | undefined, all: (string | null | undefined)[]): { days: number; share: number } | null {
+  const t = (d: string | null | undefined) => (d ? Date.parse(d) : NaN);
+  const times = all.map(t).filter((n) => Number.isFinite(n));
+  const mine = t(date);
+  if (times.length < 2 || !Number.isFinite(mine)) return null;
+  const newest = Math.max(...times);
+  const longest = newest - Math.min(...times);
+  const day = 86_400_000;
+  return { days: Math.round((newest - mine) / day), share: longest > 0 ? (newest - mine) / longest : 0 };
 }
