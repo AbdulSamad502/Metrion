@@ -78,3 +78,22 @@
 .mt-topbar .mt-eyebrow { font-size: 12px; letter-spacing: 0.01em; text-transform: none; font-weight: 700; }
 .mt-topbar .t-page-title { font-size: 24px; }
 .mt-topbar a, .mt-topbar button { font-size: 15px; }
+
+/* the app's default size is a browser at 80%: desktop windows only, so phones keep full-size text */
+@media (min-width: 1024px) {
+  html.mt-zoom { zoom: 0.8; }
+  html.mt-zoom .h-screen { height: calc(100dvh / 0.8); }
+}
+
+/* the whole menu fits without a scrollbar */
+.sb-scroll { scrollbar-width: none; }
+.sb-scroll::-webkit-scrollbar { display: none; }
+@media (min-width: 1024px) {
+  .sb-brand { padding: 16px 24px 8px; }
+  .mt-sidebar .mt-nav-item { min-height: 36px; }
+  .sb-group + .sb-group { margin-top: 8px; }
+  .sb-label { padding: 8px 12px 4px; }
+  .sb-system { padding-top: 8px; }
+  .sb-user { padding-top: 8px; padding-bottom: 8px; margin-top: 0; }
+  .sb-avatar, .sb-signout { width: 36px; height: 36px; }
+}

@@ -51,6 +51,12 @@ function OwnFrame({ children }: { children: ReactNode }) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   useSurfaceSheen(surfaceRef, Boolean(session) && !error); // the surface div only exists once the session has loaded
 
+  // The app reads as a browser at 80%: on a desktop-width window everything is drawn at four-fifths size (see .mt-zoom in sidebar.css).
+  useLayoutEffect(() => {
+    document.documentElement.classList.add("mt-zoom");
+    return () => document.documentElement.classList.remove("mt-zoom");
+  }, []);
+
   // Restore the remembered collapse state after hydration (never during render: SSR has no storage).
   useEffect(() => {
     try {
