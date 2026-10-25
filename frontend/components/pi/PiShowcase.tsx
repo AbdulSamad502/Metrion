@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Pill, RefreshButton } from "@/components/overview/parts";
-import { Icon } from "@/components/ui/Icon";
+import { Donut, toneAt } from "@/components/overview/charts";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/LoadingState";
 import { useToast } from "@/components/ui/Toast";
 import {
@@ -95,7 +96,7 @@ export function PiShowcase({ client, initialRunId = null }: { client: PiClient; 
     <div className="ov mt-content">
       <header className="ov-head ov-rise">
         <div className="min-w-0">
-          <h2 className="ov-h">Product Intelligence Workspace</h2>
+          <h2 className="ov-h">What to sell next</h2>
           <p className="ov-body" style={{ marginTop: 4 }}>Saved research · read-only</p>
         </div>
         <Link href="/dashboard/ceo-hub" className="ov-btn ov-btn--brand min-h-10">
@@ -435,10 +436,13 @@ function f2(margin: { display: string | null; reason?: string } | undefined, spr
   return margin?.display ? { value: margin.display, sub: "From your quote", missing: false } : { value: "Unavailable", sub: margin?.reason ?? spread, missing: true };
 }
 
-function Tile({ label, value, sub, missing }: { label: string; value: string; sub?: string; missing?: boolean }) {
+function Tile({ label, value, sub, missing, icon, tone }: { label: string; value: string; sub?: string; missing?: boolean; icon?: IconName; tone?: string }) {
   return (
     <div className="pi-tile">
-      <div className="ov-meta">{label}</div>
+      <div className="pi-tile-top">
+        {icon && <span className="pi-tile-ico" style={{ color: tone, background: `color-mix(in srgb, ${tone} 14%, transparent)` }} aria-hidden><Icon name={icon} size={16} /></span>}
+        <span className="ov-meta">{label}</span>
+      </div>
       <div className={missing ? "ov-title" : "ov-fig"} style={missing ? { color: "var(--ov-ink-3)" } : undefined}>{value}</div>
       {sub && <div className="ov-meta">{sub}</div>}
     </div>
@@ -468,11 +472,17 @@ function ProductInformation({ product, brief }: { product: PiProduct; brief: PiC
   const marginT = f2(margin, "Needs your cost and selling price");
   const unitsT = tile(units, "Needs your confirmed quote");
   const imgUrl = safeHref(c.image_url);
+  const scoreNum = product.finalScore !== null ? Number(product.finalScore) : NaN;
+  const ringScore = Number.isFinite(scoreNum) && scoreNum >= 0 && scoreNum <= 100 ? scoreNum : null; // only to size the ring; the written score is the backend's
+  const sentimentParts = (product.reviewInsights.find((i) => i.sentiment_split)?.sentiment_split ? Object.entries(product.reviewInsights.find((i) => i.sentiment_split)!.sentiment_split!) : []).map(([k, v], i) => ({ key: k, label: k.toLowerCase(), raw: v, share: Number.parseFloat(v) / 100, color: /pos/i.test(k) ? "var(--ov-good)" : /neg/i.test(k) ? "var(--ov-warn)" : toneAt(i + 3) })).filter((p) => Number.isFinite(p.share) && p.share > 0);
   return (
     <section className="pi-detail" aria-label={`Product information: ${c.candidate_title}`}>
       <header className="pi-detail-head">
         {imgUrl && (
           <div className="pi-thumb"><ProductImage product={product} large /></div>
+        )}
+        {ringScore !== null && (
+          <Donut size={96} parts={[{ key: "score", label: "Score", share: ringScore / 100, color: "var(--ov-brand)" }]} summary={`Score ${score(product.finalScore)}`} center={<span className="ov-title">{product.finalScore}</span>} />
         )}
         <div className="min-w-0">
           <div className="ov-meta" style={{ display: "flex", alignItems: "center", gap: 8 }}><Badge tone="neutral">Rank #{product.rank}</Badge><h4 style={{ margin: 0, font: "inherit" }}>Product Information</h4></div>
@@ -483,28 +493,39 @@ function ProductInformation({ product, brief }: { product: PiProduct; brief: PiC
       </header>
 
       <div className="pi-facts">
-        <Tile label="Selling price" value={band ?? (web?.average_paise != null ? formatPaise(web.average_paise) : "Unavailable")} sub={band ? (web?.average_paise != null ? `Web ref: ${formatPaise(web.average_paise)} (not verified)` : "Your target band") : web ? "Web reference, not verified" : "No target price stated"} missing={!band && !web} />
-        <Tile label="Cost price" value={costT.value} sub={costT.sub} missing={costT.missing} />
-        <Tile label="Net margin" value={marginT.value} sub={marginT.sub} missing={marginT.missing} />
-        <Tile label="Units to buy" value={unitsT.value} sub={unitsT.sub ? `${unitsT.sub}${units?.display ? " · a ceiling, not a forecast" : ""}` : undefined} missing={unitsT.missing} />
+        <Tile icon="tag" tone="var(--ov-c1)" label="Selling price" value={band ?? (web?.average_paise != null ? formatPaise(web.average_paise) : "Unavailable")} sub={band ? (web?.average_paise != null ? `Web ref: ${formatPaise(web.average_paise)} (not verified)` : "Your target band") : web ? "Web reference, not verified" : "No target price stated"} missing={!band && !web} />
+        <Tile icon="cart" tone="var(--ov-c3)" label="Cost price" value={costT.value} sub={costT.sub} missing={costT.missing} />
+        <Tile icon="reports" tone="var(--ov-c2)" label="Net margin" value={marginT.value} sub={marginT.sub} missing={marginT.missing} />
+        <Tile icon="orders" tone="var(--ov-c4)" label="Units to buy" value={unitsT.value} sub={unitsT.sub ? `${unitsT.sub}${units?.display ? " · a ceiling, not a forecast" : ""}` : undefined} missing={unitsT.missing} />
       </div>
 
       <div className="pi-cols">
-        <div className="pi-panel">
+        <div className="pi-panel pi-panel--people">
           <h5 className="ov-title">What viewers say</h5>
           <p className="ov-meta">Viewer and web commentary, not verified buyer reviews{splits[0] ? ` · ${splits[0]}` : ""}</p>
+          {sentimentParts.length >= 2 && (
+            <div className="ov-chart">
+              <Donut size={104} parts={sentimentParts} summary={`Commentary: ${sentimentParts.map((p) => `${p.label} ${p.raw}`).join(", ")}`} />
+              <ul className="ov-chart-key">{sentimentParts.map((p) => <li key={p.key}><i style={{ background: p.color }} aria-hidden />{p.label}<b>{p.raw}</b></li>)}</ul>
+            </div>
+          )}
           <div className="pi-halves">
             <div>
-              <div className="ov-meta" style={{ color: "var(--ov-good)" }}>Liked</div>
+              <div className="ov-meta pi-liked"><Icon name="check" size={12} strokeWidth={2.5} /> Liked</div>
               {positives.length ? <ul className="pi-list" style={{ marginTop: 8 }}>{positives.map((t) => <li key={t} className="ov-body" style={{ color: "var(--ov-ink)" }}>{t}</li>)}</ul> : <p className="ov-meta" style={{ marginTop: 8 }}>No commentary themes were available.</p>}
             </div>
             <div>
-              <div className="ov-meta" style={{ color: "var(--ov-warn)" }}>To fix</div>
+              <div className="ov-meta pi-fix"><Icon name="alert" size={12} strokeWidth={2.5} /> To fix</div>
               {defects.length ? <ul className="pi-list" style={{ marginTop: 8 }}>{defects.map((t) => <li key={t} className="ov-body" style={{ color: "var(--ov-ink)" }}>{t}</li>)}</ul> : <p className="ov-meta" style={{ marginTop: 8 }}>No complaint themes were found.</p>}
             </div>
           </div>
 
-          <h5 className="ov-title pi-sub">Supplier lead</h5>
+        </div>
+        <div className="pi-panel">
+          <EvidencePanel product={product} />
+        </div>
+        <div className="pi-panel pi-panel--wide">
+          <h5 className="ov-title">Supplier lead</h5>
           {lead ? (
             <div className="pi-supplier">
               <div className="min-w-0 ov-body">
@@ -517,9 +538,6 @@ function ProductInformation({ product, brief }: { product: PiProduct; brief: PiC
               {href && <a href={href} target="_blank" rel="noopener noreferrer" className="ov-btn min-h-10" style={{ flex: "none" }}>Supplier Link ↗</a>}
             </div>
           ) : <p className="ov-meta">No supplier lead was found for this product.</p>}
-        </div>
-        <div className="pi-panel">
-          <EvidencePanel product={product} />
         </div>
       </div>
 
@@ -559,11 +577,11 @@ function EvidencePanel({ product }: { product: PiProduct }) {
         )}
       </dl>
       <h5 className="ov-title pi-sub">Score signals</h5>
-      <ul className="pi-list" style={{ gap: 16 }}>
-        {ev.signals.map((s) => (
+      <ul className="pi-list pi-signals">
+        {ev.signals.map((s, si) => (
           <li key={s.signal} className="pi-signal">
             <span className="ov-body" style={{ color: "var(--ov-ink)", fontWeight: 700 }}>{cap(s.signal)}</span>
-            {s.status === "AVAILABLE" && s.max > 0 && <span className="pi-bar" aria-hidden><i style={{ width: `${Math.min(100, (Number(s.points) / Number(s.max)) * 100)}%` }} /></span>}
+            {s.status === "AVAILABLE" && s.max > 0 && <span className="pi-bar" aria-hidden><i style={{ width: `${Math.min(100, (Number(s.points) / Number(s.max)) * 100)}%`, background: toneAt(si) }} /></span>}
             <span className="ov-meta">{s.status === "AVAILABLE" ? `${s.points}/${s.max} points - ${s.reason}` : `unavailable (${s.reason})`}</span>
           </li>
         ))}
