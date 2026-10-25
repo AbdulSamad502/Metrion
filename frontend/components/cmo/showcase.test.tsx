@@ -31,7 +31,7 @@ describe("CMO showcase (read-only)", () => {
   it("shows honest empty states, the ask-the-CEO hint, and no generation controls", async () => {
     render(<ShowcaseDashboard client={fake()} />);
     expect(await screen.findByText("No news yet. Ask the CEO.")).toBeInTheDocument();
-    expect(screen.getByText(/To create or change anything, ask the CEO/)).toBeInTheDocument();
+    expect(screen.getByText(/Ask the CEO to create or change anything/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ask the CEO" })).toHaveAttribute("href", "/dashboard/ceo-hub");
     expect(screen.queryByRole("button", { name: /generate|regenerate|select|lock|approve/i })).toBeNull();
     expect(screen.queryByText("SAMPLE DATA", { exact: false })).toBeNull();
@@ -122,9 +122,9 @@ const fail500 = () => Object.assign(new Error("x"), { status: 500 });
 describe("CMO showcase: results stay trustworthy while loading", () => {
   it("shows the product and search the results are for", async () => {
     render(<ShowcaseDashboard client={fake()} />);
-    expect(await screen.findByTestId("cmo-context")).toHaveTextContent("Showing saved results for all products.");
+    expect(await screen.findByTestId("cmo-context")).toHaveTextContent("Showing all products.");
     await userEvent.selectOptions(await screen.findByLabelText("Filter by product"), "S1");
-    expect(screen.getByTestId("cmo-context")).toHaveTextContent("Showing saved results for Bottle.");
+    expect(screen.getByTestId("cmo-context")).toHaveTextContent("Showing Bottle.");
   });
 
   it("does not leave Amazon titles on screen as if they were Flipkart titles", async () => {

@@ -52,10 +52,7 @@ export function ShowcaseDashboard({ client, sample = false }: { client: Showcase
       <header className="ov-head ov-rise">
         <div className="min-w-0">
           <h2 className="ov-h">Slim CMO Dashboard</h2>
-          <p className="ov-body" style={{ marginTop: 4 }}>Saved titles and listing copy · read-only</p>
-          <p className="ov-meta" style={{ marginTop: 8 }}>
-            <strong style={{ color: "var(--ov-ink)" }}>To create or change anything, ask the CEO.</strong> This page only shows what is already saved.
-          </p>
+          <p className="ov-body" style={{ marginTop: 4 }}>Read-only. Ask the CEO to create or change anything.</p>
         </div>
         <Link href="/dashboard/ceo-hub" className="ov-btn ov-btn--brand min-h-10">
           Ask the CEO
@@ -75,7 +72,7 @@ export function ShowcaseDashboard({ client, sample = false }: { client: Showcase
         </div>
         <div className="ov-head-r">
           <p role="status" className="ov-meta" style={{ margin: 0 }}>
-            {busy > 0 ? "Refreshing… what is shown is the last result that loaded." : `Showing saved results for ${productLabel ?? "all products"}${q ? ` matching “${q}”` : ""}.`}
+            {busy > 0 ? "Refreshing… what is shown is the last result that loaded." : `Showing ${productLabel ?? "all products"}${q ? ` matching “${q}”` : ""}.`}
           </p>
           <RefreshButton spinning={busy > 0} onClick={() => setRefreshKey((n) => n + 1)} />
         </div>
@@ -174,8 +171,22 @@ function TitlesAndPacks({ client, marketplace, sku, q }: { client: ShowcaseClien
   };
 
   const marketLabel = MARKETPLACES.find((m) => m.id === marketplace)?.label ?? marketplace;
+  const titleItems = titles.state.status === "ready" ? titles.state.data.items : null;
   return (
     <>
+      {titleItems && packs.state.status === "ready" && (
+        <section className="ov-card ov-hero cmo-hero ov-rise" aria-label={`${marketLabel} listing summary`}>
+          <div className="cmo-hero-head">
+            <p className="ov-h">{marketLabel} listings</p>
+            <p className="ov-meta">Saved results</p>
+          </div>
+          <dl className="cmo-hero-stats">
+            <div><dd className="ov-fig">{titleItems.length}</dd><dt className="ov-meta">Titles shown</dt></div>
+            <div><dd className="ov-fig">{titleItems.filter((t) => t.approved).length}</dd><dt className="ov-meta">Titles approved</dt></div>
+            <div><dd className="ov-fig">{packItems.length}</dd><dt className="ov-meta">Copy packs</dt></div>
+          </dl>
+        </section>
+      )}
       <div className="cmo-work">
       <SectionCard
         title="Frequently Used SEO Titles"
@@ -382,7 +393,7 @@ function HashtagsAndCompliance({ client, marketplace, sku, q }: { client: Showca
           </ul>
         )}
       </AsyncBlock>
-      <p className="ov-meta" style={{ marginTop: 16 }}>Recommend-only. Nothing is sent to a marketplace.</p>
+      <p className="ov-meta" style={{ marginTop: 16 }}>Nothing is sent to a marketplace.</p>
     </SectionCard>
   );
 }
