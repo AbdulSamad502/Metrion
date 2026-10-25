@@ -1,37 +1,54 @@
 /* Layered surfaces for the signed-in dashboard (reversible).
    To remove: delete this file, its import in ShellFrame.tsx, and the data-surface effect there.
    It applies while a dashboard page is mounted (html[data-surface="layered"]); the CEO Hub is excluded in ShellFrame.
-   One deep tone for the page, a lighter tone of the same hue for cards, a quieter tone for panels inside cards. */
+   The idea: one neutral black, but not one flat black. The page is darkest at the edges and lifts toward a soft glow at the top;
+   cards are a clearly lighter tone that is a little brighter at the top edge than at the bottom, with a fine light border and a 1px top highlight;
+   panels inside a card step lighter again. The same structure in light mode, with greys instead of blacks. */
 
 html[data-surface="layered"] {
-  --ov-page: #000000;
-  --ov-card: #0f0f11;
-  --ov-soft: #17171a;
-  --ov-line: #232327;
-  --ov-edge: #34343a;
+  --ov-page: #050505;
+  --ov-page-glow: #1b1b1f;
+  --ov-card: #131316;
+  --ov-card-top: #19191d;
+  --ov-card-bottom: #101012;
+  --ov-soft: #1c1c20;
+  --ov-line: rgba(255, 255, 255, 0.08);
+  --ov-edge: rgba(255, 255, 255, 0.13);
   --ov-field-edge: #7e7e88;
-  --ov-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 10px 24px -20px rgba(0, 0, 0, 0.7);
-  --ov-shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 16px 28px -20px rgba(0, 0, 0, 0.8);
+  --ov-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 14px 28px -22px rgba(0, 0, 0, 0.9);
+  --ov-shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 18px 32px -20px rgba(0, 0, 0, 0.95);
   --bg-base: var(--ov-page);
 }
 
 html[data-surface="layered"][data-theme="light"] {
-  --ov-page: #eef0f7;
-  --ov-card: #f7f8fd;
-  --ov-soft: #ebeef8;
-  --ov-line: #d2d8ea;
-  --ov-edge: #b8c0db;
+  --ov-page: #d6d9e3;
+  --ov-page-glow: #f1f2f8;
+  --ov-card: #fafbfe;
+  --ov-card-top: #ffffff;
+  --ov-card-bottom: #f1f3f9;
+  --ov-soft: #e9ecf5;
+  --ov-line: rgba(25, 32, 70, 0.11);
+  --ov-edge: rgba(25, 32, 70, 0.2);
   --ov-field-edge: #7b83a3;
   --ov-ink-2: #3e4262;
-  --ov-ink-3: #535776;
-  --ov-shadow: 0 1px 2px rgba(30, 40, 90, 0.07);
-  --ov-shadow-lift: 0 4px 12px -6px rgba(30, 40, 90, 0.18);
+  --ov-ink-3: #4f5372;
+  --ov-shadow: 0 1px 2px rgba(25, 32, 70, 0.08), 0 14px 26px -20px rgba(25, 32, 70, 0.3);
+  --ov-shadow-lift: 0 4px 12px -6px rgba(25, 32, 70, 0.22), 0 20px 32px -22px rgba(25, 32, 70, 0.35);
 }
 
-html[data-surface="layered"] body,
-html[data-surface="layered"] .mt-sidebar,
-html[data-surface="layered"] .mt-topbar {
-  background: var(--ov-page) !important;
+/* the page: darkest at the edges, a soft lift near the top */
+html[data-surface="layered"] body {
+  background:
+    radial-gradient(1200px 560px at 62% -6%, var(--ov-page-glow) 0%, transparent 72%),
+    radial-gradient(900px 500px at 0% 100%, color-mix(in srgb, var(--ov-page) 70%, #000) 0%, transparent 70%),
+    var(--ov-page) !important;
+  background-attachment: fixed !important;
 }
-html[data-surface="layered"] .mt-sidebar { border-right: 1px solid var(--ov-line); }
-html[data-surface="layered"] .mt-topbar { border-bottom: 1px solid var(--ov-line); }
+html[data-surface="layered"] .mt-sidebar { background: color-mix(in srgb, var(--ov-page) 55%, #000) !important; border-right: 1px solid var(--ov-line); }
+html[data-surface="layered"][data-theme="light"] .mt-sidebar { background: color-mix(in srgb, var(--ov-page) 70%, #fff) !important; }
+html[data-surface="layered"] .mt-topbar { background: transparent !important; border-bottom: 1px solid var(--ov-line); }
+
+/* cards and panels: lighter than the page, brighter at the top edge */
+html[data-surface="layered"] :is(.ov-card:not(.ov-hero), .pi-panel) {
+  background-image: linear-gradient(180deg, var(--ov-card-top) 0%, var(--ov-card-bottom) 100%);
+}
