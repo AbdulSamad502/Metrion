@@ -192,7 +192,7 @@ export function CiDashboard({ client }: { client: CiClient }) {
             ? `Loading ${ws.products.find((p) => p.productId === pending.productId)?.title ?? "the next product"}… the ${subject ?? "tracked competitors"} view below is the previous one.`
             : pending?.kind === "refresh"
               ? "Refreshing… what is shown is the last result that loaded."
-              : `Showing ${subject ?? "all tracked competitors"} · Data as of ${fmtDateTime(ws.asOf)}${checkedAt ? ` · checked ${checkedAt}` : ""}`}
+              : `Data as of ${fmtDateTime(ws.asOf)}${checkedAt ? ` · checked ${checkedAt}` : ""}`}
         </p>
         <RefreshButton spinning={pending?.kind === "refresh"} onClick={() => void load(ws.selectedProductId, "refresh")} />
       </div>
@@ -226,15 +226,15 @@ export function CiDashboard({ client }: { client: CiClient }) {
               </section>
               <div className="ov-span-5">
                 <div className="ov-tiles ci-tiles ov-rise" style={{ ...rise(3), height: "100%" }}>
-                  <Tile label="Competitors tracked" value={ws.watchlist ? `${ws.watchlist.used} of ${ws.watchlist.limit}` : k.trackedCount} meter={ws.watchlist ? { used: ws.watchlist.used, limit: ws.watchlist.limit } : undefined} hint={ws.watchlist && ws.watchlist.free === 0 ? "List is full: stop tracking one to add another" : `${k.verifiedCount} with a verified price`} />
-                  <Tile label="Need fresh evidence" value={k.needsEvidenceCount} tone={k.needsEvidenceCount > 0 ? "warn" : undefined} hint={k.needsEvidenceCount > 0 ? "Send the CEO a new screenshot" : "All evidence is recent"} />
-                  <Tile label="Verified changes" value={k.importantChangeCount} hint="Price or stock, from confirmed screenshots" />
-                  <Tile label="Customer insights" value={k.reviewInsightCount} hint="From review screenshots you sent" />
+                  <Tile label="Competitors tracked" value={ws.watchlist ? `${ws.watchlist.used} of ${ws.watchlist.limit}` : k.trackedCount} meter={ws.watchlist ? { used: ws.watchlist.used, limit: ws.watchlist.limit } : undefined} hint={ws.watchlist && ws.watchlist.free === 0 ? "Full: stop one to add another" : `${k.verifiedCount} with a verified price`} />
+                  <Tile label="Need fresh evidence" value={k.needsEvidenceCount} tone={k.needsEvidenceCount > 0 ? "warn" : undefined} hint={k.needsEvidenceCount > 0 ? "Send a new screenshot" : "All evidence is recent"} />
+                  <Tile label="Verified changes" value={k.importantChangeCount} hint="Price or stock" />
+                  <Tile label="Customer insights" value={k.reviewInsightCount} hint="From your screenshots" />
                 </div>
               </div>
 
               <div className="ov-span-12" style={{ display: "flex" }}>
-                <Box title="Where your price sits" subtitle="From verified prices. Not estimated." index={4}>
+                <Box title="Where your price sits" subtitle="Verified prices only" index={4}>
                   {ws.selectedProductId?.startsWith("category:") ? (
                     <EmptyState
                       compact
@@ -288,7 +288,7 @@ export function CiDashboard({ client }: { client: CiClient }) {
               )}
             </Box>
 
-            <Box title="Found, awaiting your decision" subtitle="Search leads. Not verified prices." index={7}>
+            <Box title="Found, awaiting your decision" subtitle="Not verified yet" index={7}>
               {ws.candidates.length === 0 ? (
                 <EmptyState compact title="No candidates waiting" description={ws.lastDiscovery ? discoveryNote(ws.lastDiscovery) : "No search yet."} />
               ) : (
@@ -298,7 +298,7 @@ export function CiDashboard({ client }: { client: CiClient }) {
 
             <div className="ov-grid">
               <div className="ov-span-7" style={{ display: "flex" }}>
-                <Box title="Verified changes" subtitle="From confirmed screenshots. Competitors aren’t watched in between." index={8}>
+                <Box title="Verified changes" subtitle="Dated screenshots, not live" index={8}>
                   {ws.changes.length === 0 ? (
                     <EmptyState compact title="No verified changes yet" description="Shows after a second confirmed screenshot." />
                   ) : (
@@ -346,7 +346,7 @@ export function CiDashboard({ client }: { client: CiClient }) {
                 </Box>
               </div>
               <div className="ov-span-6" style={{ display: "flex" }}>
-                <Box title="Review insights" subtitle="Recurring themes, with reviews read." index={11}>
+                <Box title="Review insights" subtitle="Recurring themes" index={11}>
                   {ws.reviewInsights.length === 0 ? (
                     <EmptyState compact title="No review insights yet" description="Send the CEO a reviews screenshot." action={<AskCeo href={askHref("reviews", null)} label="Ask about reviews" />} />
                   ) : (

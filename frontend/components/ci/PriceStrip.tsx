@@ -16,8 +16,6 @@ export function PriceStrip({ points, band }: { points: StripPoint[]; band: Strip
   hi += pad;
   const pos = (v: number) => `${((v - lo) / (hi - lo)) * 100}%`;
   const sorted = [...points].sort((a, b) => a.paise - b.paise);
-  const dataMin = Math.min(...values);
-  const dataMax = Math.max(...values);
   // Dots that would sit on top of each other go on a second lane, so every number stays readable.
   const lanes: number[] = [];
   let lastAt = -Infinity;
@@ -48,10 +46,6 @@ export function PriceStrip({ points, band }: { points: StripPoint[]; band: Strip
             {points.indexOf(p) + 1}
           </div>
         ))}
-      </div>
-      <div className="ci-strip-axis" aria-hidden>
-        <span>Lowest {formatPaise(dataMin)}</span>
-        <span>Highest {formatPaise(dataMax)}</span>
       </div>
       <ol className="ci-legend" aria-label="Verified competitor prices" style={{ margin: 0, padding: 0, listStyle: "none" }}>
         {points.map((p, i) => (

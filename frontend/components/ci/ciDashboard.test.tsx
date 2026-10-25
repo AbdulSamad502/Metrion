@@ -133,7 +133,7 @@ describe("what the dashboard states, and what it refuses to", () => {
     render(<CiDashboard client={client(FULL)} />);
     await screen.findByTestId("ci-dashboard");
     expect(screen.getAllByText(/not verified yet/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Search leads\. Not verified prices/)).toBeInTheDocument();
+    expect(screen.getByText(/Not verified yet/)).toBeInTheDocument();
     expect(document.querySelectorAll('a[href*="flipkart.com"], a[href*="amazon.in"]')).toHaveLength(0);
   });
 
@@ -142,7 +142,7 @@ describe("what the dashboard states, and what it refuses to", () => {
     await screen.findByTestId("ci-dashboard");
     expect(screen.getByText("Titan Octane: price down 9.2%")).toBeInTheDocument();
     expect(screen.getByText(/from the screenshot of/)).toBeInTheDocument();
-    expect(screen.getByText(/aren’t watched in between/)).toBeInTheDocument();
+    expect(screen.getByText(/Dated screenshots, not live/)).toBeInTheDocument();
   });
 
   it("shows review themes with how many reviews were read, and pending confirmations", async () => {
@@ -273,7 +273,7 @@ describe("what the dashboard does when data is loading, refreshing or failing", 
   it("names the product, the data's own date and when it was checked", async () => {
     render(<CiDashboard client={client(FULL)} />);
     const ctx = await screen.findByTestId("ci-context");
-    expect(ctx).toHaveTextContent(/Showing .* · Data as of .* · checked /);
+    expect(ctx).toHaveTextContent(/Data as of .* · checked /);
   });
 
   it("offers a retry when the first load fails, and shows the workspace once it works", async () => {
@@ -325,7 +325,7 @@ describe("what the dashboard does when data is loading, refreshing or failing", 
     expect(screen.getByRole("button", { name: "SKU-2" })).toHaveAttribute("aria-pressed", "true");
     d.resolve(SKU2);
     expect((await screen.findAllByText("Rival Two")).length).toBeGreaterThan(0);
-    expect(screen.getByTestId("ci-context")).toHaveTextContent(/Showing /);
+    expect(screen.getByTestId("ci-context")).toHaveTextContent(/Data as of /);
   });
 
   it("keeps the previous product and names the failure when a switch fails, with a retry", async () => {
