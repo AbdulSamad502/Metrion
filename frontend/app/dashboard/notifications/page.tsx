@@ -86,7 +86,7 @@ function Notifications() {
             </div>
           )
         ) : (
-          <ul className="ov-card ov-rows" style={{ opacity: refreshing ? 0.7 : 1, transition: "opacity 200ms ease", gap: 0, padding: 16 }}>
+          <ul className="ov-card ov-rows" style={{ opacity: refreshing ? 0.7 : 1, transition: "opacity 200ms ease", gap: 0, padding: 8 }}>
             {rows.map((r) => (
               <li key={r.key}>
                 <NotificationItem

@@ -108,7 +108,7 @@
 .pi-rec[open] { gap: 16px; }
 
 /* the best bet, as the page's answer */
-.pi-hero { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; padding: 24px 32px; }
+.pi-hero { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; padding: 32px; }
 .pi-hero-main { display: flex; flex-direction: column; gap: 4px; flex: 1 1 360px; min-width: 0; }
 .pi-hero-side { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; }
 .pi-hero-score { display: flex; align-items: baseline; gap: 8px; }

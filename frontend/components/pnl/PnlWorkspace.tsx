@@ -78,7 +78,7 @@ export function PnlWorkspace() {
   const marketplaceLabel = PNL_MARKETPLACES.find((m) => m.id === form.marketplace)?.label ?? "";
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col" style={{ gap: "var(--ov-gap, 24px)" }}>
       <div className="mt-no-print ov-card min-w-0">
         <PnlInputs form={form} setForm={setForm} errors={errors} onReset={reset} onExample={loadExample} />
         <div className="mt-6 flex flex-wrap items-center gap-3">

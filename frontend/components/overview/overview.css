@@ -172,7 +172,7 @@
   gap: 16px;
   min-width: 0;
 }
-.ov-card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 24px; }
+.ov-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-height: 40px; }
 .ov-card-head > :first-child { min-width: 0; }
 
 /* ---------- layout ---------- */
@@ -441,3 +441,12 @@ a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px;
   .ov-row-end { flex-basis: 100%; padding-left: 56px; }
   .ov-row-end .ov-arrow { display: none; }
 }
+
+/* every card title sits in the same 40px band at the top, so titles line up across a row; what trails it (a pill, a link, a button) centres in that band */
+.ov-card-head > :first-child .ov-title:first-child, .ov-card-head > .ov-title { line-height: 40px; }
+.ov-card-head > :first-child .ov-title:first-child + .ov-meta { margin-top: -8px !important; }
+.ov-card-head > :not(:first-child) { align-self: flex-start; min-height: 40px; display: inline-flex; align-items: center; }
+
+/* a text-style button lines its words up with the text around it, not its own padding */
+.ov-btn--ghost { margin-left: -8px; }
+.ov-card-head > .ov-btn--ghost, .ov-head-r .ov-btn--ghost { margin-left: 0; margin-right: -8px; }
