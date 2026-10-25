@@ -16,7 +16,7 @@ export function Donut({ parts, summary, size = 160, center }: { parts: DonutPart
   return (
     <div className="ov-donut" style={{ width: size, height: size }}>
       <svg viewBox="0 0 100 100" width={size} height={size} role="img" aria-label={summary}>
-        <circle cx="50" cy="50" r={r} fill="none" stroke="var(--ov-soft)" strokeWidth="14" />
+        <circle cx="50" cy="50" r={r} fill="none" stroke="var(--ov-track, var(--ov-soft))" strokeWidth="14" />
         {parts.filter((p) => p.share > 0).map((p, i, shown) => {
           const offset = shown.slice(0, i).reduce((sum, q) => sum + q.share * c, 0);
           const len = Math.max(0, p.share * c - gap);
