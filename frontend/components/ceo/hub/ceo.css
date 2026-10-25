@@ -105,12 +105,14 @@ body:has(.mt-galaxy)::before { background-image: none; }
   /* the bar floats over the foot of the view, so the activity card can run to the bottom; only the bar itself is opaque */
   .ceo-root { position: relative; }
   [data-testid="chat-bar"] { position: absolute !important; left: 0; right: 0; bottom: 0; background: none !important; pointer-events: none; }
-  [data-testid="chat-bar"] .ceo-bar > * { pointer-events: auto; background: var(--bg-base); }
-  [data-testid="chat-column"] .ceo-conv, [data-testid="work-area"] { padding-bottom: 210px; }
+  [data-testid="chat-bar"] .ceo-bar > * { pointer-events: auto; }
+  [data-testid="chat-column"] .ceo-conv, [data-testid="work-area"] { padding-bottom: 190px; }
   [data-testid="chat-column"] .ceo-activity { margin-bottom: 8px; }
   [data-testid="chat-column"] .ceo-split { min-height: 100%; }
   .ceo-composer { min-height: 64px; }
 }
+
+[data-testid="chat-bar"] { background: none !important; }
 
 /* the hub's default size: one step smaller than the rest of the app (80% of the app's own 80%), on desktop windows only */
 @media (min-width: 1024px) { .ceo-root { zoom: 0.8; } }
