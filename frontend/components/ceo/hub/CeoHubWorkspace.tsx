@@ -70,7 +70,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   const fileKey = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
   const setFileState = (f: File, st: FileStatus) => setFileStates((m) => ({ ...m, [fileKey(f)]: st }));
   /** The hub shows ONE view at a time, full width: the agents (the live canvas), the conversation, or the activity / results. All three stay mounted; the chat bar is always at the bottom. */
-  const [view, setView] = useState<"agents" | "chat" | "results">("chat");
+  const [view, setView] = useState<"agents" | "chat">("chat");
   const data = hub.detail.data;
   // before any conversation exists, every agent the member can use is shown as ready (a new conversation attaches them all); locked / no-access ones still show as such
   const nodes = canvasNodes(data?.agents ?? { CI: true, CFO: true, PI: true, CMO: true }, hub.availability, data?.investigation.status ?? "ACTIVE", data?.findings ?? []);
@@ -150,7 +150,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   );
   const connected = nodes.filter((n) => n.state === "ATTACHED");
   const quick = QUICK_ACTIONS.filter((q) => ["pnl", "research", "competitors"].includes(q.id));
-  const tabBtn = (id: "agents" | "chat" | "results", label: string, testId: string) => (
+  const tabBtn = (id: "agents" | "chat", label: string, testId: string) => (
     <button key={id} type="button" role="tab" aria-selected={view === id} data-testid={testId} onClick={(e) => { setView(id); e.currentTarget.scrollIntoView?.({ inline: "center", block: "nearest" }); }}
       className="mt-focus ceo-tab min-h-[40px] whitespace-nowrap px-3 t-body-sm font-semibold" data-on={view === id}>
       {label}
@@ -176,7 +176,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
     </>
   );
 
-  const resultsLabel = processing ? "Activity & results · live" : needsInput ? "Activity & results · waiting" : "Activity & results";
+  const conversationLabel = processing ? "Conversation · live" : needsInput ? "Conversation · waiting" : "Conversation";
   return (
     <div ref={rootRef} data-view={view} className="mt-galaxy ceo-root flex flex-col gap-3 xl:h-full" data-testid="ceo-hub">
       <div className="ceo-dots" aria-hidden />
@@ -194,8 +194,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
         )}
         <div className="ceo-tabs flex min-w-0 flex-1 items-center justify-center overflow-x-auto" role="tablist" aria-label="Agents, conversation, or activity and results">
           {tabBtn("agents", "Agents", "tab-agents")}
-          {tabBtn("chat", "Conversation", "right-tab-chat")}
-          {tabBtn("results", resultsLabel, "right-tab-results")}
+          {tabBtn("chat", conversationLabel, "right-tab-chat")}
         </div>
         <div className="flex flex-shrink-0 items-center gap-1">
           <button type="button" data-testid="new-investigation" disabled={processing || empty} onClick={() => { hub.select(null); setView("chat"); }} aria-label="New chat" title={empty ? "You are already on a new chat: type below to start it." : "Start a new chat"} className="ceo-action mt-focus">
@@ -225,11 +224,8 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
                 onSend={hub.sendTurn} awaiting={hub.awaitingAnswer} onApprovePlan={(id, h) => void hub.approvePlan(id, h)} onDeclinePlan={(id) => void hub.declinePlan(id)} planBusy={hub.planBusy} onResolve={hub.resolve} onReopen={hub.reopen} onArchive={hub.archive} onRetry={() => void hub.retryDetail()}
               />
             )}
-          </div>
-        </section>
-
-        <section className={`min-h-0 min-w-0 flex-1 overflow-y-auto ${view === "results" ? "flex" : "hidden"}`} aria-label="Activity and results" data-testid="results-area" role="tabpanel">
-          <div className="ceo-read mx-auto flex w-full max-w-[1000px] flex-col gap-6">
+          <div className="flex flex-col gap-6 pb-6" data-testid="results-area" aria-label="Activity and results" role="region">
+            <h2 className="m-0 mt-eyebrow">Activity &amp; results</h2>
             {(hub.health.entries.length > 0 || hub.health.status === "error" || hub.list.items.length > 0) && <div className="@container"><div className="grid grid-cols-1 gap-3 @[760px]:grid-cols-2" data-testid="summary-cards">
               <section aria-labelledby="ceo-health-inline" className="flex min-w-0 flex-col gap-2">
                 <h3 id="ceo-health-inline" className="m-0 mt-eyebrow">Business at a glance</h3>
@@ -239,7 +235,9 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
             </div></div>}
             {activity}
           </div>
+          </div>
         </section>
+
       </div>
 
       {/* CHAT BAR: always at the bottom, whichever view is open. */}

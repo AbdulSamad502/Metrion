@@ -60,22 +60,22 @@ body:has(.mt-galaxy)::before { background-image: none; }
 /* ---- hover: a dot grid that lights up in a soft circle trailing the pointer (the reference recording) ----
    Rest: a very faint grid, 12px apart. Pointer over the page: the dots near it darken inside a ~100px circle that eases after the cursor and fades when it stops.
    Pointer over a button or card: the same grid shows inside that element only. Reduced motion: no trailing, no fades. */
-.ceo-root { --dot: rgba(255, 255, 255, 0.06); --dot-hi: rgba(255, 255, 255, 0.5); }
+.ceo-root { --dot: rgba(255, 255, 255, 0.11); --dot-hi: rgba(255, 255, 255, 0.95); }
 .ceo-dots, [data-dots]::before {
-  background-image: radial-gradient(circle, var(--dot-hi) 1.1px, transparent 1.5px);
+  background-image: radial-gradient(circle, var(--dot-hi) 1.7px, transparent 2.2px);
   background-size: 12px 12px;
 }
 .ceo-dots { position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 0.45s ease; background-position: 6px 6px;
-  -webkit-mask-image: radial-gradient(circle 110px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 100%);
-  mask-image: radial-gradient(circle 110px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 100%); }
-.ceo-root::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-image: radial-gradient(circle, var(--dot) 1.1px, transparent 1.5px); background-size: 12px 12px; background-position: 6px 6px; }
+  -webkit-mask-image: radial-gradient(circle 220px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.7) 50%, transparent 100%);
+  mask-image: radial-gradient(circle 220px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.7) 50%, transparent 100%); }
+.ceo-root::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-image: radial-gradient(circle, var(--dot) 1.3px, transparent 1.8px); background-size: 12px 12px; background-position: 6px 6px; }
 .ceo-root[data-spot="on"] .ceo-dots { opacity: 1; transition-duration: 0.15s; }
 [data-dots="static"] { position: relative; }
 [data-dots] { isolation: isolate; }
 [data-dots]::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity 0.18s ease;
-  -webkit-mask-image: radial-gradient(circle 80px at var(--lx, 50%) var(--ly, 50%), #000 0%, rgba(0, 0, 0, 0.45) 50%, transparent 100%);
-  mask-image: radial-gradient(circle 80px at var(--lx, 50%) var(--ly, 50%), #000 0%, rgba(0, 0, 0, 0.45) 50%, transparent 100%);
+  -webkit-mask-image: radial-gradient(circle 140px at var(--lx, 50%) var(--ly, 50%), #000 0%, rgba(0, 0, 0, 0.7) 50%, transparent 100%);
+  mask-image: radial-gradient(circle 140px at var(--lx, 50%) var(--ly, 50%), #000 0%, rgba(0, 0, 0, 0.7) 50%, transparent 100%);
 }
 [data-dots][data-hot]::before, [data-dots]:focus-visible::before { opacity: 1; }
 [data-dots]:focus-visible::before { --lx: 50%; --ly: 50%; }

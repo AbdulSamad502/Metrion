@@ -81,7 +81,7 @@ describe("approval refusal", () => {
 describe("hub layout", () => {
   let fake: FakeCeo;
   beforeEach(() => { fake = new FakeCeo(); });
-  it("shows one full-width view at a time (agents, conversation, activity and results), all mounted, with the chat bar always below them", async () => {
+  it("shows one full-width view at a time (agents, conversation with its activity and results), all mounted, with the chat bar always below them", async () => {
     render(<CeoHubWorkspace client={fake.client()} feedFactory={new ManualFeed().factory} />);
     const chat = await screen.findByTestId("chat-column");
     const bar = screen.getByTestId("chat-bar");
@@ -92,10 +92,9 @@ describe("hub layout", () => {
     expect(screen.getByTestId("right-tab-chat")).toHaveAttribute("aria-selected", "true");
     expect(chat).not.toHaveClass("hidden");
     expect(canvasArea).toHaveClass("hidden");
-    await userEvent.setup().click(screen.getByTestId("right-tab-results"));
-    expect(screen.getByTestId("right-tab-results")).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByTestId("results-area")).not.toHaveClass("hidden");
-    expect(chat).toHaveClass("hidden");
+    expect(within(chat).getByTestId("results-area")).toBeInTheDocument(); // the activity and results sit in the conversation view, under the messages
+    expect(screen.queryByTestId("right-tab-results")).toBeNull(); // there are two views now, not three
+    expect(chat).not.toHaveClass("hidden");
     await userEvent.setup().click(screen.getByTestId("tab-agents"));
     expect(canvasArea).not.toHaveClass("hidden");
     expect(screen.getByTestId("composer")).toBeInTheDocument(); // still there
