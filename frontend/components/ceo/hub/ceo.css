@@ -95,10 +95,11 @@ body:has(.mt-galaxy)::before { background-image: none; }
 .ceo-activity > h2 { font-size: 20px; letter-spacing: 0; text-transform: none; color: var(--ov-ink); font-weight: 600; }
 .ceo-activity .mt-panel, .ceo-activity .mt-hub-card { background: transparent; box-shadow: none; }
 @media (min-width: 1280px) {
-  .ceo-split { max-width: 1240px; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 0 28px; align-items: start; }
-  .ceo-split .ceo-conv { min-height: 100%; }
-  .ceo-split .ceo-activity { position: sticky; top: 0; max-height: 100%; overflow-y: auto; align-self: start; }
-  .ceo-bar { max-width: 1240px; padding-right: 428px; }
+  .ceo-split { max-width: none; padding-inline: 24px; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 0 32px; align-items: start; }
+  .ceo-split .ceo-conv { width: 100%; max-width: 780px; margin-inline: auto; min-height: 100%; }
+  .ceo-split .ceo-activity { position: sticky; top: 8px; max-height: calc(100% - 16px); overflow-y: auto; }
+  .ceo-bar { max-width: none; padding-inline: 24px 456px; }
+  .ceo-bar > * { width: 100%; max-width: 780px; margin-inline: auto; }
 }
 
 /* the hub's default size: one step smaller than the rest of the app (80% of the app's own 80%), on desktop windows only */
