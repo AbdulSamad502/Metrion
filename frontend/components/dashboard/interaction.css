@@ -17,6 +17,10 @@
     position: relative;
     z-index: 1;
   }
+  /* a control placed with absolute or fixed positioning (the connect and remove buttons on the CEO Hub agent cards) must stay where it is:
+     forcing it to position: relative on hover moved it out from under the pointer, so it flipped back and forth and looked like shaking */
+  html.mt-dash-type :is(button, a, [role="button"]).absolute:not(:disabled):not([aria-disabled="true"]):hover { position: absolute; }
+  html.mt-dash-type :is(button, a, [role="button"]).fixed:not(:disabled):not([aria-disabled="true"]):hover { position: fixed; }
   /* an icon-only control reads better with a gentler pop */
   html.mt-dash-type :is(button, a).ov-icon-btn:not(:disabled):not([aria-disabled="true"]):hover,
   html.mt-dash-type button.sb-signout:not(:disabled):hover { scale: 1.08; }
