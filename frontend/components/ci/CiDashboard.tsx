@@ -14,6 +14,7 @@ import {
   type CiCandidate, type CiCompetitor, type CiWorkspace,
 } from "@/lib/ciWorkspace";
 import { formatPaise } from "@/lib/piShowcase";
+import { dayLabel } from "@/components/overview/format";
 import { PriceStrip, type StripBand } from "./PriceStrip";
 import "@/components/overview/overview.css";
 import "./ci.css";
@@ -155,6 +156,10 @@ export function CiDashboard({ client }: { client: CiClient }) {
 
   return (
     <div className="ov mt-content" data-testid="ci-dashboard">
+      <div className="ov-rise" style={rise(0)}>
+        <h2 className="ov-h">How you compare</h2>
+        <p className="ov-body" style={{ marginTop: 4 }}>Verified prices, changes and what customers say</p>
+      </div>
       <header className="ov-head ov-rise" style={rise(0)}>
         <div className="ov-chips-row" role="group" aria-label="Product shown">
           {ws.products.length === 0 ? (
@@ -296,8 +301,8 @@ export function CiDashboard({ client }: { client: CiClient }) {
               )}
             </Box>
 
-            <div className="ov-grid">
-              <div className="ov-span-7" style={{ display: "flex" }}>
+            <div className="ov-grid" style={{ alignItems: "start" }}>
+              <div className="ov-span-7 ov-col">
                 <Box title="Verified changes" subtitle="Dated screenshots, not live" index={8}>
                   {ws.changes.length === 0 ? (
                     <EmptyState compact title="No verified changes yet" description="Shows after a second confirmed screenshot." />
@@ -305,28 +310,6 @@ export function CiDashboard({ client }: { client: CiClient }) {
                     <Changes ws={ws} />
                   )}
                 </Box>
-              </div>
-              <div className="ov-span-5" style={{ display: "flex" }}>
-                <Box title="Freshness" index={9}>
-                  {ws.competitors.length === 0 ? (
-                    <EmptyState compact title="Nothing to check yet" description="Shows once a competitor is tracked." />
-                  ) : (
-                    <ul className="ov-rows">
-                      {ws.competitors.map((c) => (
-                        <li key={c.id} className="ov-row" style={{ minHeight: 56 }}>
-                          <span className="ov-row-main">
-                            <span className="ov-title">{c.label ?? "Competitor"}</span>
-                            <span className="ov-meta">{c.evidenceDate ? fmtDate(c.evidenceDate) : "no screenshot yet"}</span>
-                          </span>
-                          <Pill tone={c.freshness === "FRESH" ? "good" : "warn"} icon={c.freshness === "FRESH" ? "check" : "alert"}>{FRESHNESS_LABEL[c.freshness]}</Pill>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Box>
-              </div>
-
-              <div className="ov-span-6" style={{ display: "flex" }}>
                 <Box title="Waiting on you" index={10}>
                   {ws.pendingConfirmations.length === 0 ? (
                     <EmptyState compact title="Nothing waiting" description="Details to confirm show up here." />
@@ -345,7 +328,24 @@ export function CiDashboard({ client }: { client: CiClient }) {
                   )}
                 </Box>
               </div>
-              <div className="ov-span-6" style={{ display: "flex" }}>
+              <div className="ov-span-5 ov-col">
+                <Box title="Freshness" index={9}>
+                  {ws.competitors.length === 0 ? (
+                    <EmptyState compact title="Nothing to check yet" description="Shows once a competitor is tracked." />
+                  ) : (
+                    <ul className="ov-rows">
+                      {ws.competitors.map((c) => (
+                        <li key={c.id} className="ov-row" style={{ minHeight: 56 }}>
+                          <span className="ov-row-main">
+                            <span className="ov-title">{c.label ?? "Competitor"}</span>
+                            <span className="ov-meta">{c.evidenceDate ? fmtDate(c.evidenceDate) : "no screenshot yet"}</span>
+                          </span>
+                          <Pill tone={c.freshness === "FRESH" ? "good" : "warn"} icon={c.freshness === "FRESH" ? "check" : "alert"}>{FRESHNESS_LABEL[c.freshness]}</Pill>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Box>
                 <Box title="Review insights" subtitle="Recurring themes" index={11}>
                   {ws.reviewInsights.length === 0 ? (
                     <EmptyState compact title="No review insights yet" description="Send the CEO a reviews screenshot." action={<AskCeo href={askHref("reviews", null)} label="Ask about reviews" />} />
@@ -434,7 +434,7 @@ function Activity({ ws, limit }: { ws: CiWorkspace; limit: number }) {
     <ol className="ci-timeline" style={{ margin: 0, padding: 0, listStyle: "none" }} aria-label="Activity">
       {days.map((d) => (
         <li key={d.day} className="ci-day">
-          <b>{fmtDate(d.day)}</b>
+          <b>{dayLabel(d.day) ?? fmtDate(d.day)}</b>
           <ul>
             {d.items.map((i) => (
               <li key={i.label} className="ov-body" style={{ color: "var(--ov-ink)" }}>{i.label}{i.count > 1 ? ` × ${i.count}` : ""}</li>
