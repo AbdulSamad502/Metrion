@@ -119,7 +119,7 @@ export function LengthMeter({ n, max }: { n: number; max: number | null | undefi
 export function SectionCard({ title, hint, action, children }: { title: string; hint?: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="ov-card ov-rise" aria-label={title}>
-      <header className="ov-card-head" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+      <header className="ov-card-head" style={{ flexWrap: "wrap" }}>
         <div className="min-w-0">
           <h2 className="ov-title">{title}</h2>
           {hint && <p className="ov-meta" style={{ marginTop: 4 }}>{hint}</p>}

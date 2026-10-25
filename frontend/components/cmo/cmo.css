@@ -59,13 +59,6 @@
 .cmo-pack > *:not(.cmo-block) , .cmo-pack > .cmo-block--wide { grid-column: 1 / -1; }
 @media (max-width: 900px) { .cmo-pack { grid-template-columns: 1fr; } }
 .cmo-block { padding: 16px; border: 1px solid var(--ov-line); border-radius: 16px; background: var(--ov-soft); }
-.cmo-hero { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 24px 32px; }
-.cmo-hero-head { display: flex; flex-direction: column; gap: 4px; }
-.cmo-hero .ov-h { color: var(--ov-hero-ink); }
-.cmo-hero-stats { display: flex; flex-wrap: wrap; gap: 8px 48px; margin: 0; }
-.cmo-hero-stats > div { display: flex; flex-direction: column-reverse; gap: 4px; }
-.cmo-hero-stats dd { margin: 0; color: var(--ov-hero-ink); }
-.cmo-hero-stats dt { color: var(--ov-hero-ink-2); }
 
 .cmo-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 .cmo-meta-row .cmo-meter { width: 120px; flex: none; }
@@ -75,5 +68,17 @@
   .cmo-filters, .cmo-filters label { width: 100%; }
   .cmo-filters label { flex-direction: column; align-items: stretch; }
   .cmo-filters .cmo-input, .cmo-filters select { width: 100% !important; max-width: 100%; }
-  .cmo-hero-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; width: 100%; }
-}
+  }
+
+/* one bar: marketplace on the left, filters on the right */
+.cmo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.cmo-bar .cmo-filters { gap: 8px; }
+.cmo-based { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmo-more > summary { list-style: none; cursor: pointer; width: fit-content; margin: 16px 0; }
+.cmo-more > summary::-webkit-details-marker { display: none; }
+.cmo-checks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+@media (max-width: 900px) { .cmo-checks { grid-template-columns: 1fr; } }
+.cmo-item--approved { border-color: var(--ov-edge); }
+
+/* an odd one out spans the row instead of leaving a gap beside it */
+.cmo-rules > :last-child:nth-child(odd), .cmo-news > :last-child:nth-child(odd) { grid-column: 1 / -1; }
