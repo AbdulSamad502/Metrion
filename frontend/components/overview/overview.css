@@ -27,6 +27,7 @@
   --ov-good-soft: rgba(79, 217, 160, 0.14);
   --ov-warn: #f0b955;
   --ov-warn-soft: rgba(240, 185, 85, 0.14);
+  --ov-warn-fill: #f0b955; /* amber for bars and rings (not text) */
   --ov-bad: #ff8294;
   --ov-bad-soft: rgba(255, 130, 148, 0.14);
   --ov-hero-a: #26262b;
@@ -128,8 +129,9 @@
   --ov-on-brand: #ffffff;
   --ov-good: #0a7050;
   --ov-good-soft: #dcf3ea;
-  --ov-warn: #8a4f00;
-  --ov-warn-soft: #fff0cf;
+  --ov-warn: #965800;
+  --ov-warn-soft: #fff1d3;
+  --ov-warn-fill: #e7a21c;
   --ov-bad: #b3263e;
   --ov-bad-soft: #fde6ea;
   --ov-c1: #0a0a0b;
@@ -360,7 +362,7 @@ a.ov-row:active { transform: scale(0.99); }
 /* a thin bar under each leak: how big it is next to the others */
 a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px; }
 .ov-leakbar { flex-basis: 100%; height: 4px; border-radius: 999px; background: var(--ov-line); margin-left: 56px; width: calc(100% - 56px); overflow: hidden; }
-.ov-leakbar > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-warn); transform-origin: left; animation: ov-grow 640ms var(--ov-ease) 240ms both; }
+.ov-leakbar > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-warn-fill); transform-origin: left; animation: ov-grow 640ms var(--ov-ease) 240ms both; }
 
 /* ---------- goal meter ---------- */
 .ov-meter { height: 8px; border-radius: 999px; background: var(--ov-soft); overflow: hidden; }

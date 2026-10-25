@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Tabs } from "@/components/ui/Tabs";
-import { Bars, Donut } from "@/components/overview/charts";
+import { Bars, Donut, toneAt } from "@/components/overview/charts";
 import { DetailDrawer } from "@/components/ui/DetailDrawer";
 import { AsyncBlock, CopyButton, fmtDate, Hint, LengthMeter, Pill, SectionCard, ShowcaseRefreshProvider, useAsync, withLimit } from "@/components/cmo/showcaseUi";
 import { RefreshButton } from "@/components/overview/parts";
@@ -111,8 +111,8 @@ function NewsSection({ client }: { client: ShowcaseClient }) {
                   </div>
                   <p className="ov-title">{finding.text}</p>
                   <p className="ov-meta">
-                    {finding.publishedAt ? `Published ${fmtDate(finding.publishedAt)}` : "Publication date not stated"}
-                    {finding.corroboration ? ` - ${finding.corroboration}` : ""}
+                    {finding.publishedAt ? fmtDate(finding.publishedAt) : "No date stated"}
+                    {finding.corroboration ? ` · ${finding.corroboration}` : ""}
                   </p>
                 </div>
               </li>
@@ -121,9 +121,10 @@ function NewsSection({ client }: { client: ShowcaseClient }) {
           return (
             <>
               <p className="ov-meta">
-                {latest.nicheTerms.length > 0 && <>Niche: <strong style={{ color: "var(--ov-ink)" }}>{latest.nicheTerms.join(", ")}</strong> - </>}
-                Updated {fmtDate(latest.createdAt)}{latest.interpretationLabel ? ` - ${latest.interpretationLabel}` : ""}{latest.evidenceRef ? ` - Evidence: ${latest.evidenceRef}` : ""}
+                {latest.nicheTerms.length > 0 && <><strong style={{ color: "var(--ov-ink)" }}>{latest.nicheTerms.join(", ")}</strong> · </>}
+                Updated {fmtDate(latest.createdAt)}{latest.interpretationLabel ? ` · ${latest.interpretationLabel}` : ""}{latest.evidenceRef ? ` · ${latest.evidenceRef}` : ""}
               </p>
+              <NewsVisual items={items} />
               {items.length === 0 ? (
                 <Hint>The latest report has no findings.</Hint>
               ) : (
@@ -242,6 +243,11 @@ function TitlesAndPacks({ client, marketplace, sku, q }: { client: ShowcaseClien
                     ))}
                   </div>
                 )}
+                <PackFit parts={[
+                  ...p.bullets.map((b) => ({ used: b.chars, max: b.max })),
+                  { used: p.description.chars, max: p.description.max },
+                  ...(p.backendTerms ? [{ used: p.backendTerms.bytes, max: p.backendTerms.maxBytes }] : []),
+                ]} />
                 <p className="ov-meta cmo-based">Based on: <span style={{ color: "var(--ov-ink)", fontWeight: 700 }}>{p.groundedOn.titleText}</span></p>
                 <PackRow heading="Feature bullets" />
                 {p.bullets.map((b, i) => (
@@ -255,7 +261,7 @@ function TitlesAndPacks({ client, marketplace, sku, q }: { client: ShowcaseClien
                 <PackRow heading="Product description" />
                 <div className="cmo-block cmo-block--wide">
                   <div className="cmo-row">
-                    <div className="cmo-row-main"><p className="ov-body" style={{ color: "var(--ov-ink)", whiteSpace: "pre-wrap" }}>{p.description.text}</p><p className="ov-meta">{withLimit(p.description.chars, p.description.max, "chars")}</p></div>
+                    <div className="cmo-row-main"><Clamp text={p.description.text} /><p className="ov-meta">{withLimit(p.description.chars, p.description.max, "chars")}</p></div>
                     <CopyButton text={p.description.text} onCopied={() => track(gen, "COPIED", undefined, "DESCRIPTION")} />
                   </div>
                 </div>
@@ -264,7 +270,7 @@ function TitlesAndPacks({ client, marketplace, sku, q }: { client: ShowcaseClien
                     <PackRow heading="Backend search terms" />
                     <div className="cmo-block cmo-block--wide">
                       <div className="cmo-row">
-                        <div className="cmo-row-main"><p className="ov-body" style={{ color: "var(--ov-ink)" }}>{p.backendTerms.text}</p><p className="ov-meta">{withLimit(p.backendTerms.bytes, p.backendTerms.maxBytes, "bytes")}</p></div>
+                        <div className="cmo-row-main"><Clamp text={p.backendTerms.text} lines={2} /><p className="ov-meta">{withLimit(p.backendTerms.bytes, p.backendTerms.maxBytes, "bytes")}</p></div>
                         <CopyButton text={p.backendTerms.text} onCopied={() => track(gen, "COPIED", undefined, "BACKEND_TERMS")} />
                       </div>
                     </div>
@@ -384,7 +390,6 @@ function HashtagsAndCompliance({ client, marketplace, sku, q }: { client: Showca
           </ul>
         )}
       </AsyncBlock>
-      <p className="ov-meta" style={{ marginTop: 16 }}>Nothing is sent to a marketplace.</p>
     </SectionCard>
   );
 }
@@ -431,5 +436,65 @@ function TitleSummary({ items, showApproved }: { items: ShowcaseTitle[]; showApp
         </div>
       )}
     </div>
+  );
+}
+
+/** A long text block clamped to a few lines with a toggle. The full text stays in the page for screen readers and copy. */
+function Clamp({ text, lines = 3 }: { text: string; lines?: number }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 160 || text.includes("\n");
+  return (
+    <div>
+      <p className="ov-body cmo-clamp" data-open={open || !long} style={{ color: "var(--ov-ink)", whiteSpace: "pre-wrap", ["--lines" as string]: lines }}>{text}</p>
+      {long && <button type="button" className="ov-btn ov-btn--ghost min-h-10" aria-expanded={open} onClick={() => setOpen((v) => !v)}>{open ? "Show less" : "Show all"}</button>}
+    </div>
+  );
+}
+
+/** News at a glance: findings per topic (a ring) and where each dated finding falls in time (dots on a line). Counts and the dates given; undated findings are not placed. */
+function NewsVisual({ items }: { items: NewsItem[] }) {
+  if (items.length < 2) return null;
+  const bySection = new Map<string, number>();
+  items.forEach((i) => bySection.set(i.section, (bySection.get(i.section) ?? 0) + 1));
+  const topics = [...bySection.entries()];
+  const dated = items.map((i) => (i.finding.publishedAt ? Date.parse(i.finding.publishedAt) : NaN)).filter((n) => Number.isFinite(n));
+  const lo = Math.min(...dated);
+  const hi = Math.max(...dated);
+  return (
+    <div className="cmo-newsviz">
+      <div className="cmo-ring">
+        <Donut
+          size={96}
+          summary={`${items.length} findings across ${topics.length} topics`}
+          parts={topics.map(([k, n], i) => ({ key: k, label: k, share: n / items.length, color: toneAt(i) }))}
+          center={<span className="ov-fig">{items.length}</span>}
+        />
+        <ul className="ov-chart-key">{topics.map(([k, n], i) => <li key={k}><i style={{ background: toneAt(i) }} aria-hidden />{k}<b>{n}</b></li>)}</ul>
+      </div>
+      {dated.length >= 2 && hi > lo && (
+        <figure className="cmo-time" aria-label={`Findings dated ${fmtDate(new Date(lo).toISOString())} to ${fmtDate(new Date(hi).toISOString())}`}>
+          <div className="cmo-time-line" aria-hidden>
+            {dated.map((t, i) => <i key={i} style={{ left: `${((t - lo) / (hi - lo)) * 100}%` }} />)}
+          </div>
+          <figcaption className="ov-meta"><span>{fmtDate(new Date(lo).toISOString())}</span><span>{fmtDate(new Date(hi).toISOString())}</span></figcaption>
+        </figure>
+      )}
+    </div>
+  );
+}
+
+/** Every part of the pack against its limit in one strip (bullets, description, search terms). Parts with no stated limit are left out. */
+function PackFit({ parts }: { parts: { used: number; max: number | null | undefined }[] }) {
+  const m = parts.filter((x) => x.max != null && (x.max as number) > 0);
+  if (m.length < 2) return null;
+  const within = m.filter((x) => x.used <= (x.max as number)).length;
+  return (
+    <figure className="cmo-strip" style={{ flex: "none", width: "100%", maxWidth: 360 }} aria-label={`${within} of ${m.length} parts are within their limit`}>
+      <div className="cmo-strip-bars" aria-hidden>
+        {m.map((x, i) => <span key={i} className="cmo-strip-col"><i className={x.used > (x.max as number) ? "is-over" : undefined} style={{ height: `${Math.max(6, Math.min(100, (x.used / (x.max as number)) * 100))}%` }} /></span>)}
+        <b className="cmo-strip-limit" />
+      </div>
+      <figcaption className="ov-meta">Length vs limit: {within} of {m.length} parts within it</figcaption>
+    </figure>
   );
 }

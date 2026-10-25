@@ -4,7 +4,11 @@
 .mt-sidebar { --sb-s1: 12px; --sb-s2: 15px; }
 
 /* brand */
-.sb-brand { display: flex; align-items: center; gap: 12px; padding: 24px 24px 16px; }
+.sb-brand { display: flex; align-items: center; gap: 8px; padding: 24px 16px 16px 24px; }
+.sb-brand-tag { white-space: nowrap; }
+.sb-toggle { margin-left: auto; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px; border: 0; background: transparent; color: var(--text-5); cursor: pointer; }
+.sb-toggle:hover { background: var(--fill-hover); color: var(--text-2); }
+.mt-sidebar.sb-collapsed .sb-toggle { margin-left: 0; }
 .sb-brand-mark { flex: none; width: 44px; height: 28px; background: var(--ov-brand); -webkit-mask: url(/metrion-mark-transparent.png) center / contain no-repeat; mask: url(/metrion-mark-transparent.png) center / contain no-repeat; }
 .sb-brand-name { font-size: var(--sb-s2); font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; color: var(--text-1); }
 .sb-brand-tag { font-size: var(--sb-s1); font-weight: 600; color: var(--text-5); line-height: 1.3; }
@@ -106,4 +110,13 @@
 /* the page header's title and actions sit on the same left and right edges as the content below it */
 @media (min-width: 1024px) {
   html.mt-dash-type .mt-topbar { padding-left: max(32px, calc((100% - 1232px) / 2)); padding-right: max(32px, calc((100% - 1232px) / 2)); }
+}
+
+/* a slimmer top bar: no eyebrow line, a smaller title, tighter padding and 36px buttons */
+@media (min-width: 640px) {
+  html.mt-dash-type .mt-topbar { padding-top: 12px; padding-bottom: 12px; min-height: 0; }
+  html.mt-dash-type .mt-topbar .mt-eyebrow { display: none; }
+  html.mt-dash-type .mt-topbar .t-page-title { font-size: 20px; line-height: 1.2; }
+  html.mt-dash-type .mt-topbar .t-meta { margin-top: 0; }
+  html.mt-dash-type .mt-topbar .mt-btn:not(.lg\:hidden), html.mt-dash-type .mt-topbar a.mt-btn { min-height: 36px; }
 }

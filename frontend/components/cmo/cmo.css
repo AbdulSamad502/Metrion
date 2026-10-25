@@ -91,3 +91,15 @@
 .cmo-strip-col > i.is-over { background: var(--ov-bad); }
 .cmo-strip-limit { position: absolute; inset: 0 0 auto 0; border-top: 1px dashed var(--ov-field-edge); }
 .cmo-ring { display: flex; align-items: center; gap: 16px; }
+
+/* clamped text blocks */
+.cmo-clamp[data-open="false"] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines, 3); overflow: hidden; }
+
+/* news at a glance */
+.cmo-newsviz { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0; border-top: 1px solid var(--ov-line); border-bottom: 1px solid var(--ov-line); }
+.cmo-newsviz .ov-chart-key { margin: 0; }
+.cmo-time { margin: 0; flex: 1 1 240px; display: flex; flex-direction: column; gap: 8px; }
+.cmo-time-line { position: relative; height: 24px; }
+.cmo-time-line::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; border-radius: 2px; background: var(--ov-line); }
+.cmo-time-line > i { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--ov-brand); border: 2px solid var(--ov-card); }
+.cmo-time figcaption { display: flex; justify-content: space-between; }

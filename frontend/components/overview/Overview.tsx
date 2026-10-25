@@ -203,7 +203,7 @@ export function HeroEmpty({ failed, onRetry }: { failed: boolean; onRetry: () =>
 /* ------------------------------------------------------------------ side cards */
 
 const BAND_KEY = { GOOD: "good", WATCH: "to watch", AT_RISK: "at risk" } as const;
-const BAND_COLOR = { GOOD: "var(--ov-good)", WATCH: "var(--ov-warn)", AT_RISK: "var(--ov-bad)" } as const;
+const BAND_COLOR = { GOOD: "var(--ov-good)", WATCH: "var(--ov-warn-fill)", AT_RISK: "var(--ov-bad)" } as const;
 
 export function Health({ entry }: { entry: HealthEntry }) {
   const p = entry.presentation;

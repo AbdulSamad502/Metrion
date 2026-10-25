@@ -89,9 +89,13 @@ export function Sidebar({
     }
     // Measured from bounding boxes (not offsetTop) so it stays correct inside the scrolling nav,
     // whatever the offsetParent chain is.
-    const top = active.getBoundingClientRect().top - nav.getBoundingClientRect().top + nav.scrollTop;
+    // Under the dashboard's reduced page size (CSS zoom) rects are in screen pixels but the indicator is laid out in zoomed pixels, so divide by the scale.
+    const navRect = nav.getBoundingClientRect();
+    const scale = nav.offsetHeight > 0 && navRect.height > 0 ? navRect.height / nav.offsetHeight : 1;
+    const rect = active.getBoundingClientRect();
+    const top = (rect.top - navRect.top) / scale + nav.scrollTop;
     ind.style.opacity = "1";
-    ind.style.height = `${active.getBoundingClientRect().height}px`;
+    ind.style.height = `${rect.height / scale}px`;
     ind.style.transform = `translateY(${top}px)`;
   };
 
@@ -138,11 +142,24 @@ export function Sidebar({
         } ${collapsed ? "lg:w-[76px]" : "lg:w-60"}`}
       >
         <div className={`sb-brand ${collapsed ? "lg:justify-center" : ""}`}>
-          <span role="img" aria-label="Metrion" className="sb-brand-mark" />
+          <span role="img" aria-label="Metrion" className={`sb-brand-mark ${collapsed ? "lg:hidden" : ""}`} />
           <div className={`min-w-0 ${collapsed ? "lg:hidden" : ""}`}>
             <div className="sb-brand-name">Metrion</div>
             <div className="sb-brand-tag">Engine of growth</div>
           </div>
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+            title={collapsed ? "Expand navigation" : "Collapse navigation"}
+            aria-pressed={collapsed}
+            className="sb-toggle mt-focus hidden lg:inline-flex"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="3" y="4" width="18" height="16" rx="4" />
+              <path d="M10 4v16" />
+            </svg>
+          </button>
         </div>
 
         <nav ref={navRef} className="sb-nav sb-scroll relative flex-1 overflow-y-auto" aria-label="Sections">
@@ -182,21 +199,6 @@ export function Sidebar({
             </div>
           </div>
         </nav>
-
-        <div className="sb-foot hidden lg:block">
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-            aria-pressed={collapsed}
-            className="sb-collapse mt-focus"
-          >
-            <span style={{ display: "inline-flex", transform: collapsed ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}>
-              <Icon name="collapse" size={18} />
-            </span>
-            {!collapsed && "Collapse"}
-          </button>
-        </div>
 
         <div className="sb-user">
           <div className="sb-avatar" title={collapsed ? `${userName} · ${roleLabel}` : undefined}>
