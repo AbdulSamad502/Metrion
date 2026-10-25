@@ -60,22 +60,22 @@ body:has(.mt-galaxy)::before { background-image: none; }
 /* ---- hover: a dot grid that lights up in a soft circle trailing the pointer (the reference recording) ----
    Rest: a very faint grid, 12px apart. Pointer over the page: the dots near it darken inside a ~100px circle that eases after the cursor and fades when it stops.
    Pointer over a button or card: the same grid shows inside that element only. Reduced motion: no trailing, no fades. */
-.ceo-root { --dot: rgba(255, 255, 255, 0.11); --dot-hi: rgba(255, 255, 255, 0.95); }
+.ceo-root { --dot: rgba(255, 255, 255, 0.08); --dot-hi: rgba(255, 255, 255, 0.7); }
 .ceo-dots, [data-dots]::before {
-  background-image: radial-gradient(circle, var(--dot-hi) 1.7px, transparent 2.2px);
+  background-image: radial-gradient(circle, var(--dot-hi) 1.3px, transparent 1.8px);
   background-size: 12px 12px;
 }
 .ceo-dots { position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 0.45s ease; background-position: 6px 6px;
-  -webkit-mask-image: radial-gradient(circle 220px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.7) 50%, transparent 100%);
-  mask-image: radial-gradient(circle 220px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.7) 50%, transparent 100%); }
-.ceo-root::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-image: radial-gradient(circle, var(--dot) 1.3px, transparent 1.8px); background-size: 12px 12px; background-position: 6px 6px; }
+  -webkit-mask-image: radial-gradient(circle 150px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
+  mask-image: radial-gradient(circle 150px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%); }
+.ceo-root::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-image: radial-gradient(circle, var(--dot) 1.2px, transparent 1.7px); background-size: 12px 12px; background-position: 6px 6px; }
 .ceo-root[data-spot="on"] .ceo-dots { opacity: 1; transition-duration: 0.15s; }
 [data-dots="static"] { position: relative; }
 [data-dots] { isolation: isolate; }
 [data-dots]::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity 0.18s ease;
-  -webkit-mask-image: radial-gradient(circle 140px at var(--lx, 50%) var(--ly, 50%), #000 0%, rgba(0, 0, 0, 0.7) 50%, transparent 100%);
-  mask-image: radial-gradient(circle 140px at var(--lx, 50%) var(--ly, 50%), #000 0%, rgba(0, 0, 0, 0.7) 50%, transparent 100%);
+  -webkit-mask-image: radial-gradient(circle 100px at var(--lx, 50%) var(--ly, 50%), #000 0%, rgba(0, 0, 0, 0.5) 50%, transparent 100%);
+  mask-image: radial-gradient(circle 100px at var(--lx, 50%) var(--ly, 50%), #000 0%, rgba(0, 0, 0, 0.5) 50%, transparent 100%);
 }
 [data-dots][data-hot]::before, [data-dots]:focus-visible::before { opacity: 1; }
 [data-dots]:focus-visible::before { --lx: 50%; --ly: 50%; }
@@ -90,12 +90,15 @@ body:has(.mt-galaxy)::before { background-image: none; }
 .ceo-tabs { justify-content: safe center; overflow-y: hidden; scrollbar-width: none; }
 .ceo-tabs::-webkit-scrollbar { display: none; }
 .ceo-tab[data-on="true"]::after { bottom: 0; }
-/* activity and results: lines, not boxes (status-coloured finding cards keep their border, it carries meaning) */
-[data-testid="results-area"] { padding-top: 24px; }
-[data-testid="results-area"] .mt-panel, [data-testid="results-area"] .mt-hub-card,
-[data-testid="results-area"] li[style*="border: 1px solid var(--border-subtle)"],
-[data-testid="results-area"] div.rounded-xl[style*="border: 1px solid var(--border-subtle)"] {
-  background: transparent !important; border: 0 !important; border-bottom: 1px solid var(--ov-line) !important; border-radius: 0 !important; box-shadow: none !important;
+/* conversation on the left, activity and insights in a panel on the right (wide screens); stacked below that */
+.ceo-activity { background: var(--ov-card, #0e0e10); border: 1px solid var(--ov-edge); border-radius: 16px; padding: 20px; }
+.ceo-activity > h2 { font-size: 20px; letter-spacing: 0; text-transform: none; color: var(--ov-ink); font-weight: 600; }
+.ceo-activity .mt-panel, .ceo-activity .mt-hub-card { background: transparent; box-shadow: none; }
+@media (min-width: 1280px) {
+  .ceo-split { max-width: 1240px; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 0 28px; align-items: start; }
+  .ceo-split .ceo-conv { min-height: 100%; }
+  .ceo-split .ceo-activity { position: sticky; top: 0; max-height: 100%; overflow-y: auto; align-self: start; }
+  .ceo-bar { max-width: 1240px; padding-right: 428px; }
 }
 
 /* the hub's default size: one step smaller than the rest of the app (80% of the app's own 80%), on desktop windows only */
