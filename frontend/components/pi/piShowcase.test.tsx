@@ -63,7 +63,7 @@ describe("PI showcase (read-only)", () => {
     expect(screen.getByText("Rank #1")).toBeInTheDocument();
     expect(screen.getByText(/Budget: ₹3,50,000 · Target Price: ₹1,999 – ₹3,499 · Amazon · Top 5 Shortlist/)).toBeInTheDocument();
     expect(screen.getByText("Product Information")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Top Products from your Old Investigations/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Top picks/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Old Investigation\s+Historical/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "+ New Discovery" })).toHaveAttribute("href", "/dashboard/ceo-hub");
     expect(screen.getByRole("link", { name: /Print \/ Export PDF/ })).toHaveAttribute("href", `/reports/pi/${RUN_A}/print`);
@@ -358,7 +358,7 @@ describe("PI showcase: one strong action, and the research stays read-only", () 
     await screen.findByRole("heading", { name: /Recent Investigation/ });
     const strong = [...document.querySelectorAll("a, button")].filter((e) => solid(e) && !e.hasAttribute("aria-current")); // the active carousel dot marks position, it is not an action
     expect(strong.map((e) => e.textContent)).toEqual(["+ New Discovery"]);
-    expect(solid(screen.getByRole("link", { name: /Ask the CEO for batch size/ }))).toBe(false);
+    expect(solid(screen.getByRole("link", { name: /Ask for batch size/ }))).toBe(false);
   });
 
   it("shows the saved score as plain text, not as a positive state", async () => {
@@ -374,7 +374,7 @@ describe("PI showcase: one strong action, and the research stays read-only", () 
     const card = await screen.findByLabelText("Product information: Watch 1");
     expect(within(card).getByRole("heading", { name: "Product Information" })).toBeInTheDocument();
     expect(within(card).getByText("Watch 1", { selector: "p" })).toBeInTheDocument();
-    expect(card).toHaveTextContent(/opportunity candidate from public web signal/);
+    expect(card).toHaveTextContent(/from public web signals/);
   });
 });
 

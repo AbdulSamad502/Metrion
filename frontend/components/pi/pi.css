@@ -106,3 +106,12 @@
 .pi-rec > summary .pi-chev { margin-left: auto; transition: transform 200ms var(--ov-ease); }
 .pi-rec[open] > summary .pi-chev { transform: rotate(180deg); }
 .pi-rec[open] { gap: 16px; }
+
+/* the best bet, as the page's answer */
+.pi-hero { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; padding: 24px 32px; }
+.pi-hero-main { display: flex; flex-direction: column; gap: 4px; flex: 1 1 360px; min-width: 0; }
+.pi-hero-side { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; }
+.pi-hero-score { display: flex; align-items: baseline; gap: 8px; }
+.pi-hero-score .ov-fig-lg { color: var(--ov-hero-ink); }
+.pi-hero .ov-h, .pi-hero .ov-h strong { color: var(--ov-hero-ink); }
+.pi-hero .ov-meta { color: var(--ov-hero-ink-2); }

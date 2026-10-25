@@ -165,7 +165,7 @@ function TopPicks({ items, onOpen }: { items: PiHistoryItem[]; onOpen: (runId: s
   return (
     <section className="ov-card ov-rise" aria-label="Top products from your earlier investigations">
       <h3 className="ov-title" style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", columnGap: 12 }}>
-        <span>Top Products from your Old Investigations</span>
+        <span>Top picks</span>
         
       </h3>
       {picks.length === 0 ? (
@@ -328,9 +328,18 @@ function CurrentInvestigation({ runId, client, cache, rank, setRank, isLatest, o
       ) : (
         <>
           {c.overall && (
-            <div className="pi-answer">
-              <p className="ov-title"><strong>Strongest opportunity: {c.overall.title}</strong> - {c.overall.reason}.</p>
-              <Link href="/dashboard/ceo-hub" className="ov-btn min-h-10" style={{ background: "var(--ov-card)" }}>Ask the CEO for batch size →</Link>
+            <div className="ov-card ov-hero pi-hero">
+              <div className="pi-hero-main">
+                <p className="ov-meta">Best bet</p>
+                <p className="ov-h"><strong>{c.overall.title}</strong></p>
+                <p className="ov-meta">{c.overall.reason}</p>
+              </div>
+              <div className="pi-hero-side">
+                {products[0] && products[0].candidate.candidate_title === c.overall.title && products[0].finalScore && (
+                  <div className="pi-hero-score"><span className="ov-fig-lg">{products[0].finalScore}</span><span className="ov-meta">/100 score</span></div>
+                )}
+                <Link href="/dashboard/ceo-hub" className="ov-btn ov-btn--glass min-h-10">Ask for batch size →</Link>
+              </div>
             </div>
           )}
           <Ledger products={products} idx={idx} onSelect={(n) => setRank(n + 1)} />
@@ -468,7 +477,7 @@ function ProductInformation({ product, brief }: { product: PiProduct; brief: PiC
         <div className="min-w-0">
           <div className="ov-meta" style={{ display: "flex", alignItems: "center", gap: 8 }}><Badge tone="neutral">Rank #{product.rank}</Badge><h4 style={{ margin: 0, font: "inherit" }}>Product Information</h4></div>
           <p className="ov-h" style={{ marginTop: 8 }}>{c.candidate_title}</p>
-          <p className="ov-meta" style={{ marginTop: 4 }}>{c.observed_category ? `${c.observed_category} · ` : ""}score {score(product.finalScore)} · opportunity candidate from public web signal</p>
+          <p className="ov-meta" style={{ marginTop: 4 }}>{c.observed_category ? `${c.observed_category} · ` : ""}score {score(product.finalScore)} · from public web signals</p>
           {imgUrl && <p className="ov-meta">image from {imageDomain(c.image_source_url)}</p>}
         </div>
       </header>
