@@ -1,6 +1,6 @@
 /* The advanced CFO tools, in the Overview's look. These rules only apply inside .cfo-skin, so no other page changes.
    They restyle the classes the tools already use; no tool logic or wording changes. */
-.cfo-skin { max-width: 1232px; }
+.cfo-skin { max-width: 1440px; }
 .cfo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ov-gap); align-items: start; }
 @media (max-width: 1100px) { .cfo-grid { grid-template-columns: 1fr; } }
 .cfo-stack, .cfo-skin .mt-stack { display: flex; flex-direction: column; gap: var(--ov-gap); }
@@ -57,3 +57,39 @@
 
 .cfo-skin .uppercase { text-transform: none; letter-spacing: 0; }
 .cfo-skin .mt-eyebrow { font-size: var(--ov-s1); text-transform: none; letter-spacing: 0; }
+
+/* ---------- Expense tracker: four panels on one grid ---------- */
+.exp-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--ov-gap); align-items: stretch; }
+.exp-panel { grid-column: span 12; display: flex; flex-direction: column; gap: 16px; padding: 24px; border-radius: 20px; background: var(--ov-soft); border: 1px solid var(--ov-line); min-width: 0; }
+@media (min-width: 1100px) {
+  .exp-add, .exp-list { grid-column: span 7; }
+  .exp-budget, .exp-status { grid-column: span 5; }
+  .exp-panel .grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .exp-panel .grid > :only-child, .exp-add > div:nth-of-type(2) { grid-column: 1 / -1; }
+}
+.exp-title { margin: 0; font-size: var(--ov-s2); font-weight: 800; color: var(--ov-ink); letter-spacing: -0.005em; }
+.exp-panel :is(.mt-input, select, input[type="date"], input[type="text"]) { background: var(--ov-card); }
+.exp-panel > .mt-3, .exp-panel > div > .mt-3 { margin-top: 0; }
+.exp-total { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--ov-line); }
+.exp-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+.exp-stats > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.exp-stats .ov-fig { font-size: var(--ov-s2); overflow-wrap: anywhere; }
+@media (max-width: 640px) { .exp-stats { grid-template-columns: 1fr; gap: 8px; } }
+
+/* ---------- Profit calculator: steps as cards ---------- */
+.cfo-skin .pnl-step { padding: 0; gap: 0; overflow: hidden; }
+.cfo-skin .pnl-step-head { padding: 16px 24px; background: transparent; border: 0; }
+.cfo-skin .pnl-step-body { padding: 8px 24px 24px; }
+.cfo-skin .pnl-step-icon { background: var(--ov-soft); color: var(--ov-ink); border: 1px solid var(--ov-line); }
+.cfo-skin label.mt-chip.flex-col { border-radius: 16px; min-height: 0; padding: 16px; align-items: flex-start; text-align: left; border: 1px solid var(--ov-line); background: var(--ov-card); }
+.cfo-skin label.mt-chip.flex-col:has(input:checked) { border-color: var(--ov-brand); background: var(--ov-brand-soft); }
+.cfo-skin [data-testid^="fee-"] { border-radius: 16px !important; background: var(--ov-soft) !important; border: 1px solid var(--ov-line) !important; padding: 16px !important; }
+
+@media (min-width: 1100px) { .exp-add { order: 1; } .exp-budget { order: 2; } .exp-list { order: 3; } .exp-status { order: 4; } }
+.exp-panel .mt-btn { background: var(--ov-brand); color: var(--ov-on-brand); width: fit-content; padding: 0 24px; }
+@media (hover: hover) and (pointer: fine) { .exp-panel .mt-btn:hover { background: var(--ov-brand-ink); } }
+
+/* segmented choices in the calculator: one outer track, a solid fill on the chosen option, no second outline */
+.cfo-skin fieldset .grid.p-1 { border: 0 !important; background: var(--ov-soft) !important; border-radius: 999px; }
+.cfo-skin fieldset .grid.p-1 > label.mt-chip { border: 0 !important; background: transparent !important; color: var(--ov-ink-2) !important; }
+.cfo-skin fieldset .grid.p-1 > label.mt-chip:has(input:checked) { background: var(--ov-brand) !important; color: var(--ov-on-brand) !important; }

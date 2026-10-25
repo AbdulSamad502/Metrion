@@ -44,3 +44,8 @@ html.mt-dash-type :is(.mt-dash-card--interactive, .mt-dash-card--interactive-lit
 html.mt-dash-type :is(.mt-dash-card--interactive, .mt-glow-panel)::before { opacity: 0 !important; }
 html.mt-dash-type :is(.mt-dash-card--interactive, .mt-hover-card):is(:hover, :focus-visible) { border-color: var(--border-default); }
 html.mt-dash-type :is(.mt-dash-card, .mt-panel)[data-sheen] { background-image: none; box-shadow: none; }
+
+/* rows that fill their card edge to edge (Action Center) must never grow past the card: they tint instead of scaling */
+@media (hover: hover) and (pointer: fine) {
+  html.mt-dash-type :is(button.ov-row, ul.ov-card a.ov-row):not(:disabled):hover { scale: 1; background: var(--ov-soft); border-radius: 16px; }
+}

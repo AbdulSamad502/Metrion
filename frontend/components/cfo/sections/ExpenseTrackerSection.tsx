@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/Toast";
 import { apiFetch, type BudgetStatus, type ExpenseListResponse, type ManualAdjustmentIdResponse } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
 import { ErrorText, Field, SelectInput, SubmitButton, TextInput, rupees, toPaise } from "@/components/cfo/primitives";
+import { Pill } from "@/components/overview/parts";
 
 // --- 1. Expense tracker (PUT/GET /cfo/expenses, PUT /cfo/expenses/budget, GET /cfo/expenses/budget-status) --
 
@@ -162,9 +163,9 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
 
   return (
     <Section title="Expense tracker">
-      <div className="flex flex-col gap-6">
-        <div>
-          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Add expense</div>
+      <div className="exp-grid">
+        <div className="exp-panel exp-add">
+          <h3 className="exp-title">Add expense</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Category">
               <SelectInput
@@ -191,8 +192,8 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
           <ErrorText>{addError}</ErrorText>
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
-          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>List expenses</div>
+        <div className="exp-panel exp-list">
+          <h3 className="exp-title">List expenses</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Period start (optional)">
               <TextInput type="date" value={listPeriodStart} onChange={setListPeriodStart} />
@@ -252,14 +253,14 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
                   </tbody>
                 </table></div>
               )}
-              <div className="mt-2 t-body" style={{ color: "var(--text-2)" }}>Total: {rupees(listResult.totalPaise)}</div>
+              <div className="exp-total"><span className="ov-meta">Total</span><b className="ov-fig">{rupees(listResult.totalPaise)}</b></div>
               </div>
             </div>
           )}
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
-          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Set category budget</div>
+        <div className="exp-panel exp-budget">
+          <h3 className="exp-title">Set category budget</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Field label="Category">
               <SelectInput
@@ -278,8 +279,8 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
           <ErrorText>{budgetError}</ErrorText>
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
-          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Check budget status</div>
+        <div className="exp-panel exp-status">
+          <h3 className="exp-title">Check budget status</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Category">
               <SelectInput
@@ -305,18 +306,19 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
                 <div style={{ color: "var(--text-6)" }}>No budget set for this category/period.</div>
               ) : (
                 <>
-                  <div>
-                    Spent: {rupees(statusResult.spentPaise)} · Budget: {rupees(statusResult.budgetPaise)} · Remaining:{" "}
-                    {rupees(statusResult.remainingPaise)}
+                  <div className="exp-stats">
+                    <div><span className="ov-meta">Spent</span><b className="ov-fig">{rupees(statusResult.spentPaise)}</b></div>
+                    <div><span className="ov-meta">Budget</span><b className="ov-fig">{rupees(statusResult.budgetPaise)}</b></div>
+                    <div><span className="ov-meta">Remaining</span><b className="ov-fig">{rupees(statusResult.remainingPaise)}</b></div>
                   </div>
                   {statusResult.budgetPaise !== null && statusResult.budgetPaise > 0 && (
                     <div className="ov-meter my-2" role="img" aria-label={`${rupees(statusResult.spentPaise)} spent of a ${rupees(statusResult.budgetPaise)} budget`}>
                       <i style={{ width: `${Math.min(100, (statusResult.spentPaise / statusResult.budgetPaise) * 100)}%`, background: statusResult.exceeded ? "var(--ov-bad)" : "var(--ov-brand)" }} />
                     </div>
                   )}
-                  <div style={{ color: statusResult.exceeded ? "var(--negative)" : "var(--accent)" }}>
+                  <Pill tone={statusResult.exceeded ? "bad" : "good"} icon={statusResult.exceeded ? "alert" : "check"}>
                     {statusResult.exceeded ? "Budget exceeded" : "Within budget"}
-                  </div>
+                  </Pill>
                 </>
               )}
             </div>

@@ -23,12 +23,12 @@ html[data-surface="layered"] {
 }
 
 html[data-surface="layered"][data-theme="light"] {
-  --ov-page: #f2f2f4;
+  --ov-page: #e6e7ec;
   --ov-page-glow: #ffffff;
   --ov-card: #ffffff;
   --ov-card-top: #ffffff;
-  --ov-card-bottom: #fcfcfd;
-  --ov-soft: #ececf0;
+  --ov-card-bottom: #f8f8fb;
+  --ov-soft: #f2f2f6;
   --ov-line: rgba(0, 0, 0, 0.16);
   --ov-edge: rgba(0, 0, 0, 0.32);
   --ov-track: rgba(0, 0, 0, 0.3);
@@ -57,13 +57,33 @@ html[data-surface="layered"] :is(.ov-card:not(.ov-hero), .pi-panel) {
   background-image: linear-gradient(180deg, var(--ov-card-top) 0%, var(--ov-card-bottom) 100%);
 }
 
-/* light mode: a clean page with a soft white lift at the top (no dark corner), a white sidebar, and borders that stay quiet */
+/* light mode: the same layering as dark. A cool grey page that lifts to a soft white glow at the top, white cards with a lit top edge and a two-layer shadow,
+   panels one step greyer inside them, a white sidebar, and a black hero that is lit from the top like the dark cards. */
 html[data-surface="layered"][data-theme="light"] body {
   background:
-    radial-gradient(1100px 520px at 60% -8%, #ffffff 0%, transparent 70%),
+    radial-gradient(1200px 560px at 62% -8%, #fbfbff 0%, transparent 72%),
+    radial-gradient(900px 520px at 0% 100%, #dcdde4 0%, transparent 70%),
     var(--ov-page) !important;
   background-attachment: fixed !important;
 }
-html[data-surface="layered"][data-theme="light"] .mt-sidebar { background: #ffffff !important; border-right: 1px solid var(--ov-line); }
-html[data-surface="layered"][data-theme="light"] .ov-card:not(.ov-hero) { border-color: var(--ov-edge); }
-html[data-surface="layered"][data-theme="light"] .ov-hero { border: 1px solid #000; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 18px 36px -16px rgba(0, 0, 0, 0.45); }
+html[data-surface="layered"][data-theme="light"] .mt-sidebar { background: #fbfbfd !important; border-right: 1px solid var(--ov-edge); }
+html[data-surface="layered"][data-theme="light"] .mt-topbar { border-bottom: 1px solid var(--ov-line); }
+html[data-surface="layered"][data-theme="light"] .ov-card:not(.ov-hero),
+html[data-surface="layered"][data-theme="light"] .pi-panel {
+  border-color: var(--ov-edge);
+  box-shadow: 0 1px 0 #ffffff inset, 0 1px 2px rgba(20, 22, 40, 0.06), 0 14px 30px -16px rgba(20, 22, 40, 0.2);
+}
+html[data-surface="layered"][data-theme="light"] .ov-hero { background-image: none; border: 1px solid #000; box-shadow: none; }
+
+/* light mode, finer detail: panels inside cards get a crisp edge and a white top highlight instead of a flat grey fill */
+html[data-surface="layered"][data-theme="light"] :is(.ov-tile, .ci-item, .cmo-item, .cmo-block, .ov-row:not(a), .pi-tile) {
+  box-shadow: 0 1px 0 #ffffff inset;
+  border-color: var(--ov-line);
+}
+
+/* browser surfaces, themed for both modes: selection, form accents, caret and scrollbars follow the palette */
+html[data-surface="layered"] { accent-color: var(--ov-brand); caret-color: var(--ov-brand); }
+html[data-surface="layered"] ::selection { background: var(--ov-brand); color: var(--ov-on-brand); }
+html[data-surface="layered"] * { scrollbar-width: thin; scrollbar-color: var(--ov-field-edge) transparent; }
+html[data-surface="layered"][data-theme="light"] input:focus-visible,
+html[data-surface="layered"][data-theme="light"] select:focus-visible { outline: 2px solid var(--ov-brand); outline-offset: 2px; }

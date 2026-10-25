@@ -161,14 +161,14 @@ describe("orientation: where am I, and where can I go", () => {
     expect(document.title).toBe("Page CFO · Metrion");
   });
 
-  it("groups the menu as Start, Business and System, and marks exactly the current page", async () => {
+  it("groups the menu as Start, Agents, Tools and System, and marks exactly the current page", async () => {
     pathname = "/dashboard/cfo";
     render(<ShellFrame>{page("Finance")}</ShellFrame>);
     await screen.findByText("body Finance");
     const nav = screen.getByLabelText("Sections");
-    for (const heading of ["Start", "Business", "System"]) expect(within(nav).getByText(heading)).toBeInTheDocument();
+    expect([...nav.querySelectorAll(".sb-label")].map((l) => l.textContent)).toEqual(["Start", "Agents", "Tools", "System"]);
     const labels = within(nav).getAllByRole("link").map((l) => l.textContent?.trim());
-    expect(labels).toEqual(["Overview", "CEO Hub", "Action Center", "Products", "Competitors", "Profit & Finance", "Profit Calculator", "Listings & Marketing", "Agents", "Settings"]);
+    expect(labels).toEqual(["Overview", "CEO Hub", "Action Center", "Products", "Competitors", "Profit & Finance", "Listings & Marketing", "Profit Calculator", "Expense Tracker", "Agents", "Settings"]);
     const current = within(nav).getAllByRole("link").filter((l) => l.getAttribute("aria-current") === "page");
     expect(current).toHaveLength(1);
     expect(current[0]).toHaveTextContent("Profit & Finance");

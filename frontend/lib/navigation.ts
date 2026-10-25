@@ -25,6 +25,7 @@ export const PAGE_COPY = {
   products: { title: "Products", subtitle: "Product ideas and suppliers" },
   competitors: { title: "Competitors", subtitle: "Prices, changes and what customers say" },
   "pnl-calculator": { title: "Profit Calculator", subtitle: "Try prices, costs and fees before you commit. A what-if from the numbers you type, never your verified results" },
+  "expense-tracker": { title: "Expense Tracker", subtitle: "Log what you spend and keep each category inside a budget" },
   cfo: { title: "Profit & Finance", subtitle: "Profit and where money leaks" },
   cmo: { title: "Listings & Marketing", subtitle: "Titles and listing copy to copy" },
   agents: { title: "Agents", subtitle: "Your specialists" },
@@ -36,8 +37,8 @@ const label = (id: keyof typeof PAGE_COPY) => PAGE_COPY[id].title;
 /** The full browser-tab title. Complete in every route segment (no template): Next applied a parent's title template inconsistently on client navigation. */
 export const pageTitle = (id: keyof typeof PAGE_COPY): string => `${PAGE_COPY[id].title} · Metrion`;
 
-/** Start: where a seller begins. Business: the four workspaces, in the order a seller thinks about them (what to sell, who competes, what it earns,
- * how to list it). System sits below (`FOOTER_NAV`). */
+/** Start: where a seller begins. Agents: the four specialists, in the order a seller thinks about them (what to sell, who competes, what it earns,
+ * how to list it). Tools: the calculator and the expense tracker, which belong to no agent. System sits below (`FOOTER_NAV`). */
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Start",
@@ -48,13 +49,19 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "Business",
+    label: "Agents",
     items: [
       { id: "products", label: label("products"), icon: "products", href: "/dashboard/pi" },
       { id: "competitors", label: label("competitors"), icon: "competitors", href: "/dashboard/competitors" },
       { id: "cfo", label: label("cfo"), icon: "finance", href: "/dashboard/cfo" },
-      { id: "pnl-calculator", label: label("pnl-calculator"), icon: "reports", href: "/dashboard/pnl-calculator" },
       { id: "cmo", label: label("cmo"), icon: "marketing", href: "/dashboard/cmo" },
+    ],
+  },
+  {
+    label: "Tools",
+    items: [
+      { id: "pnl-calculator", label: label("pnl-calculator"), icon: "reports", href: "/dashboard/pnl-calculator" },
+      { id: "expense-tracker", label: label("expense-tracker"), icon: "orders", href: "/dashboard/expense-tracker" },
     ],
   },
 ];

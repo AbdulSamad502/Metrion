@@ -13,6 +13,12 @@ export default function PnlCalculatorPage() {
   return (
     <DashboardShell {...PAGE_COPY["pnl-calculator"]}>
       <div className="ov cfo-skin">
+        <header className="ov-head ov-rise">
+          <div>
+            <h2 className="ov-h">What would you earn?</h2>
+            <p className="ov-body" style={{ marginTop: 4 }}>Try a price with your own costs. An estimate, never saved.</p>
+          </div>
+        </header>
         <PnlWorkspace />
       </div>
     </DashboardShell>

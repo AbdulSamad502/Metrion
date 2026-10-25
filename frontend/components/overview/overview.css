@@ -102,7 +102,7 @@
 }
 
 .ov {
-  max-width: 1232px;
+  max-width: 1440px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -290,11 +290,9 @@ a:hover > .ov-arrow, a:focus-visible > .ov-arrow, button:hover > .ov-arrow { tra
 
 /* ---------- hero ---------- */
 .ov-hero {
-  color: var(--ov-hero-ink); border: 0; gap: 24px; padding: 32px; overflow: hidden; justify-content: center;
-  background:
-    radial-gradient(560px 280px at 100% 0%, rgba(255, 255, 255, 0.08), transparent 70%),
-    linear-gradient(140deg, var(--ov-hero-a) 0%, var(--ov-hero-b) 58%, var(--ov-hero-c) 100%);
-  box-shadow: 0 32px 48px -32px var(--ov-hero-glow), 0 2px 6px rgba(43, 39, 145, 0.25);
+  color: var(--ov-hero-ink); border: 1px solid var(--ov-edge); gap: 24px; padding: 32px; overflow: hidden; justify-content: center;
+  background: var(--ov-hero-b);
+  box-shadow: none;
 }
 .ov-hero .ov-meta, .ov-hero .ov-body { color: var(--ov-hero-ink-2); }
 .ov-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }

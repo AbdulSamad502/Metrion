@@ -149,18 +149,16 @@ function GstRateField({ value, onChange, error }: { value: PnlField; onChange: (
 }
 
 type StepTone = "info" | "warning" | "rose" | "violet" | "accent";
-const TONE_VAR: Record<StepTone, string> = { info: "var(--info)", warning: "var(--warning)", rose: "var(--tone-rose)", violet: "var(--tone-violet)", accent: "var(--accent)" };
 
 /** A numbered, collapsible step with a tick once everything in it has been entered. "Entered" only means something was typed or marked not applicable; it
  * does not mean the values are right. The icon and tint only help tell the steps apart; each is named in words. */
 function StepCard({ n, title, subtitle, done, open, onToggle, icon, tone, wide = false, children }: { n: number; title: string; subtitle: string; done: boolean; open: boolean; onToggle: () => void; icon: IconName; tone: StepTone; wide?: boolean; children: ReactNode }) {
   const id = useId();
-  const c = TONE_VAR[tone];
   return (
-    <section className={`overflow-hidden rounded-2xl ${wide ? "lg:col-span-2" : ""}`} style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }} data-testid={`step-${n}`}>
+    <section className={`ov-card pnl-step ${wide ? "lg:col-span-2" : ""}`} data-testid={`step-${n}`}>
       <h2 className="m-0">
-        <button type="button" aria-expanded={open} aria-controls={id} onClick={onToggle} className="mt-focus flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-3 text-left" style={{ background: `linear-gradient(90deg, color-mix(in srgb, ${c} 14%, transparent), transparent 75%)` }}>
-          <span aria-hidden className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: `color-mix(in srgb, ${c} 22%, transparent)`, color: c }}><Icon name={icon} size={20} /></span>
+        <button type="button" aria-expanded={open} aria-controls={id} onClick={onToggle} className="pnl-step-head mt-focus flex min-h-14 w-full cursor-pointer items-center gap-3 text-left">
+          <span aria-hidden className="pnl-step-icon flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" data-tone={tone}><Icon name={icon} size={20} /></span>
           <span className="min-w-0 flex-1">
             <span className="block t-body font-semibold" style={{ color: "var(--text-1)" }}><span aria-hidden>{n}. </span>{title}</span>
             <span className="block t-meta" style={{ color: "var(--text-5)" }}>{subtitle}</span>
@@ -174,7 +172,7 @@ function StepCard({ n, title, subtitle, done, open, onToggle, icon, tone, wide =
           <span aria-hidden style={{ color: "var(--text-5)", transform: open ? "rotate(180deg)" : "none", display: "inline-flex" }}><Icon name="chevron" size={18} /></span>
         </button>
       </h2>
-      <div id={id} hidden={!open} className="px-4 pb-5 pt-3">{children}</div>
+      <div id={id} hidden={!open} className="pnl-step-body">{children}</div>
     </section>
   );
 }
@@ -246,7 +244,7 @@ export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form:
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-4 rounded-2xl p-4 sm:grid-cols-2" style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
+      <div className="ov-card grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-3">
           <PillChoice legend="Marketplace" segmented value={form.marketplace} options={PNL_MARKETPLACES} onChange={(v: PnlMarketplace) => setForm((f) => (f.isExample ? exampleForm(v, f.mode) : { ...f, marketplace: v, fees: {}, fulfilment: "easy_ship" }))} />
           <PillChoice legend="Detail" segmented value={form.mode} options={[{ id: "quick", label: "Expected" }, { id: "detailed", label: "Detailed" }]} onChange={(v) => set("mode", v)} />

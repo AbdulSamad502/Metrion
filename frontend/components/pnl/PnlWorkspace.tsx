@@ -79,21 +79,21 @@ export function PnlWorkspace() {
 
   return (
     <div className="flex flex-col" style={{ gap: "var(--ov-gap, 24px)" }}>
-      <div className="mt-no-print ov-card min-w-0">
+      <div className="mt-no-print min-w-0 flex flex-col" style={{ gap: "var(--ov-gap, 24px)" }}>
         <PnlInputs form={form} setForm={setForm} errors={errors} onReset={reset} onExample={loadExample} />
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <button type="button" onClick={calculate} disabled={busy} className="mt-btn mt-focus min-h-10 rounded-xl px-6 t-body font-bold" style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}>
+        <div className="ov-card flex flex-wrap items-center gap-3" style={{ flexDirection: "row" }}>
+          <button type="button" onClick={calculate} disabled={busy} className="ov-btn ov-btn--brand mt-focus min-h-10">
             {busy ? "Calculating…" : "Calculate"}
           </button>
+          {error && <div className="min-w-0 flex-1"><ErrorNotice message={error} /></div>}
         </div>
-        {error && <div className="mt-4"><ErrorNotice message={error} /></div>}
       </div>
       <div id="pnl-results" className="min-w-0 scroll-mt-24">
         <div className="mt-print-area ov-card flex flex-col gap-4">
           <p className="mt-print-only m-0 t-body-sm">Metrion profit &amp; loss estimate · {marketplaceLabel} · {form.mode === "quick" ? "Expected" : "Detailed"} · hypothetical estimate, not verified</p>
           <PnlResults result={result} stale={stale} busy={busy} onUsePrice={usePrice} />
           <div className="mt-no-print">
-            <button type="button" onClick={() => window.print()} disabled={!result || result.status === "incomplete"} className="mt-btn mt-focus min-h-10 rounded-lg px-4 t-body-sm font-semibold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
+            <button type="button" onClick={() => window.print()} disabled={!result || result.status === "incomplete"} className="ov-btn mt-focus min-h-10">
               Print or save as PDF
             </button>
           </div>

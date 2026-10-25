@@ -109,7 +109,7 @@
 
 /* the page header's title and actions sit on the same left and right edges as the content below it */
 @media (min-width: 1024px) {
-  html.mt-dash-type .mt-topbar { padding-left: max(32px, calc((100% - 1232px) / 2)); padding-right: max(32px, calc((100% - 1232px) / 2)); }
+  html.mt-dash-type .mt-topbar { padding-left: max(32px, calc((100% - 1440px) / 2)); padding-right: max(32px, calc((100% - 1440px) / 2)); }
 }
 
 /* a slimmer top bar: no eyebrow line, a smaller title, tighter padding and 36px buttons */
