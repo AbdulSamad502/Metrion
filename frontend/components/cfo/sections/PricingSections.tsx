@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LineChart } from "@/components/overview/charts";
 import { Section } from "@/components/ui/Section";
 import { CostInput } from "@/components/ui/CostInput";
 import { costReady, costToApi, EMPTY_COST, type CostChoice } from "@/lib/costInput";
@@ -8,6 +9,8 @@ import { apiFetch, type BatchSizeResponse, type FundingReadinessResponse, type L
 import { friendlyApiError } from "@/lib/apiErrors";
 import { DataRequestNote } from "@/components/cfo/DataRequestNote";
 import { CfoMetricResultRow, ComponentRowsEditor, EditableGstSummaryLine, ErrorText, Field, SelectInput, SubmitButton, TextInput, componentRowsToPayload, newGstSummaryLine, toPaise, PeriodPresets } from "@/components/cfo/primitives";
+
+const rupeeText = (paise: number) => `${paise < 0 ? "-" : ""}₹${(Math.abs(paise) / 100).toFixed(2)}`;
 
 // --- 6. Pricing curve (POST /cfo/pricing) --------------------------------------------
 
@@ -169,6 +172,10 @@ export function PricingCurveSection({ getToken }: { getToken: () => Promise<stri
         <ErrorText>{error}</ErrorText>
         {result && (
           <div className="mt-ledger">
+            <LineChart
+              summary={`Result at each price you listed: ${result.curve.map((r) => `${r.calculationBasis ?? r.metricCode} ${r.isAvailable && r.valuePaise !== null ? rupeeText(r.valuePaise) : "unavailable"}`).join(", ")}.`}
+              points={result.curve.map((r, i) => ({ key: `${i}-${r.engineResultRef}`, label: r.calculationBasis ?? r.metricCode, y: r.isAvailable ? r.valuePaise : null }))}
+            />
             {result.curve.map((r) => (
               <CfoMetricResultRow key={r.engineResultRef} label={r.calculationBasis ?? r.metricCode} result={r} />
             ))}

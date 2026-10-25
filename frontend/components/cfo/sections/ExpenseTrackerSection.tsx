@@ -309,6 +309,11 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
                     Spent: {rupees(statusResult.spentPaise)} · Budget: {rupees(statusResult.budgetPaise)} · Remaining:{" "}
                     {rupees(statusResult.remainingPaise)}
                   </div>
+                  {statusResult.budgetPaise !== null && statusResult.budgetPaise > 0 && (
+                    <div className="ov-meter my-2" role="img" aria-label={`${rupees(statusResult.spentPaise)} spent of a ${rupees(statusResult.budgetPaise)} budget`}>
+                      <i style={{ width: `${Math.min(100, (statusResult.spentPaise / statusResult.budgetPaise) * 100)}%`, background: statusResult.exceeded ? "var(--ov-bad)" : "var(--ov-brand)" }} />
+                    </div>
+                  )}
                   <div style={{ color: statusResult.exceeded ? "var(--negative)" : "var(--accent)" }}>
                     {statusResult.exceeded ? "Budget exceeded" : "Within budget"}
                   </div>

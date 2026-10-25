@@ -5,7 +5,7 @@ import { formatBps, formatPaise } from "@/lib/pnlText";
 import type { PnlBreakdown, PnlLineShare } from "@/lib/pnlScenario";
 
 /** Slice colours. They only tell slices apart; they carry no meaning (the label and percentage are always written beside each one). Profit is the accent. */
-const PALETTE = ["#5BA8FF", "#E7AC42", "#A78BFA", "#F16B61", "#2DD4BF", "#F472B6", "#94A3B8", "#C084FC"] as const;
+const PALETTE = ["var(--ov-c4)", "var(--ov-c3)", "var(--ov-c6)", "var(--ov-c5)", "var(--ov-c2)", "var(--ov-c1)", "var(--ov-c7)", "var(--ov-warn)"] as const;
 const PROFIT = "var(--accent)";
 
 const colourOf = (id: string, index: number): string => (id === "profit" ? PROFIT : PALETTE[index % PALETTE.length]);

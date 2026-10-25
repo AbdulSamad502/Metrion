@@ -79,7 +79,7 @@ export function PnlWorkspace() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="mt-no-print min-w-0">
+      <div className="mt-no-print ov-card min-w-0">
         <PnlInputs form={form} setForm={setForm} errors={errors} onReset={reset} onExample={loadExample} />
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <button type="button" onClick={calculate} disabled={busy} className="mt-btn mt-focus min-h-10 rounded-xl px-6 t-body font-bold" style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}>
@@ -89,7 +89,7 @@ export function PnlWorkspace() {
         {error && <div className="mt-4"><ErrorNotice message={error} /></div>}
       </div>
       <div id="pnl-results" className="min-w-0 scroll-mt-24">
-        <div className="mt-print-area flex flex-col gap-4">
+        <div className="mt-print-area ov-card flex flex-col gap-4">
           <p className="mt-print-only m-0 t-body-sm">Metrion profit &amp; loss estimate · {marketplaceLabel} · {form.mode === "quick" ? "Expected" : "Detailed"} · hypothetical estimate, not verified</p>
           <PnlResults result={result} stale={stale} busy={busy} onUsePrice={usePrice} />
           <div className="mt-no-print">
@@ -99,7 +99,7 @@ export function PnlWorkspace() {
           </div>
         </div>
       </div>
-      <div className="mt-no-print"><PnlWhatIf form={form} hasResult={result !== null && result.status !== "incomplete"} /></div>
+      <div className="mt-no-print ov-card"><PnlWhatIf form={form} hasResult={result !== null && result.status !== "incomplete"} /></div>
       {kept && result && result.status !== "incomplete" && (
         <a href="#pnl-results" aria-label="Jump to your result" className="mt-no-print fixed inset-x-3 bottom-3 z-30 flex items-center justify-between rounded-2xl px-4 py-3 shadow-2xl lg:hidden" style={{ background: "var(--bg-popover)", border: "1px solid var(--accent-border-strong)", color: "var(--text-1)" }} data-testid="glance-bar">
           <span className="t-body-sm" style={{ color: "var(--text-5)" }}>{result.status === "provisional" ? "Profit before missing costs" : "Profit per order kept"}</span>
