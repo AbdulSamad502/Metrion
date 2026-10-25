@@ -18,12 +18,15 @@ export function Tabs({
   onChange,
   label,
   idPrefix = "tab",
+  panels = true,
 }: {
   tabs: TabItem[];
   active: string;
   onChange: (id: string) => void;
   label: string;
   idPrefix?: string;
+  /** false when the tabs filter one view and no separate TabPanel exists, so no tab points at a panel that is not there */
+  panels?: boolean;
 }) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -93,7 +96,7 @@ export function Tabs({
             role="tab"
             type="button"
             aria-selected={selected}
-            aria-controls={`${idPrefix}-panel-${t.id}`}
+            aria-controls={panels ? `${idPrefix}-panel-${t.id}` : undefined}
             tabIndex={selected ? 0 : -1}
             disabled={t.disabled}
             onClick={() => onChange(t.id)}

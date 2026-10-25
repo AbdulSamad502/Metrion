@@ -165,5 +165,5 @@ export function CopyButton({ text, label = "Copy", onCopied, primary = false }: 
 export const fmtDate = (iso: string | null | undefined): string => {
   if (!iso) return "not stated";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "not stated" : d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return Number.isNaN(d.getTime()) ? "not stated" : d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 };

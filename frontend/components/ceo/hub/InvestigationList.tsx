@@ -102,7 +102,7 @@ export function InvestigationList({
                 <span className="flex items-center gap-2">
                   <StatusBadge tone={STATUS_TONE[i.status]}>{STATUS_LABEL[i.status]}</StatusBadge>
                   <time className="t-meta" dateTime={i.last_message_at} style={{ color: "var(--text-6)" }}>
-                    {new Date(i.last_message_at).toLocaleDateString()}
+                    {new Date(i.last_message_at).toLocaleDateString("en-IN")}
                   </time>
                 </span>
               </button>

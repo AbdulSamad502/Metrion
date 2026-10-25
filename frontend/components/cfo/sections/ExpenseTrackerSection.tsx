@@ -89,7 +89,7 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
       const res = await apiFetch<ExpenseListResponse>(`/api/v1/cfo/expenses${qs ? `?${qs}` : ""}`, await getToken());
       setListResult(res);
       setListQuery(qs);
-      setListLoadedAt(new Date().toLocaleString());
+      setListLoadedAt(new Date().toLocaleString("en-IN"));
     } catch (e) {
       // A failed refresh keeps the last list that did load; the notice below says so.
       setListError(friendlyApiError(e, "Could not load expenses"));
@@ -178,7 +178,7 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
               <TextInput value={addAmount} onChange={setAddAmount} placeholder="e.g. 499" />
             </Field>
             <Field label="Marketplace (optional)">
-              <TextInput value={addMarketplace} onChange={setAddMarketplace} placeholder="AMAZON" />
+              <TextInput value={addMarketplace} onChange={setAddMarketplace} placeholder="e.g. Amazon" />
             </Field>
           </div>
           <div className="mt-3">
@@ -247,7 +247,7 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
                         <td className="py-2" style={{ color: "var(--text-5)" }}>{e.reason ?? "—"}</td>
                         <td className="py-2" style={{ color: "var(--text-3)" }}>{rupees(e.amountPaise)}</td>
                         <td className="py-2" style={{ color: "var(--text-5)" }}>{e.targetType}/{e.targetRef}</td>
-                        <td className="py-2" style={{ color: "var(--text-5)" }}>{new Date(e.createdAt).toLocaleString()}</td>
+                        <td className="py-2" style={{ color: "var(--text-5)" }}>{new Date(e.createdAt).toLocaleString("en-IN")}</td>
                       </tr>
                     ))}
                   </tbody>

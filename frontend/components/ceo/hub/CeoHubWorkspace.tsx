@@ -151,7 +151,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
   const connected = nodes.filter((n) => n.state === "ATTACHED");
   const quick = QUICK_ACTIONS.filter((q) => ["pnl", "research", "competitors"].includes(q.id));
   const tabBtn = (id: "agents" | "chat" | "results", label: string, testId: string) => (
-    <button key={id} type="button" role="tab" aria-selected={view === id} data-testid={testId} onClick={() => setView(id)}
+    <button key={id} type="button" role="tab" aria-selected={view === id} data-testid={testId} onClick={(e) => { setView(id); e.currentTarget.scrollIntoView?.({ inline: "center", block: "nearest" }); }}
       className="mt-focus ceo-tab min-h-[40px] whitespace-nowrap px-3 t-body-sm font-semibold" data-on={view === id}>
       {label}
     </button>

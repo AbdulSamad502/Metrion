@@ -90,7 +90,7 @@ export function useNotificationsFeed(enabled: boolean): NotificationsState {
       };
       settle(a, (v) => setAlerts(v.alerts), setAlertsStatus, setAlertsError);
       settle(d, setDataRequests, setDataRequestsStatus, setDataRequestsError);
-      if (a.status === "fulfilled" || d.status === "fulfilled") setCheckedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+      if (a.status === "fulfilled" || d.status === "fulfilled") setCheckedAt(new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }));
       inFlight.current = false;
       setSettled(nonce);
       if (queued.current) {

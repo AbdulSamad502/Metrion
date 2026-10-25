@@ -61,7 +61,7 @@ export function ShowcaseDashboard({ client, sample = false }: { client: Showcase
       </header>
 
       <div className="cmo-bar ov-rise" style={{ ["--i" as string]: 1 }}>
-        <Tabs tabs={sectionTabs} active={marketplace} onChange={(id) => setMarketplace(id as Marketplace)} label="Marketplace" idPrefix="cmo-mp" />
+        <Tabs tabs={sectionTabs} active={marketplace} onChange={(id) => setMarketplace(id as Marketplace)} label="Marketplace" idPrefix="cmo-mp" panels={false} />
         <div className="cmo-filters">
           <select value={sku} onChange={(e) => setSku(e.target.value)} className="cmo-input" aria-label="Filter by product">
             <option value="">All products</option>

@@ -186,14 +186,14 @@ export const productLabel = (p: { productId: string; title: string | null }): st
 
 export function fmtDate(iso: string | null | undefined): string {
   const d = iso ? new Date(iso) : null;
-  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "date not stated";
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "date not stated";
 }
 
 /** A stored timestamp for display ("18 Oct 2026, 5:30 pm"), or plain words when it is missing or unreadable. */
 export function fmtDateTime(iso: string | null | undefined): string {
   const d = iso ? new Date(iso) : null;
   return d && !Number.isNaN(d.getTime())
-    ? d.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })
+    ? d.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })
     : "time not stated";
 }
 

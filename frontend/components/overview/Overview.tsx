@@ -22,7 +22,7 @@ export const HEADLINE = "Contribution profit";
 const TIER_WORD = { connected: "In chat", available: "Own page", unavailable: "Soon" } as const;
 const TAGLINE: Record<string, string> = { CI: "Watches competitor prices", PI: "Finds products to sell", CFO: "Tracks your profit and cash", CMO: "Writes your listings" };
 
-const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const clock = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
 export const figureOf = (e: HealthEntry | undefined, label: string) => e?.presentation?.figures.find((f) => f.label === label);
 
 /* ------------------------------------------------------------------ greeting */

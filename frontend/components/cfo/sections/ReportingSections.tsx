@@ -471,7 +471,7 @@ export function DataRequestsSection({
                   <td className="py-2" style={{ color: "var(--text-3)" }}>{r.reason ?? "—"}</td>
                   <td className="py-2" style={{ color: "var(--text-5)" }}>{r.blockingMetric ?? "—"}</td>
                   <td className="py-2" style={{ color: "var(--text-5)" }}>{r.status}</td>
-                  <td className="py-2" style={{ color: "var(--text-5)" }}>{new Date(r.createdAt).toLocaleString()}</td>
+                  <td className="py-2" style={{ color: "var(--text-5)" }}>{new Date(r.createdAt).toLocaleString("en-IN")}</td>
                 </tr>
               ))}
             </tbody>

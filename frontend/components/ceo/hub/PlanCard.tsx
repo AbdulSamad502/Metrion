@@ -14,7 +14,7 @@ const STATE: Record<string, { tone: Tone; label: string; note: string }> = {
 
 const timeOf = (iso: string): string => {
   const d = new Date(iso);
-  return d.toString() === "Invalid Date" ? "" : d.toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return d.toString() === "Invalid Date" ? "" : d.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 
 /** The plan the CEO prepared, rendered from the STORED plan row (never parsed from the chat text). The card is COMPACT: a few short lines (what runs, the confirmed inputs, the model, the cost,

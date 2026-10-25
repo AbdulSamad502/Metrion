@@ -85,7 +85,7 @@ describe("loading an investigation", () => {
       id: "inv-1",
       messages: [
         msg({ id: "u1", role: "USER", content: "How did last month go?", turn_id: "t1" }),
-        msg({ id: "c1", role: "CEO", content: "Here is what your saved, verified results show.\n- Net realized revenue: ₹482,150.00 (DERIVED, as of 2026-10-01)", turn_id: "t1" }),
+        msg({ id: "c1", role: "CEO", content: "Here is what your saved, verified results show.\n- Net realized revenue: ₹4,82,150.00 (DERIVED, as of 2026-10-01)", turn_id: "t1" }),
       ],
       turns: [{ id: "t1", route: "BUSINESS_STATE", route_key: "BS_PNL_LATEST", status: "DELIVERED", composition_mode: "TEMPLATE", user_message_id: "u1", ceo_message_id: "c1", created_at: "x" }],
       findings: [finding({ id: "f1", turn_id: "t1", source: "BUSINESS_STATE", action_key: "BS_PNL_LATEST", status: "COMPLETE", figure_refs: [{ kind: "ENGINE_RESULT", id: "abcdef12-0000" }, { kind: "ENGINE_RESULT", id: "fedcba98-0000" }] })],
@@ -93,7 +93,7 @@ describe("loading an investigation", () => {
     mount();
     await openInvestigation(id);
     expect(screen.getByTestId("message-user")).toHaveTextContent("How did last month go?");
-    expect(screen.getByTestId("message-ceo")).toHaveTextContent("₹482,150.00"); // the backend's gated text, shown verbatim
+    expect(screen.getByTestId("message-ceo")).toHaveTextContent("₹4,82,150.00"); // the backend's gated text, shown verbatim
     expect(screen.getByText("Read directly from your saved, verified results.")).toBeInTheDocument();
     const card = screen.getByTestId("finding-f1");
     expect(within(card).getByText("Latest profit & loss")).toBeInTheDocument();

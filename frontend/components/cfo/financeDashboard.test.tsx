@@ -13,7 +13,7 @@ import CfoPage from "@/app/dashboard/cfo/page";
 
 const fig = (label: string, value: string, register = "DERIVED") => ({ label, value, register, as_of: "2026-10-01", note: null, ref: { kind: "ENGINE_RESULT", id: label, as_of: "2026-10-01" } });
 const present = (figures: ReturnType<typeof fig>[], over: object = {}) => ({ version: 1, headline: "h", figures, conflicts: [], facts: [], gaps: [], offers: [], artefacts: [], ...over });
-const PNL = { key: "BS_PNL_LATEST", status: "COMPLETE", period: "2026-09-01/2026-09-30", asOf: new Date().toISOString().slice(0, 10), previewHint: null, presentation: present([fig("Contribution profit", "₹142,860.00", "VERIFIED"), fig("Net realized revenue", "₹684,300.00"), fig("Marketplace fees", "₹98,420.00")]) };
+const PNL = { key: "BS_PNL_LATEST", status: "COMPLETE", period: "2026-09-01/2026-09-30", asOf: new Date().toISOString().slice(0, 10), previewHint: null, presentation: present([fig("Contribution profit", "₹1,42,860.00", "VERIFIED"), fig("Net realized revenue", "₹6,84,300.00"), fig("Marketplace fees", "₹98,420.00")]) };
 const req = { id: "r1", requestedField: "Cost of SKU 1", reason: "Needed to work out profit", blockingMetric: null, status: "OPEN", createdAt: "2026-10-08T10:00:00Z" };
 
 function stub(entries: unknown[], healthStatus = 200) {
@@ -35,7 +35,7 @@ describe("Profit & Finance (read-only)", () => {
     stub([PNL]);
     const { container } = render(<CfoPage />);
     const hero = await screen.findByTestId("profit-hero");
-    expect(within(hero).getByTestId("figure-value")).toHaveTextContent("₹142,860.00");
+    expect(within(hero).getByTestId("figure-value")).toHaveTextContent("₹1,42,860.00");
     expect(container.querySelectorAll("form, input, select, textarea, [type=file]")).toHaveLength(0);
   });
 

@@ -118,7 +118,7 @@ export function ImportHistory({
                           {i.filename}
                         </div>
                         <div className="t-meta mt-0.5" style={{ color: "var(--text-5)" }}>
-                          {i.adapter ?? "No adapter run"} · {new Date(i.uploadedAt).toLocaleDateString()}
+                          {i.adapter ?? "No adapter run"} · {new Date(i.uploadedAt).toLocaleDateString("en-IN")}
                         </div>
                       </div>
                       {statusBadge(i)}

@@ -93,3 +93,5 @@
 .cfo-skin fieldset .grid.p-1 { border: 0 !important; background: var(--ov-soft) !important; border-radius: 999px; }
 .cfo-skin fieldset .grid.p-1 > label.mt-chip { border: 0 !important; background: transparent !important; color: var(--ov-ink-2) !important; }
 .cfo-skin fieldset .grid.p-1 > label.mt-chip:has(input:checked) { background: var(--ov-brand) !important; color: var(--ov-on-brand) !important; }
+.exp-panel select, .exp-panel select option { text-transform: capitalize; }
+.exp-panel select, .exp-panel select option { text-transform: capitalize; }

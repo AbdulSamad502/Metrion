@@ -105,3 +105,6 @@ html.mt-reveal .ci-strip-band:not([data-seen]),
 html.mt-reveal .ci-strip-dot:not([data-seen]),
 html.mt-reveal .ci-diverge i:not([data-seen]),
 html.mt-reveal .pi-bar > i:not([data-seen]) { animation-play-state: paused; }
+
+/* room under the last card for the floating "Sample data" label */
+html.mt-demo-bar #main { padding-bottom: 6rem; }

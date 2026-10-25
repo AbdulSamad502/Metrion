@@ -3,7 +3,7 @@ import { bandOf, flowShares, goalShare, periodDays, periodLabel, readLeak, weigh
 
 describe("overview formatting", () => {
   it("reads a backend money string only to size things", () => {
-    expect(weight("₹142,860.00")).toBe(142860);
+    expect(weight("₹1,42,860.00")).toBe(142860);
     expect(weight("−₹3,210.00")).toBe(-3210);
     expect(weight("Unavailable")).toBeNull();
     expect(weight(undefined)).toBeNull();

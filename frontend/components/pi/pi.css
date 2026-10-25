@@ -40,7 +40,7 @@
 .pi-dl { display: grid; gap: 4px; margin: 8px 0 0; }
 .pi-dl dt { display: inline; font-weight: 800; color: var(--ov-ink); }
 .pi-dl dd { display: inline; margin: 0; }
-.pi-link { color: var(--ov-brand-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.pi-link { display: inline-flex; align-items: center; min-height: 24px; color: var(--ov-brand-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 
 @media (prefers-reduced-motion: reduce) { .pi-bar > i { animation: none; } .pi-pick, .pi-neighbour, .pi-arrow, .pi-dots button.pi-dot { transition: none; } .pi-pick:hover, .pi-pick:active { transform: none; } }
 

@@ -22,7 +22,7 @@ import "./pi.css";
 const sortDesc = (a: PiHistoryItem, b: PiHistoryItem) => (b.completedAt ?? "").localeCompare(a.completedAt ?? "");
 const fmtDate = (iso: string | null | undefined) => {
   const d = iso ? new Date(iso) : null;
-  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "date not stated";
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "date not stated";
 };
 const score = (s: string | null) => (s ? `${s}/100` : "no score");
 
@@ -69,7 +69,7 @@ export function PiShowcase({ client, initialRunId = null }: { client: PiClient; 
       if (!mounted.current || mine !== seq.current) return;
       setHistory(items);
       setHistoryError(null);
-      setCheckedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+      setCheckedAt(new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }));
       setCurrentId((cur) => cur ?? [...items].sort(sortDesc)[0]?.runId ?? null);
     } catch (e) {
       // A failed refresh keeps the last list that loaded; the notice below says so.

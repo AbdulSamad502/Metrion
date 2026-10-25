@@ -49,7 +49,7 @@ body:has(.mt-galaxy)::before { background-image: none; }
 .ceo-top { padding: 4px 0 0; border-bottom: 1px solid var(--ov-line); }
 .ceo-icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; color: var(--ov-ink-2); background: none; border: 0; cursor: pointer; }
 .ceo-icon:hover { color: var(--ov-ink); background: var(--ov-soft); }
-.ceo-tab { position: relative; background: none; border: 0; color: var(--ov-ink-3); cursor: pointer; transition: color 0.15s; }
+.ceo-tab { flex: none; position: relative; background: none; border: 0; color: var(--ov-ink-3); cursor: pointer; transition: color 0.15s; }
 .ceo-tab:hover { color: var(--ov-ink); }
 .ceo-tab[data-on="true"] { color: var(--ov-ink); }
 .ceo-tab[data-on="true"]::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--ov-brand); }
@@ -87,7 +87,7 @@ body:has(.mt-galaxy)::before { background-image: none; }
 /* the cards on the agents view are solid, so a wire never shows through their text (the page-level --hub-card-bg is translucent inside .mt-galaxy) */
 .mt-galaxy { --hub-card-bg: var(--ov-card, #0e0e10); }
 /* the tab row scrolls sideways only: the active underline used to push it into a vertical scrollbar */
-.ceo-tabs { overflow-y: hidden; scrollbar-width: none; }
+.ceo-tabs { justify-content: safe center; overflow-y: hidden; scrollbar-width: none; }
 .ceo-tabs::-webkit-scrollbar { display: none; }
 .ceo-tab[data-on="true"]::after { bottom: 0; }
 /* activity and results: lines, not boxes (status-coloured finding cards keep their border, it carries meaning) */

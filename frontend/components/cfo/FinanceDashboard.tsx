@@ -57,7 +57,7 @@ export function FinanceDashboard() {
           </p>
         </div>
         <div className="ov-head-r">
-          {checkedAt && <span className="ov-meta">Updated {new Date(checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>}
+          {checkedAt && <span className="ov-meta">Updated {new Date(checkedAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</span>}
           <RefreshButton spinning={refreshing} onClick={refresh} />
           <Link href="/dashboard/ceo-hub" className="ov-btn ov-btn--brand min-h-10">Ask the CEO <Icon name="arrow" size={14} strokeWidth={2} className="ov-arrow" /></Link>
         </div>

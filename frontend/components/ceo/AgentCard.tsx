@@ -53,7 +53,7 @@ export function AgentCard({ agent, lastActivity }: { agent: RosterAgent; lastAct
             "No activity yet."
           ) : (
             <>
-              Last activity <time dateTime={lastActivity}>{new Date(lastActivity).toLocaleString()}</time>
+              Last activity <time dateTime={lastActivity}>{new Date(lastActivity).toLocaleString("en-IN")}</time>
             </>
           )}
         </span>

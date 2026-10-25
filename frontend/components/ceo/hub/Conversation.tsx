@@ -276,7 +276,7 @@ function ReportButtons({ links }: { links: { href: string; label: string }[] }) 
 
 const timeOf = (iso: string): string => {
   const d = new Date(iso);
-  return d.toString() === "Invalid Date" ? "" : d.toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return d.toString() === "Invalid Date" ? "" : d.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 
 /** "Key Insights": only when this answer's own saved results carry structured facts or figures (the backend's snapshot, verbatim, never re-worded or computed here). */

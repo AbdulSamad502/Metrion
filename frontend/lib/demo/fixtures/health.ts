@@ -2,7 +2,7 @@ import type { HealthEntry, Presentation, PresentationFigure } from "@/lib/ceo";
 import { isoDaysAgo, monthBounds } from "./dates";
 
 /** SAMPLE saved results for the Overview (the Sample-data preview). They follow `GET /api/v1/ceo/state/health` entry for entry (backend/src/backend/ceo/business_state.py):
- * every `value` is a string exactly as the backend formats a figure (`₹482,150.00`), and every figure keeps its own register, as-of date and ref. The business and
+ * every `value` is a string exactly as the backend formats a figure (`₹4,82,150.00`), and every figure keeps its own register, as-of date and ref. The business and
  * every number are fictional and hand-typed: nothing here is computed, summed or derived from anything. */
 const fig = (label: string, value: string, id: string, register: string, asOf: string, note: string | null = null): PresentationFigure => ({
   label, value, register, as_of: asOf, note, ref: { kind: "ENGINE_RESULT", id: `demo-${id}`, as_of: asOf },
@@ -19,9 +19,9 @@ export function demoHealth(): { entries: HealthEntry[] } {
     entries: [
       {
         key: "BS_PNL_LATEST", status: "AVAILABLE", period, asOf: computed, previewHint: null,
-        presentation: present("Net realized revenue: ₹684,300.00", [
-          fig("Net realized revenue", "₹684,300.00", "rev", "DERIVED", computed),
-          fig("Contribution profit", "₹142,860.00", "profit", "VERIFIED", computed, "Calculated by the engine from the reports you uploaded"),
+        presentation: present("Net realized revenue: ₹6,84,300.00", [
+          fig("Net realized revenue", "₹6,84,300.00", "rev", "DERIVED", computed),
+          fig("Contribution profit", "₹1,42,860.00", "profit", "VERIFIED", computed, "Calculated by the engine from the reports you uploaded"),
           fig("Marketplace fees", "₹98,420.00", "fees", "DERIVED", computed),
         ]),
       },
@@ -50,7 +50,7 @@ export function demoHealth(): { entries: HealthEntry[] } {
       {
         key: "BS_SELLER_CONTEXT", status: "AVAILABLE", period: null, asOf: isoDaysAgo(12, 9), previewHint: null,
         presentation: present("Your saved goal and notes", [
-          fig("Monthly profit goal", "₹150,000.00", "goal", "MANUAL", isoDaysAgo(12, 9), "Entered by you"),
+          fig("Monthly profit goal", "₹1,50,000.00", "goal", "MANUAL", isoDaysAgo(12, 9), "Entered by you"),
         ]),
       },
       {

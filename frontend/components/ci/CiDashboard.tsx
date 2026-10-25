@@ -104,7 +104,7 @@ export function CiDashboard({ client }: { client: CiClient }) {
         setError(null);
         setMarket(null);
         setMarketNote(null);
-        setCheckedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+        setCheckedAt(new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }));
         setPending(null);
         if (data.selectedProductId && !data.selectedProductId.startsWith("category:")) {
           setMarketLoading(true);
@@ -575,7 +575,7 @@ function CandidateList({ rows }: { rows: CiCandidate[] }) {
             {c.title && (
               <span className="ov-meta">
                 {c.marketplace ? c.marketplace.charAt(0) + c.marketplace.slice(1).toLowerCase() : "A marketplace"} · {c.relationshipClass !== "UNKNOWN" ? RELATIONSHIP_LABEL[c.relationshipClass] : c.identityNote ?? "not classified yet"}
-                {c.url && (<> · <a href={c.url} target="_blank" rel="noopener noreferrer" className="mt-focus" style={{ color: "var(--ov-brand-ink)", textDecoration: "underline" }}>Open listing</a></>)}
+                {c.url && (<> · <a href={c.url} target="_blank" rel="noopener noreferrer" className="mt-focus pi-link">Open listing</a></>)}
               </span>
             )}
             <span className="ov-meta">

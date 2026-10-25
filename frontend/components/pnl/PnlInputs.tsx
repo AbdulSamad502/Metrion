@@ -44,7 +44,7 @@ function NumberField({
           className="mt-chip mt-2 inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-full px-3 t-meta focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--accent)]"
           style={{ border: `1px solid ${value.na ? "var(--accent-border-strong)" : "var(--border-default)"}`, color: value.na ? "var(--accent)" : "var(--text-4)", background: value.na ? "var(--accent-fill-default)" : "transparent" }}
         >
-          <input type="checkbox" className="h-4 w-4 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={value.na} onChange={(e) => onChange({ text: "", na: e.target.checked })} />
+          <input type="checkbox" className="h-6 w-6 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={value.na} onChange={(e) => onChange({ text: "", na: e.target.checked })} />
           <span>{unit === "%" ? "Doesn't apply (0%)" : "Doesn't apply (₹0)"}</span>
         </label>
       )}
@@ -314,7 +314,7 @@ export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form:
                 )}
                 {tiers && (
                   <label className="flex w-fit cursor-pointer items-center gap-2 t-body-sm" style={{ color: "var(--text-4)" }}>
-                    <input type="checkbox" className="mt-focus h-5 w-5 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={entry.useTiers} onChange={(e) => setFee(def.id, { useTiers: e.target.checked })} />
+                    <input type="checkbox" className="mt-focus h-6 w-6 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={entry.useTiers} onChange={(e) => setFee(def.id, { useTiers: e.target.checked })} />
                     This fee changes with the selling price
                   </label>
                 )}
@@ -374,7 +374,7 @@ export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form:
       <StepCard n={detailed ? 5 : 4} wide icon="target" tone="accent" title="Price targets" subtitle="Assumes your order volume does not change with price" done={false} open={openSteps[5]} onToggle={() => toggle(5)}>
         <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <label className="flex min-h-10 cursor-pointer items-center gap-2 t-body-sm" style={{ color: "var(--text-3)" }}>
-            <input type="checkbox" className="mt-focus h-5 w-5 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={form.wantBreakeven} onChange={(e) => set("wantBreakeven", e.target.checked)} />
+            <input type="checkbox" className="mt-focus h-6 w-6 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={form.wantBreakeven} onChange={(e) => set("wantBreakeven", e.target.checked)} />
             Find my break-even price
           </label>
           <NumberField label="Find the price for a target margin" unit="%" value={form.targetMargin} onChange={field("targetMargin")} error={errors.targetMargin} allowNa={false} hint="Margin on revenue. Blank skips it." />

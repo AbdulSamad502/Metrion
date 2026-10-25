@@ -57,7 +57,7 @@ function FindingRow({ f, confirming, onAsk, onCancel, onConfirm }: { f: SharedFi
     <li data-testid={`shared-finding-${f.id}`} className="flex flex-col gap-1 rounded-lg px-3 py-2" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-card)" }}>
       <div className="flex flex-wrap items-center gap-1.5">
         <StatusBadge tone={TRUST_TONE[f.trust]}>{f.trustLabel}</StatusBadge>
-        <span className="t-meta" style={{ color: "var(--text-5)" }}>{agent} · <time dateTime={f.createdAt}>{new Date(f.createdAt).toLocaleDateString()}</time></span>
+        <span className="t-meta" style={{ color: "var(--text-5)" }}>{agent} · <time dateTime={f.createdAt}>{new Date(f.createdAt).toLocaleDateString("en-IN")}</time></span>
       </div>
       {f.subject && <div className="t-body-sm font-semibold" style={{ color: "var(--text-1)" }}>“{f.subject}”</div>}
       <div className="t-body-sm" style={{ color: "var(--text-3)" }}>{f.text}</div>

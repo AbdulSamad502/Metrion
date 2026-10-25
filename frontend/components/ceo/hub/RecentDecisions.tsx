@@ -45,7 +45,7 @@ export function RecentDecisions({
                     <span style={{ color: "var(--accent)" }}><Icon name="check" size={13} strokeWidth={2} /></span>
                     <span className="truncate t-body-sm font-semibold" style={{ color: "var(--text-2)" }}>{i.title || "Untitled conversation"}</span>
                   </span>
-                  <time className="flex-shrink-0 t-meta" dateTime={i.last_message_at} style={{ color: "var(--text-5)" }}>{new Date(i.last_message_at).toLocaleDateString()}</time>
+                  <time className="flex-shrink-0 t-meta" dateTime={i.last_message_at} style={{ color: "var(--text-5)" }}>{new Date(i.last_message_at).toLocaleDateString("en-IN")}</time>
                 </button>
               </li>
             ))}

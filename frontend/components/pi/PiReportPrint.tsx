@@ -13,7 +13,7 @@ const muted = "#555";
 const rule = "#ccc";
 const fmtDate = (iso: string | null | undefined) => {
   const d = iso ? new Date(iso) : null;
-  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "date not stated";
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "date not stated";
 };
 const score = (s: string | null) => (s ? `${s}/100` : "no score");
 

@@ -136,7 +136,7 @@ function FindingCard({ finding: f, historical, arrived, defaultOpen, onAsk, askD
         {historical && <StatusBadge tone="neutral">Historical</StatusBadge>}
       </div>
       <div className="mt-1 t-meta" style={{ color: "var(--text-5)" }}>
-        {sourceLabel(f.source)} · <time dateTime={f.created_at}>{new Date(f.created_at).toLocaleString()}</time>
+        {sourceLabel(f.source)} · <time dateTime={f.created_at}>{new Date(f.created_at).toLocaleString("en-IN")}</time>
       </div>
       {historical && (
         <div className="mt-1.5 t-meta" style={{ color: "var(--text-6)" }}>

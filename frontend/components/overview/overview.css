@@ -471,5 +471,9 @@ a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px;
 .ov-wf-step--rest { background: repeating-linear-gradient(135deg, var(--ov-hero-rest) 0 4px, transparent 4px 8px); border: 1px solid var(--ov-hero-rest); }
 .ov-wf-step--profit { background: var(--ov-hero-ink); }
 .ov-wf-label { font-size: var(--ov-s1); font-weight: 700; color: var(--ov-hero-ink-2); }
-.ov-wf-value { font-size: var(--ov-s2); font-weight: 800; overflow-wrap: anywhere; }
+.ov-wf-value { font-size: var(--ov-s2); font-weight: 800; white-space: nowrap; } /* a money figure is never broken across lines */
+@media (max-width: 560px) { .ov-wf { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 24px; } }
 @media (max-width: 560px) { .ov-wf { gap: 8px; } .ov-wf-plot { height: 72px; } }
+
+/* a text link that stands on its own line is at least 24px tall (also used on the Competitors and Profit & Finance pages) */
+.pi-link { color: var(--ov-brand-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; display: inline-flex; align-items: center; min-height: 24px; }

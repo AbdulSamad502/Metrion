@@ -18,7 +18,7 @@ type Routes = { health?: unknown; healthStatus?: number; ci?: unknown; ciStatus?
 const today = new Date().toISOString().slice(0, 10);
 const fig = (label: string, value: string, register = "DERIVED") => ({ label, value, register, as_of: "2026-10-01", note: null, ref: { kind: "ENGINE_RESULT", id: label, as_of: "2026-10-01" } });
 const present = (figures: ReturnType<typeof fig>[], over: object = {}) => ({ version: 1, headline: "h", figures, conflicts: [], facts: [], gaps: [], offers: [], artefacts: [], ...over });
-const entry = (asOf: string | null, figures = [fig("Contribution profit", "₹142,860.00", "VERIFIED"), fig("Net realized revenue", "₹684,300.00"), fig("Marketplace fees", "₹98,420.00")]) =>
+const entry = (asOf: string | null, figures = [fig("Contribution profit", "₹1,42,860.00", "VERIFIED"), fig("Net realized revenue", "₹6,84,300.00"), fig("Marketplace fees", "₹98,420.00")]) =>
   ({ key: "BS_PNL_LATEST", status: "COMPLETE", period: "2026-09-01/2026-09-30", asOf, previewHint: null, presentation: present(figures) });
 const CI = { trackedCompetitors: 3, lastResearchAt: "2026-10-05T10:00:00Z", recentPriceEvents7d: 4, pendingManualEntry: 1, staleCompetitors: 2 };
 const AGENTS = [{ id: "CFO", name: "CFO", status: "CONNECTED" }, { id: "PI", name: "Product Intelligence", status: "NOT_CONNECTED" }];
@@ -89,19 +89,19 @@ describe("Overview", () => {
     stub({ health: { entries: [entry(today)] } });
     render(<DashboardPage />);
     const hero = await screen.findByTestId("profit-hero");
-    expect(within(hero).getByTestId("figure-value")).toHaveTextContent("₹142,860.00");
+    expect(within(hero).getByTestId("figure-value")).toHaveTextContent("₹1,42,860.00");
     expect(hero).toHaveTextContent("1 Sep – 30 Sep");
     expect(within(hero).getByText("Verified")).toBeInTheDocument();
     // the bar says what it shows without relying on how it looks
-    expect(within(hero).getByRole("img")).toHaveAccessibleName(/₹684,300.00 revenue: ₹98,420.00 went to marketplace fees, ₹142,860.00 is profit/);
+    expect(within(hero).getByRole("img")).toHaveAccessibleName(/₹6,84,300.00 revenue: ₹98,420.00 went to marketplace fees, ₹1,42,860.00 is profit/);
   });
 
   it("draws no bar when the figures cannot honestly be drawn together", async () => {
-    stub({ health: { entries: [entry(today, [fig("Contribution profit", "₹142,860.00", "VERIFIED"), fig("Net realized revenue", "₹100,000.00"), fig("Marketplace fees", "₹98,420.00")])] } });
+    stub({ health: { entries: [entry(today, [fig("Contribution profit", "₹1,42,860.00", "VERIFIED"), fig("Net realized revenue", "₹1,00,000.00"), fig("Marketplace fees", "₹98,420.00")])] } });
     render(<DashboardPage />);
     const hero = await screen.findByTestId("profit-hero");
     expect(within(hero).queryByTestId("profit-flow")).toBeNull();
-    expect(within(hero).getByTestId("figure-value")).toHaveTextContent("₹142,860.00");
+    expect(within(hero).getByTestId("figure-value")).toHaveTextContent("₹1,42,860.00");
   });
 
   it("is honest about saved results that are stale, missing, or could not be loaded", async () => {

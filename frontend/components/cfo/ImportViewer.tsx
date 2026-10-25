@@ -68,7 +68,7 @@ function cell(col: Column, row: ImportRow) {
   if (!hasValue(v)) return <span style={{ color: "var(--text-7)" }}>—</span>;
   if (col.kind === "money") return money(v);
   if (col.kind === "id") return <code title={String(v)}>{String(v).slice(0, 8)}</code>;
-  if (col.kind === "date") return new Date(String(v)).toLocaleDateString();
+  if (col.kind === "date") return new Date(String(v)).toLocaleDateString("en-IN");
   return String(v);
 }
 
@@ -158,7 +158,7 @@ function ImportViewerBody({ reportFileId, getToken }: { reportFileId: string; ge
           {detail.filename}
         </div>
         <div className="t-meta mt-1" style={{ color: "var(--text-5)" }}>
-          {detail.adapter ? `${detail.adapter}` : "No ingestion run"} · uploaded {new Date(detail.uploadedAt).toLocaleString()}
+          {detail.adapter ? `${detail.adapter}` : "No ingestion run"} · uploaded {new Date(detail.uploadedAt).toLocaleString("en-IN")}
         </div>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           {detail.status && <StatusBadge tone={statusTone(detail.status)} dot>{detail.status.toLowerCase()}</StatusBadge>}

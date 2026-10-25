@@ -7,7 +7,7 @@ describe("sample health entries", () => {
   it("has the Contribution profit headline in BS_PNL_LATEST, with a register, as-of and ref on every figure", () => {
     const pnl = entries.find((e) => e.key === "BS_PNL_LATEST")!;
     const headline = pnl.presentation!.figures.find((f) => f.label === "Contribution profit")!;
-    expect(headline.value).toBe("₹142,860.00");
+    expect(headline.value).toBe("₹1,42,860.00");
     expect(headline.register).toBe("VERIFIED");
     for (const e of entries) for (const f of e.presentation?.figures ?? []) {
       expect(f.register).toBeTruthy();
