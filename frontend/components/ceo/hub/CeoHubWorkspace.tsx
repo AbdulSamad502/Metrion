@@ -213,7 +213,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
           {canvas}
         </section>
 
-        <section className={`min-h-0 min-w-0 flex-1 flex-col overflow-y-auto ${view === "chat" ? "flex" : "hidden"}`} aria-label="CEO conversation" data-testid="chat-column">
+        <section className={`min-h-0 min-w-0 flex-1 flex-col overflow-y-auto max-xl:flex-none max-xl:overflow-visible ${view === "chat" ? "flex" : "hidden"}`} aria-label="CEO conversation" data-testid="chat-column">
           <div className="ceo-read ceo-split mx-auto flex w-full max-w-[820px] flex-1 flex-col gap-3">
             <div className="ceo-conv flex min-w-0 flex-1 flex-col gap-3">
             <div className="truncate t-meta" style={{ color: needsInput ? "var(--warning)" : "var(--text-5)" }} data-testid="chat-status">{ceoStatus}</div>

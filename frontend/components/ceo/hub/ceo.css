@@ -96,10 +96,12 @@ body:has(.mt-galaxy)::before { background-image: none; }
 .ceo-activity .mt-panel, .ceo-activity .mt-hub-card { background: transparent; box-shadow: none; }
 @media (min-width: 1280px) {
   .ceo-split { max-width: none; padding-inline: 24px; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 0 32px; align-items: start; }
-  .ceo-split .ceo-conv { width: 100%; max-width: 780px; margin-inline: auto; min-height: 100%; }
+  .ceo-split .ceo-conv { width: 100%; max-width: 860px; margin-inline: auto; min-height: 100%; }
   .ceo-split .ceo-activity { position: sticky; top: 8px; max-height: calc(100% - 16px); overflow-y: auto; }
-  .ceo-bar { max-width: none; padding-inline: 24px 456px; }
-  .ceo-bar > * { width: 100%; max-width: 780px; margin-inline: auto; }
+  .ceo-bar { max-width: none; padding-inline: 24px; }
+  .ceo-root[data-view="chat"] .ceo-bar { padding-right: 456px; }
+  .ceo-bar > * { width: 100%; max-width: 860px; margin-inline: auto; }
+  .ceo-composer { min-height: 64px; }
 }
 
 /* the hub's default size: one step smaller than the rest of the app (80% of the app's own 80%), on desktop windows only */
