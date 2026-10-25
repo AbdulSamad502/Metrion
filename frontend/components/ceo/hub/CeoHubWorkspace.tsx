@@ -288,7 +288,8 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
 
       {drawer && (
         <div ref={drawerRef} tabIndex={-1} className="fixed inset-0 z-40 flex outline-none" role="dialog" aria-modal="true" aria-label="Conversations and business overview" data-testid="drawer">
-          <div className="flex w-[min(420px,92vw)] flex-col gap-5 overflow-y-auto p-4" style={{ background: "var(--bg-base)", borderRight: "1px solid var(--border-subtle)" }}>
+          <button type="button" aria-label="Close panel" className="flex-1" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setDrawer(false)} />
+          <div className="flex w-[min(420px,92vw)] flex-col gap-5 overflow-y-auto p-4" style={{ background: "var(--bg-base)", borderLeft: "1px solid var(--border-subtle)" }}>
             <div className="flex items-center justify-between">
               <h2 className="m-0 t-card-title font-bold" style={{ color: "var(--text-1)" }}>Conversations</h2>
               <button type="button" aria-label="Close" onClick={() => setDrawer(false)} className="mt-btn mt-focus rounded-lg p-1.5" style={{ color: "var(--text-3)" }}><Icon name="close" size={16} /></button>
@@ -298,7 +299,6 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
               onToggleArchived={hub.setShowArchived} onDelete={(id) => void hub.removeConversation(id)} onSelect={(id) => { hub.select(id); setDrawer(false); }} onCreate={(t) => { void hub.create(t); setDrawer(false); }} onRetry={hub.refreshList}
             />
           </div>
-          <button type="button" aria-label="Close panel" className="flex-1" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setDrawer(false)} />
         </div>
       )}
     </div>

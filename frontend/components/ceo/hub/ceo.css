@@ -91,13 +91,13 @@ body:has(.mt-galaxy)::before { background-image: none; }
 .ceo-tabs::-webkit-scrollbar { display: none; }
 .ceo-tab[data-on="true"]::after { bottom: 0; }
 /* conversation on the left, activity and insights in a panel on the right (wide screens); stacked below that */
-.ceo-activity { background: var(--ov-card, #0e0e10); border: 1px solid var(--ov-edge); border-radius: 16px; padding: 20px; }
+.ceo-activity { flex: none; overflow: visible; max-height: none; background: var(--ov-card, #0e0e10); border: 1px solid var(--ov-edge); border-radius: 16px; padding: 20px; }
 .ceo-activity > h2 { font-size: 20px; letter-spacing: 0; text-transform: none; color: var(--ov-ink); font-weight: 600; }
 .ceo-activity .mt-panel, .ceo-activity .mt-hub-card { background: transparent; box-shadow: none; }
 @media (min-width: 1280px) {
   .ceo-split { max-width: none; padding-inline: 24px; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 0 32px; align-items: start; }
   .ceo-split .ceo-conv { width: 100%; max-width: 860px; margin-inline: auto; min-height: 100%; }
-  .ceo-split .ceo-activity { position: sticky; top: 8px; max-height: calc(100% - 16px); overflow-y: auto; }
+  .ceo-split .ceo-activity { position: sticky; top: 8px; height: calc(100% - 16px); overflow-y: auto; }
   .ceo-bar { max-width: none; padding-inline: 24px; }
   .ceo-root[data-view="chat"] .ceo-bar { padding-right: 456px; }
   .ceo-bar > * { width: 100%; max-width: 860px; margin-inline: auto; }
