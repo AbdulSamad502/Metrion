@@ -70,7 +70,7 @@ const ROUTE_WORDS: Record<string, string> = {
 
 const stamp = (iso: string): string => {
   const d = new Date(iso);
-  return d.toString() === "Invalid Date" ? iso : d.toLocaleString("en-IN");
+  return d.toString() === "Invalid Date" ? iso : d.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 };
 
 export function ExecutionPanel({

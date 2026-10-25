@@ -179,7 +179,7 @@ function NotificationItem({ row, onOpen }: { row: Row; onOpen: () => void }) {
       <span className="ov-row-main">
         <span className="ov-title" style={{ display: "block" }}>{isAlert ? row.alert.message : row.request.requestedField}</span>
         {!isAlert && row.request.reason && <span className="ov-meta">{row.request.reason}</span>}
-        <time className="ov-meta" dateTime={row.at}>{new Date(row.at).toLocaleString("en-IN")}</time>
+        <time className="ov-meta" dateTime={row.at}>{new Date(row.at).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}</time>
       </span>
       <span className="ov-row-end"><Pill tone={isAlert ? "brand" : "warn"}>{isAlert ? "Competitor" : "CFO needs input"}</Pill><Icon name="arrow" size={14} strokeWidth={2} className="ov-arrow" /></span>
     </button>

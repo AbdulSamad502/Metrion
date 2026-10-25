@@ -90,21 +90,21 @@ html[data-surface="layered"][data-theme="light"] input:focus-visible,
 html[data-surface="layered"][data-theme="light"] select:focus-visible { outline: 2px solid var(--ov-brand); outline-offset: 2px; }
 
 /* draw-in animations wait, at their first frame, until they scroll into view (useRevealOnView marks each one data-seen) */
-html.mt-reveal .ov-rise:not([data-seen]),
-html.mt-reveal .ov-bars-track > i:not([data-seen]),
-html.mt-reveal .ov-meter > i:not([data-seen]),
-html.mt-reveal .ov-leakbar > i:not([data-seen]),
-html.mt-reveal .ov-flow-seg:not([data-seen]),
-html.mt-reveal .ov-donut-sweep:not([data-seen]),
-html.mt-reveal .ov-line-path:not([data-seen]),
-html.mt-reveal .ov-wf-step:not([data-seen]),
-html.mt-reveal .ci-pips i:not([data-seen]),
-html.mt-reveal .ov-chart-key li:not([data-seen]),
-html.mt-reveal .cmo-meter > i:not([data-seen]),
-html.mt-reveal .ci-strip-band:not([data-seen]),
-html.mt-reveal .ci-strip-dot:not([data-seen]),
-html.mt-reveal .ci-diverge i:not([data-seen]),
-html.mt-reveal .pi-bar > i:not([data-seen]) { animation-play-state: paused; }
+html.mt-inview .ov-rise:not([data-seen]),
+html.mt-inview .ov-bars-track > i:not([data-seen]),
+html.mt-inview .ov-meter > i:not([data-seen]),
+html.mt-inview .ov-leakbar > i:not([data-seen]),
+html.mt-inview .ov-flow-seg:not([data-seen]),
+html.mt-inview .ov-donut-sweep:not([data-seen]),
+html.mt-inview .ov-line-path:not([data-seen]),
+html.mt-inview .ov-wf-step:not([data-seen]),
+html.mt-inview .ci-pips i:not([data-seen]),
+html.mt-inview .ov-chart-key li:not([data-seen]),
+html.mt-inview .cmo-meter > i:not([data-seen]),
+html.mt-inview .ci-strip-band:not([data-seen]),
+html.mt-inview .ci-strip-dot:not([data-seen]),
+html.mt-inview .ci-diverge i:not([data-seen]),
+html.mt-inview .pi-bar > i:not([data-seen]) { animation-play-state: paused; }
 
 /* room under the last card for the floating "Sample data" label */
 html.mt-demo-bar #main { padding-bottom: 6rem; }

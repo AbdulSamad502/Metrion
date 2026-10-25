@@ -154,3 +154,16 @@
 .pi-hero .pi-thumb-sm { border-radius: 20px; border-color: rgba(255, 255, 255, 0.18); }
 .pi-hero .pi-hero-main { flex: 1 1 280px; }
 .pi-photo-frame { border-radius: 20px; overflow: hidden; background: #f1f2f5; border: 1px solid var(--ov-line); }
+
+/* on a phone the ledger is one card per product: picture and name on top, then each figure on its own labelled line (no sideways scrolling table) */
+@media (max-width: 640px) {
+  .pi-ledger-wrap { overflow: visible; margin: 0; padding: 0; }
+  .pi-ledger, .pi-ledger tbody { display: block; min-width: 0; }
+  .pi-ledger thead { display: none; }
+  .pi-ledger tbody tr { display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--ov-line); }
+  .pi-ledger tr:last-child { border-bottom: 0; }
+  .pi-ledger td { padding: 4px 0; border: 0; white-space: normal; }
+  .pi-ledger td[data-label] { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; text-align: right; }
+  .pi-ledger td[data-label]::before { content: attr(data-label); color: var(--ov-ink-3); font-size: var(--ov-s1); font-weight: 600; text-align: left; }
+  .pi-ledger td.pi-name { padding-bottom: 8px; }
+}

@@ -13,7 +13,7 @@ export function useRevealOnView() {
     if (typeof window === "undefined" || typeof IntersectionObserver === "undefined") return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     const root = document.documentElement;
-    root.classList.add("mt-reveal");
+    root.classList.add("mt-inview");
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) {
         if (!e.isIntersecting) continue;
@@ -38,7 +38,7 @@ export function useRevealOnView() {
       mo.disconnect();
       io.disconnect();
       if (frame) cancelAnimationFrame(frame);
-      root.classList.remove("mt-reveal");
+      root.classList.remove("mt-inview");
     };
   }, []);
 }

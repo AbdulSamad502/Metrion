@@ -158,7 +158,7 @@ function ImportViewerBody({ reportFileId, getToken }: { reportFileId: string; ge
           {detail.filename}
         </div>
         <div className="t-meta mt-1" style={{ color: "var(--text-5)" }}>
-          {detail.adapter ? `${detail.adapter}` : "No ingestion run"} · uploaded {new Date(detail.uploadedAt).toLocaleString("en-IN")}
+          {detail.adapter ? `${detail.adapter}` : "No ingestion run"} · uploaded {new Date(detail.uploadedAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}
         </div>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           {detail.status && <StatusBadge tone={statusTone(detail.status)} dot>{detail.status.toLowerCase()}</StatusBadge>}
