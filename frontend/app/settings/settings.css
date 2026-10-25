@@ -9,3 +9,10 @@
 .set-strength i { flex: 1; height: 8px; border-radius: 999px; background: var(--ov-line); transition: background 200ms; }
 .set-strength i.on { background: var(--ov-good); }
 .set-strength i.warn { background: var(--ov-warn); }
+
+/* two even columns, then one full-width row; rows of facts run two across, and a lone last one spans */
+.set-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ov-gap); align-items: stretch; }
+@media (max-width: 900px) { .set-cols { grid-template-columns: 1fr; } }
+.set-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.set-list > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+@media (max-width: 760px) { .set-list { grid-template-columns: 1fr; } }

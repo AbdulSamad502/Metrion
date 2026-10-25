@@ -51,14 +51,18 @@ function SettingsWorkspace() {
   const googleAccount = user.externalAccounts.find((a) => a.provider === "google");
 
   return (
-    <div className="ov mt-content" style={{ maxWidth: 800, margin: "0 auto" }}>
+    <div className="ov mt-content">
       <Tabs tabs={[...SETTINGS_TABS]} active={tab} onChange={setTab} label="Settings sections" idPrefix="settings" />
       <TabPanel id="account" active={tab} idPrefix="settings">
         <div className="set-stack">
-          <AppearanceCard />
-          {DEMO_AVAILABLE && <SampleDataCard />}
+          <div className="set-cols">
+            <div className="ov-col"><PasswordCard user={user} passwordEnabled={user.passwordEnabled} /></div>
+            <div className="ov-col">
+              <AppearanceCard />
+              {DEMO_AVAILABLE && <SampleDataCard />}
+            </div>
+          </div>
           <SignInMethodsCard googleConnected={!!googleAccount} passwordEnabled={user.passwordEnabled} />
-          <PasswordCard user={user} passwordEnabled={user.passwordEnabled} />
         </div>
       </TabPanel>
       <TabPanel id="business" active={tab} idPrefix="settings">
