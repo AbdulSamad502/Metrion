@@ -4,12 +4,12 @@
    One deep tone for the page, a lighter tone of the same hue for cards, a quieter tone for panels inside cards. */
 
 html[data-surface="layered"] {
-  --ov-page: #0a0c16;
-  --ov-card: #141829;
-  --ov-soft: #1b2036;
-  --ov-line: #242a45;
-  --ov-edge: #313859;
-  --ov-field-edge: #7d84a8;
+  --ov-page: #000000;
+  --ov-card: #0f0f11;
+  --ov-soft: #17171a;
+  --ov-line: #232327;
+  --ov-edge: #34343a;
+  --ov-field-edge: #7e7e88;
   --ov-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 10px 24px -20px rgba(0, 0, 0, 0.7);
   --ov-shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 16px 28px -20px rgba(0, 0, 0, 0.8);
   --bg-base: var(--ov-page);
