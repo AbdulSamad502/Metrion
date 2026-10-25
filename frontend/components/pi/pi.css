@@ -33,7 +33,7 @@
 /* score signals: a bar per signal, the words say the same */
 .pi-signal { display: grid; grid-template-columns: 1fr; gap: 4px; }
 .pi-bar { height: 8px; border-radius: 999px; background: var(--ov-line); overflow: hidden; }
-.pi-bar > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-brand); transform-origin: left; animation: ov-grow 640ms var(--ov-ease) 200ms both; }
+.pi-bar > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-brand); transform-origin: left; animation: ov-grow 400ms var(--ov-ease) both; }
 
 .pi-rec-list { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0; list-style: none; }
 .pi-rec-list > li { background: var(--ov-soft); border-radius: 16px; padding: 16px; border: 1px solid var(--ov-line); }
@@ -67,7 +67,7 @@
 .pi-rank:active { transform: scale(0.94); }
 .pi-ledger tr.is-selected .pi-rank { background: var(--ov-brand); color: var(--ov-on-brand); }
 .pi-name { min-width: 220px; }
-.pi-pickname { display: flex; flex-direction: column; gap: 4px; padding: 0; border: 0; background: transparent; text-align: left; font: inherit; cursor: pointer; color: inherit; }
+.pi-pickname { display: flex; flex-direction: row; align-items: center; gap: 16px; padding: 0; border: 0; background: transparent; text-align: left; font: inherit; cursor: pointer; color: inherit; }
 .pi-score { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 96px; }
 .pi-score b { font-weight: 800; }
 
@@ -146,3 +146,11 @@
 .pi-pos { display: inline-flex; flex-direction: column; gap: 8px; min-width: 96px; }
 .pi-pos .pi-bar { width: 96px; }
 .pi-bar--good > i { background: var(--ov-good); }
+
+/* small product pictures in the list and the banner */
+.pi-pickname-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pi-thumb-sm { flex: none; display: inline-grid; place-items: center; overflow: hidden; border-radius: 14px; background: #f1f2f5; border: 1px solid var(--ov-line); }
+.pi-thumb-sm img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pi-hero .pi-thumb-sm { border-radius: 20px; border-color: rgba(255, 255, 255, 0.18); }
+.pi-hero .pi-hero-main { flex: 1 1 280px; }
+.pi-photo-frame { border-radius: 20px; overflow: hidden; background: #f1f2f5; border: 1px solid var(--ov-line); }

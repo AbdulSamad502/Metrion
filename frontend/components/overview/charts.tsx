@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 /** Drawing only. Every figure shown beside a chart is the backend's own string; the numbers passed in here size a slice or a point and are never displayed.
  *  Colours come from the --ov-c1…c7 tokens, so a new palette recolours every chart. */
@@ -13,17 +13,21 @@ export function Donut({ parts, summary, size = 160, center }: { parts: DonutPart
   const r = 40;
   const c = 2 * Math.PI * r;
   const gap = parts.length > 1 ? 1.2 : 0;
+  const sweep = `ov-sweep-${useId().replace(/:/g, "")}`;
   return (
     <div className="ov-donut" style={{ width: size, height: size }}>
       <svg viewBox="0 0 100 100" width={size} height={size} role="img" aria-label={summary}>
         <circle cx="50" cy="50" r={r} fill="none" stroke="var(--ov-track, var(--ov-soft))" strokeWidth="14" />
+        <mask id={sweep} maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+          <circle className="ov-donut-sweep" cx="50" cy="50" r={r} fill="none" stroke="#fff" strokeWidth="16" pathLength={1} transform="rotate(-90 50 50)" />
+        </mask>
+        <g mask={`url(#${sweep})`}>
         {parts.filter((p) => p.share > 0).map((p, i, shown) => {
           const offset = shown.slice(0, i).reduce((sum, q) => sum + q.share * c, 0);
           const len = Math.max(0, p.share * c - gap);
           const el = (
             <circle
               key={p.key}
-              className="ov-donut-arc"
               cx="50" cy="50" r={r} fill="none" strokeWidth="14" strokeLinecap="butt"
               stroke={p.color ?? toneAt(i)}
               strokeDasharray={`${len} ${c - len}`}
@@ -34,6 +38,7 @@ export function Donut({ parts, summary, size = 160, center }: { parts: DonutPart
           );
           return el;
         })}
+        </g>
       </svg>
       {center && <div className="ov-donut-center">{center}</div>}
     </div>

@@ -98,7 +98,7 @@ describe("PI showcase (read-only)", () => {
   it("shows an image with its source, a plain placeholder when there is none, and falls back when it fails to load", async () => {
     const { container } = render(<PiShowcase client={fake()} />);
     await screen.findByText("Rank #1");
-    const img = container.querySelector("img") as HTMLImageElement;
+    const img = container.querySelector('img:not([alt=""])') as HTMLImageElement; // the detail picture (the small list thumbnails are decorative)
     expect(img.getAttribute("src")).toBe("https://cdn.shop.example/w1.jpg");
     expect(screen.getByText("image from shop.example")).toBeInTheDocument();
     img.dispatchEvent(new Event("error"));

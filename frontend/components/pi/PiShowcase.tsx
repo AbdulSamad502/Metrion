@@ -330,6 +330,7 @@ function CurrentInvestigation({ runId, client, cache, rank, setRank, isLatest, o
         <>
           {c.overall && (
             <div className="ov-card ov-hero pi-hero">
+              {products[0] && products[0].candidate.candidate_title === c.overall.title && <Thumb product={products[0]} size={112} />}
               <div className="pi-hero-main">
                 <p className="ov-meta">Best bet</p>
                 <p className="ov-h"><strong>{c.overall.title}</strong></p>
@@ -355,6 +356,19 @@ function CurrentInvestigation({ runId, client, cache, rank, setRank, isLatest, o
         </>
       )}
     </section>
+  );
+}
+
+/** A small square picture for a list row or banner. Nothing is drawn when the product has no usable image (the row keeps its words). */
+function Thumb({ product, size }: { product: PiProduct; size: number }) {
+  const [failed, setFailed] = useState(false);
+  const url = safeHref(product.candidate.image_url);
+  if (!url || failed) return null;
+  return (
+    <span className="pi-thumb-sm" style={{ width: size, height: size }} aria-hidden>
+      {/* eslint-disable-next-line @next/next/no-img-element -- hotlinked from arbitrary hosts, attributed in the detail view */}
+      <img src={url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+    </span>
   );
 }
 
@@ -417,8 +431,11 @@ function Ledger({ products, idx, onSelect }: { products: PiProduct[]; idx: numbe
                 </td>
                 <td className="pi-name">
                   <button type="button" onClick={() => onSelect(i)} className="pi-pickname mt-focus" tabIndex={-1}>
-                    <span className="ov-title">{q.candidate.candidate_title}</span>
-                    {q.candidate.observed_category && <span className="ov-meta">{q.candidate.observed_category}</span>}
+                    <Thumb product={q} size={56} />
+                    <span className="pi-pickname-text">
+                      <span className="ov-title">{q.candidate.candidate_title}</span>
+                      {q.candidate.observed_category && <span className="ov-meta">{q.candidate.observed_category}</span>}
+                    </span>
                   </button>
                 </td>
                 <td className="num">

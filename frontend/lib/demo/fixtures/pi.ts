@@ -30,6 +30,13 @@ type Spec = {
   financials?: PiFinancial[];
 };
 
+const SAMPLE_IMAGES: [string, string][] = [["Stainless steel airtight", "container"], ["Borosilicate glass", "jars"], ["Collapsible silicone", "boxes"], ["Rotating spice", "rack"], ["Under-sink", "basket"], ["Double-wall steel lunch", "lunchbox"], ["3-tier stainless", "tiffin"], ["Insulated bag", "bag"], ["Kids 4-compartment", "plate"], ["Vacuum insulated", "flask"], ["Wall-mounted spice", "shelf"], ["Magnetic spice", "tins"], ["Tiered stainless", "dabba"], ["Glass spice bottles", "bottles"], ["Over-the-door", "doorrack"]];
+/** Fake product pictures (drawn locally, not photographs) so the layout can be judged with images. Real runs carry hotlinked, attributed photos. */
+function sampleImage(title: string): string | null {
+  const hit = SAMPLE_IMAGES.find(([k]) => title.startsWith(k));
+  return hit ? `/demo-products/${hit[1]}.svg` : null;
+}
+
 const DEMAND_REASON = "Search-demand data is not available in this plan.";
 
 function supplierLead(runKey: string, rank: number, s: NonNullable<Spec["supplier"]>, days: number): PiSupplierLead {
@@ -87,8 +94,8 @@ function build(runKey: string, days: number, specs: Spec[]): PiProduct[] {
         id,
         candidate_title: s.title,
         observed_category: s.category,
-        image_url: null,
-        image_source_url: null,
+        image_url: sampleImage(s.title),
+        image_source_url: "https://images.example.test/sample-photo",
         proxy_score: s.proxy,
         web_price_signal: s.webAvg === null
           ? { status: "UNAVAILABLE" }

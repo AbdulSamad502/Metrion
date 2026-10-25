@@ -224,8 +224,9 @@
 .ov-input[aria-invalid="true"] { border-color: var(--ov-bad); }
 
 /* ---------- first rise (once, gentle) ---------- */
-@keyframes ov-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.ov-rise { animation: ov-rise 480ms var(--ov-ease) both; animation-delay: calc(var(--i, 0) * 56ms); }
+/* everything appears together and quickly: a short fade, no slide and no stagger, so no card waits on the one above it */
+@keyframes ov-rise { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+.ov-rise { animation: ov-rise 260ms var(--ov-ease) both; }
 
 /* ---------- pills, chips, buttons ---------- */
 .ov-pill {
@@ -308,7 +309,7 @@ a:hover > .ov-arrow, a:focus-visible > .ov-arrow, button:hover > .ov-arrow { tra
 }
 .ov-flow-seg {
   height: 100%; border-radius: 4px; min-width: 8px; flex: none;
-  transform-origin: left center; animation: ov-grow 720ms var(--ov-ease) 240ms both;
+  transform-origin: left center; animation: ov-grow 400ms var(--ov-ease) both;
 }
 .ov-flow-seg:first-child { border-radius: 999px 4px 4px 999px; }
 .ov-flow-seg:last-child { border-radius: 4px 999px 999px 4px; }
@@ -360,11 +361,11 @@ a.ov-row:active { transform: scale(0.99); }
 /* a thin bar under each leak: how big it is next to the others */
 a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px; }
 .ov-leakbar { flex-basis: 100%; height: 4px; border-radius: 999px; background: var(--ov-line); margin-left: 56px; width: calc(100% - 56px); overflow: hidden; }
-.ov-leakbar > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-warn-fill); transform-origin: left; animation: ov-grow 640ms var(--ov-ease) 240ms both; }
+.ov-leakbar > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-warn-fill); transform-origin: left; animation: ov-grow 400ms var(--ov-ease) both; }
 
 /* ---------- goal meter ---------- */
 .ov-meter { height: 8px; border-radius: 999px; background: var(--ov-soft); overflow: hidden; }
-.ov-meter > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-brand); transform-origin: left; animation: ov-grow 720ms var(--ov-ease) 320ms both; }
+.ov-meter > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-brand); transform-origin: left; animation: ov-grow 400ms var(--ov-ease) both; }
 
 /* ---------- market tiles ---------- */
 .ov-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
@@ -418,9 +419,9 @@ a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px;
 /* ---------- charts (drawn from tokens, so a new palette recolours them) ---------- */
 .ov-donut { position: relative; flex: none; }
 .ov-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 32px; gap: 4px; pointer-events: none; }
-.ov-donut-arc { animation: ov-arc 720ms var(--ov-ease) both; animation-delay: calc(var(--i, 0) * 80ms); }
-@keyframes ov-arc { from { opacity: 0; } to { opacity: 1; } }
-.ov-line-path { stroke-dasharray: 1; animation: ov-draw 900ms var(--ov-ease) both; }
+/* the ring is drawn by a circular sweep (a mask whose stroke is traced once round), quick enough not to be waited on */
+.ov-donut-sweep { stroke-dasharray: 1; animation: ov-draw 520ms cubic-bezier(.4, 0, .2, 1) both; }
+.ov-line-path { stroke-dasharray: 1; animation: ov-draw 500ms var(--ov-ease) both; }
 @keyframes ov-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 .ov-chart { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; }
 .ov-chart-key { display: flex; flex-direction: column; gap: 8px; flex: 1 1 200px; min-width: 0; }
@@ -428,12 +429,20 @@ a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px;
 .ov-chart-key i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .ov-chart-key b { margin-left: auto; color: var(--ov-ink); font-weight: 800; padding-left: 8px; text-align: right; overflow-wrap: anywhere; }
 .ov-xlabels { display: flex; justify-content: space-between; gap: 8px; font-size: var(--ov-s1); font-weight: 600; color: var(--ov-ink-3); }
-@media (prefers-reduced-motion: reduce) { .ov-donut-arc, .ov-line-path { animation: none; } }
+/* formation: pieces of a visual aid build in together, each from its own base */
+@keyframes ov-up { from { transform: scaleY(0); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@keyframes ov-fill { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+.ov-wf-step { transform-origin: bottom; animation: ov-up 420ms var(--ov-ease) both; }
+.ov-wf-col:nth-child(2) .ov-wf-step { animation-delay: 60ms; } .ov-wf-col:nth-child(3) .ov-wf-step { animation-delay: 120ms; } .ov-wf-col:nth-child(4) .ov-wf-step { animation-delay: 180ms; }
+.ci-pips i { animation: ov-fill 240ms var(--ov-ease) both; }
+.ci-pips i:nth-child(2) { animation-delay: 40ms; } .ci-pips i:nth-child(3) { animation-delay: 80ms; } .ci-pips i:nth-child(4) { animation-delay: 120ms; } .ci-pips i:nth-child(5) { animation-delay: 160ms; }
+.ov-chart-key li { animation: ov-rise 260ms var(--ov-ease) both; }
+@media (prefers-reduced-motion: reduce) { .ov-donut-sweep, .ov-line-path, .ov-wf-step, .ci-pips i, .ov-chart-key li { animation: none; } }
 .ov-bars { display: flex; flex-direction: column; gap: 16px; }
 .ov-bars-top { display: flex; justify-content: space-between; gap: 16px; font-size: var(--ov-s2); font-weight: 600; color: var(--ov-ink-2); }
 .ov-bars-top b { color: var(--ov-ink); font-weight: 800; text-align: right; overflow-wrap: anywhere; }
 .ov-bars-track { display: block; height: 8px; margin-top: 8px; border-radius: 999px; background: var(--ov-soft); overflow: hidden; }
-.ov-bars-track > i { display: block; height: 100%; border-radius: 999px; transform-origin: left; animation: ov-grow 720ms var(--ov-ease) calc(var(--i, 0) * 80ms) both; }
+.ov-bars-track > i { display: block; height: 100%; border-radius: 999px; transform-origin: left; animation: ov-grow 400ms var(--ov-ease) both; }
 @media (prefers-reduced-motion: reduce) { .ov-bars-track > i { animation: none; } }
 
 /* phones: the row's tag drops under its text so the text keeps the width */

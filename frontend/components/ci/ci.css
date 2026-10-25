@@ -18,7 +18,7 @@
 .ci-strip { display: flex; flex-direction: column; gap: 16px; margin: 0; }
 .ci-strip-plot { position: relative; height: 88px; }
 .ci-strip-track { position: absolute; left: 0; right: 0; top: 40px; height: 8px; border-radius: 999px; background: var(--ov-edge); opacity: 0.7; }
-.ci-strip-band { position: absolute; top: 32px; height: 24px; border-radius: 12px; background: color-mix(in srgb, var(--ov-brand) 22%, var(--ov-card)); border: 1px solid var(--ov-brand); transform-origin: left; animation: ov-grow 720ms var(--ov-ease) 240ms both; }
+.ci-strip-band { position: absolute; top: 32px; height: 24px; border-radius: 12px; background: color-mix(in srgb, var(--ov-brand) 22%, var(--ov-card)); border: 1px solid var(--ov-brand); transform-origin: left; animation: ov-grow 400ms var(--ov-ease) both; }
 .ci-strip-tick { position: absolute; top: 28px; width: 2px; height: 32px; margin-left: -1px; border-radius: 2px; background: var(--ov-ink-2); }
 .ci-strip-tick span { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: var(--ov-s1); font-weight: 700; color: var(--ov-ink-3); white-space: nowrap; }
 .ci-strip-dot {

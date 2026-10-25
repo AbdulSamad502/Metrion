@@ -10,6 +10,7 @@ import { DecidePanel, type DecideKind } from "@/components/ceo/hub/DecidePanel";
 import { ExecutionPanel } from "@/components/ceo/hub/ExecutionPanel";
 import { FindingsPanel } from "@/components/ceo/hub/FindingsPanel";
 import { HealthStrip } from "@/components/ceo/hub/HealthStrip";
+import "./ceo.css";
 import { InvestigationList } from "@/components/ceo/hub/InvestigationList";
 import { Welcome } from "@/components/ceo/hub/Welcome";
 import { MemoryPanel } from "@/components/ceo/hub/MemoryPanel";

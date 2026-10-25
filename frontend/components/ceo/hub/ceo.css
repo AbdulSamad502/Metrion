@@ -1,0 +1,46 @@
+/* The CEO Hub in the Metrion palette: black and white with the shared chart accents, no green and no glow.
+   Scoped to a page that holds the hub canvas (.mt-galaxy), so no other page is affected. */
+html:root:not([data-theme="light"]) {
+  --hub-space: #000;
+  --hub-glow: rgba(255, 255, 255, 0.28);
+  --hub-glow-soft: transparent;
+  --hub-card-bg: var(--ov-card, #0e0e10);
+  --agent-ci: var(--ov-c3);
+  --agent-cfo: var(--ov-c4);
+  --agent-pi: var(--ov-c5);
+  --agent-cmo: var(--ov-c6);
+}
+body:has(.mt-galaxy) {
+  --accent: var(--ov-brand);
+  --accent-hover: var(--ov-brand-ink);
+  --accent-on-fill: var(--ov-on-brand);
+  --accent-fill-subtle: var(--ov-brand-soft);
+  --accent-fill-default: var(--ov-brand-soft);
+  --accent-border-subtle: color-mix(in srgb, var(--ov-brand) 22%, transparent);
+  --accent-border-default: color-mix(in srgb, var(--ov-brand) 36%, transparent);
+  --accent-border-strong: color-mix(in srgb, var(--ov-brand) 56%, transparent);
+  --positive: var(--ov-good);
+  --negative: var(--ov-bad);
+  --negative-fill: var(--ov-bad-soft);
+  --warning: var(--ov-warn);
+  --warning-fill: var(--ov-warn-soft);
+  --text-1: var(--ov-ink);
+  --text-2: var(--ov-ink);
+  --text-3: var(--ov-ink-2);
+  --text-4: var(--ov-ink-2);
+  --text-5: var(--ov-ink-3);
+  --text-6: var(--ov-ink-3);
+  --text-mint: var(--ov-good);
+  --text-green-muted: var(--ov-good);
+  --border-subtle: var(--ov-line);
+  --border-default: var(--ov-edge);
+  --border-hover: var(--ov-field-edge);
+  --fill-hover: var(--ov-soft);
+  background: #000;
+}
+body:has(.mt-galaxy)::before { background-image: none; }
+.mt-galaxy { background-color: var(--ov-card, #0e0e10); border: 1px solid var(--ov-edge); }
+.mt-glow-card, .mt-glow-card.mt-agent-glow { box-shadow: none; animation: none; }
+.mt-glow-card { border-color: var(--ov-edge); }
+.mt-glow-card.mt-agent-glow { border-color: var(--ov-brand); }
+.mt-hub-edge { filter: none; }

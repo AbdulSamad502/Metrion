@@ -184,7 +184,7 @@ export const SOURCE_LABEL: Record<string, string> = {
 };
 
 export function safeHref(u: string | null | undefined): string | null {
-  return u && /^https?:\/\//i.test(u) ? u : null;
+  return u && (/^https?:\/\//i.test(u) || u.startsWith("/demo-products/")) ? u : null; // http(s), or a picture drawn locally for the sample data
 }
 
 export function imageDomain(sourceUrl: string | null | undefined): string {

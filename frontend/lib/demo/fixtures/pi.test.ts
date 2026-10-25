@@ -14,7 +14,7 @@ describe("PI sample data", () => {
     expect(out.handled && out.body.items.every((i) => i.topProducts.length === 3)).toBe(true);
   });
 
-  it("returns each report with five products, honest gaps and no hotlinked images", () => {
+  it("returns each report with five products, honest gaps and locally drawn sample pictures", () => {
     for (const id of PI_SAMPLE_RUN_IDS) {
       const out = get<PiCase>(`/api/v1/pi/research/${id}`);
       expect(out.handled).toBe(true);
@@ -22,7 +22,7 @@ describe("PI sample data", () => {
       expect(out.body.products).toHaveLength(5);
       expect(out.body.unavailable.length).toBeGreaterThan(0);
       for (const p of out.body.products) {
-        expect(p.candidate.image_url).toBeNull();
+        expect(p.candidate.image_url).toMatch(/^\/demo-products\//); // drawn locally, never hotlinked
         expect(p.recommendation.gaps).toBeDefined();
         for (const l of p.supplierLeads) expect(l.contact?.published_price?.disclaimer).toMatch(/Not a quote/);
       }
