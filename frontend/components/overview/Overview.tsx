@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { Icon } from "@/components/ui/Icon";
 import type { HealthEntry, PresentationFigure } from "@/lib/ceo";
 import { agentMeta, agentTier, useAgentRoster } from "@/lib/agents";
@@ -12,6 +13,7 @@ import { BAND_TONE, BAND_WORD, bandOf, dayLabel, flowShares, goalShare, isNegati
 import { Donut } from "./charts";
 import { Pill, RefreshButton, rise } from "./parts";
 import "./overview.css";
+import "./layered.css";
 
 export const PNL_KEY = "BS_PNL_LATEST";
 export const BANDS_KEY = "BS_HEALTH_BANDS";
@@ -437,7 +439,17 @@ function Team({ lastResearchAt }: { lastResearchAt: string | null | undefined })
 
 /* ------------------------------------------------------------------ page */
 
+/** EXPERIMENT: marks the page as layered while the Overview is on screen (see layered.css). Remove with that file. */
+function useLayeredSurface() {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.surface = "layered";
+    return () => { delete root.dataset.surface; };
+  }, []);
+}
+
 export function Overview() {
+  useLayeredSurface();
   const ci = useCiSummary();
   const { health, refresh, refreshing, checkedAt } = useBusinessHealth();
   const by = (key: string) => health.entries.find((e) => e.key === key);

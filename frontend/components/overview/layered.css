@@ -1,0 +1,37 @@
+/* EXPERIMENT (reversible): layered surfaces for the Overview page only.
+   To remove: delete this file, its import in Overview.tsx, and the useLayeredSurface() call there.
+   It applies only while <Overview /> is mounted (html[data-surface="layered"]), so no other page — including the CEO Hub — is touched.
+   One deep tone for the page, a lighter tone of the same hue for cards, a quieter tone for panels inside cards. */
+
+html[data-surface="layered"] {
+  --ov-page: #0a0c16;
+  --ov-card: #141829;
+  --ov-soft: #1b2036;
+  --ov-line: #242a45;
+  --ov-edge: #313859;
+  --ov-field-edge: #7d84a8;
+  --ov-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 10px 24px -20px rgba(0, 0, 0, 0.7);
+  --ov-shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 16px 28px -20px rgba(0, 0, 0, 0.8);
+  --bg-base: var(--ov-page);
+}
+
+html[data-surface="layered"][data-theme="light"] {
+  --ov-page: #dde1ef;
+  --ov-card: #f7f8fd;
+  --ov-soft: #ebeef8;
+  --ov-line: #d2d8ea;
+  --ov-edge: #b8c0db;
+  --ov-field-edge: #7b83a3;
+  --ov-ink-2: #3e4262;
+  --ov-ink-3: #535776;
+  --ov-shadow: 0 1px 2px rgba(30, 40, 90, 0.07);
+  --ov-shadow-lift: 0 4px 12px -6px rgba(30, 40, 90, 0.18);
+}
+
+html[data-surface="layered"] body,
+html[data-surface="layered"] .mt-sidebar,
+html[data-surface="layered"] .mt-topbar {
+  background: var(--ov-page) !important;
+}
+html[data-surface="layered"] .mt-sidebar { border-right: 1px solid var(--ov-line); }
+html[data-surface="layered"] .mt-topbar { border-bottom: 1px solid var(--ov-line); }
