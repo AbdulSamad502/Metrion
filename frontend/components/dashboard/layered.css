@@ -1,6 +1,6 @@
-/* EXPERIMENT (reversible): layered surfaces for the Overview page only.
-   To remove: delete this file, its import in Overview.tsx, and the useLayeredSurface() call there.
-   It applies only while <Overview /> is mounted (html[data-surface="layered"]), so no other page — including the CEO Hub — is touched.
+/* Layered surfaces for the signed-in dashboard (reversible).
+   To remove: delete this file, its import in ShellFrame.tsx, and the data-surface effect there.
+   It applies while a dashboard page is mounted (html[data-surface="layered"]); the CEO Hub is excluded in ShellFrame.
    One deep tone for the page, a lighter tone of the same hue for cards, a quieter tone for panels inside cards. */
 
 html[data-surface="layered"] {

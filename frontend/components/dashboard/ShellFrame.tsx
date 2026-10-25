@@ -12,6 +12,7 @@ import { Icon } from "@/components/ui/Icon";
 import { ToastProvider } from "@/components/ui/Toast";
 import { DemoBadge } from "@/components/demo/DemoBadge";
 import "./typography.css";
+import "./layered.css";
 import "./interaction.css";
 
 const COLLAPSE_KEY = "metrion.sidebar.collapsed";
@@ -59,6 +60,15 @@ function OwnFrame({ children }: { children: ReactNode }) {
     root.classList.add("mt-zoom", "mt-dash-type");
     return () => root.classList.remove("mt-zoom", "mt-dash-type");
   }, []);
+
+  // Layered surfaces (deep page, lighter cards; see layered.css) on every dashboard page except the CEO Hub, which keeps its own look.
+  // To switch the treatment off, delete layered.css, its import above and this effect.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (focusMode) return;
+    root.dataset.surface = "layered";
+    return () => { delete root.dataset.surface; };
+  }, [focusMode]);
 
   // Restore the remembered collapse state after hydration (never during render: SSR has no storage).
   useEffect(() => {
