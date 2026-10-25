@@ -106,11 +106,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--ov-gap);
-  font-family: var(--font-display, var(--font-geist-sans)), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-body, var(--font-geist-sans)), ui-sans-serif, system-ui, sans-serif;
   font-size: var(--ov-s2);
   line-height: 1.5;
   color: var(--ov-ink);
-  font-feature-settings: "tnum" 1, "cv11" 1;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -435,3 +434,10 @@ a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px;
 .ov-bars-track { display: block; height: 8px; margin-top: 8px; border-radius: 999px; background: var(--ov-soft); overflow: hidden; }
 .ov-bars-track > i { display: block; height: 100%; border-radius: 999px; transform-origin: left; animation: ov-grow 720ms var(--ov-ease) calc(var(--i, 0) * 80ms) both; }
 @media (prefers-reduced-motion: reduce) { .ov-bars-track > i { animation: none; } }
+
+/* phones: the row's tag drops under its text so the text keeps the width */
+@media (max-width: 560px) {
+  .ov-row { flex-wrap: wrap; }
+  .ov-row-end { flex-basis: 100%; padding-left: 56px; }
+  .ov-row-end .ov-arrow { display: none; }
+}

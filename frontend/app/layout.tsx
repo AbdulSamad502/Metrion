@@ -1,20 +1,21 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
-import { Inter, Plus_Jakarta_Sans } from "next/font/google";
+import { Inter, Manrope } from "next/font/google";
 import "./globals.css";
 import { AppFrame } from "@/components/dashboard/AppFrame";
 import { InlineScript } from "@/components/InlineScript";
 import { themeInitScript } from "@/lib/theme";
 
+// Inter: body text, labels, navigation, buttons and tables. (The variable keeps its old name so existing styles still resolve.)
 const inter = Inter({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
-// The friendly face the Overview speaks in. Other pages keep Inter until they are redesigned.
-const jakarta = Plus_Jakarta_Sans({
-  variable: "--font-display",
+// Manrope: headings and the big financial figures on the signed-in dashboard (see components/dashboard/typography.css).
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
   weight: ["500", "600", "700", "800"],
 });
@@ -42,7 +43,7 @@ const clerkAppearance = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${inter.variable} ${jakarta.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang="en" className={`${inter.variable} ${manrope.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         <InlineScript html={themeInitScript} />
       </head>

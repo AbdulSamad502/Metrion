@@ -11,6 +11,7 @@ import { Sidebar } from "./Sidebar";
 import { Icon } from "@/components/ui/Icon";
 import { ToastProvider } from "@/components/ui/Toast";
 import { DemoBadge } from "@/components/demo/DemoBadge";
+import "./typography.css";
 
 const COLLAPSE_KEY = "metrion.sidebar.collapsed";
 
@@ -53,8 +54,9 @@ function OwnFrame({ children }: { children: ReactNode }) {
 
   // The app reads as a browser at 80%: on a desktop-width window everything is drawn at four-fifths size (see .mt-zoom in sidebar.css).
   useLayoutEffect(() => {
-    document.documentElement.classList.add("mt-zoom");
-    return () => document.documentElement.classList.remove("mt-zoom");
+    const root = document.documentElement;
+    root.classList.add("mt-zoom", "mt-dash-type");
+    return () => root.classList.remove("mt-zoom", "mt-dash-type");
   }, []);
 
   // Restore the remembered collapse state after hydration (never during render: SSR has no storage).
