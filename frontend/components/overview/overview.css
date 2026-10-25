@@ -35,6 +35,7 @@
   --ov-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 32px -24px rgba(0, 0, 0, 0.7);
   --ov-shadow-lift: 0 1px 2px rgba(0, 0, 0, 0.4), 0 24px 40px -24px rgba(0, 0, 0, 0.85);
   --ov-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --ov-gap: 24px; /* the one space between cards, on every page */
 
   /* chart colours: tell slices and lines apart only; the label and figure are always written beside them */
   --ov-c1: #8f88ff;
@@ -60,7 +61,7 @@
 }
 
 /* the older tools (calculator, expense tracker, finance tools) read these names; they follow the same palette */
-.ov {
+.ov, .mt-sidebar, .mt-topbar {
   --accent: var(--ov-brand);
   --accent-hover: var(--ov-brand-ink);
   --accent-on-fill: var(--ov-on-brand);
@@ -104,7 +105,7 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: var(--ov-gap);
   font-family: var(--font-display, var(--font-geist-sans)), ui-sans-serif, system-ui, sans-serif;
   font-size: var(--ov-s2);
   line-height: 1.5;
@@ -119,9 +120,9 @@
   --ov-ink-3: #666480;
   --ov-card: #ffffff;
   --ov-soft: #f4f1ea;
-  --ov-line: #e6e1d4;
-  --ov-edge: #d3ccb9;
-  --ov-field-edge: #8a8799;
+  --ov-line: #dcd5c3;
+  --ov-edge: #c4bba3;
+  --ov-field-edge: #857f96;
   --ov-brand: #4f46e5;
   --ov-brand-ink: #3b33c4;
   --ov-brand-soft: #ecebfd;
@@ -139,13 +140,12 @@
   --ov-c5: #c0344d;
   --ov-c6: #7b3fc4;
   --ov-c7: #666480;
-  --ov-shadow: 0 1px 2px rgba(40, 30, 80, 0.05), 0 16px 32px -24px rgba(40, 30, 80, 0.28);
+  --ov-shadow: 0 1px 2px rgba(40, 30, 80, 0.08), 0 16px 32px -24px rgba(40, 30, 80, 0.32);
   --ov-shadow-lift: 0 2px 4px rgba(40, 30, 80, 0.06), 0 24px 40px -24px rgba(40, 30, 80, 0.38);
 }
 
 @media (max-width: 479px) {
-  :root { --ov-s4: 40px; }
-  .ov { gap: 24px; }
+  :root { --ov-s4: 40px; --ov-gap: 16px; }
 }
 
 .ov *, .ov *::before, .ov *::after { box-sizing: border-box; }
@@ -182,13 +182,13 @@
 .ov-head-r { display: flex; align-items: center; gap: 8px; }
 .ov-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
-.ov-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: stretch; }
+.ov-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--ov-gap); align-items: stretch; }
 .ov-span-7 { grid-column: span 7; min-width: 0; }
 .ov-span-5 { grid-column: span 5; min-width: 0; }
 .ov-span-6 { grid-column: span 6; min-width: 0; }
 .ov-span-12 { grid-column: span 12; min-width: 0; }
 .ov-span-7 > .ov-card, .ov-span-5 > .ov-card, .ov-span-6 > .ov-card, .ov-span-12 > .ov-card { flex: 1; }
-.ov-col { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.ov-col { display: flex; flex-direction: column; gap: var(--ov-gap); min-width: 0; }
 .ov-col > .ov-card:last-child { flex: 1; }
 @media (max-width: 1100px) {
   .ov-span-7, .ov-span-5, .ov-span-6 { grid-column: span 12; }
@@ -265,10 +265,10 @@
 
 .ov-btn:active, .ov-chip:active, .ov-icon-btn:active { transform: scale(0.97); }
 @media (hover: hover) and (pointer: fine) {
-  .ov-chip:hover { border-color: var(--ov-brand); box-shadow: 0 6px 16px -10px var(--ov-brand); }
+  .ov-chip:hover { border-color: var(--ov-brand); }
   .ov-btn:hover { background: color-mix(in srgb, var(--ov-soft) 80%, var(--ov-brand) 20%); }
-  .ov-btn--brand:hover { background: var(--ov-brand); box-shadow: 0 8px 20px -10px var(--ov-brand); }
-  .ov-btn--solid:hover { background: var(--ov-solid-bg); box-shadow: 0 8px 20px -10px rgba(0, 0, 0, 0.5); }
+  .ov-btn--brand:hover { background: var(--ov-brand-ink); }
+  .ov-btn--solid:hover { background: color-mix(in srgb, var(--ov-solid-bg) 90%, var(--ov-brand) 10%); }
   .ov-btn--glass:hover { background: var(--ov-hero-glass-2); }
   .ov-btn--ghost:hover { background: var(--ov-brand-soft); }
   .ov-icon-btn:hover { color: var(--ov-brand-ink); border-color: var(--ov-brand); }
@@ -286,7 +286,7 @@ a:hover > .ov-arrow, a:focus-visible > .ov-arrow, button:hover > .ov-arrow { tra
 
 /* ---------- hero ---------- */
 .ov-hero {
-  color: var(--ov-hero-ink); border: 0; gap: 24px; padding: 32px; overflow: hidden; justify-content: space-between;
+  color: var(--ov-hero-ink); border: 0; gap: 24px; padding: 32px; overflow: hidden; justify-content: center;
   background:
     radial-gradient(560px 280px at 100% 0%, rgba(255, 255, 255, 0.08), transparent 70%),
     linear-gradient(140deg, var(--ov-hero-a) 0%, var(--ov-hero-b) 58%, var(--ov-hero-c) 100%);
@@ -373,7 +373,7 @@ a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px;
   transition: transform 160ms var(--ov-ease), background 160ms, box-shadow 160ms;
 }
 .ov-tile:active { transform: scale(0.98); }
-@media (hover: hover) and (pointer: fine) { .ov-tile:hover { transform: translateY(-2px); box-shadow: var(--ov-shadow); } }
+@media (hover: hover) and (pointer: fine) { .ov-tile:hover { transform: translateY(-2px); border-color: var(--ov-brand); } }
 .ov-tile-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ov-tile--warn .ov-fig { color: var(--ov-warn); }
 
@@ -388,7 +388,7 @@ a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px;
   transition: transform 200ms var(--ov-ease), box-shadow 200ms var(--ov-ease);
 }
 .ov-agent:active { transform: scale(0.985); }
-@media (hover: hover) and (pointer: fine) { .ov-agent:hover { transform: translateY(-4px); box-shadow: var(--ov-shadow-lift); } }
+@media (hover: hover) and (pointer: fine) { .ov-agent:hover { transform: translateY(-2px); border-color: var(--ov-brand); } }
 .ov-agent-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ov-agent-top > .ov-badge-circle { background: var(--ov-brand-soft); color: var(--ov-brand-ink); }
 .ov-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ov-ink-3); flex: none; }

@@ -39,13 +39,13 @@ function Agents() {
         </ul>
       )}
 
-      <section className="ov-card ov-rise" style={{ ["--i" as string]: 2 }} aria-labelledby="ag-add">
+      <section className="ov-card ov-rise" style={{ ["--i" as string]: 2, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: "8px 24px" }} aria-labelledby="ag-add">
         <h2 id="ag-add" className="ov-sr-only sr-only">Adding and removing agents</h2>
         <div className="ov-head-r" style={{ flexWrap: "wrap" }}>
           <span className="ov-title">Buying and removing agents</span>
           <Pill>Not available yet</Pill>
         </div>
-        <p className="ov-body" style={{ maxWidth: "70ch" }}>
+        <p className="ov-body" style={{ maxWidth: "70ch", flex: "1 1 320px" }}>
           No way to buy, add or remove agents yet. {agents && !error ? "The roster above is exactly what the backend reports — nothing on this page changes it." : "Nothing on this page changes the roster."}
         </p>
       </section>

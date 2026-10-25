@@ -5,7 +5,7 @@
 
 /* brand */
 .sb-brand { display: flex; align-items: center; gap: 12px; padding: 24px 24px 16px; }
-.sb-brand-mark { flex: none; width: 44px; height: auto; }
+.sb-brand-mark { flex: none; width: 44px; height: 28px; background: var(--ov-brand); -webkit-mask: url(/metrion-mark-transparent.png) center / contain no-repeat; mask: url(/metrion-mark-transparent.png) center / contain no-repeat; }
 .sb-brand-name { font-size: var(--sb-s2); font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; color: var(--text-1); }
 .sb-brand-tag { font-size: var(--sb-s1); font-weight: 600; color: var(--text-5); line-height: 1.3; }
 

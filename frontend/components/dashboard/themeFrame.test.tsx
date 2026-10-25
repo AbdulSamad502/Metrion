@@ -70,12 +70,10 @@ describe("theme in the signed-in frame", () => {
     expect(html()).toBeUndefined();
   });
 
-  it("carries both brand marks in the sidebar, the transparent light one for CSS to pick on a light surface", async () => {
+  it("draws one brand mark in the sidebar, coloured by the theme rather than by a second image", async () => {
     render(<ShellFrame>{page()}</ShellFrame>);
     await screen.findByText("body");
-    const marks = screen.getAllByRole("img", { name: "Metrion", hidden: true }).filter((m) => m.getAttribute("data-src")?.includes("metrion-mark"));
-    expect(marks.map((m) => m.getAttribute("data-src")).sort()).toEqual(["/metrion-mark-light.png", "/metrion-mark-transparent.png"]);
-    expect(marks.find((m) => m.getAttribute("data-src") === "/metrion-mark-transparent.png")).toHaveClass("mt-brand-mark--dark");
-    expect(marks.find((m) => m.getAttribute("data-src") === "/metrion-mark-light.png")).toHaveClass("mt-brand-mark--light");
+    const marks = screen.getAllByRole("img", { name: "Metrion", hidden: true }).filter((m) => m.classList.contains("sb-brand-mark"));
+    expect(marks).toHaveLength(1);
   });
 });

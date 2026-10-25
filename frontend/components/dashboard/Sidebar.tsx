@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { Icon } from "@/components/ui/Icon";
 import "./sidebar.css";
+import "@/components/overview/overview.css";
 import { FOOTER_NAV, NAV_GROUPS, SYSTEM_GROUP_LABEL, isActive, type NavItem } from "@/lib/navigation";
 
 /** The persistent app navigation (docs/design/frontend-design). Active state comes from the
@@ -137,8 +138,7 @@ export function Sidebar({
         } ${collapsed ? "lg:w-[76px]" : "lg:w-60"}`}
       >
         <div className={`sb-brand ${collapsed ? "lg:justify-center" : ""}`}>
-          <Image src="/metrion-mark-transparent.png" alt="Metrion" width={44} height={28} className="sb-brand-mark mt-brand-mark--dark" priority />
-          <Image src="/metrion-mark-light.png" alt="Metrion" width={44} height={28} className="sb-brand-mark mt-brand-mark--light" loading="eager" />
+          <span role="img" aria-label="Metrion" className="sb-brand-mark" />
           <div className={`min-w-0 ${collapsed ? "lg:hidden" : ""}`}>
             <div className="sb-brand-name">Metrion</div>
             <div className="sb-brand-tag">Engine of growth</div>
