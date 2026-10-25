@@ -3,7 +3,7 @@ import { useEffect, type RefObject } from "react";
 /** Interactive things in the hub that get the dot-grid hover (disabled controls never react). */
 const AREA = '[data-testid="work-area"]'; // the effect belongs to the agents view only
 const HOT = 'button:not(:disabled), a[href], [role="button"], [role="tab"], .mt-glow-card, .mt-chip';
-const LAG = 0.16; // how much of the distance to the pointer is closed each frame: the glow trails the cursor a little and settles
+const LAG = 0.32; // how much of the distance to the pointer is closed each frame: the glow trails the cursor a little and settles
 const IDLE_MS = 700;
 
 /** The CEO Hub's hover effect (see ceo.css): a faint dot grid whose dots darken in a soft circle that trails the pointer, on the page and inside whatever
@@ -27,13 +27,17 @@ export function useDotSpotlight(rootRef: RefObject<HTMLElement | null>) {
         el.setAttribute("data-hot", "");
       }
     };
+    /** The pointer is in screen pixels; the hub may be drawn zoomed (the app is shown at 80%, the hub at 80% of that), so convert with the real scale. */
     const paint = () => {
-      root.style.setProperty("--mx", `${x}px`);
-      root.style.setProperty("--my", `${y}px`);
+      const rr = root.getBoundingClientRect();
+      const k = root.offsetWidth > 0 ? rr.width / root.offsetWidth : 1;
+      root.style.setProperty("--mx", `${(x - rr.left) / k}px`);
+      root.style.setProperty("--my", `${(y - rr.top) / k}px`);
       if (hot) {
         const r = hot.getBoundingClientRect();
-        hot.style.setProperty("--lx", `${x - r.left}px`);
-        hot.style.setProperty("--ly", `${y - r.top}px`);
+        const kh = hot.offsetWidth > 0 ? r.width / hot.offsetWidth : k;
+        hot.style.setProperty("--lx", `${(x - r.left) / kh}px`);
+        hot.style.setProperty("--ly", `${(y - r.top) / kh}px`);
       }
     };
     const tick = () => {

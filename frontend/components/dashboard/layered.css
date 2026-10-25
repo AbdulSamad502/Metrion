@@ -88,3 +88,20 @@ html[data-surface="layered"] ::selection { background: var(--ov-brand); color: v
 html[data-surface="layered"] * { scrollbar-width: thin; scrollbar-color: var(--ov-field-edge) transparent; }
 html[data-surface="layered"][data-theme="light"] input:focus-visible,
 html[data-surface="layered"][data-theme="light"] select:focus-visible { outline: 2px solid var(--ov-brand); outline-offset: 2px; }
+
+/* draw-in animations wait, at their first frame, until they scroll into view (useRevealOnView marks each one data-seen) */
+html.mt-reveal .ov-rise:not([data-seen]),
+html.mt-reveal .ov-bars-track > i:not([data-seen]),
+html.mt-reveal .ov-meter > i:not([data-seen]),
+html.mt-reveal .ov-leakbar > i:not([data-seen]),
+html.mt-reveal .ov-flow-seg:not([data-seen]),
+html.mt-reveal .ov-donut-sweep:not([data-seen]),
+html.mt-reveal .ov-line-path:not([data-seen]),
+html.mt-reveal .ov-wf-step:not([data-seen]),
+html.mt-reveal .ci-pips i:not([data-seen]),
+html.mt-reveal .ov-chart-key li:not([data-seen]),
+html.mt-reveal .cmo-meter > i:not([data-seen]),
+html.mt-reveal .ci-strip-band:not([data-seen]),
+html.mt-reveal .ci-strip-dot:not([data-seen]),
+html.mt-reveal .ci-diverge i:not([data-seen]),
+html.mt-reveal .pi-bar > i:not([data-seen]) { animation-play-state: paused; }

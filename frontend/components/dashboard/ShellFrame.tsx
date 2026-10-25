@@ -13,6 +13,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { DemoBadge } from "@/components/demo/DemoBadge";
 import "./typography.css";
 import "./layered.css";
+import { useRevealOnView } from "./useRevealOnView";
 import "./interaction.css";
 
 const COLLAPSE_KEY = "metrion.sidebar.collapsed";
@@ -51,6 +52,7 @@ function OwnFrame({ children }: { children: ReactNode }) {
       delete root.dataset.theme; // marketing and sign-in pages are always dark
     };
   }, [theme]);
+  useRevealOnView();
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   useSurfaceSheen(surfaceRef, false); // the cursor-following glow on cards is switched off; nothing glows under the pointer // the surface div only exists once the session has loaded
 

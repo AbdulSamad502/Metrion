@@ -65,10 +65,10 @@ body:has(.mt-galaxy)::before { background-image: none; }
   background-image: radial-gradient(circle, var(--dot-hi) 1.1px, transparent 1.5px);
   background-size: 12px 12px;
 }
-.ceo-dots { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 0.45s ease; background-position: 6px 6px;
+.ceo-dots { position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 0.45s ease; background-position: 6px 6px;
   -webkit-mask-image: radial-gradient(circle 110px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 100%);
   mask-image: radial-gradient(circle 110px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 100%); }
-.ceo-root::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background-image: radial-gradient(circle, var(--dot) 1.1px, transparent 1.5px); background-size: 12px 12px; background-position: 6px 6px; }
+.ceo-root::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-image: radial-gradient(circle, var(--dot) 1.1px, transparent 1.5px); background-size: 12px 12px; background-position: 6px 6px; }
 .ceo-root[data-spot="on"] .ceo-dots { opacity: 1; transition-duration: 0.15s; }
 [data-dots="static"] { position: relative; }
 [data-dots] { isolation: isolate; }
@@ -82,3 +82,35 @@ body:has(.mt-galaxy)::before { background-image: none; }
 @media (prefers-reduced-motion: reduce) { .ceo-dots, [data-dots]::before { transition: none; } }
 @media (hover: none) { .ceo-dots, [data-dots]::before { display: none; } }
 .ceo-root:not([data-view="agents"])::before, .ceo-root:not([data-view="agents"]) .ceo-dots { display: none; }
+
+/* ---- fixes from review ---- */
+/* the cards on the agents view are solid, so a wire never shows through their text (the page-level --hub-card-bg is translucent inside .mt-galaxy) */
+.mt-galaxy { --hub-card-bg: var(--ov-card, #0e0e10); }
+/* the tab row scrolls sideways only: the active underline used to push it into a vertical scrollbar */
+.ceo-tabs { overflow-y: hidden; scrollbar-width: none; }
+.ceo-tabs::-webkit-scrollbar { display: none; }
+.ceo-tab[data-on="true"]::after { bottom: 0; }
+/* activity and results: lines, not boxes (status-coloured finding cards keep their border, it carries meaning) */
+[data-testid="results-area"] { padding-top: 24px; }
+[data-testid="results-area"] .mt-panel, [data-testid="results-area"] .mt-hub-card,
+[data-testid="results-area"] li[style*="border: 1px solid var(--border-subtle)"],
+[data-testid="results-area"] div.rounded-xl[style*="border: 1px solid var(--border-subtle)"] {
+  background: transparent !important; border: 0 !important; border-bottom: 1px solid var(--ov-line) !important; border-radius: 0 !important; box-shadow: none !important;
+}
+
+/* the hub's default size: one step smaller than the rest of the app (80% of the app's own 80%), on desktop windows only */
+@media (min-width: 1024px) { .ceo-root { zoom: 0.8; } }
+
+/* connecting and removing a specialist: the card and its wire change state with a short fade, and the card shows it is working while the server answers */
+.mt-glow-card { transition: opacity 0.3s ease, border-color 0.3s ease, background-color 0.3s ease; }
+svg path[data-testid^="edge-"] { transition: stroke 0.3s ease, stroke-opacity 0.3s ease, opacity 0.3s ease; }
+[data-testid^="agent-node-"][data-busy="true"] { opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) { .mt-glow-card, svg path[data-testid^="edge-"] { transition: none; } }
+
+/* ---- reading views: conversation, activity, chat bar ----
+   The hub is drawn one step smaller than the app, which left chat and results looking small and empty; they read at the app's own size. */
+@media (min-width: 1024px) { .ceo-read { zoom: 1.25; } }
+.ceo-msg-user { background: var(--ov-soft); }
+.ceo-composer { background: var(--ov-card, #0e0e10); border: 1px solid var(--ov-edge); min-height: 56px; align-items: center; }
+.ceo-composer:focus-within { border-color: var(--ov-field-edge); }
+.ceo-composer textarea { min-height: 40px; }

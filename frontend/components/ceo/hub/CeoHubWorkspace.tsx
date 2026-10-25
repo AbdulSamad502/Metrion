@@ -215,7 +215,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
         </section>
 
         <section className={`min-h-0 min-w-0 flex-1 flex-col overflow-y-auto ${view === "chat" ? "flex" : "hidden"}`} aria-label="CEO conversation" data-testid="chat-column">
-          <div className="mx-auto flex w-full max-w-[880px] flex-1 flex-col gap-3">
+          <div className="ceo-read mx-auto flex w-full max-w-[820px] flex-1 flex-col gap-3">
             <div className="truncate t-meta" style={{ color: needsInput ? "var(--warning)" : "var(--text-5)" }} data-testid="chat-status">{ceoStatus}</div>
             {empty ? (
               <Welcome agents={{ CI: true, CFO: true, PI: true, CMO: true }} onAsk={(t) => void send(t, null)} onAction={(l, a) => void send(l, null, a)} onOpenForm={(f) => setForm(f as DecideKind)} />
@@ -229,7 +229,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
         </section>
 
         <section className={`min-h-0 min-w-0 flex-1 overflow-y-auto ${view === "results" ? "flex" : "hidden"}`} aria-label="Activity and results" data-testid="results-area" role="tabpanel">
-          <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-5">
+          <div className="ceo-read mx-auto flex w-full max-w-[1000px] flex-col gap-6">
             {(hub.health.entries.length > 0 || hub.health.status === "error" || hub.list.items.length > 0) && <div className="@container"><div className="grid grid-cols-1 gap-3 @[760px]:grid-cols-2" data-testid="summary-cards">
               <section aria-labelledby="ceo-health-inline" className="flex min-w-0 flex-col gap-2">
                 <h3 id="ceo-health-inline" className="m-0 mt-eyebrow">Business at a glance</h3>
@@ -244,7 +244,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
 
       {/* CHAT BAR: always at the bottom, whichever view is open. */}
       <div className="sticky bottom-0 z-20 flex min-w-0 flex-shrink-0 flex-col gap-2 pb-1 pt-2" style={{ background: "linear-gradient(to top, var(--bg-base) 75%, transparent)" }} data-testid="chat-bar">
-        <div className="mx-auto flex w-full max-w-[880px] min-w-0 flex-col gap-2">
+        <div className="ceo-read mx-auto flex w-full max-w-[820px] min-w-0 flex-col gap-2">
           {form && (
             <DecidePanel client={client} kind={form} disabled={processing} onClose={() => setForm(null)} onRun={(label, action) => { void send(label, null, action); setForm(null); }} />
           )}
