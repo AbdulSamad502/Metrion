@@ -301,8 +301,8 @@ export function CiDashboard({ client }: { client: CiClient }) {
               )}
             </Box>
 
-            <div className="ov-grid" style={{ alignItems: "start" }}>
-              <div className="ov-span-7 ov-col">
+            <div className="ov-grid">
+              <div className="ov-span-7" style={{ display: "flex" }}>
                 <Box title="Verified changes" subtitle="Dated screenshots, not live" index={8}>
                   {ws.changes.length === 0 ? (
                     <EmptyState compact title="No verified changes yet" description="Shows after a second confirmed screenshot." />
@@ -310,42 +310,8 @@ export function CiDashboard({ client }: { client: CiClient }) {
                     <Changes ws={ws} />
                   )}
                 </Box>
-                <Box title="Waiting on you" index={10}>
-                  {ws.pendingConfirmations.length === 0 ? (
-                    <EmptyState compact title="Nothing waiting" description="Details to confirm show up here." />
-                  ) : (
-                    <ul className="ci-list">
-                      {ws.pendingConfirmations.map((p) => (
-                        <li key={p.id} className="ci-item">
-                          <span className="ci-item-main">
-                            <span className="ov-title">Confirm the {p.field.replace(/_paise$/, "").replace(/_/g, " ")}</span>
-                            <span className="ov-meta">until {fmtDate(p.expiresAt)}</span>
-                          </span>
-                          <AskCeo href={askHref("confirm", null)} label="Confirm in chat" quiet />
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Box>
               </div>
-              <div className="ov-span-5 ov-col">
-                <Box title="Freshness" index={9}>
-                  {ws.competitors.length === 0 ? (
-                    <EmptyState compact title="Nothing to check yet" description="Shows once a competitor is tracked." />
-                  ) : (
-                    <ul className="ov-rows">
-                      {ws.competitors.map((c) => (
-                        <li key={c.id} className="ov-row" style={{ minHeight: 56 }}>
-                          <span className="ov-row-main">
-                            <span className="ov-title">{c.label ?? "Competitor"}</span>
-                            <span className="ov-meta">{c.evidenceDate ? fmtDate(c.evidenceDate) : "no screenshot yet"}</span>
-                          </span>
-                          <Pill tone={c.freshness === "FRESH" ? "good" : "warn"} icon={c.freshness === "FRESH" ? "check" : "alert"}>{FRESHNESS_LABEL[c.freshness]}</Pill>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Box>
+              <div className="ov-span-5" style={{ display: "flex" }}>
                 <Box title="Review insights" subtitle="Recurring themes" index={11}>
                   {ws.reviewInsights.length === 0 ? (
                     <EmptyState compact title="No review insights yet" description="Send the CEO a reviews screenshot." action={<AskCeo href={askHref("reviews", null)} label="Ask about reviews" />} />
@@ -363,6 +329,44 @@ export function CiDashboard({ client }: { client: CiClient }) {
                             <AskCeo href={askHref("reviewsfor", r.label)} label="Add more reviews" quiet />
                             {r.findingId && <AskCeo href={askFindingHref(r.findingId, ws.selectedProductId, r.label)} label="Explain this" quiet />}
                           </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Box>
+              </div>
+              <div className="ov-span-7" style={{ display: "flex" }}>
+                <Box title="Freshness" index={9}>
+                  {ws.competitors.length === 0 ? (
+                    <EmptyState compact title="Nothing to check yet" description="Shows once a competitor is tracked." />
+                  ) : (
+                    <ul className="ov-rows ci-fresh">
+                      {ws.competitors.map((c) => (
+                        <li key={c.id} className="ov-row" style={{ minHeight: 56 }}>
+                          <span className="ov-row-main">
+                            <span className="ov-title">{c.label ?? "Competitor"}</span>
+                            <span className="ov-meta">{c.evidenceDate ? fmtDate(c.evidenceDate) : "no screenshot yet"}</span>
+                          </span>
+                          <Pill tone={c.freshness === "FRESH" ? "good" : "warn"} icon={c.freshness === "FRESH" ? "check" : "alert"}>{FRESHNESS_LABEL[c.freshness]}</Pill>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Box>
+              </div>
+              <div className="ov-span-5" style={{ display: "flex" }}>
+                <Box title="Waiting on you" index={10}>
+                  {ws.pendingConfirmations.length === 0 ? (
+                    <EmptyState compact title="Nothing waiting" description="Details to confirm show up here." />
+                  ) : (
+                    <ul className="ci-list">
+                      {ws.pendingConfirmations.map((p) => (
+                        <li key={p.id} className="ci-item">
+                          <span className="ci-item-main">
+                            <span className="ov-title">Confirm the {p.field.replace(/_paise$/, "").replace(/_/g, " ")}</span>
+                            <span className="ov-meta">until {fmtDate(p.expiresAt)}</span>
+                          </span>
+                          <AskCeo href={askHref("confirm", null)} label="Confirm in chat" quiet />
                         </li>
                       ))}
                     </ul>
@@ -456,7 +460,7 @@ function Changes({ ws }: { ws: CiWorkspace }) {
         const down = c.direction === "DECREASE";
         return (
           <li key={`${c.competitorId}-${c.occurredAt}`} className="ci-change">
-            <div className="ov-card-head" style={{ alignItems: "flex-start" }}>
+            <div className="ov-card-head">
               <div style={{ minWidth: 0 }}>
                 <div className="ov-title">
                   {c.label ?? "A competitor"}: {c.kind === "AVAILABILITY" ? `stock ${(c.availabilityChange ?? "changed").toLowerCase().replace(/_/g, " ")}` : `price ${down ? "down" : "up"} ${c.deltaPct.replace("-", "")}%`}
