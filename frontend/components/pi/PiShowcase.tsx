@@ -466,7 +466,7 @@ function ProductInformation({ product, brief }: { product: PiProduct; brief: PiC
           <div className="pi-thumb"><ProductImage product={product} large /></div>
         )}
         <div className="min-w-0">
-          <div className="ov-meta" style={{ display: "flex", alignItems: "center", gap: 8 }}><Badge tone="neutral">Rank #{product.rank}</Badge><h4>Product Information</h4></div>
+          <div className="ov-meta" style={{ display: "flex", alignItems: "center", gap: 8 }}><Badge tone="neutral">Rank #{product.rank}</Badge><h4 style={{ margin: 0, font: "inherit" }}>Product Information</h4></div>
           <p className="ov-h" style={{ marginTop: 8 }}>{c.candidate_title}</p>
           <p className="ov-meta" style={{ marginTop: 4 }}>{c.observed_category ? `${c.observed_category} · ` : ""}score {score(product.finalScore)} · opportunity candidate from public web signal</p>
           {imgUrl && <p className="ov-meta">image from {imageDomain(c.image_source_url)}</p>}
@@ -481,34 +481,35 @@ function ProductInformation({ product, brief }: { product: PiProduct; brief: PiC
       </div>
 
       <div className="pi-cols">
-        <div className="pi-col">
-          <h5 className="ov-meta">Viewer / web commentary insights (not verified buyer reviews)</h5>
+        <div className="pi-panel">
+          <h5 className="ov-title">What viewers say</h5>
+          <p className="ov-meta">Viewer and web commentary, not verified buyer reviews{splits[0] ? ` · ${splits[0]}` : ""}</p>
           <div className="pi-halves">
             <div>
-              <div className="ov-title" style={{ color: "var(--ov-good)" }}>Positive{splits[0] ? ` · ${splits[0]}` : ""}</div>
-              {positives.length ? <ul className="pi-list" style={{ marginTop: 8 }}>{positives.map((t) => <li key={t} className="ov-body" style={{ color: "var(--ov-ink)" }}>• {t}</li>)}</ul> : <p className="ov-meta" style={{ marginTop: 8 }}>No commentary themes were available.</p>}
+              <div className="ov-meta" style={{ color: "var(--ov-good)" }}>Liked</div>
+              {positives.length ? <ul className="pi-list" style={{ marginTop: 8 }}>{positives.map((t) => <li key={t} className="ov-body" style={{ color: "var(--ov-ink)" }}>{t}</li>)}</ul> : <p className="ov-meta" style={{ marginTop: 8 }}>No commentary themes were available.</p>}
             </div>
             <div>
-              <div className="ov-title">Defects to address</div>
-              {defects.length ? <ul className="pi-list" style={{ marginTop: 8 }}>{defects.map((t) => <li key={t} className="ov-body" style={{ color: "var(--ov-ink)" }}>• {t}</li>)}</ul> : <p className="ov-meta" style={{ marginTop: 8 }}>No complaint themes were found.</p>}
+              <div className="ov-meta" style={{ color: "var(--ov-warn)" }}>To fix</div>
+              {defects.length ? <ul className="pi-list" style={{ marginTop: 8 }}>{defects.map((t) => <li key={t} className="ov-body" style={{ color: "var(--ov-ink)" }}>{t}</li>)}</ul> : <p className="ov-meta" style={{ marginTop: 8 }}>No complaint themes were found.</p>}
             </div>
           </div>
 
-          <h5 className="ov-meta" style={{ marginTop: 24 }}>Supplier lead</h5>
+          <h5 className="ov-title pi-sub">Supplier lead</h5>
           {lead ? (
             <div className="pi-supplier">
               <div className="min-w-0 ov-body">
                 <div className="ov-title">{href ? <a href={href} target="_blank" rel="noopener noreferrer" className="pi-link">{lead.supplier_name}</a> : lead.supplier_name}</div>
-                <div>{lead.locality ?? "Location not stated"} · {SOURCE_LABEL[lead.source] ?? lead.source}</div>
-                <div>Phone: {lead.contact?.phone ?? "not published"} · MOQ: {lead.contact?.moq ? "published by the supplier" : "not published"}</div>
-                {published && <div style={{ fontWeight: 800, color: "var(--ov-ink)" }}>Published price: {published.low_paise === published.high_paise ? formatPaise(published.low_paise) : `${formatPaise(published.low_paise)} - ${formatPaise(published.high_paise)}`} per {published.unit} (their own page, {fmtDate(published.captured_at)}; not a quote)</div>}
+                <div className="ov-meta">{lead.locality ?? "Location not stated"} · {SOURCE_LABEL[lead.source] ?? lead.source}</div>
+                <div className="ov-meta">Phone: {lead.contact?.phone ?? "not published"} · MOQ: {lead.contact?.moq ? "published by the supplier" : "not published"}</div>
+                {published && <div className="ov-body" style={{ fontWeight: 800, color: "var(--ov-ink)", marginTop: 8 }}>Published price: {published.low_paise === published.high_paise ? formatPaise(published.low_paise) : `${formatPaise(published.low_paise)} - ${formatPaise(published.high_paise)}`} per {published.unit} (their own page, {fmtDate(published.captured_at)}; not a quote)</div>}
                 {lead.fetched_at && <div className="ov-meta">Found {fmtDate(lead.fetched_at)} · not checked by Metrion</div>}
               </div>
               {href && <a href={href} target="_blank" rel="noopener noreferrer" className="ov-btn min-h-10" style={{ flex: "none" }}>Supplier Link ↗</a>}
             </div>
-          ) : <p className="ov-meta" style={{ marginTop: 8 }}>No supplier lead was found for this product.</p>}
+          ) : <p className="ov-meta">No supplier lead was found for this product.</p>}
         </div>
-        <div className="pi-col">
+        <div className="pi-panel">
           <EvidencePanel product={product} />
         </div>
       </div>
@@ -521,31 +522,44 @@ function ProductInformation({ product, brief }: { product: PiProduct; brief: PiC
 function EvidencePanel({ product }: { product: PiProduct }) {
   const ev = evidenceOf(product.candidate);
   const n = (v: number | null) => (v === null ? "n/a" : v.toLocaleString("en-IN"));
+  const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
   return (
-    <div aria-label="Research evidence and trend signals">
-      <h5 className="ov-meta">Research evidence and trend signals</h5>
-      <ul className="pi-list" style={{ marginTop: 8, gap: 8 }}>
-        <li className="ov-body">
-          <strong style={{ color: "var(--ov-ink)" }}>Independent sources:</strong> {ev.independentSources === null ? "not recorded" : `${ev.independentSources} website${ev.independentSources === 1 ? "" : "s"} or video${ev.independentSources === 1 ? "" : "s"} mention it`}
-          {ev.sources.length > 0 && (
-            <span> - {ev.sources.slice(0, 6).map((s, i) => (
-              <span key={s.url}>{i > 0 && ", "}<a href={s.url} target="_blank" rel="noopener noreferrer" className="pi-link">{s.domain}</a> ({s.kind})</span>
-            ))}</span>
-          )}
-        </li>
-        <li className="ov-body">
-          <strong style={{ color: "var(--ov-ink)" }}>Video engagement (YouTube):</strong>{" "}
-          {ev.engagement ? `${n(ev.engagement.videos)} video(s), ${n(ev.engagement.views)} views, ${n(ev.engagement.comments)} comments` : ev.engagementMissing}
-        </li>
-        {ev.demandMissing && <li className="ov-body"><strong style={{ color: "var(--ov-ink)" }}>Search demand:</strong> unavailable - {ev.demandMissing}</li>}
+    <div className="pi-evidence" aria-label="Research evidence and trend signals">
+      <h5 className="ov-title">Research evidence and trend signals</h5>
+      <dl className="pi-facts-list">
+        <div>
+          <dt className="ov-meta">Sources</dt>
+          <dd className="ov-body">
+            {ev.independentSources === null ? "not recorded" : `${ev.independentSources} website${ev.independentSources === 1 ? "" : "s"} or video${ev.independentSources === 1 ? "" : "s"} mention it`}
+            {ev.sources.length > 0 && (
+              <span className="pi-sources">{ev.sources.slice(0, 6).map((s) => (
+                <span key={s.url}><a href={s.url} target="_blank" rel="noopener noreferrer" className="pi-link">{s.domain}</a> <span className="ov-meta">({s.kind})</span></span>
+              ))}</span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="ov-meta">Video views</dt>
+          <dd className="ov-body">{ev.engagement ? `${n(ev.engagement.videos)} video(s), ${n(ev.engagement.views)} views, ${n(ev.engagement.comments)} comments` : ev.engagementMissing}</dd>
+        </div>
+        {ev.demandMissing && (
+          <div>
+            <dt className="ov-meta">Search demand</dt>
+            <dd className="ov-body">unavailable - {ev.demandMissing}</dd>
+          </div>
+        )}
+      </dl>
+      <h5 className="ov-title pi-sub">Score signals</h5>
+      <ul className="pi-list" style={{ gap: 16 }}>
         {ev.signals.map((s) => (
-          <li key={s.signal} className="pi-signal ov-body">
-            <span><strong style={{ color: "var(--ov-ink)" }}>Score signal, {s.signal}:</strong> {s.status === "AVAILABLE" ? `${s.points}/${s.max} points` : `unavailable (${s.reason})`}{s.status === "AVAILABLE" ? ` - ${s.reason}` : ""}</span>
+          <li key={s.signal} className="pi-signal">
+            <span className="ov-body" style={{ color: "var(--ov-ink)", fontWeight: 700 }}>{cap(s.signal)}</span>
             {s.status === "AVAILABLE" && s.max > 0 && <span className="pi-bar" aria-hidden><i style={{ width: `${Math.min(100, (Number(s.points) / Number(s.max)) * 100)}%` }} /></span>}
+            <span className="ov-meta">{s.status === "AVAILABLE" ? `${s.points}/${s.max} points - ${s.reason}` : `unavailable (${s.reason})`}</span>
           </li>
         ))}
       </ul>
-      <p className="ov-meta" style={{ marginTop: 8 }}>Attention, not demand or sales.</p>
+      <p className="ov-meta">Attention, not demand or sales.</p>
     </div>
   );
 }

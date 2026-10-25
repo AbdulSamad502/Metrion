@@ -1,8 +1,8 @@
 /* Product Intelligence — the Overview's design language (components/overview/overview.css). */
 .pi-soft { background: var(--ov-soft); border-radius: 16px; padding: 16px; min-width: 0; border: 1px solid var(--ov-line); }
 .pi-ledger-wrap .sr-only { position: absolute; }
-.pi-stack { display: flex; flex-direction: column; gap: 16px; }
-.pi-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 24px; align-items: start; }
+.pi-stack { display: flex; flex-direction: column; gap: var(--ov-gap); }
+.pi-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: var(--ov-gap); align-items: start; }
 @media (max-width: 1100px) { .pi-split { grid-template-columns: 1fr; } }
 
 /* top picks */
@@ -79,10 +79,16 @@
 .pi-facts > .pi-tile { padding: 16px; }
 .pi-facts > .pi-tile + .pi-tile { border-left: 1px solid var(--ov-line); }
 @media (max-width: 900px) { .pi-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pi-facts > .pi-tile:nth-child(3) { border-left: 0; } .pi-facts > .pi-tile:nth-child(n+3) { border-top: 1px solid var(--ov-line); } }
-.pi-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; align-items: start; }
+.pi-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
 @media (max-width: 1100px) { .pi-cols { grid-template-columns: 1fr; } }
 .pi-col { min-width: 0; }
-.pi-supplier { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--ov-line); }
+.pi-panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; padding: 24px; border: 1px solid var(--ov-edge); border-radius: 16px; background: var(--ov-card); }
+.pi-sub { padding-top: 16px; border-top: 1px solid var(--ov-line); }
+.pi-facts-list { display: flex; flex-direction: column; gap: 16px; margin: 0; }
+.pi-facts-list dd { margin: 4px 0 0; }
+.pi-sources { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; }
+.pi-signal { display: flex; flex-direction: column; gap: 8px; }
+.pi-supplier { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid var(--ov-line); border-radius: 16px; background: var(--ov-soft); }
 .pi-halves { margin-top: 8px; gap: 24px; }
 .pi-rec { display: flex; flex-direction: column; gap: 16px; padding-top: 24px; border-top: 1px solid var(--ov-line); }
 .pi-rec-list > li { background: transparent; border-radius: 0; padding: 16px 0; border-top: 1px solid var(--ov-line); }

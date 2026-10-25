@@ -89,7 +89,7 @@ describe("PI showcase (read-only)", () => {
   it("labels commentary honestly and never as verified buyer reviews", async () => {
     render(<PiShowcase client={fake()} />);
     await screen.findByText("Rank #1");
-    expect(screen.getByText(/Viewer \/ web commentary insights \(not verified buyer reviews\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Viewer and web commentary, not verified buyer reviews/)).toBeInTheDocument();
     expect(screen.getAllByText(/comfortable strap/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/strap is stiff/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/trending|bestseller/i)).toBeNull();
