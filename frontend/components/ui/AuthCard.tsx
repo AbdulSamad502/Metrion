@@ -1,4 +1,3 @@
-import Image from "next/image";
 import type { ReactNode } from "react";
 
 /** The glass-card auth shell — docs/design/frontend-design's card treatment
@@ -26,7 +25,7 @@ export function AuthCard({
       />
       <div className="relative w-full max-w-[400px]">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <Image src="/metrion-mark.png" alt="Metrion" width={40} height={40} />
+          <span role="img" aria-label="Metrion" className="mt-auth-mark" style={{ width: 56, height: 36 }} />
           <div>
             <h1 className="text-xl font-bold" style={{ color: "var(--text-1)" }}>
               {title}

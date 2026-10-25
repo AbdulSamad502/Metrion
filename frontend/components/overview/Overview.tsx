@@ -99,7 +99,7 @@ export function Hero({ pnl, headline, financeLink = true }: { pnl: HealthEntry; 
       </div>
 
       <div className="ov-hero-fig">
-        <div className="ov-fig-lg" data-testid="figure-value" style={negative ? { color: "#ffd0d6" } : undefined}>{headline.value}</div>
+        <div className="ov-fig-lg" data-testid="figure-value" style={negative ? { color: "var(--ov-hero-bad)" } : undefined}>{headline.value}</div>
         <p className="ov-meta">{[period, "From your reports"].filter(Boolean).join(" · ")}</p>
       </div>
 
@@ -139,9 +139,9 @@ export function Hero({ pnl, headline, financeLink = true }: { pnl: HealthEntry; 
           )}
           {financeLink && (
           <div className="ov-flow-legend">
-            <div className="ov-flow-key"><span><i style={{ background: "#ffd48a" }} />Marketplace fees</span><b>{fees.value}</b></div>
-            <div className="ov-flow-key"><span><i style={{ background: "rgba(255,255,255,.4)" }} />Other costs</span><Link href="/dashboard/cfo" className="ov-flow-link">See breakdown <Icon name="arrow" size={12} strokeWidth={2} className="ov-arrow" /></Link></div>
-            <div className="ov-flow-key"><span><i style={{ background: "#fff" }} />Profit</span><b>{headline.value}</b></div>
+            <div className="ov-flow-key"><span><i style={{ background: "var(--ov-hero-fees)" }} />Marketplace fees</span><b>{fees.value}</b></div>
+            <div className="ov-flow-key"><span><i style={{ background: "var(--ov-hero-rest)" }} />Other costs</span><Link href="/dashboard/cfo" className="ov-flow-link">See breakdown <Icon name="arrow" size={12} strokeWidth={2} className="ov-arrow" /></Link></div>
+            <div className="ov-flow-key"><span><i style={{ background: "var(--ov-hero-ink)" }} />Profit</span><b>{headline.value}</b></div>
           </div>
           )}
           <p className="ov-meta">Out of {revenue.value} revenue.</p>
@@ -193,7 +193,7 @@ export function HeroEmpty({ failed, onRetry }: { failed: boolean; onRetry: () =>
         {failed ? (
           <button type="button" className="ov-btn" onClick={onRetry}>Try again</button>
         ) : (
-          <Link href="/dashboard/cfo#reports" className="ov-btn" style={{ background: "var(--ov-brand)", color: "#fff" }}>Upload reports <Icon name="arrow" size={14} strokeWidth={2} className="ov-arrow" /></Link>
+          <Link href="/dashboard/cfo#reports" className="ov-btn" style={{ background: "var(--ov-brand)", color: "var(--ov-on-brand)" }}>Upload reports <Icon name="arrow" size={14} strokeWidth={2} className="ov-arrow" /></Link>
         )}
       </div>
     </section>

@@ -31,7 +31,7 @@ export function ConfirmDialog({
   });
   return (
     <ModalPortal>
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.65)" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "var(--ov-scrim, rgba(0,0,0,0.65))" }}>
       <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="confirm-title" className="mt-panel w-full max-w-md outline-none" style={{ padding: 24, background: "var(--bg-popover)", border: "1px solid var(--border-default)" }}>
         <h2 id="confirm-title" className="t-section" style={{ color: "var(--text-1)" }}>
           {title}

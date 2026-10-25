@@ -30,8 +30,10 @@
   --ov-warn-fill: #f0b955; /* amber for bars and rings (not text) */
   --ov-bad: #ff8294;
   --ov-bad-soft: rgba(255, 130, 148, 0.14);
-  --ov-hero-a: #26262b;
-  --ov-hero-b: #1a1a1e;
+  --ov-hero-a: #232325;
+  --ov-hero-b: #161617;
+  --ov-hero-bad: #ffd0d6;
+  --ov-scrim: rgba(0, 0, 0, 0.6);
   --ov-hero-c: #202024;
   --ov-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 32px -24px rgba(0, 0, 0, 0.7);
   --ov-shadow-lift: 0 1px 2px rgba(0, 0, 0, 0.4), 0 24px 40px -24px rgba(0, 0, 0, 0.85);
@@ -62,7 +64,7 @@
 }
 
 /* the older tools (calculator, expense tracker, finance tools) read these names; they follow the same palette */
-.ov, .mt-sidebar, .mt-topbar {
+.ov, .mt-sidebar, .mt-topbar, .mt-auth, .mt-demo {
   --accent: var(--ov-brand);
   --accent-hover: var(--ov-brand-ink);
   --accent-on-fill: var(--ov-on-brand);
@@ -141,7 +143,9 @@
   --ov-c5: #be185d;
   --ov-c6: #c2410c;
   --ov-c7: #71717a;
-  --ov-hero-a: #1c1c20;
+  --ov-hero-a: #1c1c1e;
+  --ov-hero-bad: #ffd0d6;
+  --ov-scrim: rgba(0, 0, 0, 0.45);
   --ov-hero-b: #0a0a0b;
   --ov-hero-c: #121214;
   --ov-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 16px 32px -24px rgba(0, 0, 0, 0.22);

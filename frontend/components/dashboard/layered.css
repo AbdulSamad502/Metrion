@@ -23,12 +23,12 @@ html[data-surface="layered"] {
 }
 
 html[data-surface="layered"][data-theme="light"] {
-  --ov-page: #e6e7ec;
+  --ov-page: #e7e7e9;
   --ov-page-glow: #ffffff;
   --ov-card: #ffffff;
   --ov-card-top: #ffffff;
-  --ov-card-bottom: #f8f8fb;
-  --ov-soft: #f2f2f6;
+  --ov-card-bottom: #fafafa;
+  --ov-soft: #f4f4f5;
   --ov-line: rgba(0, 0, 0, 0.16);
   --ov-edge: rgba(0, 0, 0, 0.32);
   --ov-track: rgba(0, 0, 0, 0.3);
@@ -61,18 +61,18 @@ html[data-surface="layered"] :is(.ov-card:not(.ov-hero), .pi-panel, .ov-agent) {
    panels one step greyer inside them, a white sidebar, and a black hero that is lit from the top like the dark cards. */
 html[data-surface="layered"][data-theme="light"] body {
   background:
-    radial-gradient(1200px 560px at 62% -8%, #fbfbff 0%, transparent 72%),
-    radial-gradient(900px 520px at 0% 100%, #dcdde4 0%, transparent 70%),
+    radial-gradient(1200px 560px at 62% -8%, #fafafa 0%, transparent 72%),
+    radial-gradient(900px 520px at 0% 100%, #dcdce0 0%, transparent 70%),
     var(--ov-page) !important;
   background-attachment: fixed !important;
 }
-html[data-surface="layered"][data-theme="light"] .mt-sidebar { background: #fbfbfd !important; border-right: 1px solid var(--ov-edge); }
+html[data-surface="layered"][data-theme="light"] .mt-sidebar { background: #fafafa !important; border-right: 1px solid var(--ov-edge); }
 html[data-surface="layered"][data-theme="light"] .mt-topbar { border-bottom: 1px solid var(--ov-line); }
 html[data-surface="layered"][data-theme="light"] .ov-card:not(.ov-hero),
 html[data-surface="layered"][data-theme="light"] .pi-panel,
 html[data-surface="layered"][data-theme="light"] .ov-agent {
   border-color: var(--ov-edge);
-  box-shadow: 0 1px 2px rgba(20, 22, 40, 0.05), 0 8px 20px -12px rgba(20, 22, 40, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 20px -12px rgba(0, 0, 0, 0.12);
 }
 html[data-surface="layered"][data-theme="light"] .ov-hero { background-image: none; border: 1px solid #000; box-shadow: none; }
 

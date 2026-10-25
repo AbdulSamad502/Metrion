@@ -288,7 +288,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
 
       {drawer && (
         <div ref={drawerRef} tabIndex={-1} className="fixed inset-0 z-40 flex outline-none" role="dialog" aria-modal="true" aria-label="Conversations and business overview" data-testid="drawer">
-          <button type="button" aria-label="Close panel" className="flex-1" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setDrawer(false)} />
+          <button type="button" aria-label="Close panel" className="flex-1" style={{ background: "var(--ov-scrim, rgba(0,0,0,0.45))" }} onClick={() => setDrawer(false)} />
           <div className="flex w-[min(420px,92vw)] flex-col gap-5 overflow-y-auto p-4" style={{ background: "var(--bg-base)", borderLeft: "1px solid var(--border-subtle)" }}>
             <div className="flex items-center justify-between">
               <h2 className="m-0 t-card-title font-bold" style={{ color: "var(--text-1)" }}>Conversations</h2>

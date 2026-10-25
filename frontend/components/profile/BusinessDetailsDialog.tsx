@@ -77,7 +77,7 @@ export function BusinessDetailsDialog({ onClose, onSaved }: { onClose: () => voi
 
   return (
     <ModalPortal>
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-10" style={{ background: "rgba(0,0,0,0.65)" }}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-10" style={{ background: "var(--ov-scrim, rgba(0,0,0,0.65))" }}>
       <div
         ref={ref}
         tabIndex={-1}

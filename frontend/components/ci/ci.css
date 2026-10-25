@@ -24,7 +24,7 @@
 .ci-strip-dot {
   position: absolute; width: 24px; height: 24px; margin-left: -12px; border-radius: 50%; display: grid; place-items: center;
   background: var(--ov-brand); color: var(--ov-on-brand); font-size: var(--ov-s1); font-weight: 800; border: 2px solid var(--ov-card);
-  box-shadow: 0 2px 6px rgba(40, 30, 80, 0.25); animation: ov-pop 480ms var(--ov-ease) 360ms both;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); animation: ov-pop 480ms var(--ov-ease) 360ms both;
 }
 @keyframes ov-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
 .ci-strip-axis { display: flex; justify-content: space-between; font-size: var(--ov-s1); font-weight: 600; color: var(--ov-ink-3); }

@@ -19,8 +19,8 @@ export function DemoBadge() {
   return (
     <div
       role="status"
-      className="fixed bottom-3 right-3 z-[90] flex max-w-[calc(100vw-24px)] flex-wrap items-center justify-end gap-x-2 gap-y-0 rounded-xl px-3 py-1.5 t-meta max-sm:left-3"
-      style={{ background: "var(--bg-popover)", border: "1px solid var(--warning-border)", color: "var(--text-2)", boxShadow: "0 6px 24px rgba(0,0,0,0.35)" }}
+      className="fixed bottom-3 right-3 z-[90] flex max-w-[calc(100vw-24px)] flex-wrap items-center justify-end gap-x-2 gap-y-0 mt-demo rounded-xl px-3 py-1.5 t-meta max-sm:left-3"
+      style={{ background: "var(--bg-popover)", border: "1px solid var(--warning-border)", color: "var(--text-2)", boxShadow: "var(--ov-shadow-lift, 0 6px 24px rgba(0,0,0,0.35))" }}
     >
       <span className="font-bold" style={{ color: "var(--warning)" }}>Sample data</span>
       <span style={{ color: "var(--text-4)" }}>Not your numbers. Nothing is saved.</span>

@@ -179,7 +179,7 @@ export function AgentCanvas({
                 data-testid={`edge-${n.code}`}
                 className={attached ? `mt-hub-edge ${working[n.code] ? "" : "mt-hub-edge--flow"}` : undefined}
                 strokeDasharray={working[n.code] ? "6 6" : attached ? "4 4" : "5 5"}
-                stroke={working[n.code] ? "var(--accent)" : attached ? "var(--accent)" : "rgba(140,148,138,0.5)"}
+                stroke={working[n.code] ? "var(--accent)" : attached ? "var(--accent)" : "var(--ov-edge)"}
                 opacity={dead ? 0.55 : 1}
               >
                 {working[n.code] && !still && <animate attributeName="stroke-dashoffset" from="12" to="0" dur="0.8s" repeatCount="indefinite" />}

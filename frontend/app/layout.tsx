@@ -26,16 +26,16 @@ export const metadata: Metadata = {
 };
 
 // Clerk's theme engine takes literal colors, so these mirror the tokens in globals.css
-// (colorPrimary=--accent, colorBackground=--bg-popover, colorText=--text-2,
-// colorTextSecondary=--text-5). Keep them in sync if those tokens change.
+// (colorPrimary=--ov-brand, colorBackground=--ov-card, colorText=--ov-ink,
+// colorTextSecondary=--ov-ink-3). Keep them in sync if those tokens change.
 const clerkAppearance = {
   variables: {
-    colorPrimary: "#3ECF74",
-    colorBackground: "#14150F",
-    colorInputBackground: "rgba(18, 20, 17, 0.5)",
-    colorInputText: "#F2F4F0",
-    colorText: "#F2F4F0",
-    colorTextSecondary: "#8A9188",
+    colorPrimary: "#fafafa",
+    colorBackground: "#0e0e10",
+    colorInputBackground: "#0f0f11",
+    colorInputText: "#fafafa",
+    colorText: "#fafafa",
+    colorTextSecondary: "#a1a1aa",
     borderRadius: "14px",
     fontFamily: "Inter, sans-serif",
   },
