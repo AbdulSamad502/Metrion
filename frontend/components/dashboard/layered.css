@@ -6,12 +6,12 @@
    panels inside a card step lighter again. The same structure in light mode, with greys instead of blacks. */
 
 html[data-surface="layered"] {
-  --ov-page: #050505;
-  --ov-page-glow: #1b1b1f;
-  --ov-card: #131316;
-  --ov-card-top: #19191d;
-  --ov-card-bottom: #101012;
-  --ov-soft: #1c1c20;
+  --ov-page: #000000;
+  --ov-page-glow: #1a1a1d;
+  --ov-card: #0e0e10;
+  --ov-card-top: #141416;
+  --ov-card-bottom: #0b0b0c;
+  --ov-soft: #1a1a1d;
   --ov-line: rgba(255, 255, 255, 0.08);
   --ov-edge: rgba(255, 255, 255, 0.13);
   --ov-field-edge: #7e7e88;
@@ -21,19 +21,19 @@ html[data-surface="layered"] {
 }
 
 html[data-surface="layered"][data-theme="light"] {
-  --ov-page: #d6d9e3;
-  --ov-page-glow: #f1f2f8;
-  --ov-card: #fafbfe;
+  --ov-page: #e9e9ec;
+  --ov-page-glow: #ffffff;
+  --ov-card: #ffffff;
   --ov-card-top: #ffffff;
-  --ov-card-bottom: #f1f3f9;
-  --ov-soft: #e9ecf5;
-  --ov-line: rgba(25, 32, 70, 0.11);
-  --ov-edge: rgba(25, 32, 70, 0.2);
-  --ov-field-edge: #7b83a3;
-  --ov-ink-2: #3e4262;
-  --ov-ink-3: #4f5372;
-  --ov-shadow: 0 1px 2px rgba(25, 32, 70, 0.08), 0 14px 26px -20px rgba(25, 32, 70, 0.3);
-  --ov-shadow-lift: 0 4px 12px -6px rgba(25, 32, 70, 0.22), 0 20px 32px -22px rgba(25, 32, 70, 0.35);
+  --ov-card-bottom: #fafafa;
+  --ov-soft: #f1f1f3;
+  --ov-line: rgba(0, 0, 0, 0.09);
+  --ov-edge: rgba(0, 0, 0, 0.18);
+  --ov-field-edge: #71717a;
+  --ov-ink-2: #3f3f46;
+  --ov-ink-3: #52525b;
+  --ov-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 14px 26px -20px rgba(0, 0, 0, 0.2);
+  --ov-shadow-lift: 0 4px 12px -6px rgba(0, 0, 0, 0.14), 0 20px 32px -22px rgba(0, 0, 0, 0.28);
 }
 
 /* the page: darkest at the edges, a soft lift near the top */

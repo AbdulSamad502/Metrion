@@ -11,53 +11,53 @@
   --ov-s3: 24px;
   --ov-s4: 48px;
 
-  --ov-ink: #f3f2fb;
-  --ov-ink-2: #c9c8d8;
-  --ov-ink-3: #9d9cb0;
-  --ov-card: #14151a;
-  --ov-soft: #1b1c23;
-  --ov-line: #2a2b34;
-  --ov-edge: #3d3e4b;
-  --ov-field-edge: #7a7b8e;
-  --ov-brand: #8f88ff;
-  --ov-brand-ink: #b9b4ff;
-  --ov-brand-soft: rgba(143, 136, 255, 0.14);
-  --ov-on-brand: #100d33;
+  --ov-ink: #fafafa;
+  --ov-ink-2: #d4d4d8;
+  --ov-ink-3: #a1a1aa;
+  --ov-card: #0f0f11;
+  --ov-soft: #1a1a1d;
+  --ov-line: #27272a;
+  --ov-edge: #3f3f46;
+  --ov-field-edge: #80808a;
+  --ov-brand: #ffffff;
+  --ov-brand-ink: #e4e4e7;
+  --ov-brand-soft: rgba(255, 255, 255, 0.1);
+  --ov-on-brand: #000000;
   --ov-good: #4fd9a0;
   --ov-good-soft: rgba(79, 217, 160, 0.14);
   --ov-warn: #f0b955;
   --ov-warn-soft: rgba(240, 185, 85, 0.14);
   --ov-bad: #ff8294;
   --ov-bad-soft: rgba(255, 130, 148, 0.14);
-  --ov-hero-a: #2b2791;
-  --ov-hero-b: #4a42d8;
-  --ov-hero-c: #5249d8;
+  --ov-hero-a: #26262b;
+  --ov-hero-b: #1a1a1e;
+  --ov-hero-c: #202024;
   --ov-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 32px -24px rgba(0, 0, 0, 0.7);
   --ov-shadow-lift: 0 1px 2px rgba(0, 0, 0, 0.4), 0 24px 40px -24px rgba(0, 0, 0, 0.85);
   --ov-ease: cubic-bezier(0.23, 1, 0.32, 1);
   --ov-gap: 24px; /* the one space between cards, on every page */
 
   /* chart colours: tell slices and lines apart only; the label and figure are always written beside them */
-  --ov-c1: #8f88ff;
-  --ov-c2: #4fd9a0;
-  --ov-c3: #f0b955;
-  --ov-c4: #5bb8ff;
-  --ov-c5: #ff8294;
-  --ov-c6: #c58bff;
-  --ov-c7: #9d9cb0;
+  --ov-c1: #fafafa;
+  --ov-c2: #60a5fa;
+  --ov-c3: #a78bfa;
+  --ov-c4: #2dd4bf;
+  --ov-c5: #f472b6;
+  --ov-c6: #fb923c;
+  --ov-c7: #8b8b94;
 
   /* fixed surfaces: the hero banner and the solid button keep their own contrast in every theme */
   --ov-solid-bg: #ffffff;
-  --ov-solid-ink: #2b2791;
+  --ov-solid-ink: #000000;
   --ov-hero-ink: #ffffff;
   --ov-hero-ink-2: rgba(255, 255, 255, 0.92);
-  --ov-hero-glass: rgba(20, 12, 80, 0.32);
-  --ov-hero-glass-2: rgba(20, 12, 80, 0.46);
+  --ov-hero-glass: rgba(255, 255, 255, 0.1);
+  --ov-hero-glass-2: rgba(255, 255, 255, 0.18);
   --ov-hero-track: rgba(255, 255, 255, 0.12);
   --ov-hero-rest: rgba(255, 255, 255, 0.34);
   --ov-hero-fees: #ffd48a;
   --ov-hero-well: rgba(0, 0, 0, 0.18);
-  --ov-hero-glow: rgba(60, 50, 200, 0.6);
+  --ov-hero-glow: rgba(255, 255, 255, 0.16);
 }
 
 /* the older tools (calculator, expense tracker, finance tools) read these names; they follow the same palette */
@@ -114,17 +114,17 @@
 }
 
 :root[data-theme="light"] {
-  --ov-ink: #1b1a2e;
-  --ov-ink-2: #4a4863;
-  --ov-ink-3: #666480;
+  --ov-ink: #0a0a0b;
+  --ov-ink-2: #3f3f46;
+  --ov-ink-3: #52525b;
   --ov-card: #ffffff;
-  --ov-soft: #f4f1ea;
-  --ov-line: #dcd5c3;
-  --ov-edge: #c4bba3;
-  --ov-field-edge: #857f96;
-  --ov-brand: #4f46e5;
-  --ov-brand-ink: #3b33c4;
-  --ov-brand-soft: #ecebfd;
+  --ov-soft: #f4f4f5;
+  --ov-line: #e4e4e7;
+  --ov-edge: #d4d4d8;
+  --ov-field-edge: #71717a;
+  --ov-brand: #0a0a0b;
+  --ov-brand-ink: #27272a;
+  --ov-brand-soft: rgba(0, 0, 0, 0.06);
   --ov-on-brand: #ffffff;
   --ov-good: #0a7050;
   --ov-good-soft: #dcf3ea;
@@ -132,15 +132,18 @@
   --ov-warn-soft: #fff0cf;
   --ov-bad: #b3263e;
   --ov-bad-soft: #fde6ea;
-  --ov-c1: #4f46e5;
-  --ov-c2: #0a7050;
-  --ov-c3: #b86e00;
-  --ov-c4: #0b6fb8;
-  --ov-c5: #c0344d;
-  --ov-c6: #7b3fc4;
-  --ov-c7: #666480;
-  --ov-shadow: 0 1px 2px rgba(40, 30, 80, 0.08), 0 16px 32px -24px rgba(40, 30, 80, 0.32);
-  --ov-shadow-lift: 0 2px 4px rgba(40, 30, 80, 0.06), 0 24px 40px -24px rgba(40, 30, 80, 0.38);
+  --ov-c1: #0a0a0b;
+  --ov-c2: #2563eb;
+  --ov-c3: #7c3aed;
+  --ov-c4: #0f766e;
+  --ov-c5: #be185d;
+  --ov-c6: #c2410c;
+  --ov-c7: #71717a;
+  --ov-hero-a: #1c1c20;
+  --ov-hero-b: #0a0a0b;
+  --ov-hero-c: #121214;
+  --ov-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 16px 32px -24px rgba(0, 0, 0, 0.22);
+  --ov-shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.06), 0 24px 40px -24px rgba(0, 0, 0, 0.3);
 }
 
 @media (max-width: 479px) {
@@ -448,3 +451,16 @@ a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px;
 /* a text-style button lines its words up with the text around it, not its own padding */
 .ov-btn--ghost { margin-left: -8px; }
 .ov-card-head > .ov-btn--ghost, .ov-head-r .ov-btn--ghost { margin-left: 0; margin-right: -8px; }
+
+/* waterfall (Profit & Finance hero): revenue, then fees and other costs step down, then profit. Heights size the steps only; the figures are the backend's. */
+.ov-wf { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.ov-wf-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ov-wf-plot { position: relative; height: 96px; border-radius: 8px; background: var(--ov-hero-well); }
+.ov-wf-step { position: absolute; left: 0; right: 0; border-radius: 6px; }
+.ov-wf-step--rev { background: var(--ov-hero-rest); }
+.ov-wf-step--fees { background: var(--ov-hero-fees); }
+.ov-wf-step--rest { background: repeating-linear-gradient(135deg, var(--ov-hero-rest) 0 4px, transparent 4px 8px); border: 1px solid var(--ov-hero-rest); }
+.ov-wf-step--profit { background: var(--ov-hero-ink); }
+.ov-wf-label { font-size: var(--ov-s1); font-weight: 700; color: var(--ov-hero-ink-2); }
+.ov-wf-value { font-size: var(--ov-s2); font-weight: 800; overflow-wrap: anywhere; }
+@media (max-width: 560px) { .ov-wf { gap: 8px; } .ov-wf-plot { height: 72px; } }
