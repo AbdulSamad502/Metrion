@@ -16,7 +16,7 @@ html[data-surface="layered"] {
 }
 
 html[data-surface="layered"][data-theme="light"] {
-  --ov-page: #dde1ef;
+  --ov-page: #eef0f7;
   --ov-card: #f7f8fd;
   --ov-soft: #ebeef8;
   --ov-line: #d2d8ea;
