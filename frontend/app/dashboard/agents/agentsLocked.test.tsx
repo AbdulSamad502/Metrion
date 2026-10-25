@@ -53,7 +53,7 @@ describe("Agents page: locked agents (mocked availability)", () => {
     stub({});
     render(<AgentsPage />);
     expect(await screen.findByText("Buying and removing agents")).toBeInTheDocument();
-    expect(screen.getByText(/No way to buy, add or remove agents yet\./)).toBeInTheDocument();
+    expect(screen.getByText(/Adding or removing agents isn’t available yet/)).toBeInTheDocument();
     expect(screen.queryByText(/Agent Cart/)).toBeNull();
     expect(screen.queryByText(/no entitlement or purchasing service/)).toBeNull();
   });

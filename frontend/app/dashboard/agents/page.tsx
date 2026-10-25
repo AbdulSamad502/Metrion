@@ -46,7 +46,7 @@ function Agents() {
           <Pill>Not available yet</Pill>
         </div>
         <p className="ov-body" style={{ maxWidth: "70ch", flex: "1 1 320px" }}>
-          No way to buy, add or remove agents yet. {agents && !error ? "The roster above is exactly what the backend reports — nothing on this page changes it." : "Nothing on this page changes the roster."}
+          Adding or removing agents isn’t available yet.
         </p>
       </section>
     </div>

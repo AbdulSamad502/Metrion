@@ -125,7 +125,7 @@ function Notifications() {
         <RefreshButton spinning={refreshing} onClick={n.reload} />
       </div>
       <p className="ov-body">
-        Alerts from the last {ALERT_WINDOW_DAYS} days and open data requests. Nothing is marked read.
+        Last {ALERT_WINDOW_DAYS} days. Nothing is marked read.
       </p>
       <TabPanel id="all" active={tab} idPrefix="notif">
         {list(all, ["alerts", "requests"], alertsHidden ? "No open data requests" : "You're all caught up", alertsHidden ? "Nothing waiting on you. Alerts aren’t shown for your role." : "No alerts or open requests.")}

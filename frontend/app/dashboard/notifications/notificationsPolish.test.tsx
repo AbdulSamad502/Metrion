@@ -59,7 +59,7 @@ describe("Action Center presentation (mocked feed)", () => {
   it("says one thing once: the window comes from ALERT_WINDOW_DAYS and the no-read-state notice stays", () => {
     state = notifications({ alerts: [alert], checkedAt: "2:16 PM" });
     render(<NotificationsPage />);
-    expect(screen.getByText(new RegExp(`last ${ALERT_WINDOW_DAYS} days and open data requests`))).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`Last ${ALERT_WINDOW_DAYS} days`))).toBeInTheDocument();
     expect(screen.getByText(/Nothing is marked read/)).toBeInTheDocument();
     expect(screen.getByText(/1 item · checked 2:16 PM/)).toBeInTheDocument();
   });

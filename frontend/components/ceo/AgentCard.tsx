@@ -48,7 +48,7 @@ export function AgentCard({ agent, lastActivity }: { agent: RosterAgent; lastAct
               "No activity — this agent does not exist yet."
             )
           ) : lastActivity === undefined ? (
-            "Activity is not recorded for this agent yet."
+            "No activity recorded yet."
           ) : lastActivity === null ? (
             "No activity yet."
           ) : (

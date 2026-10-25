@@ -235,7 +235,7 @@ function AppearanceCard() {
   ];
   return (
     <Card>
-      <Head title="Appearance" hint="Saved on this device. The CEO Hub stays dark." />
+      <Head title="Appearance" hint="Saved on this device." />
       <div className="set-chips" role="group" aria-label="Theme">
         {options.map((o) => (
           <button
@@ -262,7 +262,7 @@ function SampleDataCard() {
       <Head
         title="Sample data"
         badge={<Pill tone="warn">Preview only</Pill>}
-        hint="Made-up figures to preview every page. Nothing is saved. Not used by the CEO Hub."
+        hint="Made-up figures to preview pages. Nothing is saved."
       />
       <div>
         <button
