@@ -97,10 +97,18 @@ body:has(.mt-galaxy)::before { background-image: none; }
 @media (min-width: 1280px) {
   .ceo-split { max-width: none; padding-inline: 24px; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 0 32px; align-items: start; }
   .ceo-split .ceo-conv { width: 100%; max-width: 860px; margin-inline: auto; min-height: 100%; }
-  .ceo-split .ceo-activity { position: sticky; top: 8px; height: calc(100% - 16px); overflow-y: auto; }
+  .ceo-split { height: 100%; align-items: stretch; }
+  .ceo-split .ceo-activity { align-self: stretch; height: auto; margin-block: 8px; overflow-y: auto; }
   .ceo-bar { max-width: none; padding-inline: 24px; }
   .ceo-root[data-view="chat"] .ceo-bar { padding-right: 456px; }
   .ceo-bar > * { width: 100%; max-width: 860px; margin-inline: auto; }
+  /* the bar floats over the foot of the view, so the activity card can run to the bottom; only the bar itself is opaque */
+  .ceo-root { position: relative; }
+  [data-testid="chat-bar"] { position: absolute !important; left: 0; right: 0; bottom: 0; background: none !important; pointer-events: none; }
+  [data-testid="chat-bar"] .ceo-bar > * { pointer-events: auto; background: var(--bg-base); }
+  [data-testid="chat-column"] .ceo-conv, [data-testid="work-area"] { padding-bottom: 210px; }
+  [data-testid="chat-column"] .ceo-activity { margin-bottom: 8px; }
+  [data-testid="chat-column"] .ceo-split { min-height: 100%; }
   .ceo-composer { min-height: 64px; }
 }
 
