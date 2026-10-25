@@ -38,7 +38,7 @@ export function Welcome({
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="quick-actions">
         {GROUPS.map((g) => (
-          <section key={g.title} className="flex flex-col gap-1.5 rounded-2xl p-3" style={{ border: "1px solid var(--border-subtle)", background: "var(--bg-card)" }}>
+          <section key={g.title} className="flex flex-col gap-1.5 p-1">
             <h3 className="m-0 flex items-center gap-1.5 t-meta font-bold uppercase tracking-wide" style={{ color: "var(--text-5)" }}>
               <Icon name={g.icon} size={13} /> {g.title}
             </h3>

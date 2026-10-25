@@ -81,18 +81,24 @@ describe("approval refusal", () => {
 describe("hub layout", () => {
   let fake: FakeCeo;
   beforeEach(() => { fake = new FakeCeo(); });
-  it("puts the canvas and the chat bar in the centre and the conversation in the right-hand panel, with the activity one tab away (both stay mounted)", async () => {
+  it("shows one full-width view at a time (agents, conversation, activity and results), all mounted, with the chat bar always below them", async () => {
     render(<CeoHubWorkspace client={fake.client()} feedFactory={new ManualFeed().factory} />);
     const chat = await screen.findByTestId("chat-column");
     const bar = screen.getByTestId("chat-bar");
     expect(within(bar).getByTestId("composer")).toBeInTheDocument();
-    expect(within(chat).queryByTestId("composer")).toBeNull(); // the chat bar sits under the canvas, not inside the conversation panel
+    expect(within(chat).queryByTestId("composer")).toBeNull(); // the chat bar is outside every view
     const canvasArea = screen.getByTestId("work-area");
-    expect(within(canvasArea).getByTestId("agent-canvas")).toBeInTheDocument(); // a fresh hub has no task to report, so the centre is the canvas
-    expect(chat.compareDocumentPosition(canvasArea) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy(); // canvas first, then the conversation, then (on a phone) the sticky chat bar
+    expect(within(canvasArea).getByTestId("agent-canvas")).toBeInTheDocument(); // the agents view is mounted even while another view is open
+    expect(screen.getByTestId("right-tab-chat")).toHaveAttribute("aria-selected", "true");
+    expect(chat).not.toHaveClass("hidden");
+    expect(canvasArea).toHaveClass("hidden");
     await userEvent.setup().click(screen.getByTestId("right-tab-results"));
     expect(screen.getByTestId("right-tab-results")).toHaveAttribute("aria-selected", "true");
-    expect(within(chat).getByTestId("results-area")).toBeInTheDocument();
+    expect(screen.getByTestId("results-area")).not.toHaveClass("hidden");
+    expect(chat).toHaveClass("hidden");
+    await userEvent.setup().click(screen.getByTestId("tab-agents"));
+    expect(canvasArea).not.toHaveClass("hidden");
+    expect(screen.getByTestId("composer")).toBeInTheDocument(); // still there
   });
 });
 
