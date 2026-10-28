@@ -4,6 +4,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Icon } from "@/components/ui/Icon";
+import { DemoBadge } from "@/components/demo/DemoBadge";
 
 /** The page header, laid out as a control surface:
  *   LEFT    identity — where you are (section eyebrow) and what this page is for
@@ -49,10 +50,10 @@ export function Topbar({
             {eyebrow}
           </div>
         )}
-        <h1 className="t-page-title truncate" style={{ color: "var(--text-1)" }}>
+        <h1 className="t-body-lg truncate font-semibold" style={{ color: "var(--text-1)" }}>
           {title}
         </h1>
-        <p className="t-meta mt-1 hidden truncate md:block" style={{ color: "var(--text-5)" }}>
+        <p className="sr-only">
           {subtitle}
         </p>
       </div>
@@ -61,6 +62,7 @@ export function Topbar({
       <div className="flex-1 lg:hidden" />
 
       <div className="flex flex-shrink-0 items-center gap-2">
+        <DemoBadge />
         {actions}
         <span className="hidden sm:inline-flex">
           <ThemeToggle />
@@ -84,7 +86,7 @@ export function Topbar({
         {showCeoShortcut && (
           <Link
             href="/dashboard/ceo-hub"
-            className="mt-btn mt-btn-secondary mt-focus flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 t-body font-semibold"
+            className="mt-btn mt-btn-secondary mt-focus flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 t-body font-semibold max-lg:!hidden"
           >
             <span className="hidden sm:inline">CEO Hub</span>
             <span className="sm:hidden">CEO</span>

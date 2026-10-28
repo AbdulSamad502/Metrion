@@ -103,3 +103,8 @@
 .cmo-time-line::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; border-radius: 2px; background: var(--ov-line); }
 .cmo-time-line > i { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--ov-brand); border: 2px solid var(--ov-card); }
 .cmo-time figcaption { display: flex; justify-content: space-between; }
+
+/* Copy and Details read as buttons: a visible edge, a steady width, and Copy first */
+.cmo-actions .ov-btn { border: 1px solid var(--ov-edge); padding: 0 16px; min-width: 96px; justify-content: center; margin: 0; }
+.cmo-actions .ov-btn:hover { border-color: var(--ov-field-edge); }
+.cmo-actions .ov-btn--ghost { color: var(--ov-ink-2); }

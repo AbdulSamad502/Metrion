@@ -16,3 +16,8 @@
 .set-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .set-list > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 @media (max-width: 760px) { .set-list { grid-template-columns: 1fr; } }
+
+/* cards keep the height of their content: the right-hand column no longer stretches its last card into an empty box */
+.set-cols { align-items: start; }
+.set-cols > .ov-col { display: flex; flex-direction: column; gap: var(--ov-gap); }
+.set-cols > .ov-col > .ov-card { flex: none; }

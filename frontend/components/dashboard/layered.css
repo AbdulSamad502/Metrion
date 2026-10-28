@@ -106,5 +106,4 @@ html.mt-inview .ci-strip-dot:not([data-seen]),
 html.mt-inview .ci-diverge i:not([data-seen]),
 html.mt-inview .pi-bar > i:not([data-seen]) { animation-play-state: paused; }
 
-/* room under the last card for the floating "Sample data" label */
-html.mt-demo-bar #main { padding-bottom: 6rem; }
+

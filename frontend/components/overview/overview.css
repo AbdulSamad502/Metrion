@@ -6,7 +6,7 @@
    - motion is feedback: press, hover, a gentle first rise; all of it stops under prefers-reduced-motion */
 
 :root {
-  --ov-s1: 12px;
+  --ov-s1: 13px;
   --ov-s2: 15px;
   --ov-s3: 24px;
   --ov-s4: 48px;
@@ -295,7 +295,7 @@ a:hover > .ov-arrow, a:focus-visible > .ov-arrow, button:hover > .ov-arrow { tra
 
 /* ---------- hero ---------- */
 .ov-hero {
-  color: var(--ov-hero-ink); border: 1px solid var(--ov-edge); gap: 24px; padding: 32px; overflow: hidden; justify-content: center;
+  color: var(--ov-hero-ink); border: 1px solid var(--ov-edge); gap: 24px; padding: 32px; overflow: hidden; justify-content: space-between;
   background: var(--ov-hero-b);
   box-shadow: none;
 }
@@ -484,3 +484,10 @@ a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px;
 
 /* on a phone cards sit closer to the screen edge and give the content the room: nested panels no longer lose a third of the width to padding */
 @media (max-width: 480px) { .ov-card { padding: 20px 16px; border-radius: 20px; } }
+
+/* first run: three numbered steps under the upload button */
+.ov-steps { list-style: none; counter-reset: ovstep; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 8px 0 0; padding: 0; width: 100%; }
+.ov-steps li { counter-increment: ovstep; display: flex; flex-direction: column; gap: 4px; padding-top: 12px; border-top: 1px solid var(--ov-line); font-size: var(--ov-s1); color: var(--ov-ink-3); }
+.ov-steps li::before { content: counter(ovstep); font-weight: 700; color: var(--ov-ink-2); }
+.ov-steps b { font-size: var(--ov-s2); color: var(--ov-ink); }
+@media (max-width: 640px) { .ov-steps { grid-template-columns: 1fr; } }

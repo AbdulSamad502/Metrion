@@ -419,13 +419,6 @@ function TitleSummary({ items, showApproved }: { items: ShowcaseTitle[]; showApp
     <div className="cmo-summary">
       {measured.length >= 2 && (
         <figure className="cmo-strip" aria-label={`${within} of ${measured.length} titles are within their limit`}>
-          <div className="cmo-strip-bars" aria-hidden>
-            {measured.map((t) => {
-              const over = t.charCount > (t.maxChars as number);
-              return <span key={t.optionId} className="cmo-strip-col"><i className={over ? "is-over" : undefined} style={{ height: `${Math.max(6, Math.min(100, (t.charCount / (t.maxChars as number)) * 100))}%` }} /></span>;
-            })}
-            <b className="cmo-strip-limit" />
-          </div>
           <figcaption className="ov-meta">Length vs limit: {within} of {measured.length} within it</figcaption>
         </figure>
       )}
@@ -490,10 +483,6 @@ function PackFit({ parts }: { parts: { used: number; max: number | null | undefi
   const within = m.filter((x) => x.used <= (x.max as number)).length;
   return (
     <figure className="cmo-strip" style={{ flex: "none", width: "100%", maxWidth: 360 }} aria-label={`${within} of ${m.length} parts are within their limit`}>
-      <div className="cmo-strip-bars" aria-hidden>
-        {m.map((x, i) => <span key={i} className="cmo-strip-col"><i className={x.used > (x.max as number) ? "is-over" : undefined} style={{ height: `${Math.max(6, Math.min(100, (x.used / (x.max as number)) * 100))}%` }} /></span>)}
-        <b className="cmo-strip-limit" />
-      </div>
       <figcaption className="ov-meta">Length vs limit: {within} of {m.length} parts within it</figcaption>
     </figure>
   );

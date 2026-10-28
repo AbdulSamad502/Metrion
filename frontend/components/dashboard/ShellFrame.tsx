@@ -7,10 +7,10 @@ import { useAppSession } from "@/lib/useAppSession";
 import { useNotificationsFeed } from "@/lib/useNotifications";
 import { getServerTheme, getTheme, subscribeTheme } from "@/lib/theme";
 import { useSurfaceSheen } from "@/lib/useSurfaceSheen";
+import { BottomNav } from "./BottomNav";
 import { Sidebar } from "./Sidebar";
 import { Icon } from "@/components/ui/Icon";
 import { ToastProvider } from "@/components/ui/Toast";
-import { DemoBadge } from "@/components/demo/DemoBadge";
 import "./typography.css";
 import "./layered.css";
 import { useRevealOnView } from "./useRevealOnView";
@@ -142,7 +142,7 @@ function OwnFrame({ children }: { children: ReactNode }) {
             overlay={focusMode}
           />
           <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
-          <DemoBadge />
+          <BottomNav />
         </div>
       </FrameContext.Provider>
       </ToastProvider>

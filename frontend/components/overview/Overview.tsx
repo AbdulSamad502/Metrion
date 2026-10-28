@@ -105,7 +105,6 @@ export function Hero({ pnl, headline, financeLink = true }: { pnl: HealthEntry; 
 
       {shares && revenue && fees && (
         <div className="ov-flow" data-testid="profit-flow">
-          {financeLink ? (
           <div
             className="ov-flow-bar"
             role="img"
@@ -115,35 +114,11 @@ export function Hero({ pnl, headline, financeLink = true }: { pnl: HealthEntry; 
             <span className="ov-flow-seg ov-flow-seg--rest" />
             <span className="ov-flow-seg ov-flow-seg--profit" style={{ width: `${shares.profit * 100}%` }} />
           </div>
-          ) : (
-          <div
-            className="ov-wf"
-            role="img"
-            aria-label={`Of ${revenue.value} revenue: ${fees.value} went to marketplace fees, other costs took the next step down, and ${headline.value} is left as profit.`}
-          >
-            {[
-              { k: "rev", label: "Revenue", value: revenue.value, from: 0, to: 1 },
-              { k: "fees", label: "Fees", value: fees.value, from: 1 - shares.fees, to: 1 },
-              { k: "rest", label: "Other costs", value: null, from: shares.profit, to: 1 - shares.fees },
-              { k: "profit", label: "Profit", value: headline.value, from: 0, to: shares.profit },
-            ].map((c) => (
-              <div key={c.k} className="ov-wf-col">
-                <div className="ov-wf-plot" aria-hidden>
-                  <i className={`ov-wf-step ov-wf-step--${c.k}`} style={{ bottom: `${c.from * 100}%`, height: `${Math.max(3, (c.to - c.from) * 100)}%` }} />
-                </div>
-                <span className="ov-wf-label">{c.label}</span>
-                {c.value && <b className="ov-wf-value">{c.value}</b>}
-              </div>
-            ))}
-          </div>
-          )}
-          {financeLink && (
           <div className="ov-flow-legend">
             <div className="ov-flow-key"><span><i style={{ background: "var(--ov-hero-fees)" }} />Marketplace fees</span><b>{fees.value}</b></div>
-            <div className="ov-flow-key"><span><i style={{ background: "var(--ov-hero-rest)" }} />Other costs</span><Link href="/dashboard/cfo" className="ov-flow-link">See breakdown <Icon name="arrow" size={12} strokeWidth={2} className="ov-arrow" /></Link></div>
+            <div className="ov-flow-key"><span><i style={{ background: "var(--ov-hero-rest)" }} />Other costs</span>{financeLink ? <Link href="/dashboard/cfo" className="ov-flow-link">See breakdown <Icon name="arrow" size={12} strokeWidth={2} className="ov-arrow" /></Link> : <b>Rest of revenue</b>}</div>
             <div className="ov-flow-key"><span><i style={{ background: "var(--ov-hero-ink)" }} />Profit</span><b>{headline.value}</b></div>
           </div>
-          )}
           <p className="ov-meta">Out of {revenue.value} revenue.</p>
         </div>
       )}
@@ -194,6 +169,13 @@ export function HeroEmpty({ failed, onRetry }: { failed: boolean; onRetry: () =>
           <button type="button" className="ov-btn" onClick={onRetry}>Try again</button>
         ) : (
           <Link href="/dashboard/cfo#reports" className="ov-btn" style={{ background: "var(--ov-brand)", color: "var(--ov-on-brand)" }}>Upload reports <Icon name="arrow" size={14} strokeWidth={2} className="ov-arrow" /></Link>
+        )}
+        {!failed && (
+          <ol className="ov-steps" aria-label="How to get started">
+            <li><b>Upload your reports</b><span>Your marketplace sales and settlement files.</span></li>
+            <li><b>Add your missing costs</b><span>Profit &amp; Finance lists what it still needs.</span></li>
+            <li><b>Ask the CEO</b><span>Ask where your profit leaks, in plain words.</span></li>
+          </ol>
         )}
       </div>
     </section>

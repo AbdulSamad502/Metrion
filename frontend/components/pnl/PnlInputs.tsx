@@ -62,13 +62,13 @@ function PillChoice<T extends string>({ legend, value, options, onChange, segmen
   return (
     <fieldset className="m-0 border-0 p-0">
       <legend className="mb-1.5 p-0 t-body-sm font-medium" style={{ color: "var(--text-4)" }}>{legend}</legend>
-      <div className={segmented ? "grid auto-cols-fr grid-flow-col gap-1 rounded-full p-1" : "flex flex-wrap gap-2"} style={segmented ? { border: "1px solid var(--border-default)", background: "var(--fill-hover)" } : undefined}>
+      <div className={segmented ? "inline-grid w-fit max-w-full auto-cols-fr grid-flow-col gap-1 rounded-full p-1" : "flex flex-wrap gap-2"} style={segmented ? { border: "1px solid var(--border-default)", background: "var(--fill-hover)" } : undefined}>
         {options.map((o) => {
           const on = value === o.id;
           return (
             <label
               key={o.id}
-              className={`mt-chip flex min-h-10 cursor-pointer items-center rounded-full px-2 sm:px-4 t-body-sm font-medium focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--accent)] ${segmented ? "justify-center text-center" : ""}`}
+              className={`mt-chip flex min-h-10 cursor-pointer items-center rounded-full px-3 sm:px-5 t-body-sm font-medium focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--accent)] ${segmented ? "justify-center text-center" : ""}`}
               style={{ background: on ? "var(--accent-fill-default)" : "transparent", border: `1px solid ${on ? "var(--accent-border-strong)" : "var(--border-default)"}`, color: on ? "var(--accent)" : "var(--text-3)" }}
             >
               <input type="radio" name={legend} className="sr-only" checked={on} onChange={() => onChange(o.id)} />

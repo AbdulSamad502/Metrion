@@ -120,3 +120,11 @@
   html.mt-dash-type .mt-topbar .t-meta { margin-top: 0; }
   html.mt-dash-type .mt-topbar .mt-btn:not(.lg\:hidden), html.mt-dash-type .mt-topbar a.mt-btn { min-height: 36px; }
 }
+
+/* phone bottom bar */
+.mt-bottomnav-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; display: flex; background: var(--ov-card, var(--bg-popover)); border-top: 1px solid var(--ov-edge, var(--border-default)); padding-bottom: env(safe-area-inset-bottom); }
+.mt-bottomnav-item { flex: 1; min-width: 0; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; font-weight: 600; color: var(--ov-ink-3, var(--text-5)); text-decoration: none; }
+.mt-bottomnav-item[data-on="true"] { color: var(--ov-ink, var(--text-1)); }
+.mt-bottomnav-item[data-on="true"] svg { stroke-width: 2.2; }
+@media (max-width: 1023px) { html.mt-bottomnav #main { padding-bottom: 5.5rem; } }
+@media (min-width: 1024px) { .mt-bottomnav-bar { display: none; } }
