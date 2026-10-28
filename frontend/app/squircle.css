@@ -6,4 +6,13 @@
   html [role="dialog"].mt-panel { corner-shape: squircle; border-radius: 28px; }
   html .ceo-root .ceo-activity { corner-shape: squircle; border-radius: 36px; }
   html .ceo-root :is(.mt-glow-card, .mt-hub-card, .mt-panel) { corner-shape: squircle; border-radius: 20px; }
+
+  /* inputs and buttons: rounded-rectangle controls only. Full pills (rounded-full, 999px) stay round, and checkboxes, radios and sliders are untouched. */
+  html :is(.mt-app-surface, .mt-auth, [role="dialog"]) :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]), select, textarea, .ov-input) {
+    corner-shape: squircle; border-radius: 22px;
+  }
+  html :is(.mt-app-surface, .mt-auth, [role="dialog"]) :is(button, a, label, input, select)[class*="rounded-xl"] { corner-shape: squircle; border-radius: 18px; }
+  html :is(.mt-app-surface, .mt-auth, [role="dialog"]) :is(button, a)[class*="rounded-lg"] { corner-shape: squircle; border-radius: 14px; }
+  html :is(.mt-app-surface, .mt-auth, [role="dialog"]) :is(.ci-pick, .ov-btn--square) { corner-shape: squircle; border-radius: 28px; }
+  html .ceo-root :is(.ceo-icon, .ceo-action) { corner-shape: squircle; border-radius: 16px; }
 }
