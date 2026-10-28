@@ -1,0 +1,9 @@
+/* Squircle corners (superelliptic) for the auth card, dialogs and the CEO Hub cards, where the browser supports `corner-shape`.
+   A squircle of the same radius looks tighter, so each radius is raised a step. Other browsers keep ordinary rounded corners.
+   The dashboard cards and panels are done in components/dashboard/layered.css. Edge-attached drawers have no free corners, so they are left alone. */
+@supports (corner-shape: squircle) {
+  html .mt-auth-card { corner-shape: squircle; border-radius: 36px; }
+  html [role="dialog"].mt-panel { corner-shape: squircle; border-radius: 28px; }
+  html .ceo-root .ceo-activity { corner-shape: squircle; border-radius: 36px; }
+  html .ceo-root :is(.mt-glow-card, .mt-hub-card, .mt-panel) { corner-shape: squircle; border-radius: 20px; }
+}

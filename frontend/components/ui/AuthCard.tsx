@@ -39,7 +39,7 @@ export function AuthCard({
         </div>
 
         <div
-          className="rounded-2xl p-7"
+          className="mt-auth-card rounded-2xl p-7"
           style={{
             background: "var(--bg-card)",
             backdropFilter: "blur(34px) saturate(190%)",

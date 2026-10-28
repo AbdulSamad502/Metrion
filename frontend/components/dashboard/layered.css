@@ -107,3 +107,15 @@ html.mt-inview .ci-diverge i:not([data-seen]),
 html.mt-inview .pi-bar > i:not([data-seen]) { animation-play-state: paused; }
 
 
+
+/* Squircle cards: where the browser supports `corner-shape` the cards and the panels inside them use superelliptic corners, a smoother curve than a plain round corner.
+   A squircle of the same radius looks tighter, so the radius is raised a step; browsers without support keep the ordinary rounded corners. */
+@supports (corner-shape: squircle) {
+  html[data-surface="layered"] .ov-card, html[data-surface="layered"] .ov-agent, html[data-surface="layered"] .exp-panel, html[data-surface="layered"] .ceo-activity, html[data-surface="layered"] .cfo-skin :is(.cfo-grid, .cfo-stack) > section { corner-shape: squircle; border-radius: 36px; }
+  html[data-surface="layered"] .ov-tile, html[data-surface="layered"] .ov-why-list, html[data-surface="layered"] .ov-note, html[data-surface="layered"] .ci-change, html[data-surface="layered"] .ci-day, html[data-surface="layered"] .cmo-hint, html[data-surface="layered"] .cmo-item, html[data-surface="layered"] .cmo-block, html[data-surface="layered"] .pi-soft, html[data-surface="layered"] .pi-rec-list > li, html[data-surface="layered"] .set-row, html[data-surface="layered"] .cfo-skin .mt-ledger__row, html[data-surface="layered"] .ov-row {
+    corner-shape: squircle; border-radius: 24px;
+  }
+}
+@media (max-width: 480px) {
+  @supports (corner-shape: squircle) { html[data-surface="layered"] .ov-card, html[data-surface="layered"] .ov-agent, html[data-surface="layered"] .exp-panel { border-radius: 30px; } }
+}

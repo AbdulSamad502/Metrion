@@ -2,6 +2,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Inter, Manrope } from "next/font/google";
 import "./globals.css";
+import "./squircle.css";
 import { AppFrame } from "@/components/dashboard/AppFrame";
 import { InlineScript } from "@/components/InlineScript";
 import { themeInitScript } from "@/lib/theme";
