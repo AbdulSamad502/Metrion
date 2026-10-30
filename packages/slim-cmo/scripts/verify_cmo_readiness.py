@@ -105,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         gone = missing_keys(present, keys)
         print(f"  {label}: {'complete' if not gone else 'MISSING ' + ', '.join(gone)}")
         blockers += 1 if (gone and label.startswith("generation")) else 0
+    print("\nTitle display rules (listing preview cut-offs): " + ("configured; each rule still needs an https source and a fresh check date to count as verified" if "title_display_rules" in present else "not configured; previews are labelled ILLUSTRATIVE, never official"))
     print(f"\nPhoto trust gate: {'a passing evaluation exists' if passed else 'closed (no passing evaluation); photo details stay suggestions the seller confirms. This is allowed.'}")
     print("\nResult:", "every marketplace can generate" if not blockers else f"{blockers} blocker(s); production generation is blocked where listed above")
     return 0 if not blockers else 1

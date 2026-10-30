@@ -278,3 +278,23 @@ def direct_reply(ctx: Any, text: str, last_product: str | None = None) -> str | 
     if q is None:
         return None
     return property_reply(ctx.tenant_id, q[0], q[1], last_product)
+
+
+# ------------------------------------------------------------------------------------------------ the visual listing preview (CMO 3.0 M4)
+def is_preview_request(text: str) -> bool:
+    from backend.services import cmo_preview  # noqa: PLC0415
+
+    return cmo_preview.is_preview_request(text)
+
+
+def preview_reply(ctx: Any, investigation_id: UUID) -> tuple[str, dict[str, Any] | None]:
+    """(the chat sentence, the PREVIEW card or None). Free; built from the seller's saved titles, facts and their own photo; the card carries everything the browser needs to switch
+    marketplace, title and screen without another request."""
+    from backend.services import cmo_preview  # noqa: PLC0415
+
+    try:
+        card = cmo_preview.build_card(ctx.tenant_id, ctx.app_user_id, investigation_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("could not build the listing preview")
+        return "I could not build the preview just now. Nothing was changed or used up. Please try again.", None
+    return cmo_preview.chat_text(card), card

@@ -551,6 +551,9 @@ def _run_admitted(
         if conversational.is_capability_question(text):
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, conversational.capability_answer(caps), now, marker={"directCapabilities": True})
     if ui_action is None and not attachments and "CMO" in attached and has_permission(role=ctx.role, permissions=ctx.permissions, key=AGENT_CMO):
+        if cmo_chat.is_preview_request(text):  # CMO 3.0 M4: the visual listing preview rides on this answer as a PREVIEW card (free; the browser switches marketplace, title and screen itself)
+            preview_text, preview_card = cmo_chat.preview_reply(ctx, inv_id)
+            return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, preview_text, now, marker={"cmoPreview": True}, choices=preview_card)
         cmo_reply = cmo_profile.direct_reply(ctx, text) or cmo_chat.direct_reply(ctx, text)  # CMO 3.0 M1: "remember my AquaNest bottle?" shows the saved profile; M0: "is my bottle dishwasher safe?" is answered from what the seller confirmed, else "not confirmed"; no model, nothing run
         if cmo_reply is not None:
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, cmo_reply, now, marker={"cmoDirect": True})

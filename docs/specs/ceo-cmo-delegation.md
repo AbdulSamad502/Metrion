@@ -284,6 +284,10 @@ After a choice, the result says it is saved in Metrion, that nothing was publish
 - Re-confirmation: new writing already lists the reused facts on its plan card for the seller to approve (§6.12). A fixed "older than N days" window is **not** applied: no value has been decided for it (open question), so none is invented.
 - Not in M1: variants and product families (M8), a dashboard profile view, and editing a profile by form. A changed statement is made in chat; the old one stays in the history.
 
+### 6.14 CMO 3.0 M4 - the listing preview card in the chat (amendment, 2026-10-30)
+
+**Status: implemented.** Authority for what the card shows and how the cut-offs are labelled: `slim-cmo-agent.md` §6.16. Chat behaviour: "show my listing preview" / "preview my titles" / "mobile preview" is answered by code (no model, no plan card, no unit) with a short sentence and a `PREVIEW` card on the CEO `ANSWER` message (`choices.kind = "PREVIEW"`; migration `20261030_0025` widens `investigation_message_choices_shape`). Requests that ask to write something ("write ... preview") are never taken for a preview request. With no saved titles the CEO says so and no card is made. The seller's photo is fetched by the browser from `GET /api/v1/ceo/investigations/{id}/attachments/{aid}/image` (permission `agent.ceo` + `investigation.view`, images only, tenant and conversation scoped, identical 404 otherwise). The dashboard stays read-only and unchanged.
+
 ## 7. AI requirements
 
 **LLM role in this feature is deliberately minimal.** The classifier selects a key and fills declared slot text (existing); every question, option, plan line, label, card and count is written by code from the registry, validators and stored rows; the result is posted verbatim by a fixed template (no composer call, orchestration §6.35). The CMO's own LLM use (title/copy writing, vision description, trend interpretation) is unchanged and remains behind its deterministic validators. The dashboard and its API call no model.

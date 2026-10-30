@@ -6,6 +6,7 @@ import { Icon } from "@/components/ui/Icon";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DecisionCard } from "@/components/ceo/hub/DecisionCard";
 import { PickCard } from "@/components/ceo/hub/PickCard";
+import { ListingPreviewCard } from "@/components/ceo/hub/ListingPreviewCard";
 import { PlanCard } from "@/components/ceo/hub/PlanCard";
 import { RichText } from "@/components/ceo/hub/RichText";
 import { Welcome } from "@/components/ceo/hub/Welcome";
@@ -13,7 +14,7 @@ import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState, Spinner } from "@/components/ui/LoadingState";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { isPickCard } from "@/lib/ceo";
+import { isPickCard, isPreviewCard } from "@/lib/ceo";
 import type { AgentCode, CeoMessage, ClarificationReply, ExplicitPeriod, FindingRow, InvestigationDetail, NeedRow, PlanView, TurnRow, UiAction } from "@/lib/ceo";
 import { findingLink, investigationTitle, messageView, needStepView, needsByMessage, type HubState } from "@/lib/ceoModel";
 import type { TurnProgress } from "@/lib/useCeoHub";
@@ -41,7 +42,10 @@ export function Conversation({
   onApprovePlan,
   onDeclinePlan,
   planBusy = null,
+  loadAttachmentImage,
 }: {
+  /** loads the seller's own picture for the listing preview (authenticated, images only); absent = the preview shows its neutral placeholder */
+  loadAttachmentImage?: (investigationId: string, attachmentId: string) => Promise<string>;
   /** the Approve / Decline buttons of a plan card (the only approval there is); absent = the cards are read-only */
   onApprovePlan?: (planId: string, planHash: string) => void;
   onDeclinePlan?: (planId: string) => void;
@@ -119,6 +123,7 @@ export function Conversation({
         planBusy={planBusy}
         onApprovePlan={onApprovePlan}
         onDeclinePlan={onDeclinePlan}
+        loadImage={loadAttachmentImage}
       />
 
 
@@ -184,8 +189,9 @@ function lastCardId(messages: CeoMessage[]): string | null {
 }
 
 function Thread({
-  messages, findings, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs, plans, closed, planBusy, onApprovePlan, onDeclinePlan,
+  messages, findings, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs, plans, closed, planBusy, onApprovePlan, onDeclinePlan, loadImage,
 }: {
+  loadImage?: (investigationId: string, attachmentId: string) => Promise<string>;
   plans: PlanView[];
   closed: boolean;
   planBusy: string | null;
@@ -222,7 +228,8 @@ function Thread({
           {m.role === "CEO" && (m.kind === "ANSWER" || m.kind === "CLARIFICATION") && isPickCard(m.choices) && m.id === messages[messages.length - 1]?.id && (
             <PickCard card={m.choices} disabled={cardDisabled} onSend={onAsk} />
           )}
-          {m.id === answerableCardId && m.choices && !isPickCard(m.choices) && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
+          {m.role === "CEO" && m.kind === "ANSWER" && isPreviewCard(m.choices) && <ListingPreviewCard card={m.choices} loadImage={loadImage} />}
+          {m.id === answerableCardId && m.choices && !isPickCard(m.choices) && !isPreviewCard(m.choices) && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
         </li>
       ))}
       {placed.unplaced.length > 0 && <li><NeedSteps needs={placed.unplaced} /></li>}

@@ -80,6 +80,26 @@ def saved_facts(tenant_id: UUID, sku: str) -> list[dict[str, Any]]:
     return [{"type": str(r.fact_type), "name": r.attribute_name, "value": str(r.fact_value), "at": r.provided_at} for r in rows]
 
 
+_PHOTO = text(
+    """
+    SELECT a.id, a.filename FROM investigation_plan p
+    CROSS JOIN LATERAL jsonb_array_elements(p.plan -> 'legs') leg
+    JOIN investigation_attachment a ON a.tenant_id = p.tenant_id AND a.investigation_id = p.investigation_id AND a.id::text = leg -> 'slots' ->> 'attachment_id'
+    WHERE p.tenant_id = :t AND p.investigation_id = :inv AND p.status = 'APPROVED' AND leg ->> 'action_key' = 'cmo.analyze_attachment'
+      AND a.detected_type IN ('PNG', 'JPEG', 'WEBP')
+    ORDER BY p.created_at DESC LIMIT 1
+    """
+)
+
+
+def photo_attachment(tenant_id: UUID, investigation_id: UUID) -> dict[str, str] | None:
+    """The seller's own product photo in THIS conversation: the image they attached for Slim CMO to read (an approved photo-reading plan names it). Other images in the conversation, such as
+    a competitor screenshot, are never taken for the product picture. None when there is none."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(_PHOTO, {"t": tenant_id, "inv": investigation_id}).first()
+    return {"id": str(row.id), "filename": str(row.filename)} if row else None
+
+
 def profile_rows(tenant_id: UUID, sku: str) -> list[dict[str, Any]]:
     """Every statement the seller made about ONE exact sku, oldest first, with whether it was confirmed from a photo reading. No user ids leave this function."""
     if not sku:

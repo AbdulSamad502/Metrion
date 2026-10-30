@@ -222,7 +222,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
             ) : (
               <Conversation
                 onOpenForm={(f) => setForm(f as DecideKind)} state={hub.state} detail={data} turn={hub.turn} needs={hub.needs} notice={hub.notice} onDismissNotice={hub.dismissNotice}
-                onSend={hub.sendTurn} awaiting={hub.awaitingAnswer} onApprovePlan={(id, h) => void hub.approvePlan(id, h)} onDeclinePlan={(id) => void hub.declinePlan(id)} planBusy={hub.planBusy} onResolve={hub.resolve} onReopen={hub.reopen} onArchive={hub.archive} onRetry={() => void hub.retryDetail()}
+                onSend={hub.sendTurn} loadAttachmentImage={(inv, att) => client.getAttachmentImage(inv, att)} awaiting={hub.awaitingAnswer} onApprovePlan={(id, h) => void hub.approvePlan(id, h)} onDeclinePlan={(id) => void hub.declinePlan(id)} planBusy={hub.planBusy} onResolve={hub.resolve} onReopen={hub.reopen} onArchive={hub.archive} onRetry={() => void hub.retryDetail()}
               />
             )}
             </div>

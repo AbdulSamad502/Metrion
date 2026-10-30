@@ -44,6 +44,10 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/ceo/investigations/{investigation_id}/attachments/{attachment_id}/image": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/ceo/investigations/{investigation_id}/events": {
    "query": [],
    "requiredQuery": []
@@ -1159,6 +1163,13 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cmo/keyword-intelligence": {
+   "body": {
+    "$ref": "#/components/schemas/KeywordIntelBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cmo/keywords": {
    "body": {
     "$ref": "#/components/schemas/GroundedBody"
@@ -1201,6 +1212,13 @@
   "POST /api/v1/cmo/showcase/usage-events": {
    "body": {
     "$ref": "#/components/schemas/UsageEventBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/title-analysis": {
+   "body": {
+    "$ref": "#/components/schemas/TitleAnalysisBody"
    },
    "query": [],
    "requiredQuery": []
@@ -3693,6 +3711,49 @@
    "title": "HeldResolveBody",
    "type": "object"
   },
+  "KeywordIntelBody": {
+   "additionalProperties": false,
+   "description": "`cmo.keyword_intelligence` (CMO 3.0 M2): which keywords fit this product, with the evidence. Declared fields only; no tenant, meter or cap.",
+   "properties": {
+    "ci_insight_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "title": "Ci Insight Ids",
+     "type": "array"
+    },
+    "marketplace": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/Marketplace"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "request_key": {
+     "maxLength": 128,
+     "minLength": 1,
+     "title": "Request Key",
+     "type": "string"
+    },
+    "sku": {
+     "maxLength": 128,
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    }
+   },
+   "required": [
+    "request_key",
+    "sku"
+   ],
+   "title": "KeywordIntelBody",
+   "type": "object"
+  },
   "LandedCostHttpRequest": {
    "description": "One SKU, one `supplier.quote` target \u2014 never a set of quotes to compare (that is\nsupplier ranking, Phase B1, not this primitive). `supplier_quote_target_type`/\n`supplier_quote_target_ref` identify exactly the `(target_type, target_ref)` a seller used\nwhen recording the quote via `PUT /cfo/expenses` (`EnterExpenseRequest`'s own\n`target_type`/`target_ref` fields) \u2014 this route reads back what that write path wrote.",
    "properties": {
@@ -4965,6 +5026,7 @@
        "type": "number"
       },
       {
+       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
        "type": "string"
       },
       {
@@ -5348,6 +5410,7 @@
        "type": "number"
       },
       {
+       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
        "type": "string"
       },
       {
@@ -6032,6 +6095,38 @@
    "title": "TemplateRequest",
    "type": "object"
   },
+  "TitleAnalysisBody": {
+   "additionalProperties": false,
+   "description": "`cmo.analyze_titles` (CMO 3.0 M3): compare the options of one saved title set. Declared fields only.",
+   "properties": {
+    "ci_insight_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "title": "Ci Insight Ids",
+     "type": "array"
+    },
+    "generation_id": {
+     "format": "uuid",
+     "title": "Generation Id",
+     "type": "string"
+    },
+    "request_key": {
+     "maxLength": 128,
+     "minLength": 1,
+     "title": "Request Key",
+     "type": "string"
+    }
+   },
+   "required": [
+    "request_key",
+    "generation_id"
+   ],
+   "title": "TitleAnalysisBody",
+   "type": "object"
+  },
   "TitleSetsBody": {
    "additionalProperties": false,
    "properties": {
@@ -6410,6 +6505,7 @@
        "type": "number"
       },
       {
+       "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
        "type": "string"
       },
       {

@@ -64,16 +64,12 @@ class TitleAnalysisService:
 
         return RuleContext(check=check, limit=row.title_max_chars, source_url=row.source_url, verified_at=row.verified_at.date().isoformat(), kind=row.row_kind.value)
 
-    def run(self, actor: Actor, generation_id: UUID, request_key: str, ci: CiInputs | None = None) -> dict[str, Any]:
-        tenant = actor.tenant_id
-        key = billing.normalise_request_key(request_key)
-        with tenant_scope(tenant) as conn:
-            found = conn.execute(_FIND, {"t": tenant, "k": key}).first()
-        if found is not None:
-            return {**_row(found), "reused": True}
+    def context(self, tenant: UUID, generation_id: UUID, ci: CiInputs | None = None) -> tuple[Any, Any, str | None, str | None, dict[str, Any], tuple[Any, ...]]:
+        """(title set, fact context, product name, brand, keyword analysis, competitor themes) for one saved title set: everything the analysis and the preview share, read once.
+        A foreign or unknown set is NotFound (identical to a missing one)."""
         ts = self._store.load_title_set(tenant, generation_id)
         if ts is None:
-            raise NotFound("title set not found")  # a foreign or unknown id looks identical
+            raise NotFound("title set not found")
         facts = list(self._store.load_facts(tenant, ts.sku)) if ts.sku else []
         ctx = build_fact_context(facts)
         by = {a.name.casefold(): a.value for a in ctx.eligible if a.value}
@@ -83,6 +79,16 @@ class TitleAnalysisService:
             niche = tuple(str(r.term) for r in conn.execute(_NICHE, {"t": tenant}))
         kw = analyse_keywords(KeywordInputs(product_name, brand, tuple(a for a in [*ctx.eligible, *(a for a, _ in ctx.ineligible)] if a.name.casefold() != "product_name"),
                                             tuple(ctx.fact_ids), themes, n, niche, ts.marketplace))
+        return ts, ctx, product_name, brand, kw, themes
+
+    def run(self, actor: Actor, generation_id: UUID, request_key: str, ci: CiInputs | None = None) -> dict[str, Any]:
+        tenant = actor.tenant_id
+        key = billing.normalise_request_key(request_key)
+        with tenant_scope(tenant) as conn:
+            found = conn.execute(_FIND, {"t": tenant, "k": key}).first()
+        if found is not None:
+            return {**_row(found), "reused": True}
+        ts, ctx, product_name, brand, kw, themes = self.context(tenant, generation_id, ci)
         result = analyse_titles(AnalysisInputs(
             options=[TitleOption(str(o.id), o.rank, o.title_text) for o in ts.options], facts=ctx, product_name=product_name, brand=brand, keyword_result=kw,
             rule=self._rule(tenant, ts, ctx.allowed_context), ci_theme_words=tuple(t.word for t in themes), marketplace=ts.marketplace,
