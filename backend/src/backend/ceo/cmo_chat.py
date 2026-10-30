@@ -298,3 +298,48 @@ def preview_reply(ctx: Any, investigation_id: UUID) -> tuple[str, dict[str, Any]
         logger.exception("could not build the listing preview")
         return "I could not build the preview just now. Nothing was changed or used up. Please try again.", None
     return cmo_preview.chat_text(card), card
+
+
+# ------------------------------------------------------------------------------------------------ buyer questions and listing readiness (CMO 3.0 M5)
+def readiness_reply(ctx: Any, text: str, investigation_id: UUID) -> tuple[str, dict[str, Any] | None] | None:
+    """A code-written answer for "What questions will buyers ask?", "Is my AquaNest bottle ready to list?" and for the seller's own answer to a question ("For my AquaNest bottle, dishwasher
+    safe is: yes, I tested it"). Free; no model; None when the message is neither. The card carries both views for every marketplace so switching makes no request."""
+    from backend.services import cmo_readiness  # noqa: PLC0415
+
+    tenant = ctx.tenant_id
+    st = cmo_readiness.parse_statement(text)
+    if st is not None:
+        hint, label, value = st
+        found = resolve_product(tenant, hint)
+        if found is None:
+            return f"I could not tell which saved product “{hint}” is, so I saved nothing. Name it as you did when you gave me its details.", None
+        try:
+            cmo_readiness.save_fact(tenant, ctx.app_user_id, found[0], label, value)
+        except ValueError as exc:
+            return str(exc), None
+        except Exception:  # noqa: BLE001
+            logger.exception("could not save the seller's answer")
+            return "I could not save that just now. Nothing was changed. Please try again.", None
+        return cmo_readiness.saved_text(label, value), None
+    kind = cmo_readiness.request_kind(text)
+    if kind is None:
+        return None
+    hint = cmo_readiness.product_hint(text)
+    found = resolve_product(tenant, hint) if hint else None
+    if found is None:
+        try:
+            names = cmo_chat_repo.product_names(tenant)
+        except Exception:  # noqa: BLE001
+            logger.exception("could not read product names")
+            return "I could not read your saved products just now, so I have not answered. Nothing was changed.", None
+        if not names:
+            return "I have no saved product details yet, so there is nothing to assess. Ask me to write titles for a product and tell me about it first.", None
+        if len(names) > 1 or hint:
+            return "Which product do you mean? I have saved details for: " + "; ".join(f"“{n}”" for _, n in names[:5]) + ".", None
+        found = names[0]
+    try:
+        card = cmo_readiness.build_card(ctx, investigation_id, found[0], found[1], kind)
+    except Exception:  # noqa: BLE001
+        logger.exception("could not build the readiness card")
+        return "I could not build that just now. Nothing was changed or used up. Please try again.", None
+    return cmo_readiness.chat_text(card), card

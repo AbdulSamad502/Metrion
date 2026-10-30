@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { DecisionCard } from "@/components/ceo/hub/DecisionCard";
 import { PickCard } from "@/components/ceo/hub/PickCard";
 import { ListingPreviewCard } from "@/components/ceo/hub/ListingPreviewCard";
+import { ReadinessCard } from "@/components/ceo/hub/ReadinessCard";
 import { PlanCard } from "@/components/ceo/hub/PlanCard";
 import { RichText } from "@/components/ceo/hub/RichText";
 import { Welcome } from "@/components/ceo/hub/Welcome";
@@ -14,7 +15,7 @@ import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState, Spinner } from "@/components/ui/LoadingState";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { isPickCard, isPreviewCard } from "@/lib/ceo";
+import { isPickCard, isPreviewCard, isReadinessCard } from "@/lib/ceo";
 import type { AgentCode, CeoMessage, ClarificationReply, ExplicitPeriod, FindingRow, InvestigationDetail, NeedRow, PlanView, TurnRow, UiAction } from "@/lib/ceo";
 import { findingLink, investigationTitle, messageView, needStepView, needsByMessage, type HubState } from "@/lib/ceoModel";
 import type { TurnProgress } from "@/lib/useCeoHub";
@@ -229,7 +230,8 @@ function Thread({
             <PickCard card={m.choices} disabled={cardDisabled} onSend={onAsk} />
           )}
           {m.role === "CEO" && m.kind === "ANSWER" && isPreviewCard(m.choices) && <ListingPreviewCard card={m.choices} loadImage={loadImage} />}
-          {m.id === answerableCardId && m.choices && !isPickCard(m.choices) && !isPreviewCard(m.choices) && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
+          {m.role === "CEO" && m.kind === "ANSWER" && isReadinessCard(m.choices) && <ReadinessCard card={m.choices} disabled={cardDisabled} onSend={onAsk} />}
+          {m.id === answerableCardId && m.choices && !isPickCard(m.choices) && !isPreviewCard(m.choices) && !isReadinessCard(m.choices) && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
         </li>
       ))}
       {placed.unplaced.length > 0 && <li><NeedSteps needs={placed.unplaced} /></li>}

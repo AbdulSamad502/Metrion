@@ -262,3 +262,7 @@ Five-Title Quality Analyzer with a deterministic **0-100 Title Quality Score** (
 ## 15. M4 result (2026-10-30)
 
 Search Result & Mobile/Desktop Preview implemented end to end: pure truncation rules, a free backend card builder over the M3 analysis, a `PREVIEW` card on the CEO answer (migration `20261030_0025`), an authenticated images-only route for the seller's own photo, and an interactive React card in the CEO chat. Authority: `slim-cmo-agent.md` §6.16. Verified display widths do not exist, so previews are labelled illustrative (release note B6).
+
+## 16. M5 result (2026-10-30)
+
+Buyer Questions and Listing Readiness implemented end to end: pure question and readiness rules, two append-only tables (`20261030_0006`), a free card builder reusing M1-M4, a `READINESS` card on the CEO answer (`20261030_0026`), the seller's own answers saved by one fixed sentence, and an interactive React card in the chat. Authority: `slim-cmo-agent.md` §6.17. READY cannot appear while no verified marketplace rule or category taxonomy exists (B1).

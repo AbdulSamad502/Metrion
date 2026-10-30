@@ -44,7 +44,7 @@ TITLES = ["AquaKeep Steel Bottle", "AquaKeep Insulated Flask", "AquaKeep Water B
 PACK = {"description": "A steel bottle from AquaKeep for everyday use.", "bullets": ["Stainless steel build", "Easy to carry", "Simple to clean"],
         "keywords": ["steel bottle", "water bottle"]}
 
-_CMO_TENANT_TABLES = ("cmo_title_analysis", "cmo_keyword_analysis", "cmo_trend_report", "seller_fact", "cmo_niche_term", "cmo_title_approval", "cmo_title_option", "cmo_generation",
+_CMO_TENANT_TABLES = ("cmo_readiness_assessment", "cmo_buyer_question_set", "cmo_title_analysis", "cmo_keyword_analysis", "cmo_trend_report", "seller_fact", "cmo_niche_term", "cmo_title_approval", "cmo_title_option", "cmo_generation",
                       "product_image_analysis", "seller_image_asset", "cmo_quota_reservation", "cmo_platform_config")
 
 

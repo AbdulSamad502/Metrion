@@ -92,6 +92,38 @@ _PHOTO = text(
 )
 
 
+def title_sets_for_sku(tenant_id: UUID, sku: str, *, limit: int = 30) -> list[dict[str, Any]]:
+    """The NEWEST complete title set per marketplace for ONE product (a set written for another product is never offered), newest first, each with its ranked options."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text("SELECT g.id, g.marketplace, g.sku, g.created_at FROM cmo_generation g WHERE g.tenant_id = :t AND g.sku = :sku AND g.output_type = 'TITLE_SET' AND g.status = 'COMPLETE' "
+                 "ORDER BY g.created_at DESC, g.id LIMIT :limit"), {"t": tenant_id, "sku": sku, "limit": limit}).all()
+        seen: set[str] = set()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            if r.marketplace in seen:
+                continue
+            seen.add(r.marketplace)
+            options = conn.execute(_OPTIONS, {"t": tenant_id, "g": r.id}).all()
+            if options:
+                out.append({"generationId": str(r.id), "marketplace": r.marketplace, "sku": r.sku, "createdAt": r.created_at,
+                            "options": [{"id": str(o.id), "rank": int(o.rank), "text": str(o.title_text)} for o in options]})
+        return out
+
+
+def copy_pack_marketplaces(tenant_id: UUID, sku: str) -> set[str]:
+    """The marketplaces for which a COMPLETE listing copy pack (description, bullet points and keywords together) is saved for this product."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(text("SELECT DISTINCT marketplace FROM cmo_generation WHERE tenant_id = :t AND sku = :sku AND output_type = 'LISTING_COPY' AND status = 'COMPLETE'"), {"t": tenant_id, "sku": sku}).all()
+    return {str(r.marketplace) for r in rows}
+
+
+def has_photo_fact(tenant_id: UUID, sku: str) -> bool:
+    """True when the seller confirmed at least one detail from a photo reading for this product (a fact linked to an image analysis)."""
+    with tenant_scope(tenant_id) as conn:
+        return conn.execute(text("SELECT 1 FROM seller_fact WHERE tenant_id = :t AND sku = :sku AND image_analysis_id IS NOT NULL LIMIT 1"), {"t": tenant_id, "sku": sku}).first() is not None
+
+
 def photo_attachment(tenant_id: UUID, investigation_id: UUID) -> dict[str, str] | None:
     """The seller's own product photo in THIS conversation: the image they attached for Slim CMO to read (an approved photo-reading plan names it). Other images in the conversation, such as
     a competitor screenshot, are never taken for the product picture. None when there is none."""

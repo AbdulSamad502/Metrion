@@ -70,6 +70,25 @@ export type PreviewCard = {
 };
 export const isPreviewCard = (c: unknown): c is PreviewCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "PREVIEW" && Array.isArray((c as { sets?: unknown }).sets);
 
+/** Buyer questions and listing readiness (CMO 3.0 M5; backend: services/cmo_readiness.build_card). Both views, for all three marketplaces, ride in the card: switching makes no request. */
+export type BuyerQuestion = {
+  id: string; topic: string; question: string; importance: "ESSENTIAL" | "LIKELY" | "COMPETITOR_RELEVANT"; claim: boolean; status: "CONFIRMED" | "NOT_CONFIRMED" | "SELLER_UNKNOWN";
+  answer: string | null; source: { label: string; origin: string; at: string } | null; ask: string | null; listingUse: string; evidence: { kind: string; detail: string }[];
+};
+export type ReadinessItem = { id: string; label: string; status: "DONE" | "MISSING" | "BLOCKED" | "NOT_ASSESSED"; max: number; earned: number | null; detail: string; action: string | null };
+export type ReadinessCategory = { id: string; label: string; max: number; status: "ASSESSED" | "NOT_ASSESSED"; earned: number | null; assessable: number; score: number | null; items: ReadinessItem[] };
+export type MarketReadiness = {
+  marketplace: PreviewMarketplace; verdict: "BLOCKED" | "NOT_READY" | "DRAFT_READY_NOT_VERIFIED" | "READY"; verdictText: string;
+  score: { status: "ASSESSED" | "NOT_ASSESSED"; score?: number; earnedPoints?: number; assessablePoints: number; note: string };
+  categories: ReadinessCategory[]; nextActions: { id: string; label: string; action: string; status: string; points: number }[]; counts: { done: number; missing: number; blocked: number; notAssessed: number };
+};
+export type ReadinessCard = {
+  version: number; kind: "READINESS"; view: "questions" | "readiness"; notice: string; investigationId: string; product: { name: string; sku: string }; defaultMarketplace: PreviewMarketplace;
+  questions: { counts: { CONFIRMED: number; NOT_CONFIRMED: number; SELLER_UNKNOWN: number }; questions: BuyerQuestion[]; limits: string[] };
+  readiness: { marketplaces: MarketReadiness[]; limits: string[] };
+};
+export const isReadinessCard = (c: unknown): c is ReadinessCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "READINESS" && !!(c as { readiness?: unknown }).readiness;
+
 export const isPickCard = (c: unknown): c is PickCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "PICK" && Array.isArray((c as { items?: unknown }).items);
 
 export type CeoMessage = {
@@ -80,7 +99,7 @@ export type CeoMessage = {
   turn_id: string | null;
   created_at: string;
   /** Only a CEO CLARIFICATION message that has real candidates to offer. */
-  choices?: ClarificationCard | PickCard | PreviewCard | null;
+  choices?: ClarificationCard | PickCard | PreviewCard | ReadinessCard | null;
   /** Client-only: a message the seller just sent that the server has not echoed back yet. */
   pending?: boolean;
   /** The send failed and the thread could not be refreshed, so the server's copy is unknown: shown as not sent, never as still sending. */
