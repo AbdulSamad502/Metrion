@@ -40,6 +40,8 @@ from slim_cmo.config import (
     load_hashtag_config,
 )
 from slim_cmo.constraints import ConstraintUnavailable, ResolvedConstraint, resolve_constraint
+from slim_cmo.listing import basis as rules_basis, ci_evidence
+from slim_cmo.listing.context import ListingContext
 from slim_cmo.generation import copy as copy_gen
 from slim_cmo.generation import standalone as standalone_gen
 from slim_cmo.generation.facts import FactContext, FactInput, build_fact_context, image_attributes
@@ -69,7 +71,7 @@ from slim_cmo.types import (
 )
 
 PRODUCT_NAME_ATTRIBUTE = "product_name"
-_CONFIG_KEYS = (FORMAT_CONSTRAINT_MAX_AGE_DAYS, INTERNAL_RETRY_BOUND, HASHTAG_SET_SIZE)
+_CONFIG_KEYS = (FORMAT_CONSTRAINT_MAX_AGE_DAYS, INTERNAL_RETRY_BOUND, HASHTAG_SET_SIZE, rules_basis.FLAG_KEY, rules_basis.BULLET_TARGET_KEY)
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +91,7 @@ class Intake:
     text_only_confirmed: bool = False  # E7: explicit seller confirmation to proceed without a usable analysis
     agent_run_id: UUID | None = None
     ci_inputs: CiInputs | None = None  # CEO-brokered competitor-listing attributes (section 6.7); absent = independent mode
+    listing: ListingContext | None = None  # M6: set by the server only for a full-listing request (spec 6.18); absent for every other request
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,6 +225,14 @@ class GenerationService:
         self._kinds = accepted_row_kinds
 
     @property
+    def provider(self) -> LlmProvider:
+        return self._provider
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
     def accepted_row_kinds(self) -> frozenset[ConstraintRowKind]:
         """Which rule rows this service may read (VERIFIED in production). Read-only: the title analysis uses the same set."""
         return self._kinds
@@ -291,6 +302,10 @@ class GenerationService:
             values = store.load_config(tenant, _CONFIG_KEYS, self._clock().date())
             gen_cfg = load_generation_config(values)
             hash_cfg = load_hashtag_config(values) if output_type is OutputType.HASHTAGS else None
+            basis_settings = rules_basis.BasisSettings(
+                enabled=rules_basis.parse_flag(values.get(rules_basis.FLAG_KEY)), bullet_target=rules_basis.parse_target(values.get(rules_basis.BULLET_TARGET_KEY)),
+                workflow=intake.listing.workflow if intake.listing is not None else None,
+            )
             blocked_config: ConfigMissing | None = None
             if isinstance(gen_cfg, ConfigMissing):
                 blocked_config = gen_cfg
@@ -331,7 +346,7 @@ class GenerationService:
                         actor=actor, intake=intake, key=key, sku=sku, output_type=output_type, marketplace=item.marketplace,
                         ctx=ctx, provenance=provenance, gen_cfg=gen_cfg if isinstance(gen_cfg, GenerationConfig) else None,
                         hash_cfg=hash_cfg if isinstance(hash_cfg, HashtagConfig) else None,
-                        approval=approval, seller_title=seller_title, preblocked=failure,
+                        approval=approval, seller_title=seller_title, preblocked=failure, basis_settings=basis_settings,
                     )
                 )
             for item, report in zip(plan.to_generate, generated, strict=True):
@@ -400,6 +415,7 @@ class GenerationService:
         approval: StoredApproval | None,
         seller_title: str | None,
         preblocked: Failure | None,
+        basis_settings: rules_basis.BasisSettings | None = None,
     ) -> ArtefactReport:
         constraint_ref: UUID | None = None
         grounding_basis: GroundingBasis | None = None
@@ -416,6 +432,18 @@ class GenerationService:
                 rows, marketplace=marketplace, category=intake.category_hint, output_type=output_type,
                 now=self._clock(), max_age_days=gen_cfg.format_constraint_max_age_days, accepted_row_kinds=self._kinds,
             )
+            if isinstance(res, ConstraintUnavailable) and basis_settings is not None and output_type.value in rules_basis.BASIS_OUTPUT_TYPES:
+                # Owner decision 2026-10-30 (spec 6.18.11): inside a full-listing workflow, with the operator flag on, missing marketplace data opens the labelled rules-unavailable
+                # basis. A usable VERIFIED row never reaches here; a configuration fault never opens it; everything else keeps C13.
+                if rules_basis.applies(res, basis_settings):
+                    res = rules_basis.synthetic(
+                        marketplace, settings=basis_settings, title_option_count=rules_basis.DRAFT_TITLE_OPTION_COUNT if output_type is OutputType.TITLE_SET else None,
+                        now=self._clock(), needs_bullets=output_type is OutputType.LISTING_COPY,
+                    )
+                else:
+                    off = rules_basis.disabled_reason(basis_settings) if res.reason in rules_basis.ELIGIBLE_REASONS else None
+                    if off:
+                        res = replace(res, detail=f"{res.detail}; {off}")
             if isinstance(res, ConstraintUnavailable):
                 failure = Failure(
                     FailureCode.CONSTRAINT_BLOCKED, res.detail,
@@ -423,7 +451,7 @@ class GenerationService:
                 )
             else:
                 resolved = res
-                constraint_ref = res.row.id
+                constraint_ref = None if rules_basis.rules_basis_of(res.row) == rules_basis.UNVERIFIED else res.row.id
 
         if failure is None and output_type in GROUNDED_OUTPUT_TYPES:
             assert resolved is not None and marketplace is not None
@@ -452,18 +480,22 @@ class GenerationService:
         if failure is None:
             assert gen_cfg is not None
             ci = intake.ci_inputs if intake.ci_inputs is not None and intake.ci_inputs.usable() and output_type is not OutputType.CATALOG_ANSWER else None
+            if ci is not None and intake.listing is not None:
+                ci = ci_evidence.supported_only(ci, ctx.eligible)  # the model sees only competitor themes the seller's confirmed facts support (spec 6.18.6)
             if ci is not None:
                 own_words = set(re.findall(r"[^\W_]+", ctx.allowed_context.casefold()))  # a competitor's first word that is also the seller's own wording (e.g. "steel") is not a brand to avoid
                 ci = replace(ci, exclude_terms=tuple(t for t in ci.exclude_terms if t.casefold() not in own_words))
-                outcome = self._generate(output_type, marketplace, resolved, ctx, anchor, gen_cfg, hash_cfg, ci=ci)
+                outcome = self._generate(output_type, marketplace, resolved, ctx, anchor, gen_cfg, hash_cfg, ci=ci, listing=intake.listing)
                 problems = check_output([*texts_of(outcome.structured, outcome.output_text), *(o.text for o in outcome.options)], ci) if isinstance(outcome, Delivered) else ["NOT_DELIVERED"]  # title options live outside `structured`
                 if problems:  # a copy / light rewrite / market claim, or no usable draft: written again from the seller's own facts alone, and said so
                     ci_note = "A draft informed by competitor themes was set aside by the originality and claims checks (" + ", ".join(problems) + "); this was written from your own product facts alone."
-                    outcome = self._generate(output_type, marketplace, resolved, ctx, anchor, gen_cfg, hash_cfg)
+                    outcome = self._generate(output_type, marketplace, resolved, ctx, anchor, gen_cfg, hash_cfg, listing=intake.listing)
                 else:
                     input_mode, ci_snapshot = "CEO_BROKERED_CI", ci.snapshot()
             else:
-                outcome = self._generate(output_type, marketplace, resolved, ctx, anchor, gen_cfg, hash_cfg)
+                outcome = self._generate(output_type, marketplace, resolved, ctx, anchor, gen_cfg, hash_cfg, listing=intake.listing)
+            if isinstance(outcome, Delivered) and intake.listing is not None:
+                outcome.structured["workflow"] = intake.listing.workflow  # title sets and approvals made inside a full-listing request carry the marker (spec 6.18.11)
             if isinstance(outcome, Failed):
                 failure, outcome = outcome.failure, None
             elif output_type is OutputType.TITLE_SET and resolved is not None:
@@ -522,6 +554,7 @@ class GenerationService:
     def _generate(
         self, output_type: OutputType, marketplace: Marketplace | None, resolved: ResolvedConstraint | None,
         ctx: FactContext, anchor: str | None, gen_cfg: GenerationConfig, hash_cfg: HashtagConfig | None, ci: CiInputs | None = None,
+        listing: ListingContext | None = None,
     ) -> Outcome:
         provider: LlmProvider = _CiProvider(self._provider, ci.prompt_block()) if ci is not None else self._provider
         common: dict[str, Any] = {"provider": provider, "model": self._model, "facts": ctx, "retry_bound": gen_cfg.internal_retry_bound}
@@ -539,7 +572,8 @@ class GenerationService:
             OutputType.KEYWORDS: standalone_gen.generate_keywords,
             OutputType.BACKEND_TERMS: standalone_gen.generate_backend_terms,
         }[output_type]
-        return fn(marketplace=marketplace, resolved=resolved, anchor_title=anchor, **common)
+        extra = {"listing": listing} if output_type in (OutputType.LISTING_COPY, OutputType.BACKEND_TERMS) else {}
+        return fn(marketplace=marketplace, resolved=resolved, anchor_title=anchor, **common, **extra)
 
     def _record(
         self, *, actor: Actor, intake: Intake, key: str, sku: str | None, output_type: OutputType,

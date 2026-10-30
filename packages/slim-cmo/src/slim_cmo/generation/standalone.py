@@ -24,6 +24,8 @@ from slim_cmo.generation.prompts import component_prompt, hashtag_prompt, prompt
 from slim_cmo.generation.provider import LlmProvider
 from slim_cmo.generation.safety import feedback_lines, ineligible_names, prose_findings, rule_ids
 from slim_cmo.types import Marketplace, OutputType
+from slim_cmo.listing.basis import rules_basis_of
+from slim_cmo.listing.context import ListingContext, untraceable
 from slim_cmo.validators import (
     Violation,
     ViolationCode,
@@ -41,7 +43,8 @@ def _meta(c: ResolvedConstraint, marketplace: Marketplace, attempts: int, facts:
     return {
         "marketplace": marketplace.value,
         "constraint": c.row.cite(),
-        "count_rule": c.row.count_rule.value if c.row.count_rule else None,
+        "rules_basis": rules_basis_of(c.row),
+        "count_rule": c.row.count_rule.value if c.row.count_rule and rules_basis_of(c.row) == "VERIFIED" else None,
         "unverified_limits": list(c.unverified_limits),
         "attempts": attempts,
         "excluded_facts": list(facts.excluded),
@@ -65,14 +68,16 @@ def _run_component(
     build: Callable[[Any, dict[str, Any]], tuple[dict[str, Any], str]],
     prompt_kind: str,
     what: str,
+    listing: ListingContext | None = None,
 ) -> Outcome:
     pf = prompt_facts(facts)
+    extra = listing.prompt_extra() if listing is not None else None
     done: dict[str, tuple[dict[str, Any], str] | None] = {"v": None}
 
     def make_prompt(feedback: tuple[str, ...]) -> str:
         return component_prompt(
             kind=prompt_kind, marketplace=marketplace, facts=pf, anchor_title=anchor_title,
-            constraint=resolved.row, feedback=feedback,
+            constraint=resolved.row, feedback=feedback, listing_extra=extra,
         )
 
     def evaluate(parsed: Parsed) -> Evaluation:
@@ -146,14 +151,16 @@ def generate_keywords(
 
 def generate_backend_terms(
     *, provider: LlmProvider, model: str, marketplace: Marketplace, resolved: ResolvedConstraint,
-    facts: FactContext, anchor_title: str, retry_bound: int,
+    facts: FactContext, anchor_title: str, retry_bound: int, listing: ListingContext | None = None,
 ) -> Outcome:
     if marketplace is not Marketplace.AMAZON:
         raise ValueError("backend search terms exist only for Amazon")
+    vocab = listing.keyword_vocab if listing is not None and listing.keyword_vocab else None
 
     def check(raw: Any) -> tuple[Any, tuple[Violation, ...], list[tuple[str, str]]]:
-        r = check_backend_terms(raw, resolved.row, allowed_context=facts.allowed_context)
-        return r, r.violations, [(f"backend_terms[{i}]", t) for i, t in enumerate(r.terms)]
+        r = check_backend_terms(raw, resolved.row, allowed_context=facts.allowed_context, allow_unstated_cap=rules_basis_of(resolved.row) == "UNVERIFIED")
+        loose = tuple(Violation(ViolationCode.NOT_TRACEABLE, f"backend_terms[{i}]") for i in untraceable(r.terms, vocab)) if vocab is not None else ()
+        return r, (*r.violations, *loose), [(f"backend_terms[{i}]", t) for i, t in enumerate(r.terms)]
 
     def build(r: Any, _m: dict[str, Any]) -> tuple[dict[str, Any], str]:
         return (
@@ -165,7 +172,7 @@ def generate_backend_terms(
     return _run_component(
         kind=OutputType.BACKEND_TERMS, key="terms", key_type=list, provider=provider, model=model,
         marketplace=marketplace, resolved=resolved, facts=facts, anchor_title=anchor_title, retry_bound=retry_bound,
-        check=check, build=build, prompt_kind="BACKEND_TERMS", what="the backend search terms",
+        check=check, build=build, prompt_kind="BACKEND_TERMS", what="the backend search terms", listing=listing,
     )
 
 

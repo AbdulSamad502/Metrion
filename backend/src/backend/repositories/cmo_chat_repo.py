@@ -164,3 +164,97 @@ def approval_text(tenant_id: UUID, approval_id: UUID) -> str | None:
     with tenant_scope(tenant_id) as conn:
         row = conn.execute(_APPROVAL_TEXT, {"t": tenant_id, "a": approval_id}).first()
     return str(row.approved_text) if row else None
+
+
+# ------------------------------------------------------------------------------------------------ CMO 3.0 M6: the saved listing, its states, and "approved for use"
+_PACK = text(
+    """
+    SELECT id, marketplace, sku, request_key, grounding_approval_id, grounding_basis, format_constraint_ref, input_mode, ci_inputs_snapshot, output_structured, created_at
+    FROM cmo_generation WHERE tenant_id = :t AND id = :g AND output_type = 'LISTING_COPY' AND status = 'COMPLETE'
+    """
+)
+_TERMS = text(
+    """
+    SELECT output_structured -> 'backend_terms' AS terms FROM cmo_generation
+    WHERE tenant_id = :t AND output_type = 'BACKEND_TERMS' AND status = 'COMPLETE' AND request_key = :k
+    """
+)
+_EVENT_STATES = text(
+    """
+    SELECT event_kind, count(*) AS n, max(occurred_at) AS last_at FROM cmo_result_usage_event
+    WHERE tenant_id = :t AND generation_id = :g AND event_kind IN ('GENERATED', 'COPIED', 'MARKED_USED', 'APPROVED') GROUP BY event_kind
+    """
+)
+_AUDITED = text("SELECT verdict, created_at FROM cmo_listing_audit WHERE tenant_id = :t AND generation_id = :g ORDER BY created_at DESC, id LIMIT 1")
+_APPROVE = text(
+    """
+    INSERT INTO cmo_result_usage_event (tenant_id, generation_id, option_id, result_part, event_kind, actor_user_id, surface)
+    SELECT :t, :g, NULL, NULL, 'APPROVED', :u, 'CHAT'
+    WHERE NOT EXISTS (SELECT 1 FROM cmo_result_usage_event x WHERE x.tenant_id = :t AND x.generation_id = :g AND x.event_kind = 'APPROVED')
+    """
+)
+
+
+def listing_pack(tenant_id: UUID, generation_id: UUID) -> dict[str, Any] | None:
+    """One saved, complete listing copy pack (the CMO artefact the M6 listing is built on), or None. A foreign or unknown id is None (identical to missing)."""
+    with tenant_scope(tenant_id) as conn:
+        r = conn.execute(_PACK, {"t": tenant_id, "g": generation_id}).first()
+    if r is None:
+        return None
+    s = r.output_structured if isinstance(r.output_structured, dict) else {}
+    return {"id": str(r.id), "marketplace": str(r.marketplace), "sku": r.sku, "requestKey": str(r.request_key), "approvalId": r.grounding_approval_id, "groundingBasis": r.grounding_basis,
+            "constraintRef": str(r.format_constraint_ref) if r.format_constraint_ref else None, "inputMode": str(r.input_mode), "ciSnapshot": r.ci_inputs_snapshot, "structured": s,
+            "revisionOf": s.get("revision_of"), "createdAt": r.created_at}
+
+
+def backend_terms_for(tenant_id: UUID, pack_request_key: str) -> list[str] | None:
+    """The Amazon backend terms written alongside an original pack: the sibling artefact saved under the derived key (`<key>:copy` -> `<key>:terms`). None when there are none."""
+    if not pack_request_key.endswith(":copy"):
+        return None
+    key = pack_request_key[: -len(":copy")] + ":terms"
+    with tenant_scope(tenant_id) as conn:
+        r = conn.execute(_TERMS, {"t": tenant_id, "k": key}).first()
+    return [str(x) for x in r.terms] if r is not None and isinstance(r.terms, list) else None
+
+
+def listing_states(tenant_id: UUID, generation_id: UUID) -> dict[str, Any]:
+    """The separate recorded facts about ONE saved version: generated, audited, approved for use, copied, marked used. There is no published/live state: Metrion cannot know it."""
+    with tenant_scope(tenant_id) as conn:
+        ev = {r.event_kind: (int(r.n), r.last_at) for r in conn.execute(_EVENT_STATES, {"t": tenant_id, "g": generation_id})}
+        aud = conn.execute(_AUDITED, {"t": tenant_id, "g": generation_id}).first()
+
+    def at(kind: str) -> str | None:
+        return ev[kind][1].isoformat() if kind in ev else None
+
+    return {
+        "generated": {"done": "GENERATED" in ev, "at": at("GENERATED")},
+        "audited": {"done": aud is not None, "at": aud.created_at.isoformat() if aud else None, "verdict": str(aud.verdict) if aud else None},
+        "approvedForUse": {"done": "APPROVED" in ev, "at": at("APPROVED"), "meaning": "Approved for use in Metrion; not published."},
+        "copied": {"count": ev.get("COPIED", (0, None))[0], "at": at("COPIED")},
+        "markedUsed": {"count": ev.get("MARKED_USED", (0, None))[0], "at": at("MARKED_USED")},
+        "published": {"known": False, "note": "Metrion cannot see or change what is on a marketplace."},
+    }
+
+
+def record_approved(tenant_id: UUID, user_id: UUID, generation_id: UUID) -> bool:
+    """Append the seller's approval of this exact saved version (once per version). True when newly written. 0 units; never a metered event; not a publication."""
+    with tenant_scope(tenant_id) as conn:
+        if conn.execute(_PACK, {"t": tenant_id, "g": generation_id}).first() is None:
+            return False
+        return conn.execute(_APPROVE, {"t": tenant_id, "g": generation_id, "u": user_id}).rowcount == 1
+
+
+_LATEST_PACK = text(
+    """
+    SELECT id FROM cmo_generation WHERE tenant_id = :t AND output_type = 'LISTING_COPY' AND status = 'COMPLETE'
+      AND (CAST(:sku AS text) IS NULL OR sku = :sku) AND (CAST(:mp AS text) IS NULL OR marketplace = :mp)
+    ORDER BY created_at DESC, id LIMIT 1
+    """
+)
+
+
+def latest_listing_pack(tenant_id: UUID, *, sku: str | None = None, marketplace: str | None = None) -> UUID | None:
+    """The id of the seller's newest complete listing pack (for one product / marketplace when given), or None."""
+    with tenant_scope(tenant_id) as conn:
+        row = conn.execute(_LATEST_PACK, {"t": tenant_id, "sku": sku, "mp": marketplace}).first()
+    return row.id if row else None

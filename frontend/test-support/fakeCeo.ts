@@ -237,6 +237,8 @@ export class FakeCeo {
           return { agent, attached };
         }),
       getAttachmentImage: (id: string, attachmentId: string) => rec("getAttachmentImage", [id, attachmentId], () => `blob:fake-${attachmentId}`),
+      approveListing: (generationId: string) => rec("approveListing", [generationId], () => ({ approved: true, message: "Approved for use in Metrion; not published.", banner: null })),
+      recordListingCopy: (generationId: string) => rec("recordListingCopy", [generationId], () => true),
       uploadAttachment: (id: string, file: File) =>
         rec("uploadAttachment", [id, file.name], (): UploadedAttachment => {
           this.visible(id);

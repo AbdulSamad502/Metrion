@@ -21,6 +21,7 @@ from slim_cmo.generation.prompts import prompt_facts, title_prompt
 from slim_cmo.generation.provider import LlmProvider
 from slim_cmo.generation.safety import ProseFinding, feedback_lines, ineligible_names, prose_findings, rule_ids
 from slim_cmo.textnorm import clean_generated_text
+from slim_cmo.listing.basis import rules_basis_of
 from slim_cmo.types import Marketplace, OutputType
 from slim_cmo.validators import AcceptedOption, TitleSetEvaluation, evaluate_title_set
 
@@ -88,7 +89,8 @@ def generate_title_set(
         "short": short,
         "short_label": SHORT_SET_LABEL if short else None,
         "constraint": c.cite(),
-        "count_rule": c.count_rule.value if c.count_rule else None,
+        "rules_basis": rules_basis_of(c),
+        "count_rule": c.count_rule.value if c.count_rule and rules_basis_of(c) == "VERIFIED" else None,
         "unverified_limits": list(resolved.unverified_limits),
         "attempts": log.attempts,
         "excluded_facts": list(facts.excluded),

@@ -27,8 +27,10 @@ from slim_cmo.generation.parse import Parsed
 from slim_cmo.generation.prompts import pack_prompt, pack_repair_prompt, prompt_facts
 from slim_cmo.generation.provider import LlmProvider
 from slim_cmo.generation.safety import REPAIR_HINTS, feedback_lines, ineligible_names, prose_findings, rule_ids
+from slim_cmo.listing.basis import rules_basis_of
+from slim_cmo.listing.context import ListingContext, untraceable
 from slim_cmo.types import Marketplace, OutputType
-from slim_cmo.validators import ListingCopyCheck, check_listing_copy
+from slim_cmo.validators import ListingCopyCheck, Violation, ViolationCode, check_listing_copy
 
 STRUCTURED_FIELDS_UNVERIFIED = {
     "state": "NEEDS_SELLER_INPUT",
@@ -46,9 +48,12 @@ def generate_listing_copy(
     facts: FactContext,
     anchor_title: str,
     retry_bound: int,
+    listing: ListingContext | None = None,
 ) -> Outcome:
     c = resolved.row
     pf = prompt_facts(facts)
+    extra = listing.prompt_extra() if listing is not None else None
+    vocab = listing.keyword_vocab if listing is not None and listing.keyword_vocab else None
     delivered: dict[str, ListingCopyCheck | None] = {"pack": None}
     repair: dict[str, Any] = {}  # set after attempt 1 when the only problems are unsupported claims
 
@@ -59,7 +64,7 @@ def generate_listing_copy(
                 description_rules=repair["description"], bullet_rules=[repair["bullets"][i] for i in repair["bad_bullets"]],
                 keywords_rules=repair["keywords"], kept_bullets=[t for i, t in enumerate(repair["pack"].bullets) if i not in repair["bad_bullets"]],
             )
-        return pack_prompt(marketplace=marketplace, facts=pf, anchor_title=anchor_title, constraint=c, feedback=feedback)
+        return pack_prompt(marketplace=marketplace, facts=pf, anchor_title=anchor_title, constraint=c, feedback=feedback, listing_extra=extra)
 
     def judge(description: Any, bullets: Any, keywords: Any) -> tuple[ListingCopyCheck, tuple[Any, ...]]:
         check = check_listing_copy(description, bullets, keywords, c, allowed_context=facts.allowed_context)
@@ -69,13 +74,16 @@ def generate_listing_copy(
         return check, prose_findings(items, facts, extra_allowed=[anchor_title])
 
     def verdict(check: ListingCopyCheck, prose: tuple[Any, ...]) -> Evaluation:
-        if check.valid and not prose:
+        # M6: on a full-listing request the keywords field may only hold researched candidates (spec 6.18.4). Position/counts only; never the seller's text.
+        loose = tuple(Violation(ViolationCode.NOT_TRACEABLE, f"keywords[{i}]") for i in untraceable(check.keywords, vocab)) if vocab is not None else ()
+        if check.valid and not prose and not loose:
             delivered["pack"] = check
             return Evaluation(done=True)
+        violations = (*check.violations, *loose)
         return Evaluation(
             done=False,
-            feedback=feedback_lines(check.violations, prose),
-            violation_ids=rule_ids(check.violations, prose),
+            feedback=feedback_lines(violations, prose),
+            violation_ids=rule_ids(violations, prose),
             ineligible_names=ineligible_names(prose),
         )
 
@@ -111,7 +119,7 @@ def generate_listing_copy(
             return verdict(check, prose)
         check, prose = judge(p["description"], p["bullets"], p["keywords"])
         result = verdict(check, prose)
-        if not result.done and not check.violations and prose and all(f.kind == "UNSUPPORTED_CLAIM" for f in prose):
+        if not result.done and not check.violations and prose and all(f.kind == "UNSUPPORTED_CLAIM" for f in prose) and (vocab is None or not untraceable(check.keywords, vocab)):
             start_repair(check, prose)
         return result
 
@@ -128,7 +136,8 @@ def generate_listing_copy(
         {
             "marketplace": marketplace.value,
             "constraint": c.cite(),
-            "count_rule": c.count_rule.value if c.count_rule else None,
+            "rules_basis": rules_basis_of(c),
+            "count_rule": c.count_rule.value if c.count_rule and rules_basis_of(c) == "VERIFIED" else None,
             "description_type": c.description_type,
             "unverified_limits": list(resolved.unverified_limits),
             "attempts": log.attempts,

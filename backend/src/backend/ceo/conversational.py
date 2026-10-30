@@ -45,7 +45,7 @@ _CHAT_ACTIONS: tuple[tuple[str, str], ...] = (  # registry/action key -> what th
     ("ci.request_price_scenario", "a price scenario against one named competitor"), ("pi.discover", "a product research run (shown to you for approval where it applies)"),
     ("pi.report", "the latest product research report"), ("cmo.generate_title_sets", "listing titles"), ("cmo.generate_description", "a product description"),
     ("cmo.generate_keywords", "search keywords"), ("cmo.generate_bullets", "listing bullet points"), ("cmo.generate_backend_terms", "Amazon backend search terms"),
-    ("cmo.generate_listing_copy", "a full listing copy pack"), ("cmo.generate_hashtags", "hashtags"), ("cmo.market_trends", "a market-trends search (with the searches shown first)"),
+    ("cmo.generate_listing_copy", "a full listing copy pack"), ("cmo.generate_full_listing", "a complete, audited listing"), ("cmo.rewrite_listing_section", "a rewrite of one bullet or the description of your saved listing"), ("cmo.generate_hashtags", "hashtags"), ("cmo.market_trends", "a market-trends search (with the searches shown first)"),
 )
 NOT_YET_TEXT = (
     "Not available from chat yet: reading a competitor screenshot (those go on the Competitors page) or an image attached to anything other than a titles or listing-copy request (a product photo attached to such a request is read only after you approve it), "

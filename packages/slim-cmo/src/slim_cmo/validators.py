@@ -58,6 +58,7 @@ class ViolationCode(str, Enum):
     BYTES_EXCEEDED = "BYTES_EXCEEDED"
     FORBIDDEN_CONTENT = "FORBIDDEN_CONTENT"
     INVALID_HASHTAG = "INVALID_HASHTAG"
+    NOT_TRACEABLE = "NOT_TRACEABLE"  # M6: a keyword that is not one of the researched candidates
 
 
 @dataclass(frozen=True, slots=True)
@@ -308,14 +309,15 @@ class BackendTermsCheck:
         return not self.violations
 
 
-def check_backend_terms(raw: object, c: FormatConstraint, *, allowed_context: str | None = None) -> BackendTermsCheck:
-    cap = int(_need(c.backend_terms_max_bytes, "backend_terms_max_bytes"))
+def check_backend_terms(raw: object, c: FormatConstraint, *, allowed_context: str | None = None, allow_unstated_cap: bool = False) -> BackendTermsCheck:
+    """`allow_unstated_cap` is True only on the M6 rules-unavailable basis: the length is then measured and no cap is enforced or guessed. Everywhere else the cap is required."""
+    cap = c.backend_terms_max_bytes if allow_unstated_cap else int(_need(c.backend_terms_max_bytes, "backend_terms_max_bytes"))
     items, violations = _check_lines(raw, field="backend_terms", max_chars=None, allowed_context=allowed_context, rule=None)
     if isinstance(raw, (list, tuple)) and not items:
         violations.append(Violation(ViolationCode.EMPTY, "backend_terms"))
     joined = BACKEND_TERMS_JOINER.join(t for t in items if t)
     size = utf8_bytes(joined)
-    if size > cap:
+    if cap is not None and size > cap:
         violations.append(Violation(ViolationCode.BYTES_EXCEEDED, "backend_terms", f"{size}>{cap}"))
     return BackendTermsCheck(tuple(items), joined, size, tuple(violations))
 

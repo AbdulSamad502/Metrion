@@ -557,6 +557,9 @@ def _run_admitted(
         readiness = cmo_chat.readiness_reply(ctx, text, inv_id)  # CMO 3.0 M5: buyer questions, listing readiness, and the seller's own answer to a question (free; no model)
         if readiness is not None:
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, readiness[0], now, marker={"cmoReadiness": True}, choices=readiness[1])
+        listing = cmo_chat.listing_reply(ctx, text)  # CMO 3.0 M6: the seller's own section edit ("Change bullet 3 to: ...") or "show my listing" (free; no model; typed text never approves)
+        if listing is not None:
+            return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, listing[0], now, marker={"cmoListing": True}, choices=({**listing[1], "investigationId": str(inv_id)} if listing[1] else None))
         cmo_reply = cmo_profile.direct_reply(ctx, text) or cmo_chat.direct_reply(ctx, text)  # CMO 3.0 M1: "remember my AquaNest bottle?" shows the saved profile; M0: "is my bottle dishwasher safe?" is answered from what the seller confirmed, else "not confirmed"; no model, nothing run
         if cmo_reply is not None:
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, cmo_reply, now, marker={"cmoDirect": True})
@@ -713,6 +716,8 @@ def _run_admitted(
             if cmo_delegated:  # a product the seller already gave in this conversation is carried forward when they say "it" / "this product": it is not asked again
                 all_plans = repo_plans(tenant, inv_id)
                 prefill = cmo_delegation.prefill_for(key, decision.slots, repo.list_messages(tenant, inv_id), all_plans)
+                if key == cmo_delegation.REWRITE_KEY:  # CMO 3.0 M6 (Q26): the section and topic the seller already said are not asked again
+                    prefill = {**prefill, **cmo_chat.rewrite_prefill(text)}
                 if prefill.get("marketplace") and normalise_marketplace(text) is None:  # a marketplace the seller did not write is never taken from a model: it is asked
                     prefill = {k: v for k, v in prefill.items() if k != "marketplace"}
                 saved, saved_name = ({}, None) if key == "cmo.market_trends" else cmo_chat.saved_answers(tenant, prefill.get("product"))  # CMO 3.0 M0: what the seller confirmed about this product before
@@ -789,6 +794,12 @@ def _run_admitted(
                     if approval_id:
                         direct.pop("seller_title")
                         direct["approval_id"] = approval_id
+                if key == "cmo.generate_full_listing" and invalid_form is None:  # CMO 3.0 M6: a title, enough non-contradictory facts and researched keywords, checked BEFORE the plan card (nothing is charged or saved)
+                    invalid_form = cmo_chat.full_listing_refusal(tenant, direct)
+                if key == cmo_delegation.REWRITE_KEY and invalid_form is None:  # CMO 3.0 M6 (Q26): the saved listing, the section and a confirmed topic, checked BEFORE the plan card
+                    rewrite_slots, invalid_form = cmo_chat.rewrite_prepare(tenant, ctx.app_user_id, direct)
+                    if rewrite_slots is not None:
+                        direct = rewrite_slots
             resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct=direct)
             notes = list(resolved.echoes())
             input_session.remember_confirmed(tenant, key, run_inputs, source_ref={"message_id": str(user_msg)}, user_id=ctx.app_user_id)  # CMO's private choice, best-effort (agent-memory C6)
@@ -1011,7 +1022,7 @@ def _run_admitted(
 
 
 # ------------------------------------------------------------------------------------------------ pieces
-GROUNDED_CMO_KEYS = frozenset({"cmo.generate_description", "cmo.generate_keywords", "cmo.generate_bullets", "cmo.generate_backend_terms", "cmo.generate_listing_copy"})
+GROUNDED_CMO_KEYS = frozenset({"cmo.generate_description", "cmo.generate_keywords", "cmo.generate_bullets", "cmo.generate_backend_terms", "cmo.generate_listing_copy", "cmo.generate_full_listing"})
 VISION_UNAVAILABLE_TEXT = (
     "The vision service that reads photos is not available (it is not set up as one Metrion controls), so I did not read your photo, sent nothing, and used nothing up. "
     "You can type the product details instead and I will ask for what is missing."
@@ -1067,8 +1078,14 @@ def _plan_turn(
                 d.append(cmo_delegation.CI_USED_LINE.format(n=len(slots["ci_insight_ids"])))
             else:
                 d.append(cmo_delegation.ci_unused_line(cmo_ci_inputs.broker(ctx.tenant_id, ctx.role, ctx.permissions, now=runtime.clock())[1]))
+        rules_short: str | None = None
+        if d and k == cmo_delegation.FULL_LISTING_KEY:  # CMO 3.0 M6: whether marketplace rules are verified is stated on the card BEFORE approval (and a draft is never presented as checked)
+            extra, rules_short = cmo_chat.full_listing_plan_lines(ctx.tenant_id, slots)
+            d.extend(extra)
         if d and len(legs) == 1:  # a delegated CMO task: a purpose-written title and short lines for the card; the full details above stay complete in the plan
             compact, title = cmo_delegation.compact_lines(k, slots, preview), cmo_delegation.plan_title(k, slots)
+            if rules_short:
+                compact.insert(max(len(compact) - 1, 0), rules_short)
         if d and slots.get("approval_id"):
             approved = cmo_chat.approval_text(ctx.tenant_id, str(slots["approval_id"]))
             if approved:

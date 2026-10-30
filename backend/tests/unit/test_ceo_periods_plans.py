@@ -87,6 +87,8 @@ def test_every_planned_action_is_a_wired_registry_action_with_valid_slots():
         "cmo.generate_bullets": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
         "cmo.generate_backend_terms": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
         "cmo.generate_listing_copy": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
+        "cmo.generate_full_listing": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle", "sku": "bottle"},
+        "cmo.rewrite_listing_section": {"request_key": "k", "generation_id": "00000000-0000-0000-0000-000000000001", "target": "bullet", "bullet_number": 3, "topic": "wide opening", "sku": "bottle", "marketplace": "AMAZON", "product_name": "bottle"},
         "cmo.catalog_answer": {"request_key": "k", "product_name": "bottle", "questions": ["COLOR"]},
         "cmo.keyword_intelligence": {"request_key": "k", "sku": "bottle"},
         "cmo.analyze_titles": {"request_key": "k", "generation_id": "00000000-0000-0000-0000-000000000001"},

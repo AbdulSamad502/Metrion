@@ -35,11 +35,14 @@ EXPECTED_ROUTES = {
     "/api/v1/cmo/title-approvals", "/api/v1/cmo/image-hints/confirm",
     "/api/v1/cmo/keyword-intelligence",  # CMO 3.0 M2: zero-unit keyword analysis
     "/api/v1/cmo/title-analysis",  # CMO 3.0 M3: zero-unit title comparison
+    "/api/v1/cmo/full-listing",  # CMO 3.0 M6: the complete listing, billed per artefact on the existing path
+    "/api/v1/cmo/listing-rewrite",  # CMO 3.0 M6 (Q26): the model rewrites one section of a saved version; 1 unit, a new version
+    "/api/v1/cmo/listing/{generation_id}", "/api/v1/cmo/listing/{generation_id}/approve", "/api/v1/cmo/listing/{generation_id}/edit",  # CMO 3.0 M6: the audited card; approve for use (a click); the seller's own edit
     "/api/v1/cmo/images", "/api/v1/cmo/image-analyses",  # P6: explicit zero-unit image actions
     "/api/v1/cmo/niche-terms/suggest", "/api/v1/cmo/niche-terms/confirm", "/api/v1/cmo/niche-terms",  # P7d: zero-unit niche flow
     "/api/v1/cmo/market-trends/preview", "/api/v1/cmo/market-trends", "/api/v1/cmo/market-trends/{generation_id}",  # P7f
 }
-READ_ONLY_ROUTES = {"/api/v1/cmo/niche-terms", "/api/v1/cmo/market-trends/{generation_id}"}  # GET-only; /market-trends is POST + GET
+READ_ONLY_ROUTES = {"/api/v1/cmo/niche-terms", "/api/v1/cmo/market-trends/{generation_id}", "/api/v1/cmo/listing/{generation_id}"}  # GET-only; /market-trends is POST + GET
 
 
 class TestRouteSurface:

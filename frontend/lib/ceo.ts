@@ -89,6 +89,30 @@ export type ReadinessCard = {
 };
 export const isReadinessCard = (c: unknown): c is ReadinessCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "READINESS" && !!(c as { readiness?: unknown }).readiness;
 
+/** The complete, audited listing (CMO 3.0 M6; backend: services/cmo_listing.build_card). Data only: text, statuses and findings. Nothing here is a score, a demand or ranking figure, or a claim that
+ * the listing is published, live or accepted by a marketplace. */
+export type ListingAuditCheck = { id: string; name: string; status: "PASS" | "FAIL" | "NOT_ASSESSED" | "NOT_APPLICABLE"; detail: string };
+export type ListingAuditFinding = { check: string; severity: "BLOCKER" | "WARNING" | "NOTE"; section: string; code: string; explanation: string; correction: string | null };
+export type ListingCiRow = { theme: string; sharedBy: { count: number; of: number }; support: "SUPPORTED" | "CONSIDER_IF_TRUE"; insightIds: string[]; sources: string[]; limitation: string };
+export type ListingCard = {
+  version: number; kind: "LISTING"; notice: string; investigationId: string | null; generationId: string; marketplace: PreviewMarketplace; rulesBasis: "VERIFIED" | "UNVERIFIED";
+  banner: string | null; strategy: string; revisionOf: string | null;
+  sections: { title: string; bullets: string[]; description: string; keywords: string[]; backend_terms: string[] | null };
+  keywordMap: {
+    candidates: { keyword: string; placed: boolean; where: { section: string; count: number }[]; intent: string | null; reason: string | null }[];
+    notUsed: { keyword: string; reason: string }[]; excluded: { keyword: string; reason: string }[]; limits: string;
+  };
+  audit: { auditId: string; contentHash: string; verdict: "BLOCKED" | "NEEDS_ATTENTION" | "CHECKED_NOT_VERIFIED"; counts: { blockers: number; warnings: number; notes: number }; checks: ListingAuditCheck[];
+    findings: ListingAuditFinding[]; limits: string; method: string; createdAt: string };
+  ci: { rows: ListingCiRow[]; considerIfTrue: string[]; used: boolean };
+  states: {
+    generated: { done: boolean; at: string | null }; audited: { done: boolean; at: string | null; verdict: string | null }; approvedForUse: { done: boolean; at: string | null; meaning: string };
+    copied: { count: number; at: string | null }; markedUsed: { count: number; at: string | null }; published: { known: false; note: string };
+  };
+  editHint: string; approveHint: string;
+};
+export const isListingCard = (c: unknown): c is ListingCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "LISTING" && !!(c as { audit?: unknown }).audit;
+
 export const isPickCard = (c: unknown): c is PickCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "PICK" && Array.isArray((c as { items?: unknown }).items);
 
 export type CeoMessage = {
@@ -99,7 +123,7 @@ export type CeoMessage = {
   turn_id: string | null;
   created_at: string;
   /** Only a CEO CLARIFICATION message that has real candidates to offer. */
-  choices?: ClarificationCard | PickCard | PreviewCard | ReadinessCard | null;
+  choices?: ClarificationCard | PickCard | PreviewCard | ReadinessCard | ListingCard | null;
   /** Client-only: a message the seller just sent that the server has not echoed back yet. */
   pending?: boolean;
   /** The send failed and the thread could not be refreshed, so the server's copy is unknown: shown as not sent, never as still sending. */
@@ -311,6 +335,17 @@ export function createCeoClient(getToken: GetToken) {
       const res = await fetch(`${API_BASE}${BASE}/investigations/${id}/attachments/${attachmentId}/image`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new ApiError(res.status, "image not available");
       return URL.createObjectURL(await res.blob());
+    },
+    /** "Approve for use": a click bound to one saved listing version. Records the seller's decision in Metrion; costs nothing; publishes nothing. */
+    approveListing: async (generationId: string): Promise<{ approved: boolean; message: string; banner: string | null }> =>
+      apiFetch(`/api/v1/cmo/listing/${encodeURIComponent(generationId)}/approve`, await getToken(), { method: "POST" }),
+    /** Best-effort record that the seller copied the listing text (the existing usage-event route). Never blocks the copy. */
+    recordListingCopy: async (generationId: string): Promise<boolean> => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`${API_BASE}/api/v1/cmo/showcase/usage-events`, { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ generationId, kind: "COPIED", surface: "CHAT" }) });
+        return res.ok;
+      } catch { return false; }
     },
     uploadAttachment: async (id: string, file: File) => {
       const form = new FormData();

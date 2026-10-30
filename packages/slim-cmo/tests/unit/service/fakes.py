@@ -89,7 +89,7 @@ class InMemoryStore:
                 assert r.marketplace is not None
                 opts = tuple(StoredOption(oid, o.rank, o.text) for oid, o in zip(self.option_ids[gid], r.options, strict=True))
                 ctx = (r.output_structured or {}).get("category_context") or {}
-                return StoredTitleSet(gid, r.marketplace, r.sku, opts, ctx.get("category_hint"))
+                return StoredTitleSet(gid, r.marketplace, r.sku, opts, ctx.get("category_hint"), (r.output_structured or {}).get("workflow"))
         return None
 
     def load_image_analysis(self, tenant_id: UUID, analysis_id: UUID) -> StoredAnalysis | None:

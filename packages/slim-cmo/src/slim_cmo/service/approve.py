@@ -24,6 +24,7 @@ from uuid import UUID
 
 from slim_cmo.config import FORMAT_CONSTRAINT_MAX_AGE_DAYS
 from slim_cmo.constraints import ConstraintUnavailable, resolve_constraint
+from slim_cmo.listing import basis as rules_basis
 from slim_cmo.service.errors import InvalidApproval, NotFound
 from slim_cmo.service.models import Actor, GenerationStore
 from slim_cmo.types import ConstraintRowKind, OutputType
@@ -82,7 +83,7 @@ class ApprovalService:
         text = edited_text.strip()
         if not text:
             raise InvalidApproval("edited_text is empty")
-        values = self._store.load_config(actor.tenant_id, (FORMAT_CONSTRAINT_MAX_AGE_DAYS,), self._clock().date())
+        values = self._store.load_config(actor.tenant_id, (FORMAT_CONSTRAINT_MAX_AGE_DAYS, rules_basis.FLAG_KEY), self._clock().date())
         rows = self._store.load_constraints(actor.tenant_id, title_set.marketplace, self._kinds)
         max_age = values.get(FORMAT_CONSTRAINT_MAX_AGE_DAYS)
         resolved = resolve_constraint(
@@ -90,7 +91,16 @@ class ApprovalService:
             now=self._clock(), max_age_days=max_age if isinstance(max_age, int) else None, accepted_row_kinds=self._kinds,
         )
         if isinstance(resolved, ConstraintUnavailable):
-            return ApprovalRefused("CONSTRAINT_BLOCKED", resolved.detail)
+            # Owner decision 2026-10-30 (spec 6.18.11): a title set the SERVER generated inside a full-listing request carries that marker, and only then, with the operator flag on
+            # and no usable verified row, may a seller-edited title be checked without a marketplace length. A verified row, a configuration fault or any other title set keeps C13.
+            settings = rules_basis.BasisSettings(enabled=rules_basis.parse_flag(values.get(rules_basis.FLAG_KEY)), bullet_target=None, workflow=title_set.workflow)
+            if not rules_basis.applies(resolved, settings):
+                off = rules_basis.disabled_reason(settings) if resolved.reason in rules_basis.ELIGIBLE_REASONS else None
+                return ApprovalRefused("CONSTRAINT_BLOCKED", f"{resolved.detail}; {off}" if off else resolved.detail)
+            resolved = rules_basis.synthetic(
+                title_set.marketplace, settings=settings, title_option_count=rules_basis.DRAFT_TITLE_OPTION_COUNT, now=self._clock(), needs_bullets=False,
+            )
+            assert not isinstance(resolved, ConstraintUnavailable)
         check = check_title(text, resolved.row, field="title")
         if not check.valid:
             return ApprovalRefused(

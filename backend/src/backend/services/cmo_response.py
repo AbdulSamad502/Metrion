@@ -34,6 +34,7 @@ def _cite(structured: Mapping[str, Any]) -> dict[str, Any] | None:
 def _rule_fields(structured: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "thinInput": bool(structured.get("thin_input")),
+        "rulesBasis": structured.get("rules_basis") if structured.get("rules_basis") in ("VERIFIED", "UNVERIFIED") else None,
         "constraint": _cite(structured),
         "unverifiedLimits": _strs(structured.get("unverified_limits")),
         "countRule": structured.get("count_rule"),

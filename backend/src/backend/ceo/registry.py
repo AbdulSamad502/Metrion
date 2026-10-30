@@ -464,6 +464,8 @@ def build_default_registry() -> ActionRegistry:
         ("cmo.generate_title_sets", "post_title_sets", Effect.GENERATE_METERED, ()),
         ("cmo.approve_title", "post_title_approval", Effect.RECORD_CHOICE, ()),
         ("cmo.generate_listing_copy", "post_listing_copy", Effect.GENERATE_METERED, ()),
+        ("cmo.generate_full_listing", "post_full_listing", Effect.GENERATE_METERED, ()),
+        ("cmo.rewrite_listing_section", "post_listing_rewrite", Effect.GENERATE_METERED, ()),
         ("cmo.generate_description", "post_description", Effect.GENERATE_METERED, ()),
         ("cmo.generate_bullets", "post_bullets", Effect.GENERATE_METERED, ()),
         ("cmo.generate_keywords", "post_keywords", Effect.GENERATE_METERED, ()),

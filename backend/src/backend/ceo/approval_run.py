@@ -273,6 +273,14 @@ def _run_frozen(ctx: AuthContext, runtime: CeoRuntime, plan_id: UUID, plan: dict
             pick_card = ci_conversation.candidate_card(tenant)
         except Exception:  # noqa: BLE001 - the list is a convenience: the search result above stands without it
             logger.exception("could not list the discovery leads")
+    if key in ("cmo.generate_full_listing", "cmo.rewrite_listing_section"):  # CMO 3.0 M6: the complete listing (or the new version after a rewrite) rides on this answer as a LISTING card
+        leg = next((l for l in legs if l.action_key == key and l.payload), None)
+        card = (leg.payload or {}).get("card") if leg is not None else None
+        if isinstance(card, dict) and card.get("kind") == "LISTING":
+            pick_card = {**card, "investigationId": str(turn.investigation_id)}
+            answer += "\n\n" + ("The card below shows the new version: only the section you named changed, and the earlier version is still saved. Nothing is published, and approving it for use only records your decision in Metrion."
+                                  if key == "cmo.rewrite_listing_section" else
+                                  "The card below shows the listing, where each researched keyword is used, the audit and what it could not check. Nothing is published, and approving it for use only records your decision in Metrion.")
     if chain_run is not None:
         case = ceo_pi_research.load_case(tenant, chain_run)
         if case is not None:  # the seller reads the five-product summary, written by code from the saved case; the "View Detailed Research" link comes from the pi.report finding

@@ -21,12 +21,12 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from slim_cmo import billing
 from slim_cmo.catalog.attributes import CatalogAttribute
@@ -47,7 +47,7 @@ from slim_cmo.types import Marketplace, OutputType, TrendSection
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CMO, CATALOG_VIEW, FILES_UPLOAD, RESEARCH_MARKET_TRENDS, has_permission
-from backend.services import cmo_actions, cmo_ci_inputs, cmo_images, cmo_runtime, cmo_trends
+from backend.services import cmo_actions, cmo_ci_inputs, cmo_images, cmo_listing, cmo_runtime, cmo_trends
 from backend.services.cmo_actions import Principal, QuotaDenied, RequestInProgress
 from backend.services.cmo_runtime import CmoNotConfigured
 from backend.uploads import read_upload_capped
@@ -98,6 +98,36 @@ class GroundedBody(ProductBody):
     seller_title: str | None = Field(default=None, max_length=_TEXT)
 
 
+class FullListingBody(GroundedBody):
+    """CMO 3.0 M6 (spec 6.18): one approved title -> the pack, Amazon backend terms, optional hashtags (off unless asked), then the audit. Nothing here can switch the unverified-rules basis on."""
+
+    include_hashtags: bool = False
+
+
+class ListingEditBody(_Body):
+    message: str = Field(min_length=1, max_length=2500)
+
+
+class ListingRewriteBody(_Body):
+    """CMO 3.0 M6 (spec 6.18.7, Q26): the model rewrites ONE bullet or the description of a saved version to mention a topic the seller's confirmed facts carry. Declared fields only: no tenant,
+    meter, cap, rules-basis or workflow field exists. `sku`, `marketplace` and `product_name` are what the seller named; the saved version must match them."""
+
+    request_key: str = Field(min_length=1, max_length=128)
+    generation_id: UUID
+    target: Literal["bullet", "description"]
+    bullet_number: int | None = Field(default=None, ge=1, le=20)
+    topic: str = Field(min_length=2, max_length=80)
+    sku: str | None = Field(default=None, max_length=128)
+    marketplace: Marketplace | None = None
+    product_name: str | None = Field(default=None, max_length=_NAME)
+
+    @model_validator(mode="after")
+    def _section_shape(self) -> "ListingRewriteBody":
+        if (self.target == "bullet") != (self.bullet_number is not None):
+            raise ValueError("bullet_number is required for a bullet and not allowed for the description")
+        return self
+
+
 class HashtagsBody(ProductBody):
     marketplace: Marketplace | None = None
 
@@ -138,6 +168,7 @@ def _intake(body: ProductBody, agent_run_id: UUID | None) -> Intake:
         category_hint=body.category_hint, attributes=tuple((a.name, a.value) for a in body.attributes),
         notes=tuple(body.notes), target_price_paise=body.target_price_paise, image_analysis_id=body.image_analysis_id,
         text_only_confirmed=body.text_only_confirmed, agent_run_id=agent_run_id, ci_inputs=body._ci,
+        listing=cmo_listing.workflow_context(),  # M6: set by the server's own plan only (never a request field); None for every ordinary request
     )
 
 
@@ -184,6 +215,8 @@ def _guarded(fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail={"code": "INVALID_NICHE_REQUEST", "detail": str(exc)}) from None
     except InvalidConfirmation as exc:
         raise HTTPException(status_code=422, detail={"code": "INVALID_CONFIRMATION", "detail": str(exc)}) from None
+    except cmo_listing.ListingRefused as exc:
+        raise HTTPException(status_code=exc.status, detail={"code": exc.code, "detail": exc.detail, "missing": list(exc.missing)}) from None
     except NotFound:
         raise HTTPException(status_code=404, detail="Not found") from None  # unknown and cross-tenant look identical
     except QuotaDenied as exc:
@@ -283,6 +316,56 @@ def post_keywords(body: GroundedBody, ctx: AuthContext = require_auth(permission
 @router.post("/backend-terms")
 def post_backend_terms(body: GroundedBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
     return _standalone(ctx, body, OutputType.BACKEND_TERMS, billing.Action.GENERATE_BACKEND_TERMS)
+
+
+@router.post("/full-listing")
+def post_full_listing(body: FullListingBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The complete, audited listing for ONE marketplace (CMO 3.0 M6). Each artefact is billed on the proven per-artefact path; the audit, keyword map and card are free."""
+    def go() -> dict[str, Any]:
+        body._ci = cmo_ci_inputs.load_inputs(ctx, body.ci_insight_ids) if body.ci_insight_ids else None  # 404 for an id that is not the seller's; None = run independently
+        return cmo_listing.run_full_listing(ctx, body, make_intake=_intake)
+
+    return _guarded(go)
+
+
+@router.get("/listing/{generation_id}")
+def get_listing(generation_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The `LISTING` card for one saved pack (audited once per version; free)."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_listing.build_card(ctx.tenant_id, ctx.app_user_id, cmo_runtime.build_runtime(), generation_id)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.post("/listing/{generation_id}/approve")
+def post_listing_approve(generation_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """"Approve for use": a click bound to this exact saved version. Zero units. Not a publication."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_listing.approve_for_use(ctx.tenant_id, ctx.app_user_id, cmo_runtime.build_runtime(), generation_id)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.post("/listing/{generation_id}/edit")
+def post_listing_edit(generation_id: UUID, body: ListingEditBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The seller's own section edit (spec 6.18.7a): free, deterministic, saved as a new version; a refused edit saves nothing."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_listing.apply_edit(ctx.tenant_id, ctx.app_user_id, cmo_runtime.build_runtime(), generation_id, body.message)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.post("/listing-rewrite")
+def post_listing_rewrite(body: ListingRewriteBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The model rewrites one section of a saved version (CMO 3.0 M6, Q26). One unit, only when a rewrite is delivered; the result is a NEW immutable version, audited; nothing else changes."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_listing.rewrite_section(ctx, body)
+
+    return _guarded(go)
 
 
 @router.post("/hashtags")

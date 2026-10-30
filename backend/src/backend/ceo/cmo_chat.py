@@ -343,3 +343,40 @@ def readiness_reply(ctx: Any, text: str, investigation_id: UUID) -> tuple[str, d
         logger.exception("could not build the readiness card")
         return "I could not build that just now. Nothing was changed or used up. Please try again.", None
     return cmo_readiness.chat_text(card), card
+
+
+# ------------------------------------------------------------------------------------------------ CMO 3.0 M6: the complete listing
+def full_listing_refusal(tenant_id: UUID, direct: Mapping[str, Any]) -> str | None:
+    """The plain reason a complete listing cannot be planned yet, else None (the same preflight the handler runs, before any plan card exists: nothing is charged or saved on a refusal)."""
+    from backend.services import cmo_listing  # noqa: PLC0415
+
+    return cmo_listing.chat_refusal(tenant_id, direct)
+
+
+def listing_reply(ctx: Any, text: str) -> tuple[str, dict[str, Any] | None] | None:
+    """CMO 3.0 M6: the seller's own section edit, or "show my listing" (free). None when the message is neither."""
+    from backend.services import cmo_listing  # noqa: PLC0415
+
+    return cmo_listing.chat_reply(ctx, text)
+
+
+def full_listing_plan_lines(tenant_id: UUID, slots: Mapping[str, Any]) -> tuple[list[str], str | None]:
+    """CMO 3.0 M6: the marketplace-rules sentence for the plan card (and one short compact line). Empty when it cannot be worked out; never an invented rule statement."""
+    from backend.services import cmo_listing  # noqa: PLC0415
+
+    return cmo_listing.plan_lines(tenant_id, slots)
+
+
+def rewrite_prepare(tenant_id: UUID, user_id: UUID, direct: Mapping[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    """CMO 3.0 M6 (Q26): (the closed slots of the rewrite plan, None) or (None, the plain reason it cannot be planned), checked BEFORE the plan card: the seller's latest saved listing for the
+    product and marketplace, the section, and a topic their confirmed facts carry. Nothing is charged or saved."""
+    from backend.services import cmo_listing  # noqa: PLC0415
+
+    return cmo_listing.chat_rewrite_prepare(tenant_id, user_id, direct)
+
+
+def rewrite_prefill(text: str) -> dict[str, str]:
+    """The section and topic already named in "rewrite bullet 3 to mention wide opening" (offered to the same parsers as a typed answer)."""
+    from backend.services import cmo_listing  # noqa: PLC0415
+
+    return cmo_listing.rewrite_prefill(text)

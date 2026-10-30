@@ -191,6 +191,8 @@ LEG_LABELS: Mapping[str, str] = {
     "cmo.generate_bullets": "The bullet points",
     "cmo.generate_backend_terms": "The backend search terms",
     "cmo.generate_listing_copy": "The listing copy",
+    "cmo.generate_full_listing": "The complete listing",
+    "cmo.rewrite_listing_section": "The rewritten section",
     "cmo.analyze_attachment": "The reading of your photo",
     "cmo.approve_title": "Your title choice",
     "cmo.keyword_intelligence": "The keyword research",

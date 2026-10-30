@@ -545,6 +545,45 @@ def _grounded(noun: str) -> tuple[Field, ...]:
 
 
 CMO_DESCRIPTION, CMO_KEYWORDS, CMO_BULLETS, CMO_LISTING = _grounded("a description"), _grounded("keywords"), _grounded("bullets"), _grounded("the listing copy")
+
+
+_YES_WORDS_HASHTAGS = frozenset({"yes", "y", "yeah", "yep", "sure", "ok", "okay", "please", "add"})
+
+
+def _hashtags_yes(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = " ".join(raw.casefold().split())
+    if t in _SKIP_WORDS or t in ("no hashtags", "without hashtags", "not now"):
+        return None
+    words = re.findall(r"[a-z']+", t)
+    return True if words and words[0] in _YES_WORDS_HASHTAGS else Reject("Say yes to add hashtag suggestions (1 extra unit), or skip.")
+
+
+CMO_FULL_LISTING = (
+    *_grounded("the complete listing"),  # CMO 3.0 M6
+    Field("include_hashtags", lambda c, g: "Do you also want marketing hashtag suggestions? They cost 1 extra CMO unit and are not a listing field on any marketplace. Say yes, or skip.",
+          _hashtags_yes, lambda c, g: (Option("Yes, add hashtags (1 extra unit)", "yes", "Hashtag suggestions are added"), Option("Skip", "skip", "No hashtags")), optional=True),
+)
+_BULLET_REF = re.compile(r"\bbullet(?:\s*point)?s?\s*(?:#|no\.?|number)?\s*(\d{1,2})\b")
+
+
+def _rewrite_target(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = " ".join(raw.casefold().split())
+    if "description" in t:
+        return "description"
+    m = _BULLET_REF.search(t) or re.fullmatch(r"(\d{1,2})", t)
+    if m and 1 <= int(m.group(1)) <= 20:
+        return f"bullet:{int(m.group(1))}"
+    return Reject("Which part should I rewrite: one bullet (for example bullet 3) or the description? The title and keywords are not rewritten here.")
+
+
+CMO_REWRITE: tuple[Field, ...] = (  # CMO 3.0 M6 (Q26): the section and the topic; the saved version itself is found by code, never typed
+    _PRODUCT,
+    Field("marketplace", lambda c, g: _marketplace_question("the rewrite"), _one_marketplace, _cmo_marketplace_options(True)),
+    Field("rewrite_target", lambda c, g: "Which part should I rewrite: one bullet (for example bullet 3) or the description?", _rewrite_target,
+          lambda c, g: (Option("The description", "description", "Rewrites only the description"), Option("Bullet 1", "bullet 1", "Rewrites only bullet 1"), Option("Bullet 2", "bullet 2", "Rewrites only bullet 2"))),
+    Field("rewrite_topic", lambda c, g: "What should it mention? Use a few words about something you have confirmed (for example \u201cwide opening\u201d). I will not write about anything you have not confirmed.",
+          _text(80), lambda c, g: ()),
+)
 CMO_GROUNDED = CMO_BULLETS  # kept for importers that only need "the grounded shape"; each action has its own table so the question names what is being written
 
 
@@ -1091,10 +1130,10 @@ def _expense_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
 
 
 CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords", "cmo.generate_bullets", "cmo.generate_backend_terms",
-                "cmo.generate_listing_copy", "cmo.market_trends", "cmo.catalog_answer")
+                "cmo.generate_listing_copy", "cmo.generate_full_listing", "cmo.rewrite_listing_section", "cmo.market_trends", "cmo.catalog_answer")
 # classifier slot name -> session field it can pre-fill (the seller already said it); the answer still goes through the same parser
 PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces", "title_marketplace"), "amount": ("budget", "candidate_prices_paise", "expense_amount"),
-                                          "competitor": ("competitor",), "period": ("expense_date",), "category": ("expense_category",), "note": ("expense_note", "expense_pick")}
+                                          "rewrite_target": ("rewrite_target",), "rewrite_topic": ("rewrite_topic",), "competitor": ("competitor",), "period": ("expense_date",), "category": ("expense_category",), "note": ("expense_note", "expense_pick")}
 PLAYBOOK_PREFILL: Mapping[str, frozenset[str]] = {"NEW_PRODUCT_DECISION": frozenset({"sku"}), "COMPETITOR_PRICE_IMPACT": frozenset({"competitor", "candidate_prices_paise"})}  # what a decision playbook may be told up front
 
 SESSIONS: Mapping[str, tuple[Field, ...]] = {
@@ -1104,7 +1143,7 @@ SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "dr.cogs_per_unit": DR_COGS, "dr.supplier_quote": DR_QUOTE, "dr.batch_budget": DR_BUDGET,
     "cfo.import_attachments": IMPORT_FIELDS, "cfo.expense_add": EXP_ADD, "cfo.expense_correct": EXP_CORRECT, "cfo.expense_void": EXP_VOID, "cfo.expense_paid": EXP_PAID,
     "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_DESCRIPTION, "cmo.generate_keywords": CMO_KEYWORDS,
-    "cmo.generate_bullets": CMO_BULLETS, "cmo.generate_backend_terms": CMO_BACKEND_TERMS, "cmo.generate_listing_copy": CMO_LISTING,
+    "cmo.generate_bullets": CMO_BULLETS, "cmo.generate_backend_terms": CMO_BACKEND_TERMS, "cmo.generate_listing_copy": CMO_LISTING, "cmo.generate_full_listing": CMO_FULL_LISTING, "cmo.rewrite_listing_section": CMO_REWRITE,
     "cmo.catalog_answer": CMO_CATALOG, "cmo.approve_title": CMO_APPROVE_TITLE, "cmo.keyword_intelligence": CMO_KEYWORD_INTEL, "cmo.analyze_titles": CMO_ANALYZE_TITLES,
 }
 

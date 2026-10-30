@@ -71,6 +71,7 @@ _CMO_TENANT_TABLES = (
     "cmo_niche_term",
     "cmo_title_approval",
     "cmo_title_option",
+    "cmo_listing_audit",
     "cmo_generation",
     "product_image_analysis",
     "seller_image_asset",

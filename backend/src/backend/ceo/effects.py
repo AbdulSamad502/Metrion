@@ -124,6 +124,8 @@ ACTION_EFFECTS: Mapping[str, ActionEffects] = {
     # ---- CMO ----
     "cmo.generate_title_sets": _cmo_metered("cmo.generate_title_sets"),
     "cmo.generate_listing_copy": _cmo_metered("cmo.generate_listing_copy"),
+    "cmo.generate_full_listing": ActionEffects(meters=("cmo.generate_listing_copy", "cmo.generate_backend_terms"), external=External.MODEL, model_egress=("SELLER_CATALOG_TEXT",)),
+    "cmo.rewrite_listing_section": _cmo_metered("cmo.generate_listing_copy"),  # CMO 3.0 M6 (Q26): one section rewritten by the model = one listing-copy unit, only when delivered
     "cmo.generate_description": _cmo_metered("cmo.generate_description"),
     "cmo.generate_bullets": _cmo_metered("cmo.generate_bullets"),
     "cmo.generate_keywords": _cmo_metered("cmo.generate_keywords"),

@@ -12,7 +12,7 @@ from backend.ceo.registry import ActionRegistry, RegistryError, _with_effects, g
 
 def test_every_registered_action_has_exactly_one_effects_entry_and_vice_versa():
     keys = {s.key for s in get_registry().specs()}
-    assert len(keys) == 59  # CMO 3.0 M3: +1 cmo.analyze_titles; CMO 3.0 M2: +1 cmo.keyword_intelligence; +1 cfo.performance; +1 cfo.cash_position; +1 cfo.import_attachments; +1 cfo.query (CFO 2.0 planner); +5 Expense Tracker actions
+    assert len(keys) == 61  # CMO 3.0 M6: +1 cmo.rewrite_listing_section (one model-rewritten section = one listing-copy unit); +1 cmo.generate_full_listing (the complete, audited listing; metered per artefact); CMO 3.0 M3: +1 cmo.analyze_titles; CMO 3.0 M2: +1 cmo.keyword_intelligence; +1 cfo.performance; +1 cfo.cash_position; +1 cfo.import_attachments; +1 cfo.query (CFO 2.0 planner); +5 Expense Tracker actions
     assert keys == set(ACTION_EFFECTS)
     assert all(s.effects is ACTION_EFFECTS[s.key] for s in get_registry().specs())
 
@@ -49,7 +49,7 @@ def test_the_derived_approval_set_is_a_visible_diff_when_it_changes():
     gated = {s.key for s in get_registry().specs() if s.effects.requires_approval}
     assert gated == {
         "cmo.analyze_attachment", "cmo.catalog_answer", "cmo.generate_backend_terms", "cmo.generate_bullets", "cmo.generate_description", "cmo.generate_hashtags",
-        "cmo.generate_keywords", "cmo.generate_listing_copy", "cmo.generate_title_sets", "cmo.market_trends", "pi.discover", "pi.supplier_lookup",
+        "cmo.generate_keywords", "cmo.generate_listing_copy", "cmo.generate_full_listing", "cmo.rewrite_listing_section", "cmo.generate_title_sets", "cmo.market_trends", "pi.discover", "pi.supplier_lookup",
         "ci.discover_competitors",
         "cfo.import_attachments",  # reports the seller attached, added to their records only after Approve (cfo-3-growth-advisor.md Phase 0)
         "cfo.expense_add", "cfo.expense_correct", "cfo.expense_void", "cfo.expense_paid",  # a saved financial record the seller dictated: approval-gated by force (ceo-expense-tracker-chat.md)

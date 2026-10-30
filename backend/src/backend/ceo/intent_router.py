@@ -206,7 +206,9 @@ RULES: tuple[Rule, ...] = _EXPENSE_RULES + (Rule("COMPETITOR_PRICE_IMPACT", "CI"
             rf"(?:.*\b(?:write|give|generate|create|make|suggest|draft|need|want|get)\b.*\b{_HASHTAGS}\b|.*\b{_HASHTAGS}\s+(?:for|ideas?)\b)"
         ),
     ),
-    Rule("cmo.generate_listing_copy", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing copy|copy pack|full listing|complete listing)\b|\b(?:listing copy|copy pack)\b.*\bfor\b")),
+    Rule("cmo.rewrite_listing_section", "CMO", _rx(r"\b(?:re-?write|redo|rework|reword)\b[^.?!]*\b(?:bullet(?:\s*point)?s?\s*(?:#|no\.?|number)?\s*\d+|description)\b[^.?!]*\b(?:mention|include|cover|talk about)\b")),
+    Rule("cmo.generate_full_listing", "CMO", _rx(r"^(?!.*\b(?:listing copy|copy pack)\b)(?!\s*(?:what|how|why|is|are|does|do|can)\b).*\b(?:write|create|make|generate|prepare|build|draft|give me)\b[^.?!]*\b(?:full|complete|whole|entire)\s+(?:\w+\s+){0,2}listing\b")),
+    Rule("cmo.generate_listing_copy", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing copy|copy pack)\b|\b(?:listing copy|copy pack)\b.*\bfor\b")),
     Rule("cmo.generate_backend_terms", "CMO", _rx(rf"\b{_WRITE}\b.*\bbackend (?:search )?(?:terms|keywords)\b|\bbackend (?:search )?(?:terms|keywords)\b.*\bfor\b")),
     Rule("cmo.generate_bullets", "CMO", _rx(rf"\b{_WRITE}\b.*\b{_BULLETS}\b|\b{_BULLETS}\b.*\bfor\b")),
     Rule("cmo.generate_title_sets", "CMO", _rx(rf"\b{_WRITE}\b.*\b(?:listing |product |amazon |flipkart |meesho )?{_TITLES}\b|\b{_TITLES} (?:options?|ideas?|for)\b")),

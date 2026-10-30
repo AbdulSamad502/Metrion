@@ -15,11 +15,12 @@ Structural guarantees (tested, spec C7, C9, AC18, AC20, AC23):
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from slim_cmo.constraints import FormatConstraint
 from slim_cmo.generation.facts import FactContext
+from slim_cmo.listing.basis import UnverifiedConstraint
 from slim_cmo.types import Marketplace
 
 _RULES = """You write marketplace listing text for a seller. You are a writer, not a source of facts.
@@ -51,7 +52,7 @@ def _limits(c: FormatConstraint | None, *names: str) -> dict[str, object]:
     if c is None:
         return {}
     out: dict[str, object] = {n: getattr(c, n) for n in names if getattr(c, n) is not None}
-    if c.count_rule is not None:
+    if c.count_rule is not None and not isinstance(c, UnverifiedConstraint):  # no verified counting rule exists on the rules-unavailable basis
         out["character_counting"] = c.count_rule.value
     return out
 
@@ -110,11 +111,13 @@ def pack_prompt(
     anchor_title: str,
     constraint: FormatConstraint,
     feedback: Sequence[str],
+    listing_extra: Mapping[str, object] | None = None,
 ) -> str:
     data = _facts_data(facts)
     data["marketplace"] = marketplace.value
     data["approved_title"] = anchor_title
     data["description_type"] = constraint.description_type
+    data.update(listing_extra or {})
     data["limits"] = _limits(
         constraint, "bullet_count", "bullet_max_chars", "description_max_chars", "keywords_max_count", "keywords_max_chars"
     )
@@ -124,7 +127,7 @@ def pack_prompt(
         "Write it for this marketplace only. "
         f"Description: {description_guidance(constraint.description_max_chars)}\n"
         'Reply shape: {"description": "...", "bullets": ["..."], "keywords": ["..."]}\n\n'
-        f"{_data_block(data)}{_feedback(feedback)}"
+        f"{_listing_rules(listing_extra)}{_data_block(data)}{_feedback(feedback)}"
     )
 
 
@@ -227,6 +230,7 @@ def component_prompt(
     anchor_title: str,
     constraint: FormatConstraint,
     feedback: Sequence[str],
+    listing_extra: Mapping[str, object] | None = None,
 ) -> str:
     task, shape, limit_names = _COMPONENT_TASK[kind]
     names = limit_names + (("description_max_chars",) if kind == "DESCRIPTION" else ())
@@ -235,10 +239,23 @@ def component_prompt(
     data["marketplace"] = marketplace.value
     data["approved_title"] = anchor_title
     data["limits"] = _limits(constraint, *names)
+    data.update(listing_extra or {})
     return (
         f"{_RULES}\n\nTask: write {task} for {marketplace.value}, consistent with the approved title and using only "
-        f"facts from DATA. {guidance}\nReply shape: {shape}\n\n{_data_block(data)}{_feedback(feedback)}"
+        f"facts from DATA. {guidance}\nReply shape: {shape}\n\n{_listing_rules(listing_extra)}{_data_block(data)}{_feedback(feedback)}"
     )
+
+
+def _listing_rules(extra: Mapping[str, object] | None) -> str:
+    """Extra instructions for a full-listing request (M6). Empty for every other request, so those prompts are unchanged."""
+    if not extra:
+        return ""
+    lines = []
+    if "keywords_allowed" in extra:
+        lines.append("Every keyword or search term you write must be copied exactly from keywords_allowed; write no other keyword.")
+    if "do_not_claim" in extra:
+        lines.append("Never state or imply anything about the topics in do_not_claim: the seller has not confirmed them.")
+    return ("\n".join(lines) + "\n\n") if lines else ""
 
 
 def hashtag_prompt(*, facts: PromptFacts, set_size: int, feedback: Sequence[str]) -> str:
@@ -249,5 +266,26 @@ def hashtag_prompt(*, facts: PromptFacts, set_size: int, feedback: Sequence[str]
         "These are marketing suggestions, not a listing field on any marketplace. Each hashtag starts with # and "
         "has no spaces; use only facts from DATA.\n"
         'Reply shape: {"hashtags": ["#..."]}\n\n'
+        f"{_data_block(data)}{_feedback(feedback)}"
+    )
+
+
+def prompt_rewrite(*, marketplace: Marketplace, ctx: FactContext, approved_title: str, label: str, current: str, topic: str, keywords_allowed: Sequence[str], do_not_claim: Sequence[str],
+                   feedback: Sequence[str]) -> str:
+    """Rewrite ONE named part of a saved listing so that it mentions a topic the seller's confirmed facts carry (CMO 3.0 M6). Everything else stays as it is and is not shown to be changed."""
+    data = _facts_data(prompt_facts(ctx))
+    data["marketplace"] = marketplace.value
+    data["approved_title"] = approved_title
+    data["part_to_rewrite"] = label
+    data["current_text"] = current
+    data["must_mention"] = topic
+    if keywords_allowed:
+        data["keywords_allowed"] = list(keywords_allowed)
+    if do_not_claim:
+        data["do_not_claim"] = list(do_not_claim)
+    return (
+        f"{_RULES}\n\nTask: rewrite ONLY the {label} of a {marketplace.value} listing so that it mentions the topic in must_mention, using only facts from DATA. Keep it consistent with the approved "
+        "title. Do not change the meaning of any fact. Never state or imply anything about the topics in do_not_claim.\n"
+        'Reply shape: {"text": "..."}\n\n'
         f"{_data_block(data)}{_feedback(feedback)}"
     )

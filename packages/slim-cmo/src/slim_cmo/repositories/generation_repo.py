@@ -54,7 +54,7 @@ _INSERT_OPTION = text(
     """
 )
 _TITLE_SET = text(
-    "SELECT id, marketplace, sku, output_structured #>> '{category_context,category_hint}' AS category_hint "
+    "SELECT id, marketplace, sku, output_structured #>> '{category_context,category_hint}' AS category_hint, output_structured ->> 'workflow' AS workflow "
     "FROM cmo_generation "
     "WHERE tenant_id = :tenant_id AND id = :id AND output_type = 'TITLE_SET' AND status = 'COMPLETE'"
 )
@@ -135,7 +135,7 @@ def load_title_set(conn: Connection, tenant_id: UUID, generation_id: UUID) -> St
         StoredOption(r.id, r.rank, r.title_text)
         for r in conn.execute(_OPTIONS, {"tenant_id": tenant_id, "generation_id": generation_id})
     )
-    return StoredTitleSet(head.id, Marketplace(head.marketplace), head.sku, options, head.category_hint)
+    return StoredTitleSet(head.id, Marketplace(head.marketplace), head.sku, options, head.category_hint, head.workflow)
 
 
 def load_sibling_packs(

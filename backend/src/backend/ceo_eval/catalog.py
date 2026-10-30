@@ -93,6 +93,8 @@ ACTION_TEXT: dict[str, tuple[str, tuple[str, ...]]] = {
     "cmo.analyze_titles": ("Compare the saved title options for a marketplace, with reasons (no scores or ranking)", ("marketplace",)),
     "cmo.keyword_intelligence": ("Research which keywords fit a product, with the evidence for each (no search volume)", ("product",)),
     "cmo.approve_title": ("Record the seller's choice of one generated title option", ("option",)),
+    "cmo.generate_full_listing": ("Write a complete, audited listing (copy pack, Amazon backend terms, keyword map and audit) for a product and marketplace from the approved title (METERED)", ("product", "marketplace")),
+    "cmo.rewrite_listing_section": ("Have the model rewrite one bullet or the description of the saved complete listing to mention a confirmed detail (METERED, 1 unit)", ("product", "marketplace")),
     "cmo.generate_listing_copy": ("Write a full listing (title, description, bullets) for a product and marketplace (METERED)", ("product", "marketplace")),
     "cmo.generate_description": ("Write a product description for a marketplace (METERED)", ("product", "marketplace")),
     "cmo.generate_bullets": ("Write bullet points for a product on a marketplace (METERED)", ("product", "marketplace")),

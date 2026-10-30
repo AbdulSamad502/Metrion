@@ -34,8 +34,9 @@ from backend.ceo.contract import LegResult, LegStatus
 DELEGATED_ACTIONS: frozenset[str] = frozenset(input_session.CMO_SESSIONS)  # the CMO actions the seller can reach through the CEO, behind a plan card
 IMAGE_TYPES: frozenset[str] = frozenset({"PNG", "JPEG", "WEBP"})  # attachment types (detected from content) the CMO reads as a product photo
 IMAGE_ACTION = "cmo.analyze_attachment"  # the CEO -> CMO photo hand-off (by reference); always its own small plan card
-IMAGE_FOLLOWUPS: frozenset[str] = DELEGATED_ACTIONS - {"cmo.market_trends"}  # the generation actions that can start from an attached product photo
-CI_INFORMED: frozenset[str] = DELEGATED_ACTIONS - {"cmo.market_trends", "cmo.catalog_answer"}  # the writing actions that may be informed by the seller's saved competitor listing themes (CEO-brokered)
+REWRITE_KEY = "cmo.rewrite_listing_section"  # CMO 3.0 M6 (Q26): one section rewritten by the model
+IMAGE_FOLLOWUPS: frozenset[str] = DELEGATED_ACTIONS - {"cmo.market_trends", REWRITE_KEY}  # the generation actions that can start from an attached product photo
+CI_INFORMED: frozenset[str] = DELEGATED_ACTIONS - {"cmo.market_trends", "cmo.catalog_answer", REWRITE_KEY}  # the writing actions that may be informed by the seller's saved competitor listing themes (CEO-brokered)
 CI_USED_LINE = (
     "Informed by themes from {n} of your tracked competitors' saved listings (derived words only, no competitor text, no prices). "
     "Metrion writes original text from your own product facts and checks it is not a copy or close rewrite of any competitor's wording, and makes no search-volume, ranking or sales claim."
@@ -321,9 +322,22 @@ _WHAT = {
     "cmo.generate_title_sets": "write listing title options", "cmo.generate_hashtags": "suggest hashtags", "cmo.generate_description": "write a product description",
     "cmo.generate_keywords": "suggest search keywords", "cmo.market_trends": "research current market trends", "cmo.generate_bullets": "write the five listing bullet points",
     "cmo.generate_backend_terms": "write Amazon backend search terms", "cmo.generate_listing_copy": "write the full listing copy pack (description, bullet points and keywords)",
+    "cmo.generate_full_listing": "write the complete listing (copy pack and, on Amazon, backend search terms), then audit it and show where each keyword is used",
+    "cmo.rewrite_listing_section": "rewrite one section of your saved listing",
     "cmo.catalog_answer": "work out the catalog details (category, colour, material, size, weight, dimensions, brand) and say how sure each one is",
 }
 MAX_QUERIES_SHOWN = 12
+FULL_LISTING_KEY = "cmo.generate_full_listing"
+
+
+def full_listing_items(slots: Mapping[str, Any]) -> list[tuple[str, int]]:
+    """(artefact, units) the complete listing may consume: the copy pack, Amazon backend terms (Amazon only) and hashtags (only if asked). The audit and keyword map are free."""
+    items = [("The listing copy pack (description, bullet points, keywords)", 1)]
+    if str(slots.get("marketplace") or "").upper() == "AMAZON":
+        items.append(("Amazon backend search terms", 1))
+    if slots.get("include_hashtags") is True:
+        items.append(("Marketing hashtag suggestions (not a listing field on any marketplace)", 1))
+    return items
 
 
 def _model_line() -> str:
@@ -333,11 +347,33 @@ def _model_line() -> str:
         return "Model: the CMO language model is not configured yet, so this run would be refused and nothing would be used up."
 
 
+def _rewrite_section_name(slots: Mapping[str, Any]) -> str:
+    return f"bullet {slots['bullet_number']}" if slots.get("target") == "bullet" and slots.get("bullet_number") else "the description"
+
+
+def rewrite_plan_extras(slots: Mapping[str, Any]) -> list[str]:
+    """The exact rewrite the seller is about to approve (CMO 3.0 M6, Q26), written by code from the frozen slots."""
+    where = f" {str(slots['marketplace']).title()}" if slots.get("marketplace") else ""
+    product = f" for {slots['product_name']}" if slots.get("product_name") else ""
+    return [
+        f"Slim CMO (recommend-only) will rewrite {_rewrite_section_name(slots)} of your saved{where} listing{product} so that it mentions \u201c{slots.get('topic')}\u201d. It writes text only and changes nothing on any marketplace.",
+        "Only that one section is rewritten. Every other section and the title stay exactly as they are, and the version you have now stays saved: the rewrite is saved as a new version.",
+        "The rewrite must pass the same checks as text you type yourself (no claim you have not confirmed, no invented number, nothing close to a competitor's wording). If it cannot pass, nothing is saved and nothing is used up.",
+        _model_line(),
+        "Quota effect: 1 CMO unit, counted only if the rewrite completes; a failed or refused rewrite uses nothing.",
+        "Sent to Metrion's own language model: your confirmed product details, your approved title, the text of that one section and the topic. No competitor text, no price and nothing from any other seller is sent. Nothing is sent to a marketplace and nothing is published.",
+        "Approving a version for use is a separate click on the listing card; an approval of the earlier version does not carry over to the new one.",
+        "What is written is saved, and will also appear on the Slim CMO dashboard.",
+    ]
+
+
 def plan_extras(key: str, slots: Mapping[str, Any], preview: Mapping[str, Any] | None = None) -> tuple[list[str], dict[str, int]]:
     """What the plan card says beyond the frozen slots, written by code: what runs, the model, the quota effect, and for market research the exact searches. Also the unit
     count per leg (a title set costs one unit per marketplace). Nothing here is read from a model."""
     if key not in DELEGATED_ACTIONS:
         return [], {}
+    if key == REWRITE_KEY:
+        return rewrite_plan_extras(slots), {key: 1}
     mps = slots.get("marketplaces") if isinstance(slots.get("marketplaces"), list) else ([slots["marketplace"]] if slots.get("marketplace") else [])
     where = " on " + ", ".join(str(m).title() for m in mps) if mps else ""
     product = f" for {slots['product_name']}" if slots.get("product_name") else ""
@@ -365,7 +401,18 @@ def plan_extras(key: str, slots: Mapping[str, Any], preview: Mapping[str, Any] |
         n = len(mps) if key == "cmo.generate_title_sets" and mps else 1
         if key == "cmo.generate_title_sets":
             units[key] = n
-        details.append(f"Quota effect: {n} CMO unit{'s' if n != 1 else ''} ({'one per marketplace' if n != 1 else 'one result'}), counted only for results that complete; a failed or refused result uses nothing.")
+        if key == FULL_LISTING_KEY:
+            items = full_listing_items(slots)
+            n = sum(u for _, u in items)
+            units[key] = n
+            details.append("What will be written, and what each costs:")
+            details.extend(f"- {name}: {u} CMO unit" for name, u in items)
+            details.append(f"Total: up to {n} CMO units, counted only for results that complete. The audit, the keyword map and the competitor notes are free (no unit, no model). "
+                           + ("Hashtags are included." if slots.get("include_hashtags") is True else "Hashtags are not included."))
+            details.append("Sent to Metrion's own language model: your confirmed product details and the researched keywords. No competitor text, no price and nothing from any other seller is sent. "
+                           "Nothing is sent to a marketplace and nothing is published.")
+        else:
+            details.append(f"Quota effect: {n} CMO unit{'s' if n != 1 else ''} ({'one per marketplace' if n != 1 else 'one result'}), counted only for results that complete; a failed or refused result uses nothing.")
     details.append("What is written is saved, and will also appear on the Slim CMO dashboard.")
     return details, units
 
@@ -373,8 +420,8 @@ def plan_extras(key: str, slots: Mapping[str, Any], preview: Mapping[str, Any] |
 _TITLE_WHAT = {
     "cmo.generate_title_sets": "Write listing titles", "cmo.generate_hashtags": "Suggest hashtags", "cmo.generate_description": "Write a product description",
     "cmo.generate_keywords": "Suggest search keywords", "cmo.market_trends": "Research market trends and news", "cmo.generate_bullets": "Write listing bullet points",
-    "cmo.generate_backend_terms": "Write Amazon backend search terms", "cmo.generate_listing_copy": "Write the full listing copy pack",
-    "cmo.catalog_answer": "Work out catalog details",
+    "cmo.generate_backend_terms": "Write Amazon backend search terms", "cmo.generate_listing_copy": "Write the full listing copy pack", "cmo.generate_full_listing": "Write the complete listing",
+    "cmo.catalog_answer": "Work out catalog details", "cmo.rewrite_listing_section": "Rewrite one section of your listing",
 }
 
 
@@ -393,6 +440,8 @@ def plan_title(key: str, slots: Mapping[str, Any]) -> str:
     mps = slots.get("marketplaces") if isinstance(slots.get("marketplaces"), list) else ([slots["marketplace"]] if slots.get("marketplace") else [])
     product = f" for {slots['product_name']}" if slots.get("product_name") else ""
     where = " on " + ", ".join(str(m).title() for m in mps) if mps else ""
+    if key == REWRITE_KEY:
+        return f"Rewrite {_rewrite_section_name(slots)} of your listing{product}{where}"[:160]
     return f"{_TITLE_WHAT[key]}{product}{where}"[:160]
 
 
@@ -402,6 +451,12 @@ def compact_lines(key: str, slots: Mapping[str, Any], preview: Mapping[str, Any]
     if key not in DELEGATED_ACTIONS:
         return []
     lines = [plan_title(key, slots) + "."]
+    if key == REWRITE_KEY:
+        try:
+            model = f"Model: {config.cmo_llm_model()} (Metrion's own server)."
+        except Exception:  # noqa: BLE001 - not configured: said plainly, never a made-up name
+            model = "Model: not configured yet, so a run would be refused and nothing used up."
+        return [*lines, f"It will mention: \u201c{slots.get('topic')}\u201d. Only this section changes; the version you have stays saved.", model, "Cost: 1 CMO unit, only if it completes.", f"Valid for {ttl_minutes} minutes."]
     if key == "cmo.market_trends":
         n = len((preview or {}).get("queries") or [])
         provs = sorted({str(q.get("provider")).title() for q in (preview or {}).get("queries") or [] if q.get("provider")})
@@ -428,7 +483,12 @@ def compact_lines(key: str, slots: Mapping[str, Any], preview: Mapping[str, Any]
             except Exception:  # noqa: BLE001 - not configured: said plainly, never a made-up name
                 lines.append("Model: not configured yet, so a run would be refused and nothing used up.")
         n = len(slots["marketplaces"]) if key == "cmo.generate_title_sets" and isinstance(slots.get("marketplaces"), list) and slots["marketplaces"] else 1
-        lines.append(f"Cost: {n} CMO units, only for results that complete." if n != 1 else "Cost: 1 CMO unit, only if it completes.")
+        if key == FULL_LISTING_KEY:
+            items = full_listing_items(slots)
+            parts = ", ".join(f"{name.split(' (')[0].lower()} {u}" for name, u in items)
+            lines.append(f"Cost: up to {sum(u for _, u in items)} CMO units ({parts}), only for results that complete. The audit is free.")
+        else:
+            lines.append(f"Cost: {n} CMO units, only for results that complete." if n != 1 else "Cost: 1 CMO unit, only if it completes.")
     if slots.get("ci_insight_ids"):
         lines.append(f"Uses themes from {len(slots['ci_insight_ids'])} tracked competitor listing(s); original wording only, no copying.")
     lines.append(f"Valid for {ttl_minutes} minutes.")

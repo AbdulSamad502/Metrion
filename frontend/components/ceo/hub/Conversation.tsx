@@ -8,6 +8,7 @@ import { DecisionCard } from "@/components/ceo/hub/DecisionCard";
 import { PickCard } from "@/components/ceo/hub/PickCard";
 import { ListingPreviewCard } from "@/components/ceo/hub/ListingPreviewCard";
 import { ReadinessCard } from "@/components/ceo/hub/ReadinessCard";
+import { ListingCard } from "@/components/ceo/hub/ListingCard";
 import { PlanCard } from "@/components/ceo/hub/PlanCard";
 import { RichText } from "@/components/ceo/hub/RichText";
 import { Welcome } from "@/components/ceo/hub/Welcome";
@@ -15,7 +16,7 @@ import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState, Spinner } from "@/components/ui/LoadingState";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { isPickCard, isPreviewCard, isReadinessCard } from "@/lib/ceo";
+import { isListingCard, isPickCard, isPreviewCard, isReadinessCard } from "@/lib/ceo";
 import type { AgentCode, CeoMessage, ClarificationReply, ExplicitPeriod, FindingRow, InvestigationDetail, NeedRow, PlanView, TurnRow, UiAction } from "@/lib/ceo";
 import { findingLink, investigationTitle, messageView, needStepView, needsByMessage, type HubState } from "@/lib/ceoModel";
 import type { TurnProgress } from "@/lib/useCeoHub";
@@ -44,9 +45,13 @@ export function Conversation({
   onDeclinePlan,
   planBusy = null,
   loadAttachmentImage,
+  approveListing,
+  recordListingCopy,
 }: {
   /** loads the seller's own picture for the listing preview (authenticated, images only); absent = the preview shows its neutral placeholder */
   loadAttachmentImage?: (investigationId: string, attachmentId: string) => Promise<string>;
+  approveListing?: (generationId: string) => Promise<{ approved: boolean; message: string; banner: string | null }>;
+  recordListingCopy?: (generationId: string) => Promise<boolean>;
   /** the Approve / Decline buttons of a plan card (the only approval there is); absent = the cards are read-only */
   onApprovePlan?: (planId: string, planHash: string) => void;
   onDeclinePlan?: (planId: string) => void;
@@ -125,6 +130,8 @@ export function Conversation({
         onApprovePlan={onApprovePlan}
         onDeclinePlan={onDeclinePlan}
         loadImage={loadAttachmentImage}
+        onApproveListing={approveListing}
+        onListingCopied={(id) => void recordListingCopy?.(id)}
       />
 
 
@@ -190,9 +197,11 @@ function lastCardId(messages: CeoMessage[]): string | null {
 }
 
 function Thread({
-  messages, findings, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs, plans, closed, planBusy, onApprovePlan, onDeclinePlan, loadImage,
+  messages, findings, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs, plans, closed, planBusy, onApprovePlan, onDeclinePlan, loadImage, onApproveListing, onListingCopied,
 }: {
   loadImage?: (investigationId: string, attachmentId: string) => Promise<string>;
+  onApproveListing?: (generationId: string) => Promise<{ approved: boolean; message: string; banner: string | null }>;
+  onListingCopied?: (generationId: string) => void;
   plans: PlanView[];
   closed: boolean;
   planBusy: string | null;
@@ -231,7 +240,8 @@ function Thread({
           )}
           {m.role === "CEO" && m.kind === "ANSWER" && isPreviewCard(m.choices) && <ListingPreviewCard card={m.choices} loadImage={loadImage} />}
           {m.role === "CEO" && m.kind === "ANSWER" && isReadinessCard(m.choices) && <ReadinessCard card={m.choices} disabled={cardDisabled} onSend={onAsk} />}
-          {m.id === answerableCardId && m.choices && !isPickCard(m.choices) && !isPreviewCard(m.choices) && !isReadinessCard(m.choices) && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
+          {m.role === "CEO" && m.kind === "ANSWER" && isListingCard(m.choices) && <ListingCard card={m.choices} disabled={cardDisabled} onSend={onAsk} onApprove={onApproveListing} onCopied={onListingCopied} />}
+          {m.id === answerableCardId && m.choices && !isPickCard(m.choices) && !isPreviewCard(m.choices) && !isReadinessCard(m.choices) && !isListingCard(m.choices) && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
         </li>
       ))}
       {placed.unplaced.length > 0 && <li><NeedSteps needs={placed.unplaced} /></li>}

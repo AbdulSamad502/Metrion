@@ -57,6 +57,7 @@ class StoredTitleSet:
     sku: str | None
     options: tuple[StoredOption, ...]
     category_hint: str | None = None  # the hint the set was RESOLVED under (persisted in output_structured)
+    workflow: str | None = None  # the full-listing marker the server stored when it generated the set (M6, spec 6.18.11); never client-supplied
 
 
 @dataclass(frozen=True, slots=True)

@@ -468,6 +468,10 @@
    ],
    "requiredQuery": []
   },
+  "GET /api/v1/cmo/listing/{generation_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/cmo/market-trends": {
    "query": [],
    "requiredQuery": []
@@ -1137,6 +1141,13 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cmo/full-listing": {
+   "body": {
+    "$ref": "#/components/schemas/FullListingBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cmo/hashtags": {
    "body": {
     "$ref": "#/components/schemas/HashtagsBody"
@@ -1180,6 +1191,24 @@
   "POST /api/v1/cmo/listing-copy": {
    "body": {
     "$ref": "#/components/schemas/GroundedBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/listing-rewrite": {
+   "body": {
+    "$ref": "#/components/schemas/ListingRewriteBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/listing/{generation_id}/approve": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/listing/{generation_id}/edit": {
+   "body": {
+    "$ref": "#/components/schemas/ListingEditBody"
    },
    "query": [],
    "requiredQuery": []
@@ -3158,6 +3187,160 @@
    "title": "FinancialQueryHttpRequest",
    "type": "object"
   },
+  "FullListingBody": {
+   "additionalProperties": false,
+   "description": "CMO 3.0 M6 (spec 6.18): one approved title -> the pack, Amazon backend terms, optional hashtags (off unless asked), then the audit. Nothing here can switch the unverified-rules basis on.",
+   "properties": {
+    "approval_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Approval Id"
+    },
+    "attributes": {
+     "items": {
+      "$ref": "#/components/schemas/AttributePair"
+     },
+     "maxItems": 50,
+     "title": "Attributes",
+     "type": "array"
+    },
+    "brand": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Brand"
+    },
+    "category_hint": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Category Hint"
+    },
+    "ci_insight_ids": {
+     "items": {
+      "format": "uuid",
+      "type": "string"
+     },
+     "maxItems": 5,
+     "title": "Ci Insight Ids",
+     "type": "array"
+    },
+    "image_analysis_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Image Analysis Id"
+    },
+    "include_hashtags": {
+     "default": false,
+     "title": "Include Hashtags",
+     "type": "boolean"
+    },
+    "marketplace": {
+     "$ref": "#/components/schemas/Marketplace"
+    },
+    "notes": {
+     "items": {
+      "maxLength": 1000,
+      "type": "string"
+     },
+     "maxItems": 20,
+     "title": "Notes",
+     "type": "array"
+    },
+    "product_name": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Product Name"
+    },
+    "request_key": {
+     "maxLength": 128,
+     "minLength": 1,
+     "title": "Request Key",
+     "type": "string"
+    },
+    "seller_title": {
+     "anyOf": [
+      {
+       "maxLength": 500,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Seller Title"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 128,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "target_price_paise": {
+     "anyOf": [
+      {
+       "maximum": 9.223372036854776e+18,
+       "minimum": 0.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Target Price Paise"
+    },
+    "text_only_confirmed": {
+     "default": false,
+     "title": "Text Only Confirmed",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "request_key",
+    "marketplace"
+   ],
+   "title": "FullListingBody",
+   "type": "object"
+  },
   "FundingReadinessHttpRequest": {
    "description": "A period range plus the caller's own explicit statement of which period labels it\nexpected a `CONTRIBUTION_PROFIT` result for (cfo-agent.md \u00a76.13, `twinkly-mapping-canyon.md`\nCP B2). `expected_periods` entries must be in the same `\"{start}/{end}\"` ISO-date-range\nshape `compute_period_pnl` already persists to `metric_result.period` \u2014 CFO has no\nperiodicity assumption of its own (see `FundingReadinessRequest`'s own docstring); an empty\nlist means \"no missing-period check requested\", not \"no periods were expected\".",
    "properties": {
@@ -4038,6 +4221,108 @@
     "reason"
    ],
    "title": "LedgerVoidHttp",
+   "type": "object"
+  },
+  "ListingEditBody": {
+   "additionalProperties": false,
+   "properties": {
+    "message": {
+     "maxLength": 2500,
+     "minLength": 1,
+     "title": "Message",
+     "type": "string"
+    }
+   },
+   "required": [
+    "message"
+   ],
+   "title": "ListingEditBody",
+   "type": "object"
+  },
+  "ListingRewriteBody": {
+   "additionalProperties": false,
+   "description": "CMO 3.0 M6 (spec 6.18.7, Q26): the model rewrites ONE bullet or the description of a saved version to mention a topic the seller's confirmed facts carry. Declared fields only: no tenant,\nmeter, cap, rules-basis or workflow field exists. `sku`, `marketplace` and `product_name` are what the seller named; the saved version must match them.",
+   "properties": {
+    "bullet_number": {
+     "anyOf": [
+      {
+       "maximum": 20.0,
+       "minimum": 1.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Bullet Number"
+    },
+    "generation_id": {
+     "format": "uuid",
+     "title": "Generation Id",
+     "type": "string"
+    },
+    "marketplace": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/Marketplace"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "product_name": {
+     "anyOf": [
+      {
+       "maxLength": 200,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Product Name"
+    },
+    "request_key": {
+     "maxLength": 128,
+     "minLength": 1,
+     "title": "Request Key",
+     "type": "string"
+    },
+    "sku": {
+     "anyOf": [
+      {
+       "maxLength": 128,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Sku"
+    },
+    "target": {
+     "enum": [
+      "bullet",
+      "description"
+     ],
+     "title": "Target",
+     "type": "string"
+    },
+    "topic": {
+     "maxLength": 80,
+     "minLength": 2,
+     "title": "Topic",
+     "type": "string"
+    }
+   },
+   "required": [
+    "request_key",
+    "generation_id",
+    "target",
+    "topic"
+   ],
+   "title": "ListingRewriteBody",
    "type": "object"
   },
   "ManualMappingBody": {
