@@ -32,6 +32,8 @@ from slim_cmo import billing
 from slim_cmo.catalog.attributes import CatalogAttribute
 from slim_cmo.service.approve import ApprovalRefused
 from slim_cmo.service.catalog import CatalogRequest
+from slim_cmo.service.keywords import KeywordIntelligenceService, KeywordRequest
+from slim_cmo.service.title_analysis import TitleAnalysisService
 from slim_cmo.service.errors import GroundingRequired, InvalidApproval, InvalidConfirmation, NotFound
 from slim_cmo.imaging.normalize import ImageRejected
 from slim_cmo.service.generate import GroundingRequest, Intake
@@ -305,6 +307,62 @@ def post_catalog_answers(body: CatalogBody, ctx: AuthContext = require_auth(perm
 
 
 # ---- zero-unit actions ----------------------------------------------------------------------
+
+
+class KeywordIntelBody(_Body):
+    """`cmo.keyword_intelligence` (CMO 3.0 M2): which keywords fit this product, with the evidence. Declared fields only; no tenant, meter or cap."""
+
+    request_key: str = Field(min_length=1, max_length=128)
+    sku: str = Field(min_length=1, max_length=128)
+    marketplace: Marketplace | None = None
+    ci_insight_ids: list[UUID] = Field(default_factory=list, max_length=5)  # saved competitor listing insights the CEO brokered; each must be the seller's own (404 otherwise)
+
+
+class TitleAnalysisBody(_Body):
+    """`cmo.analyze_titles` (CMO 3.0 M3): compare the options of one saved title set. Declared fields only."""
+
+    request_key: str = Field(min_length=1, max_length=128)
+    generation_id: UUID
+    ci_insight_ids: list[UUID] = Field(default_factory=list, max_length=5)
+
+
+@router.post("/title-analysis")
+def post_title_analysis(body: TitleAnalysisBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """`cmo.analyze_titles` - rule-based comparison of the saved title options against the seller's confirmed facts and the VERIFIED marketplace rule. 0 units: no model, no network, no
+    entitlement check, no reservation, no metered event; one `agent_run` for a new analysis. No numeric score, ranking, conversion or sales claim exists in it."""
+    p = _principal(ctx)
+
+    def go() -> dict[str, Any]:
+        rt = cmo_runtime.build_runtime()
+        started, run_id = rt.clock(), uuid4()
+        ci = cmo_ci_inputs.load_inputs(ctx, body.ci_insight_ids) if body.ci_insight_ids else None
+        kinds = getattr(rt.generation, "accepted_row_kinds", None)
+        svc = TitleAnalysisService(rt.store, clock=rt.clock, **({"accepted_row_kinds": kinds} if kinds else {}))
+        res = svc.run(_actor(p), body.generation_id, body.request_key, ci)
+        if not res["reused"]:
+            cmo_actions.record_free_run(p, rt, "cmo.analyze_titles", run_id, started)
+        return {**res, "unitsBilled": 0, "agentRunId": None if res["reused"] else str(run_id)}
+
+    return _guarded(go)
+
+
+@router.post("/keyword-intelligence")
+def post_keyword_intelligence(body: KeywordIntelBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """`cmo.keyword_intelligence` - evidence-backed keyword candidates from the seller's own confirmed facts. 0 units: no model, no network, no entitlement check, no reservation, no
+    metered event; one `agent_run` for a new analysis. Search volume, demand and rank are always NOT_ASSESSED."""
+    p = _principal(ctx)
+
+    def go() -> dict[str, Any]:
+        rt = cmo_runtime.build_runtime()
+        started, run_id = rt.clock(), uuid4()
+        ci = cmo_ci_inputs.load_inputs(ctx, body.ci_insight_ids) if body.ci_insight_ids else None
+        res = KeywordIntelligenceService(rt.store).run(_actor(p), KeywordRequest(body.request_key, body.sku, body.marketplace, ci))
+        if not res["reused"]:
+            cmo_actions.record_free_run(p, rt, "cmo.keyword_intelligence", run_id, started)
+        return {**res, "unitsBilled": 0, "agentRunId": None if res["reused"] else str(run_id)}
+
+    return _guarded(go)
+
 
 
 @router.post("/title-approvals")

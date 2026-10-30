@@ -129,7 +129,7 @@ ACTION_EFFECTS: Mapping[str, ActionEffects] = {
     "cmo.generate_keywords": _cmo_metered("cmo.generate_keywords"),
     "cmo.generate_backend_terms": _cmo_metered("cmo.generate_backend_terms"),
     "cmo.generate_hashtags": _cmo_metered("cmo.generate_hashtags"),
-    "cmo.catalog_answer": _cmo_metered("cmo.catalog_answer"),
+    "cmo.catalog_answer": ActionEffects(meters=("cmo.catalog_answer",)),  # worked out by code from the seller's own facts: no model call, nothing leaves Metrion
     "cmo.market_trends": ActionEffects(
         meters=("cmo.market_trends", "research.market_trends"), external=External.SELLER_DATA_OUT, egress=("CONFIRMED_NICHE_TERMS",),
         destinations=("Tavily", "YouTube Data API"), model_egress=("PUBLIC_SEARCH_RESULT_TEXT",),
@@ -139,6 +139,8 @@ ACTION_EFFECTS: Mapping[str, ActionEffects] = {
     "cmo.approve_title": _NONE,
     "cmo.confirm_niche_terms": _NONE,
     "cmo.confirm_image_hint": _NONE,
+    "cmo.analyze_titles": _NONE,  # reads the seller's saved titles, confirmed facts and the stored marketplace rule; no model, nothing leaves Metrion, zero units
+    "cmo.keyword_intelligence": _NONE,  # reads the seller's own saved facts and saved competitor themes; no model, nothing leaves Metrion, zero units
     # The seller's attached product photo goes (by reference; the CMO reads it itself) to Metrion's own operator-controlled vision model. 0 CMO units, but it ALWAYS needs its own
     # small plan card (ceo-cmo-delegation.md CD10, option A): the card names the photo and the endpoint label before anything is read.
     "cmo.analyze_attachment": ActionEffects(external=External.MODEL, destinations=("Metrion vision model",), model_egress=("PRODUCT_IMAGE",), force_approval=True),

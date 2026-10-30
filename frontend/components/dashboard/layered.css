@@ -1,0 +1,121 @@
+/* Layered surfaces for the signed-in dashboard (reversible).
+   To remove: delete this file, its import in ShellFrame.tsx, and the data-surface effect there.
+   It applies while a dashboard page is mounted (html[data-surface="layered"]); the CEO Hub is excluded in ShellFrame.
+   The idea: one neutral black, but not one flat black. The page is darkest at the edges and lifts toward a soft glow at the top;
+   cards are a clearly lighter tone that is a little brighter at the top edge than at the bottom, with a fine light border and a 1px top highlight;
+   panels inside a card step lighter again. The same structure in light mode, with greys instead of blacks. */
+
+html[data-surface="layered"] {
+  --ov-page: #000000;
+  --ov-page-glow: #1a1a1d;
+  --ov-card: #0e0e10;
+  --ov-card-top: #141416;
+  --ov-card-bottom: #0b0b0c;
+  --ov-soft: #222226;
+  --ov-line: rgba(255, 255, 255, 0.18);
+  --ov-edge: rgba(255, 255, 255, 0.32);
+  --ov-track: rgba(255, 255, 255, 0.38);
+  color-scheme: dark;
+  --ov-field-edge: #7e7e88;
+  --ov-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 14px 28px -22px rgba(0, 0, 0, 0.9);
+  --ov-shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 18px 32px -20px rgba(0, 0, 0, 0.95);
+  --bg-base: var(--ov-page);
+}
+
+html[data-surface="layered"][data-theme="light"] {
+  --ov-page: #e7e7e9;
+  --ov-page-glow: #ffffff;
+  --ov-card: #ffffff;
+  --ov-card-top: #ffffff;
+  --ov-card-bottom: #fafafa;
+  --ov-soft: #f4f4f5;
+  --ov-line: rgba(0, 0, 0, 0.16);
+  --ov-edge: rgba(0, 0, 0, 0.32);
+  --ov-track: rgba(0, 0, 0, 0.3);
+  color-scheme: light;
+  --ov-field-edge: #71717a;
+  --ov-ink-2: #3f3f46;
+  --ov-ink-3: #52525b;
+  --ov-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 28px -14px rgba(0, 0, 0, 0.14);
+  --ov-shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.05), 0 16px 32px -14px rgba(0, 0, 0, 0.2);
+}
+
+/* the page: darkest at the edges, a soft lift near the top */
+html[data-surface="layered"] body {
+  background:
+    radial-gradient(1200px 560px at 62% -6%, var(--ov-page-glow) 0%, transparent 72%),
+    radial-gradient(900px 500px at 0% 100%, color-mix(in srgb, var(--ov-page) 70%, #000) 0%, transparent 70%),
+    var(--ov-page) !important;
+  background-attachment: fixed !important;
+}
+html[data-surface="layered"] .mt-sidebar { background: color-mix(in srgb, var(--ov-page) 55%, #000) !important; border-right: 1px solid var(--ov-line); }
+html[data-surface="layered"][data-theme="light"] .mt-sidebar { background: color-mix(in srgb, var(--ov-page) 70%, #fff) !important; }
+html[data-surface="layered"] .mt-topbar { background: transparent !important; border-bottom: 1px solid var(--ov-line); }
+
+/* cards and panels: lighter than the page, brighter at the top edge */
+html[data-surface="layered"] :is(.ov-card:not(.ov-hero), .pi-panel, .ov-agent) {
+  background-image: linear-gradient(180deg, var(--ov-card-top) 0%, var(--ov-card-bottom) 100%);
+}
+
+/* light mode: the same layering as dark. A cool grey page that lifts to a soft white glow at the top, white cards with a lit top edge and a two-layer shadow,
+   panels one step greyer inside them, a white sidebar, and a black hero that is lit from the top like the dark cards. */
+html[data-surface="layered"][data-theme="light"] body {
+  background:
+    radial-gradient(1200px 560px at 62% -8%, #fafafa 0%, transparent 72%),
+    radial-gradient(900px 520px at 0% 100%, #dcdce0 0%, transparent 70%),
+    var(--ov-page) !important;
+  background-attachment: fixed !important;
+}
+html[data-surface="layered"][data-theme="light"] .mt-sidebar { background: #fafafa !important; border-right: 1px solid var(--ov-edge); }
+html[data-surface="layered"][data-theme="light"] .mt-topbar { border-bottom: 1px solid var(--ov-line); }
+html[data-surface="layered"][data-theme="light"] .ov-card:not(.ov-hero),
+html[data-surface="layered"][data-theme="light"] .pi-panel,
+html[data-surface="layered"][data-theme="light"] .ov-agent {
+  border-color: var(--ov-edge);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 20px -12px rgba(0, 0, 0, 0.12);
+}
+html[data-surface="layered"][data-theme="light"] .ov-hero { background-image: none; border: 1px solid #000; box-shadow: none; }
+
+/* light mode, finer detail: panels inside cards get a crisp edge and a white top highlight instead of a flat grey fill */
+html[data-surface="layered"][data-theme="light"] :is(.ov-tile, .ci-item, .cmo-item, .cmo-block, .ov-row:not(a), .pi-tile) {
+  box-shadow: 0 1px 0 #ffffff inset;
+  border-color: var(--ov-line);
+}
+
+/* browser surfaces, themed for both modes: selection, form accents, caret and scrollbars follow the palette */
+html[data-surface="layered"] { accent-color: var(--ov-brand); caret-color: var(--ov-brand); }
+html[data-surface="layered"] ::selection { background: var(--ov-brand); color: var(--ov-on-brand); }
+html[data-surface="layered"] * { scrollbar-width: thin; scrollbar-color: var(--ov-field-edge) transparent; }
+html[data-surface="layered"][data-theme="light"] input:focus-visible,
+html[data-surface="layered"][data-theme="light"] select:focus-visible { outline: 2px solid var(--ov-brand); outline-offset: 2px; }
+
+/* draw-in animations wait, at their first frame, until they scroll into view (useRevealOnView marks each one data-seen) */
+html.mt-inview .ov-rise:not([data-seen]),
+html.mt-inview .ov-bars-track > i:not([data-seen]),
+html.mt-inview .ov-meter > i:not([data-seen]),
+html.mt-inview .ov-leakbar > i:not([data-seen]),
+html.mt-inview .ov-flow-seg:not([data-seen]),
+html.mt-inview .ov-donut-sweep:not([data-seen]),
+html.mt-inview .ov-line-path:not([data-seen]),
+html.mt-inview .ov-wf-step:not([data-seen]),
+html.mt-inview .ci-pips i:not([data-seen]),
+html.mt-inview .ov-chart-key li:not([data-seen]),
+html.mt-inview .cmo-meter > i:not([data-seen]),
+html.mt-inview .ci-strip-band:not([data-seen]),
+html.mt-inview .ci-strip-dot:not([data-seen]),
+html.mt-inview .ci-diverge i:not([data-seen]),
+html.mt-inview .pi-bar > i:not([data-seen]) { animation-play-state: paused; }
+
+
+
+/* Squircle cards: where the browser supports `corner-shape` the cards and the panels inside them use superelliptic corners, a smoother curve than a plain round corner.
+   A squircle of the same radius looks tighter, so the radius is raised a step; browsers without support keep the ordinary rounded corners. */
+@supports (corner-shape: squircle) {
+  html[data-surface="layered"] .ov-card, html[data-surface="layered"] .ov-agent, html[data-surface="layered"] .exp-panel, html[data-surface="layered"] .ceo-activity, html[data-surface="layered"] .cfo-skin :is(.cfo-grid, .cfo-stack) > section { corner-shape: squircle; border-radius: 36px; }
+  html[data-surface="layered"] .ov-tile, html[data-surface="layered"] .ov-why-list, html[data-surface="layered"] .ov-note, html[data-surface="layered"] .ci-change, html[data-surface="layered"] .ci-day, html[data-surface="layered"] .cmo-hint, html[data-surface="layered"] .cmo-item, html[data-surface="layered"] .cmo-block, html[data-surface="layered"] .pi-soft, html[data-surface="layered"] .pi-rec-list > li, html[data-surface="layered"] .set-row, html[data-surface="layered"] .cfo-skin .mt-ledger__row, html[data-surface="layered"] .ov-row {
+    corner-shape: squircle; border-radius: 24px;
+  }
+}
+@media (max-width: 480px) {
+  @supports (corner-shape: squircle) { html[data-surface="layered"] .ov-card, html[data-surface="layered"] .ov-agent, html[data-surface="layered"] .exp-panel { border-radius: 30px; } }
+}

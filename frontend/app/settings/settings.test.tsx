@@ -45,21 +45,21 @@ describe("Settings: competitor digest preference", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/not set up on the server yet/i);
     expect(screen.queryByText(/a\.py|"code"/)).toBeNull();
     await userEvent.setup().click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByRole("radio", { name: "Daily" })).toHaveAttribute("aria-checked", "true");
+    expect(await screen.findByRole("button", { name: "Daily" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("explains a forbidden role without an error", async () => {
     stub(() => json("forbidden", 403));
     render(<SettingsPage />);
-    expect(await screen.findByText(/does not have access to Competitor Intelligence/)).toBeInTheDocument();
+    expect(await screen.findByText(/no access to Competitor Intelligence/)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("saves the chosen frequency with the right body and confirms it", async () => {
     const f = stub((url, init) => (init?.method === "PUT" ? json({}) : json(SUB)));
     render(<SettingsPage />);
-    await userEvent.setup().click(await screen.findByRole("radio", { name: "Weekly" }));
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Weekly" })).toHaveAttribute("aria-checked", "true"));
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Weekly" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Weekly" })).toHaveAttribute("aria-pressed", "true"));
     const put = f.mock.calls.find(([, i]) => i?.method === "PUT")!;
     expect(JSON.parse(String(put[1]!.body))).toEqual({ frequency: "WEEKLY", channel: "EMAIL", enabled: true });
     expect(screen.getByText("Saved.")).toBeInTheDocument();
@@ -68,9 +68,27 @@ describe("Settings: competitor digest preference", () => {
   it("a failed save is announced, keeps the old choice selected and never says Saved", async () => {
     stub((url, init) => (init?.method === "PUT" ? json("nope", 403) : json(SUB)));
     render(<SettingsPage />);
-    await userEvent.setup().click(await screen.findByRole("radio", { name: "Off" }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Off" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/do not have permission/i);
-    expect(screen.getByRole("radio", { name: "Daily" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("button", { name: "Daily" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("Saved.")).toBeNull();
+  });
+});
+
+describe("Settings: appearance", () => {
+  it("shows the current theme as pressed, switches it, and keeps it for next time", async () => {
+    window.localStorage.clear();
+    const { resetThemeForTests } = await import("@/lib/theme");
+    resetThemeForTests();
+    window.history.replaceState(null, "", "/settings#account");
+    stub(() => json({}));
+    render(<SettingsPage />);
+    const user = userEvent.setup();
+    expect(await screen.findByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Light" }));
+    expect(screen.getByRole("button", { name: "Light" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "false");
+    expect(window.localStorage.getItem("metrion.theme")).toBe("light");
+    resetThemeForTests();
   });
 });

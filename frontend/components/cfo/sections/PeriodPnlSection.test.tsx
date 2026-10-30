@@ -40,7 +40,7 @@ async function compute(body: unknown) {
     await u.clear(el);
     await u.type(el, value);
   };
-  await fill("Marketplace", "AMAZON");
+  await u.selectOptions(screen.getAllByLabelText("Marketplace")[0], "AMAZON");
   await fill("Gross item amount (₹)", "999");
   await fill("Sales line id (UUID)", "7c1d3e50-0000-4000-8000-000000000003");
   await fill("Period start", "2026-09-01");

@@ -28,6 +28,9 @@ function validationReasons(detail: unknown): string | null {
 }
 
 const MAPPED: Record<number, string> = {
+  401: "Your session has ended. Sign in again to continue.",
+  404: "We could not find that. It may have been removed, so refresh and try again.",
+  429: "Too many requests in a short time. Wait a moment and try again.",
   402: "Your plan does not include this, or its limit for this period has been reached. Nothing was run or charged.",
   403: "You do not have permission to do this. Ask the account owner to grant you access.",
   409: "This conflicts with something already in progress or changed. Wait a moment, refresh and try again.",

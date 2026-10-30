@@ -50,8 +50,8 @@ export function Composer({
   return (
     <form
       data-testid="composer"
-      className="flex w-full flex-col gap-1.5 rounded-2xl p-2"
-      style={{ background: "var(--hub-card-bg)", border: "1px solid var(--border-default)", boxShadow: "var(--glass-shadow-hover)", outline: dragging ? "2px dashed var(--accent)" : undefined }}
+      className="flex w-full flex-col gap-1.5 rounded-[28px]"
+      style={{ outline: dragging ? "2px dashed var(--accent)" : undefined }}
       onSubmit={(e) => { e.preventDefault(); void submit(); }}
       onDragOver={(e) => { if (!disabled && e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); setDragging(true); } }}
       onDragLeave={() => setDragging(false)}
@@ -88,9 +88,9 @@ export function Composer({
         </p>
       )}
       {error && <div role="alert" className="t-meta" style={{ color: "var(--negative)" }}>{error}</div>}
-      <div className="flex items-end gap-1.5 rounded-2xl py-1.5 pl-1.5 pr-1.5 transition-colors focus-within:[border-color:var(--accent-border-strong)]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border-default)" }}>
+      <div className="ceo-composer flex items-end gap-1.5 rounded-[28px] py-1.5 pl-2 pr-2 transition-colors">
         <input ref={picker} type="file" multiple accept={ACCEPT} className="hidden" data-testid="file-input" aria-label="Attach files" onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
-        <button type="button" disabled={disabled || sending} aria-label="Attach a file" title="Attach images, PDFs, CSV or Excel files" onClick={() => picker.current?.click()} className="mt-btn mt-focus flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" style={{ color: "var(--text-4)", opacity: disabled ? 0.45 : 1 }}>
+        <button type="button" disabled={disabled || sending} aria-label="Attach a file" title="Attach images, PDFs, CSV or Excel files" onClick={() => picker.current?.click()} className="mt-btn mt-focus flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full" style={{ color: "var(--text-4)", opacity: disabled ? 0.45 : 1 }}>
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.9-8.9a3.7 3.7 0 0 1 5.2 5.2l-8.9 8.9a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2" /></svg>
         </button>
         <textarea
@@ -113,13 +113,13 @@ export function Composer({
         />
         <button
           type="submit" disabled={!canSend} aria-label="Send"
-          className="mt-btn mt-focus flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-opacity"
+          className="mt-btn mt-focus flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-opacity"
           style={{ background: "var(--accent)", color: "var(--accent-on-fill)", opacity: canSend ? 1 : 0.35 }}
         >
           {disabled || sending ? <Spinner /> : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 19V5" /><path d="M5 12l7-7 7 7" /></svg>}
         </button>
       </div>
-      <div className="px-1.5 t-meta" style={{ color: "var(--text-6)" }}>Enter to send · Shift+Enter for a new line · Drop files to attach</div>
+      <div className="px-1.5 text-center t-meta" style={{ color: "var(--text-6)" }}>Enter to send · Shift+Enter for a new line · Drop files to attach</div>
     </form>
   );
 }

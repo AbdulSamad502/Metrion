@@ -1,0 +1,38 @@
+/* Dashboard typography — one place to change the two faces.
+   Manrope: page titles, section headings, card titles, and financial figures / KPIs.
+   Inter:   everything else (body, labels, navigation, buttons, inputs, tables, dialogs).
+   These rules apply only while the signed-in dashboard is mounted (html.mt-dash-type, set by ShellFrame), so the
+   landing page and sign-in pages keep their own type. */
+
+:root {
+  --font-body: var(--font-geist-sans), "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-manrope), "Manrope", var(--font-body);
+  --font-figure: var(--font-heading);
+}
+
+html.mt-dash-type body,
+html.mt-dash-type .ov,
+html.mt-dash-type :is(button, input, select, textarea, option, optgroup) {
+  font-family: var(--font-body);
+}
+
+/* headings: page titles, section headings, card titles */
+html.mt-dash-type :is(.ov, .mt-topbar, .mt-sidebar, .mt-content, .mt-app-surface) :is(h1, h2, h3),
+html.mt-dash-type :is(h1, h2, h3, dialog h4, [role="dialog"] h4),
+html.mt-dash-type :is(.ov-h, .ov-card-head .ov-title, .t-page-title, .t-headline, .t-section, .t-card-title, .mt-section__title, .sb-brand-name) {
+  font-family: var(--font-heading);
+}
+
+/* financial figures and KPIs: Manrope, tabular */
+html.mt-dash-type :is(.ov-fig, .ov-fig-lg, .t-metric, .t-metric-lg, .pi-hero-score, .cmo-hero-stats dd, .ci-band-dl dd) {
+  font-family: var(--font-figure);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* dense tables and amounts: Inter's tabular numerals, easiest to scan in a column */
+html.mt-dash-type :is(table, .mt-ledger, .ov-row-end, .ov-chart-key b, .ov-bars-top b, .ov-flow-key b, .ov-why-row b, .ci-strip, .pi-ledger .num) {
+  font-family: var(--font-body);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}

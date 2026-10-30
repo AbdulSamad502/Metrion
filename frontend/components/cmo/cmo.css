@@ -1,0 +1,110 @@
+/* Listings & Marketing — the Overview's design language (components/overview/overview.css). */
+
+.cmo-hint { margin: 0; padding: 16px; border-radius: 16px; background: var(--ov-soft); color: var(--ov-ink-2); font-size: var(--ov-s2); font-weight: 500; border: 1px solid var(--ov-line); }
+.cmo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+@media (max-width: 1100px) { .cmo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .cmo-grid { grid-template-columns: 1fr; } }
+.cmo-list { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.cmo-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.cmo-row-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cmo-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.cmo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.cmo-label { font-size: var(--ov-s1); font-weight: 700; color: var(--ov-ink-3); margin: 0; }
+
+.cmo-meter { height: 8px; border-radius: 999px; background: var(--ov-line); overflow: hidden; }
+.cmo-meter > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-brand); transform-origin: left; animation: ov-grow 640ms var(--ov-ease) 200ms both; }
+
+.cmo-input {
+  min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--ov-edge); background: var(--ov-card); color: var(--ov-ink);
+  font: inherit; font-size: var(--ov-s2); font-weight: 600;
+  transition: border-color 160ms, box-shadow 160ms;
+}
+.cmo-input::placeholder { color: var(--ov-ink-3); }
+.cmo-input:focus-visible { outline: none; border-color: var(--ov-brand); box-shadow: 0 0 0 3px var(--ov-brand-soft); }
+.cmo-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cmo-filters label { display: inline-flex; align-items: center; gap: 8px; font-size: var(--ov-s1); font-weight: 700; color: var(--ov-ink-3); }
+
+.cmo-seg { display: inline-flex; padding: 4px; border-radius: 999px; background: var(--ov-soft); gap: 4px; }
+.cmo-seg button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--ov-ink-2); font: inherit; font-size: var(--ov-s2); font-weight: 700; cursor: pointer; transition: background 160ms, color 160ms, transform 160ms var(--ov-ease); }
+.cmo-seg button:active { transform: scale(0.97); }
+.cmo-seg button[aria-pressed="true"] { background: var(--ov-card); color: var(--ov-brand-ink); box-shadow: var(--ov-shadow); }
+.cmo-check { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; font-size: var(--ov-s2); font-weight: 600; color: var(--ov-ink-2); cursor: pointer; }
+.cmo-check input { width: 18px; height: 18px; accent-color: var(--ov-brand); }
+
+.cmo-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; border-radius: 24px; background: var(--ov-brand-soft); color: var(--ov-ink); font-size: var(--ov-s2); font-weight: 500; }
+.cmo-banner strong { font-weight: 800; }
+
+@media (prefers-reduced-motion: reduce) { .cmo-meter > i { animation: none; } .cmo-seg button { transition: none; } .cmo-seg button:active { transform: none; } }
+
+/* the workspace: titles on the left, the copy pack on the right */
+.cmo-work { display: grid; grid-template-columns: 1fr; gap: var(--ov-gap); }
+
+/* rows split by a rule, inside one card */
+.cmo-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+@media (max-width: 900px) { .cmo-rules { grid-template-columns: 1fr; } }
+.cmo-item { padding: 16px; border: 1px solid var(--ov-line); border-radius: 16px; background: var(--ov-soft); position: relative; transition: border-color 160ms; }
+.cmo-item-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; row-gap: 8px; min-width: 0; align-items: start; }
+.cmo-item-body > * { grid-column: 1; min-width: 0; }
+.cmo-item-body > .cmo-actions { grid-column: 2; grid-row: 1 / span 3; flex-direction: column; margin-top: 0; }
+.cmo-item-body > .ov-title { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 640px) { .cmo-item-body { grid-template-columns: 1fr; } .cmo-item-body > .cmo-actions { grid-column: 1; grid-row: auto; flex-direction: row; } }
+.cmo-item-body > .cmo-meter { max-width: 240px; }
+.cmo-news { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+.cmo-news .cmo-item-body { grid-template-columns: 1fr; }
+@media (max-width: 900px) { .cmo-news { grid-template-columns: 1fr; } }
+
+/* the pack */
+.cmo-pack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.cmo-pack > *:not(.cmo-block) , .cmo-pack > .cmo-block--wide { grid-column: 1 / -1; }
+@media (max-width: 900px) { .cmo-pack { grid-template-columns: 1fr; } }
+.cmo-block { padding: 16px; border: 1px solid var(--ov-line); border-radius: 16px; background: var(--ov-soft); }
+
+.cmo-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.cmo-meta-row .cmo-meter { width: 120px; flex: none; }
+.cmo-item-body > .cmo-meter { display: none; }
+
+@media (max-width: 640px) {
+  .cmo-filters, .cmo-filters label { width: 100%; }
+  .cmo-filters label { flex-direction: column; align-items: stretch; }
+  .cmo-filters .cmo-input, .cmo-filters select { width: 100% !important; max-width: 100%; }
+  }
+
+/* one bar: marketplace on the left, filters on the right */
+.cmo-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.cmo-bar .cmo-filters { gap: 8px; }
+.cmo-based { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmo-more > summary { list-style: none; cursor: pointer; width: fit-content; margin: 16px 0; }
+.cmo-more > summary::-webkit-details-marker { display: none; }
+.cmo-checks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+@media (max-width: 900px) { .cmo-checks { grid-template-columns: 1fr; } }
+.cmo-item--approved { border-color: var(--ov-edge); }
+
+/* an odd one out spans the row instead of leaving a gap beside it */
+.cmo-rules > :last-child:nth-child(odd), .cmo-news > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+/* title summary: length-vs-limit strip and approved ring */
+.cmo-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--ov-line); }
+.cmo-strip { margin: 0; display: flex; flex-direction: column; gap: 8px; flex: 0 1 320px; min-width: 200px; }
+.cmo-strip-bars { position: relative; display: flex; align-items: flex-end; gap: 8px; height: 56px; }
+.cmo-strip-col { flex: 1; height: 100%; display: flex; align-items: flex-end; border-radius: 4px; background: var(--ov-soft); }
+.cmo-strip-col > i { display: block; width: 100%; border-radius: 4px; background: var(--ov-brand); }
+.cmo-strip-col > i.is-over { background: var(--ov-bad); }
+.cmo-strip-limit { position: absolute; inset: 0 0 auto 0; border-top: 1px dashed var(--ov-field-edge); }
+.cmo-ring { display: flex; align-items: center; gap: 16px; }
+
+/* clamped text blocks */
+.cmo-clamp[data-open="false"] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines, 3); overflow: hidden; }
+
+/* news at a glance */
+.cmo-newsviz { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0; border-top: 1px solid var(--ov-line); border-bottom: 1px solid var(--ov-line); }
+.cmo-newsviz .ov-chart-key { margin: 0; }
+.cmo-time { margin: 0; flex: 1 1 240px; display: flex; flex-direction: column; gap: 8px; }
+.cmo-time-line { position: relative; height: 24px; }
+.cmo-time-line::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; border-radius: 2px; background: var(--ov-line); }
+.cmo-time-line > i { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--ov-brand); border: 2px solid var(--ov-card); }
+.cmo-time figcaption { display: flex; justify-content: space-between; }
+
+/* Copy and Details read as buttons: a visible edge, a steady width, and Copy first */
+.cmo-actions .ov-btn { border: 1px solid var(--ov-edge); padding: 0 16px; min-width: 96px; justify-content: center; margin: 0; }
+.cmo-actions .ov-btn:hover { border-color: var(--ov-field-edge); }
+.cmo-actions .ov-btn--ghost { color: var(--ov-ink-2); }

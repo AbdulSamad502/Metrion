@@ -81,8 +81,26 @@ _PI_LIMITS: Mapping[str, str] = {
 MAX_TREND_ITEMS = 4
 _CMO_KINDS: Mapping[str, str] = {
     "TITLE_SET": "Title options", "DESCRIPTION": "Description", "KEYWORDS": "Search keywords", "HASHTAGS": "Hashtags", "BULLETS": "Bullet points",
-    "LISTING_COPY": "Listing copy", "BACKEND_TERMS": "Backend search terms",
+    "LISTING_COPY": "Listing copy", "BACKEND_TERMS": "Backend search terms", "CATALOG_ANSWER": "Product details",
 }
+_BASIS_WORDS: Mapping[str, str] = {
+    "SELLER_PROVIDED": "you told me", "IMAGE_OBSERVED": "seen in your photo", "SOURCE_DERIVED": "from a cited source",
+    "ESTIMATED": "an estimate, confirm it before you list", "UNKNOWN": "not known yet",
+}
+
+
+def _catalog_item(x: Mapping[str, Any]) -> str:
+    """One catalog answer line: the value only if there is one, and always how sure it is. An unknown stays unknown; it is never filled in."""
+    name = str(x.get("attribute") or "detail").replace("_", " ").title()
+    basis = _BASIS_WORDS.get(str(x.get("basis")), "not known yet")
+    value = x.get("value")
+    if value in (None, ""):
+        est = x.get("estimate") or {}
+        sug = (x.get("suggestion") or {}).get("text")
+        guess = f" Suggestion: {sug}." if sug else ""
+        return f"{name}: not known yet ({basis}).{guess}" + (" Tell me this and I will use it." if x.get("requiresSellerInput") else "") + (f" Estimate: {est}." if est and not sug else "")
+    return f"{name}: {value} ({basis})"
+
 def _counted(text: str, a: Mapping[str, Any], stored: Any = None) -> str:
     """The text with its length, counted by CODE: the CMO's own stored count for a title, else the marketplace's counting rule applied here (UTF-16 code units unless the
     stored rule says otherwise). Never a model's figure."""
@@ -100,6 +118,7 @@ _CMO_ITEMS: Mapping[str, Any] = {
     "LISTING_COPY": lambda a: ([f"Description: {_counted(str(a['description']), a)}"] if a.get("description") else [])
     + [_counted(str(b), a) for b in a.get("bullets") or []]
     + ([f"Keywords: {', '.join(str(k) for k in a['keywords'])}"] if a.get("keywords") else []),
+    "CATALOG_ANSWER": lambda a: [_catalog_item(x) for x in a.get("attributes") or [] if isinstance(x, Mapping)],
     "BACKEND_TERMS": lambda a: ([f"{' '.join(str(t) for t in a['terms'])} ({a['byteCount']} bytes)" if isinstance(a.get("byteCount"), int) and not isinstance(a.get("byteCount"), bool)
                                 else ' '.join(str(t) for t in a['terms'])] if a.get("terms") else []),
 }
@@ -173,6 +192,11 @@ LEG_LABELS: Mapping[str, str] = {
     "cmo.generate_backend_terms": "The backend search terms",
     "cmo.generate_listing_copy": "The listing copy",
     "cmo.analyze_attachment": "The reading of your photo",
+    "cmo.approve_title": "Your title choice",
+    "cmo.keyword_intelligence": "The keyword research",
+    "cmo.analyze_titles": "The title comparison",
+    "cmo.catalog_answer": "The product details",
+    "cmo.confirm_image_hint": "Your photo confirmation",
     "cmo.market_trends": "The market trend research",
     "cmo.market_trends_preview": "The market research plan",
     "cfo.financial_health": "The financial health check",
@@ -435,6 +459,14 @@ class EvidenceCollector:
             self._trend_report(payload)
         elif leg.action_key == "cmo.analyze_attachment":
             pass  # the reading is shown to the seller by the photo-reading step as labelled suggestions; it is not a deliverable and carries no figure
+        elif leg.action_key == "cmo.approve_title":
+            self._title_choice(payload)
+        elif leg.action_key == "cmo.keyword_intelligence":
+            self._keyword_intel(payload)
+        elif leg.action_key == "cmo.analyze_titles":
+            self._title_analysis(payload)
+        elif leg.action_key == "cmo.confirm_image_hint":
+            pass  # a zero-unit record of the seller's own confirmation; nothing to present
         elif leg.action_key.startswith("cmo."):
             self._cmo_artefacts(payload)
         elif leg.action_key in ("cfo.query", "cfo.performance"):
@@ -679,6 +711,88 @@ class EvidenceCollector:
         stmts = [" ".join(str(i.get("statement", "")).split())[:260] for i in (interp.get("items") or [])[:MAX_TREND_ITEMS] if i.get("statement")]
         if stmts:
             self.artefacts.append(("What the CMO makes of it", tuple(stmts), "The CMO's reading of the findings above, not verified. Decide for yourself before acting on it."))
+
+    def _title_analysis(self, payload: Mapping[str, Any]) -> None:
+        """The title options with their 0-100 internal quality score, the points of each criterion and why points were lost, quoted as saved. Marketplace compliance is shown beside
+        the score, never inside it. A hard failure is stated first and that option is never the recommendation, whatever its score. A criterion that could not be assessed says so; it
+        is never shown as zero. No ranking, conversion or sales claim is ever shown."""
+        rules = {"PASS": "PASS", "FAIL": "FAIL", "NOT_ASSESSED": "NOT_ASSESSED"}
+        names = {"keywordRelevance": "keywords", "factAccuracy": "confirmed facts", "readability": "readability", "buyerIntent": "buyer intent", "structure": "structure"}
+        options = payload.get("options") or []
+        items: list[str] = []
+        compare: list[str] = []
+        for o in options:
+            sc = o.get("scores") or {}
+            ov = sc.get("overall") or {}
+            crit = sc.get("criteria") or {}
+            comp = rules.get(str(((o.get("dimensions") or {}).get("marketplaceRules") or {}).get("status")), "NOT_ASSESSED")
+            parts = []
+            for k, label in names.items():
+                c = crit.get(k) or {}
+                parts.append(f"{label} {c['earned']}/{c['max']}" if c.get("status") == "ASSESSED" else f"{label} not assessed")
+            if ov.get("status") == "ASSESSED":
+                head = f"{ov['score']}/100 ({str(ov['band']).replace('_', ' ').lower()})"
+                cover = f" [{ov['assessablePoints']} of 100 points assessable]"
+            else:
+                head, cover = "no overall score", f" [{ov.get('note', 'not enough evidence')}]"
+            line = f"Option {o['rank']} ({o.get('strategy')}): {o['text']} | quality score {head}{cover} | " + ", ".join(parts) + f" | marketplace compliance (separate): {comp}"
+            if o.get("hardFailures"):
+                line = f"Option {o['rank']} ({o.get('strategy')}): {o['text']} | HARD FAIL, never recommended whatever its score: " + " ".join(o["hardFailures"]) + f" | score for reference {head}{cover}"
+            lost = [f"{names[k]} -{d['points']} ({d['reason']})" for k, c in crit.items() for d in (c.get("deductions") or []) if d.get("points")]
+            if lost and not o.get("hardFailures"):
+                line += " | points lost: " + "; ".join(lost)
+            if o.get("strengths") and not o.get("hardFailures"):
+                line += " | good: " + "; ".join(o["strengths"])
+            items.append(line)
+            compare.append(f"Option {o['rank']}: " + (f"{head}, {ov['assessablePoints']} of 100 points assessable" if ov.get("status") == "ASSESSED" else f"no overall score ({ov.get('assessablePoints', 0)} of 100 points assessable)") + (" - HARD FAIL" if o.get("hardFailures") else ""))
+        if items:
+            self.artefacts.append(("Title quality scores", tuple(items), "Internal listing-quality assessment of wording and fit with your own confirmed facts. Not a marketplace ranking, search position, conversion or sales prediction."))
+            self.artefacts.append(("Comparison of all options", tuple(compare), None))
+        else:
+            self.add_gap("There were no title options to compare.")
+        rec = payload.get("recommendation") or {}
+        if rec.get("text"):
+            self.add_fact("Recommendation", str(rec["text"]), "SOURCE_DERIVED")
+        scoring = payload.get("scoring") or {}
+        if scoring.get("criteria"):
+            self.add_fact("How the score works", "Out of 100: " + ", ".join(f"{names.get(k, k)} {v}" for k, v in scoring["criteria"].items()) + f". At least {scoring.get('minimumAssessedPoints')} points must be assessable for an overall score.", "SOURCE_DERIVED")
+        for n in payload.get("notes") or []:
+            self.add_fact("Not assessed", str(n), "SOURCE_DERIVED")
+        for line in payload.get("limits") or []:
+            self.add_fact("Limit", str(line), "SOURCE_DERIVED")
+
+    def _keyword_intel(self, payload: Mapping[str, Any]) -> None:
+        """Keyword candidates with their rule-based labels and evidence, quoted as saved. Volume, demand and rank are never shown as numbers: they are not assessed."""
+        if payload.get("status") == "NO_FACTS":
+            self.add_gap("There are no confirmed details for this product yet, so there is nothing to base keywords on. Tell me " + " and ".join(payload.get("needs") or ["the product details"]) + ".")
+            return
+        where = {"TITLE": "title", "BULLETS": "bullet points", "DESCRIPTION": "description", "BACKEND_TERMS": "backend search terms", "KEYWORDS": "keywords field"}
+        items: list[str] = []
+        for c in payload.get("candidates") or []:
+            occ = c.get("competitorOccurrence") or {}
+            seen = f"seen in {occ['listings']} of {occ['of']} tracked competitor listings" if occ.get("status") == "OBSERVED" else "competitor use: not assessed"
+            evidence = ", ".join(sorted({str(e.get("detail")) for e in c.get("evidence") or []}))
+            note = "" if c.get("recommended") else " (weak fit with your product: not recommended)"
+            items.append(f"{c['keyword']}: {str(c['intent']).replace('_', ' ').lower()}; use in the {', '.join(where.get(p, str(p).lower()) for p in c['placement'])}; fit with your product {str(c['relevance']).lower()}; "
+                         f"evidence strength {str(c['confidence']).replace('_', ' ').lower()} ({evidence}); {seen}; search volume and demand: not assessed{note}")
+        if items:
+            self.artefacts.append(("Keyword candidates", tuple(items), "Fit and evidence describe how well each keyword matches your own confirmed facts. They are not search counts, rankings or sales predictions."))
+        else:
+            self.add_gap("No keyword candidates could be built from the confirmed details.")
+        for e in payload.get("excluded") or []:
+            self.add_gap(f"Excluded: “{e['keyword']}”. {e['reason']}")
+        for line in payload.get("limits") or []:
+            self.add_fact("Limit", str(line), "SOURCE_DERIVED")
+
+    def _title_choice(self, payload: Mapping[str, Any]) -> None:
+        """The seller's own title choice, quoted as saved. It is a record of their choice in Metrion; it is not a publication and not a marketplace approval."""
+        text = payload.get("approvedText")
+        if not text:
+            self.add_gap("Your title choice could not be saved.")
+            return
+        self.add_fact("The title you chose", f"“{text}”" + (" (worded by you)" if payload.get("editedBySeller") else ""), "SELLER_PROVIDED")
+        self.add_fact("What this means", "It is saved in Metrion as your choice. Nothing was published to any marketplace, and copying it later only records that you did.", "SOURCE_DERIVED")
+        self.add_fact("Next step", "Ask me to write the listing copy (description, bullet points and keywords) and I will base it on this title. That is a separate plan you approve.", "SOURCE_DERIVED")
 
     def _cmo_artefacts(self, payload: Mapping[str, Any]) -> None:
         """What CMO wrote. The text is the specialist's own content, shown quoted and labelled; it is never a figure and is not run through the money provenance path.

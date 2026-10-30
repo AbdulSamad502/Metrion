@@ -236,6 +236,7 @@ export class FakeCeo {
           }
           return { agent, attached };
         }),
+      getAttachmentImage: (id: string, attachmentId: string) => rec("getAttachmentImage", [id, attachmentId], () => `blob:fake-${attachmentId}`),
       uploadAttachment: (id: string, file: File) =>
         rec("uploadAttachment", [id, file.name], (): UploadedAttachment => {
           this.visible(id);

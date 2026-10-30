@@ -1,13 +1,24 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Manrope } from "next/font/google";
 import "./globals.css";
+import "./squircle.css";
 import { AppFrame } from "@/components/dashboard/AppFrame";
+import { InlineScript } from "@/components/InlineScript";
+import { themeInitScript } from "@/lib/theme";
 
+// Inter: body text, labels, navigation, buttons and tables. (The variable keeps its old name so existing styles still resolve.)
 const inter = Inter({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
+});
+
+// Manrope: headings and the big financial figures on the signed-in dashboard (see components/dashboard/typography.css).
+const manrope = Manrope({
+  variable: "--font-manrope",
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
@@ -16,16 +27,16 @@ export const metadata: Metadata = {
 };
 
 // Clerk's theme engine takes literal colors, so these mirror the tokens in globals.css
-// (colorPrimary=--accent, colorBackground=--bg-popover, colorText=--text-2,
-// colorTextSecondary=--text-5). Keep them in sync if those tokens change.
+// (colorPrimary=--ov-brand, colorBackground=--ov-card, colorText=--ov-ink,
+// colorTextSecondary=--ov-ink-3). Keep them in sync if those tokens change.
 const clerkAppearance = {
   variables: {
-    colorPrimary: "#3ECF74",
-    colorBackground: "#14150F",
-    colorInputBackground: "rgba(18, 20, 17, 0.5)",
-    colorInputText: "#F2F4F0",
-    colorText: "#F2F4F0",
-    colorTextSecondary: "#8A9188",
+    colorPrimary: "#fafafa",
+    colorBackground: "#0e0e10",
+    colorInputBackground: "#0f0f11",
+    colorInputText: "#fafafa",
+    colorText: "#fafafa",
+    colorTextSecondary: "#a1a1aa",
     borderRadius: "14px",
     fontFamily: "Inter, sans-serif",
   },
@@ -33,7 +44,10 @@ const clerkAppearance = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} ${manrope.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <InlineScript html={themeInitScript} />
+      </head>
       <body className="min-h-full flex flex-col" style={{ background: "var(--bg-base)" }}>
         {/* Metrion's backend creates the Clerk org during onboarding (auth.md §6.2), so if the
             Clerk instance leaves a new session "pending" on choose-organization, route it to

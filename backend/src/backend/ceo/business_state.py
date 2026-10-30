@@ -21,6 +21,7 @@ tenant-scoped. Entries whose source exists but has no tenant-wide read function 
 from __future__ import annotations
 
 import dataclasses
+import logging
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -402,7 +403,7 @@ def _load_cmo_workflow(ctx: AuthContext, now: datetime) -> StateRead:
 
 # Presentation bounds, not business thresholds. 3 periods x 3 P&L metrics + the 3 health bands = the 12 figures one answer carries (evidence.MAX_FIGURES).
 _PNL_RECENT_PERIODS = 3
-_CMO_CONTENT_ITEMS = 3
+_CMO_CONTENT_ITEMS = 6
 _CMO_CONTENT_CLIP = 1500
 _SELLER_FACT_LABELS: Mapping[str, str] = {
     "business_name": "Business name", "niche": "Your niche", "marketplaces": "Where you sell", "goal": "Your goal", "brand_tone": "Brand tone",
@@ -463,6 +464,13 @@ def _load_cmo_content_latest(ctx: AuthContext, now: datetime) -> StateRead:
     """The text Slim CMO wrote for the seller (COMPLETE generations, newest first), as quoted artefacts. Content is NEVER a Figure and NEVER evidence (R9): it is
     shown as the seller's own deliverable, labelled as written by Slim CMO and not verified."""
     assert ctx.tenant_id is not None
+    chosen = None
+    try:  # CMO 3.0 M0: the titles the seller chose come first, with what was recorded for each (copied / marked used is not "published")
+        from backend.ceo import cmo_chat  # noqa: PLC0415
+
+        chosen = cmo_chat.approved_history_artefact(ctx.tenant_id)
+    except Exception:  # noqa: BLE001 - the history is a convenience; the written text is still shown
+        logging.getLogger(__name__).exception("could not read approved titles")
     rows = ceo_reads.recent_cmo_content(ctx.tenant_id, limit=_CMO_CONTENT_ITEMS)
     if not rows:
         return StateRead(EntryStatus.UNAVAILABLE, gaps=(Gap("NO_CONTENT", "No listing content has been written yet."),))
@@ -472,6 +480,8 @@ def _load_cmo_content_latest(ctx: AuthContext, now: datetime) -> StateRead:
         where = (f" for SKU {r['sku']}" if r.get("sku") else "") + (f" on {str(r['marketplace']).title()}" if r.get("marketplace") else "")
         items = tuple(i if len(i) <= _CMO_CONTENT_CLIP else i[:_CMO_CONTENT_CLIP] + "…" for i in (str(x) for x in r["items"]))
         artefacts.append((f"Written by Slim CMO: {kind}{where} ({r['created_at'].date().isoformat()})", items, "Quoted as written; not verified by Metrion."))
+    if chosen is not None:
+        artefacts.insert(0, chosen)
     return StateRead(EntryStatus.AVAILABLE, as_of=rows[0]["created_at"], artefacts=tuple(artefacts))
 
 

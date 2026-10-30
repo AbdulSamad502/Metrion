@@ -33,6 +33,8 @@ EXPECTED_ROUTES = {
     "/api/v1/cmo/title-sets", "/api/v1/cmo/listing-copy", "/api/v1/cmo/description", "/api/v1/cmo/bullets",
     "/api/v1/cmo/keywords", "/api/v1/cmo/backend-terms", "/api/v1/cmo/hashtags", "/api/v1/cmo/catalog-answers",
     "/api/v1/cmo/title-approvals", "/api/v1/cmo/image-hints/confirm",
+    "/api/v1/cmo/keyword-intelligence",  # CMO 3.0 M2: zero-unit keyword analysis
+    "/api/v1/cmo/title-analysis",  # CMO 3.0 M3: zero-unit title comparison
     "/api/v1/cmo/images", "/api/v1/cmo/image-analyses",  # P6: explicit zero-unit image actions
     "/api/v1/cmo/niche-terms/suggest", "/api/v1/cmo/niche-terms/confirm", "/api/v1/cmo/niche-terms",  # P7d: zero-unit niche flow
     "/api/v1/cmo/market-trends/preview", "/api/v1/cmo/market-trends", "/api/v1/cmo/market-trends/{generation_id}",  # P7f

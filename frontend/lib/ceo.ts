@@ -47,6 +47,47 @@ export type PickCard = {
   items: { key: string; n?: number; label: string; marketplace?: string | null; url?: string | null; note?: string | null }[];
   actions: { id: string; label: string; template: string; exactly?: number; noPick?: boolean }[];
 };
+/** The visual listing preview (CMO 3.0 M4; backend: services/cmo_preview.build_card). Everything needed to switch marketplace, title and screen is in the card: switching makes no request. */
+export type PreviewMode = "mobile" | "desktop";
+export type PreviewMarketplace = "AMAZON" | "FLIPKART" | "MEESHO";
+export type PreviewStatus = "VISIBLE" | "CUT_OFF" | "NOT_IN_TITLE";
+export type PreviewScreen = {
+  visible: string; hidden: string; truncated: boolean; visibleChars: number; totalChars: number; limit: number;
+  limitBasis: "VERIFIED" | "ILLUSTRATIVE"; limitNote: string; limitSourceUrl?: string | null; limitVerifiedAt?: string | null;
+  keywords: { keyword: string; status: PreviewStatus }[]; details: { label: string; value: string; status: PreviewStatus }[]; suggestions: string[];
+};
+export type PreviewOption = {
+  optionId: string; rank: number; text: string; strategy: string | null; hardFailures: string[];
+  score: { status: "ASSESSED" | "NOT_ASSESSED"; score?: number | null; band?: string | null; assessablePoints?: number | null; note?: string | null; criteria: Record<string, { status: string; earned: number | null; max: number }> };
+  compliance: { status: "PASS" | "FAIL" | "NOT_ASSESSED"; detail?: string | null; length?: number | null; limit?: number | null; ruleKind?: string | null };
+  modes: Record<PreviewMode, PreviewScreen>;
+};
+export type PreviewSet = { marketplace: PreviewMarketplace; generationId: string; analysisId: string; recommendedOptionId: string | null; recommendation: string | null; options: PreviewOption[] };
+export type PreviewCard = {
+  version: number; kind: "PREVIEW"; method: string; notice: string; investigationId: string; product: { name: string | null; brand: string | null };
+  image: { attachmentId: string; filename: string } | null; imageNote: string; marketplaces: PreviewMarketplace[]; missingMarketplaces: PreviewMarketplace[];
+  sets: PreviewSet[]; defaultMode: PreviewMode; limits: string[];
+};
+export const isPreviewCard = (c: unknown): c is PreviewCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "PREVIEW" && Array.isArray((c as { sets?: unknown }).sets);
+
+/** Buyer questions and listing readiness (CMO 3.0 M5; backend: services/cmo_readiness.build_card). Both views, for all three marketplaces, ride in the card: switching makes no request. */
+export type BuyerQuestion = {
+  id: string; topic: string; question: string; importance: "ESSENTIAL" | "LIKELY" | "COMPETITOR_RELEVANT"; claim: boolean; status: "CONFIRMED" | "NOT_CONFIRMED" | "SELLER_UNKNOWN";
+  answer: string | null; source: { label: string; origin: string; at: string } | null; ask: string | null; listingUse: string; evidence: { kind: string; detail: string }[];
+};
+export type ReadinessItem = { id: string; label: string; status: "DONE" | "MISSING" | "BLOCKED" | "NOT_ASSESSED"; max: number; earned: number | null; detail: string; action: string | null };
+export type ReadinessCategory = { id: string; label: string; max: number; status: "ASSESSED" | "NOT_ASSESSED"; earned: number | null; assessable: number; score: number | null; items: ReadinessItem[] };
+export type MarketReadiness = {
+  marketplace: PreviewMarketplace; verdict: "BLOCKED" | "NOT_READY" | "DRAFT_READY_NOT_VERIFIED" | "READY"; verdictText: string;
+  score: { status: "ASSESSED" | "NOT_ASSESSED"; score?: number; earnedPoints?: number; assessablePoints: number; note: string };
+  categories: ReadinessCategory[]; nextActions: { id: string; label: string; action: string; status: string; points: number }[]; counts: { done: number; missing: number; blocked: number; notAssessed: number };
+};
+export type ReadinessCard = {
+  version: number; kind: "READINESS"; view: "questions" | "readiness"; notice: string; investigationId: string; product: { name: string; sku: string }; defaultMarketplace: PreviewMarketplace;
+  questions: { counts: { CONFIRMED: number; NOT_CONFIRMED: number; SELLER_UNKNOWN: number }; questions: BuyerQuestion[]; limits: string[] };
+  readiness: { marketplaces: MarketReadiness[]; limits: string[] };
+};
+export const isReadinessCard = (c: unknown): c is ReadinessCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "READINESS" && !!(c as { readiness?: unknown }).readiness;
 
 export const isPickCard = (c: unknown): c is PickCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "PICK" && Array.isArray((c as { items?: unknown }).items);
 
@@ -58,7 +99,7 @@ export type CeoMessage = {
   turn_id: string | null;
   created_at: string;
   /** Only a CEO CLARIFICATION message that has real candidates to offer. */
-  choices?: ClarificationCard | PickCard | null;
+  choices?: ClarificationCard | PickCard | PreviewCard | ReadinessCard | null;
   /** Client-only: a message the seller just sent that the server has not echoed back yet. */
   pending?: boolean;
   /** The send failed and the thread could not be refreshed, so the server's copy is unknown: shown as not sent, never as still sending. */
@@ -264,6 +305,13 @@ export function createCeoClient(getToken: GetToken) {
     getFindings: (id: string, turnId?: string) =>
       call<FindingRow[]>(`/investigations/${id}/findings${turnId ? `?turn_id=${encodeURIComponent(turnId)}` : ""}`),
     getNeeds: (id: string) => call<{ items: NeedRow[] }>(`/investigations/${id}/needs`),
+    /** The seller's own picture from this conversation, for the listing preview: fetched with the session token from the image route (images only) and returned as a local object URL. */
+    getAttachmentImage: async (id: string, attachmentId: string): Promise<string> => {
+      const token = await getToken();
+      const res = await fetch(`${API_BASE}${BASE}/investigations/${id}/attachments/${attachmentId}/image`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) throw new ApiError(res.status, "image not available");
+      return URL.createObjectURL(await res.blob());
+    },
     uploadAttachment: async (id: string, file: File) => {
       const form = new FormData();
       form.append("file", file);

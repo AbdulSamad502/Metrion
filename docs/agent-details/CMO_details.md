@@ -117,7 +117,7 @@ Precedence per attribute is deterministic: latest seller fact → passed-gate ob
 A separate optional artefact labelled *"marketing suggestions — not a listing field on any marketplace"*. No marketplace's hashtag support is verified, so none goes into a listing field. Needs the `hashtag_set_size` config key.
 
 ### Step I — Optional CI-informed generation
-If the seller has `agent.ci` plus a passing CI entitlement, the CEO may attach CI's `competitor_listing_insight` themes. A theme is used in copy **only** if the seller's product has a claim-eligible attribute supporting it; otherwise it's surfaced as "consider adding if true for your product". Competitor text and prices are never consumed. Missing/stale CI silently falls back to independent mode with a note. *(Per the build record this CI-informed mode — "P11" — was not started; generation runs in `INDEPENDENT` mode.)*
+If the seller has `agent.ci` plus a passing CI entitlement, the CEO may attach CI's `competitor_listing_insight` themes. A theme is used in copy **only** if the seller's product has a claim-eligible attribute supporting it; otherwise it's surfaced as "consider adding if true for your product". Competitor text and prices are never consumed. Missing/stale CI silently falls back to independent mode with a note. *(Built and wired: `backend/services/cmo_ci_inputs.py` brokers the seller's saved insights, `orchestrator.py` freezes their ids into the plan card, and the writer receives derived words only. Verified in code 2026-10-30; a run with real saved CI rows is still untested.)*
 
 ### Step J — Market-trend reports (the most elaborate capability)
 
@@ -194,7 +194,7 @@ No table stores a GST rate, a fee or a competitor/seller price as CMO fact.
 - **Launch blockers (owner inputs):** verified marketplace format constraints with `count_rule` and max-age; unset trend configuration (`max_sources_per_report`, `max_findings_per_section`, the freshness windows and corroboration thresholds); a **per-tenant monthly trend cap must be seeded** or one tenant can exhaust the shared daily ceiling; the tactic-risk pattern set (until then every tactic is `UNASSESSED` with no suggested action); the vision pass-bar and image limits/retention; legal review of search providers; provider keys and model settings.
 - **Vision trust gate is closed** — all photo-derived values are unverified hints. A real-model vision/generation run and a signed-in click-through of the workspace had not been possible in the build environment.
 - **P6 (image intake/vision/evaluation) is explicitly UNVERIFIED** against the development database (its leftover test rows block the shared fixtures); passing evidence exists only on a clean scratch database.
-- **CI-informed generation (P11) and close-out (P12) were not started** per the build record; `SOURCE_DERIVED` is vocabulary only.
+- **CI-informed generation is built** (see §1.5-I); the old build record that called it not started is out of date. **Close-out (P12) was not done.** `SOURCE_DERIVED` is still vocabulary only.
 - **Known validation gaps:** a pack that contradicts its approved title in *meaning* isn't detected; letter-spaced banned phrases aren't recognised; Hindi is the only regional language covered; the provider's India filter is approximate.
 - The daily provider ceiling counts CMO searches only — PI shares the same keys and is invisible to it.
 - The status document is dated 2026-10-04; the CEO-delegation spec still says "nothing implemented" although the delegation module, showcase routes and showcase components now exist. Treat both documents' status lines as stale and check code before relying on them.
@@ -280,3 +280,16 @@ Product/Create/Titles/Listing-copy/One-piece/Catalog/Niche forms; image upload a
 - Whether the legacy read-only **Usage** (entitlement meter) panel stays is undecided (OQ-11), and the approver's identity is returned only as "approved by you" (OQ-12).
 - Results created before the chat-only workflow are labelled "earlier workflow"; whether to include them at all is still an open question (OQ-6).
 - Visual styling follows the reference closely in layout but is not final (`docs/design/design_status.md`).
+
+---
+
+## CMO 3.0 M0 — what changed in the chat (2026-10-30, branch `feat/cmo-3-m0`)
+
+Authority: `docs/specs/ceo-cmo-delegation.md` §6.12. In short:
+
+- **Product identity.** A product named in chat gets a stable `sku` from its name, so confirmed facts are saved against it, reused in a later conversation (listed on the plan card for the seller to re-confirm), and shown on the dashboard.
+- **Choosing a title in chat.** After titles are written the seller says "use option 2" (or clicks, or types their own title). The choice is saved for free; nothing is published. Copy written afterwards is grounded on the approved title.
+- **Photo details.** A detail the seller confirms or corrects is also recorded as their own statement, linked to the photo reading (zero units).
+- **Catalog details and property questions.** "What are the colour and material of my bottle?" is a planned task with no language model; "is it dishwasher safe?" is answered from the seller's own facts, else "not confirmed".
+- **History.** "Show my selected title" lists the titles the seller chose, with copy and mark-used counts, and says that is not proof of publication.
+- **Readiness check.** `packages/slim-cmo/scripts/verify_cmo_readiness.py` reports which marketplaces can generate and which configuration is missing (read-only).

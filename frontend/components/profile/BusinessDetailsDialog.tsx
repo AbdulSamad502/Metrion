@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 import { ProfileField } from "@/components/profile/ProfileField";
 import { ApiError, apiFetch } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
@@ -75,7 +76,8 @@ export function BusinessDetailsDialog({ onClose, onSaved }: { onClose: () => voi
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-10" style={{ background: "rgba(0,0,0,0.65)" }}>
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-10" style={{ background: "var(--ov-scrim, rgba(0,0,0,0.65))" }}>
       <div
         ref={ref}
         tabIndex={-1}
@@ -83,7 +85,7 @@ export function BusinessDetailsDialog({ onClose, onSaved }: { onClose: () => voi
         aria-modal="true"
         aria-labelledby="business-details-title"
         className="mt-panel w-full max-w-xl outline-none"
-        style={{ padding: "22px 24px" }}
+        style={{ padding: "22px 24px", background: "var(--bg-popover)", border: "1px solid var(--border-default)" }}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -135,5 +137,6 @@ export function BusinessDetailsDialog({ onClose, onSaved }: { onClose: () => voi
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type ReactNode } from "react";
-import { Icon } from "@/components/ui/Icon";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { PNL_FULFILMENT, PNL_MARKETPLACES, activeFeeFields, type PnlFulfilment, type PnlMarketplace } from "@/lib/pnlFeeFields";
 import { exampleForm, newFeeEntry, type PnlBand, type PnlFeeEntry, type PnlField, type PnlForm } from "@/lib/pnlScenario";
 
@@ -13,11 +13,15 @@ function NumberField({
   label: string; hint?: ReactNode; value: PnlField; onChange: (next: PnlField) => void; error?: string; unit: "₹" | "%" | "orders"; allowNa?: boolean; placeholder?: string;
 }) {
   const id = useId();
+  const entered = !value.na && value.text.trim() !== "" && !error;
   return (
-    <div>
-      <label htmlFor={id} className="mb-1.5 block t-body-sm font-medium" style={{ color: "var(--text-5)" }}>{label}</label>
-      <div className="flex items-center gap-2">
-        <span aria-hidden className="t-body-sm" style={{ color: "var(--text-6)", minWidth: unit === "orders" ? 0 : 12 }}>{unit === "orders" ? "" : unit}</span>
+    <div className="min-w-0">
+      <label htmlFor={id} className="mb-1.5 block t-body-sm font-medium" style={{ color: "var(--text-4)" }}>{label}</label>
+      <div
+        className="mt-input flex min-h-10 items-center gap-2 px-3 py-0 focus-within:!border-[var(--accent)] focus-within:shadow-[0_0_0_3px_var(--accent-fill-default)]"
+        style={{ opacity: value.na ? 0.6 : 1, borderColor: error ? "var(--negative)" : undefined }}
+      >
+        {unit === "₹" && <span aria-hidden className="t-body-sm" style={{ color: "var(--text-5)" }}>₹</span>}
         <input
           id={id}
           inputMode="decimal"
@@ -28,36 +32,43 @@ function NumberField({
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-err` : hint ? `${id}-hint` : undefined}
           onChange={(e) => onChange({ text: e.target.value, na: false })}
-          className="mt-input w-full rounded-lg px-3 py-2 t-body"
+          className="min-w-0 flex-1 border-0 bg-transparent py-2 t-body outline-none"
+          style={{ color: "var(--text-1)" }}
         />
-        {allowNa && (
-          <label className="flex min-h-9 flex-shrink-0 cursor-pointer items-center gap-2 t-meta" style={{ color: "var(--text-5)" }}>
-            <input type="checkbox" className="mt-focus h-5 w-5 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={value.na} onChange={(e) => onChange({ text: "", na: e.target.checked })} />
-            <span>{unit === "%" ? "Doesn't apply (0%)" : "Doesn't apply (₹0)"}</span>
-          </label>
-        )}
+        {entered && <span aria-hidden className="flex flex-shrink-0" style={{ color: "var(--accent)" }}><Icon name="check" size={16} /></span>}
+        {unit === "%" && <span aria-hidden className="flex-shrink-0 border-l pl-3 t-body-sm" style={{ color: "var(--text-5)", borderColor: "var(--border-default)" }}>%</span>}
+        {unit === "orders" && <span aria-hidden className="flex-shrink-0 t-body-sm" style={{ color: "var(--text-5)" }}>orders</span>}
       </div>
+      {allowNa && (
+        <label
+          className="mt-chip mt-2 inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-full px-3 t-meta focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--accent)]"
+          style={{ border: `1px solid ${value.na ? "var(--accent-border-strong)" : "var(--border-default)"}`, color: value.na ? "var(--accent)" : "var(--text-4)", background: value.na ? "var(--accent-fill-default)" : "transparent" }}
+        >
+          <input type="checkbox" className="h-6 w-6 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={value.na} onChange={(e) => onChange({ text: "", na: e.target.checked })} />
+          <span>{unit === "%" ? "Doesn't apply (0%)" : "Doesn't apply (₹0)"}</span>
+        </label>
+      )}
       {error ? (
-        <p id={`${id}-err`} role="alert" className="mt-1 t-meta" style={{ color: "var(--negative)" }}>{error}</p>
+        <p id={`${id}-err`} role="alert" className="mt-1.5 t-meta" style={{ color: "var(--negative)" }}>{error}</p>
       ) : hint ? (
-        <p id={`${id}-hint`} className="mt-1 t-meta" style={{ color: "var(--text-6)" }}>{hint}</p>
+        <p id={`${id}-hint`} className="mt-1.5 t-meta" style={{ color: "var(--text-5)" }}>{hint}</p>
       ) : null}
     </div>
   );
 }
 
 /** Pill-style single choice. Real radio inputs underneath (arrow keys, labels and screen readers work as for any radio group). */
-function PillChoice<T extends string>({ legend, value, options, onChange }: { legend: string; value: T; options: { id: T; label: string }[]; onChange: (v: T) => void }) {
+function PillChoice<T extends string>({ legend, value, options, onChange, segmented = false }: { legend: string; value: T; options: { id: T; label: string }[]; onChange: (v: T) => void; segmented?: boolean }) {
   return (
     <fieldset className="m-0 border-0 p-0">
-      <legend className="mb-1.5 p-0 t-body-sm font-medium" style={{ color: "var(--text-5)" }}>{legend}</legend>
-      <div className="flex flex-wrap gap-2">
+      <legend className="mb-1.5 p-0 t-body-sm font-medium" style={{ color: "var(--text-4)" }}>{legend}</legend>
+      <div className={segmented ? "inline-grid w-fit max-w-full auto-cols-fr grid-flow-col gap-1 rounded-full p-1" : "flex flex-wrap gap-2"} style={segmented ? { border: "1px solid var(--border-default)", background: "var(--fill-hover)" } : undefined}>
         {options.map((o) => {
           const on = value === o.id;
           return (
             <label
               key={o.id}
-              className="mt-chip flex min-h-9 cursor-pointer items-center rounded-full px-4 t-body-sm font-medium focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--accent)]"
+              className={`mt-chip flex min-h-10 cursor-pointer items-center rounded-full px-3 sm:px-5 t-body-sm font-medium focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--accent)] ${segmented ? "justify-center text-center" : ""}`}
               style={{ background: on ? "var(--accent-fill-default)" : "transparent", border: `1px solid ${on ? "var(--accent-border-strong)" : "var(--border-default)"}`, color: on ? "var(--accent)" : "var(--text-3)" }}
             >
               <input type="radio" name={legend} className="sr-only" checked={on} onChange={() => onChange(o.id)} />
@@ -110,7 +121,7 @@ function Chip({ label, on, onClick }: { label: string; on: boolean; onClick: () 
       type="button"
       aria-pressed={on}
       onClick={onClick}
-      className="mt-chip mt-focus min-h-9 rounded-full px-3.5 t-body-sm font-medium"
+      className="mt-chip mt-focus min-h-10 rounded-full px-4 t-body-sm font-medium"
       style={{ background: on ? "var(--accent-fill-default)" : "transparent", border: `1px solid ${on ? "var(--accent-border-strong)" : "var(--border-default)"}`, color: on ? "var(--accent)" : "var(--text-3)" }}
     >
       {label}
@@ -137,29 +148,31 @@ function GstRateField({ value, onChange, error }: { value: PnlField; onChange: (
   );
 }
 
+type StepTone = "info" | "warning" | "rose" | "violet" | "accent";
+
 /** A numbered, collapsible step with a tick once everything in it has been entered. "Entered" only means something was typed or marked not applicable; it
- * does not mean the values are right. */
-function StepCard({ n, title, subtitle, done, open, onToggle, children }: { n: number; title: string; subtitle: string; done: boolean; open: boolean; onToggle: () => void; children: ReactNode }) {
+ * does not mean the values are right. The icon and tint only help tell the steps apart; each is named in words. */
+function StepCard({ n, title, subtitle, done, open, onToggle, icon, tone, wide = false, children }: { n: number; title: string; subtitle: string; done: boolean; open: boolean; onToggle: () => void; icon: IconName; tone: StepTone; wide?: boolean; children: ReactNode }) {
   const id = useId();
   return (
-    <section className="overflow-hidden rounded-2xl" style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }} data-testid={`step-${n}`}>
+    <section className={`ov-card pnl-step ${wide ? "lg:col-span-2" : ""}`} data-testid={`step-${n}`}>
       <h2 className="m-0">
-        <button type="button" aria-expanded={open} aria-controls={id} onClick={onToggle} className="mt-focus flex w-full cursor-pointer items-center gap-3 px-4 py-3.5 text-left">
-          <span aria-hidden className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg t-body-sm font-bold" style={{ background: "var(--accent-fill-default)", color: "var(--accent)" }}>{n}</span>
+        <button type="button" aria-expanded={open} aria-controls={id} onClick={onToggle} className="pnl-step-head mt-focus flex min-h-14 w-full cursor-pointer items-center gap-3 text-left">
+          <span aria-hidden className="pnl-step-icon flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" data-tone={tone}><Icon name={icon} size={20} /></span>
           <span className="min-w-0 flex-1">
-            <span className="block t-body font-semibold" style={{ color: "var(--text-1)" }}>{title}</span>
+            <span className="block t-body font-semibold" style={{ color: "var(--text-1)" }}><span aria-hidden>{n}. </span>{title}</span>
             <span className="block t-meta" style={{ color: "var(--text-5)" }}>{subtitle}</span>
           </span>
           {done && (
-            <span className="flex items-center gap-1 t-meta font-semibold" style={{ color: "var(--accent)" }}>
-              <Icon name="check" size={18} />
-              <span>Entered</span>
+            <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full" style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}>
+              <Icon name="check" size={14} />
+              <span className="sr-only">Entered</span>
             </span>
           )}
           <span aria-hidden style={{ color: "var(--text-5)", transform: open ? "rotate(180deg)" : "none", display: "inline-flex" }}><Icon name="chevron" size={18} /></span>
         </button>
       </h2>
-      <div id={id} hidden={!open} className="px-4 pb-5 pt-1">{children}</div>
+      <div id={id} hidden={!open} className="pnl-step-body">{children}</div>
     </section>
   );
 }
@@ -198,8 +211,8 @@ function BandEditor({ def, entry, errors, onChange }: { def: { id: string; label
         );
       })}
       <div className="flex gap-3 t-body-sm">
-        <button type="button" className="mt-focus font-semibold underline" style={{ color: "var(--accent)" }} onClick={() => onChange({ bands: [{ upTo: "", rate: "" }, ...entry.bands] })}>Add band</button>
-        {entry.bands.length > 2 && <button type="button" className="mt-focus underline" style={{ color: "var(--text-5)" }} onClick={() => onChange({ bands: entry.bands.slice(1) })}>Remove first band</button>}
+        <button type="button" className="mt-focus min-h-10 font-semibold underline" style={{ color: "var(--accent)" }} onClick={() => onChange({ bands: [{ upTo: "", rate: "" }, ...entry.bands] })}>Add band</button>
+        {entry.bands.length > 2 && <button type="button" className="mt-focus min-h-10 underline" style={{ color: "var(--text-5)" }} onClick={() => onChange({ bands: entry.bands.slice(1) })}>Remove first band</button>}
       </div>
     </fieldset>
   );
@@ -231,10 +244,10 @@ export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form:
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-4 rounded-2xl p-4 sm:grid-cols-2" style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
+      <div className="ov-card grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-3">
-          <PillChoice legend="Marketplace" value={form.marketplace} options={PNL_MARKETPLACES} onChange={(v: PnlMarketplace) => setForm((f) => (f.isExample ? exampleForm(v, f.mode) : { ...f, marketplace: v, fees: {}, fulfilment: "easy_ship" }))} />
-          <PillChoice legend="Detail" value={form.mode} options={[{ id: "quick", label: "Expected" }, { id: "detailed", label: "Detailed" }]} onChange={(v) => set("mode", v)} />
+          <PillChoice legend="Marketplace" segmented value={form.marketplace} options={PNL_MARKETPLACES} onChange={(v: PnlMarketplace) => setForm((f) => (f.isExample ? exampleForm(v, f.mode) : { ...f, marketplace: v, fees: {}, fulfilment: "easy_ship" }))} />
+          <PillChoice legend="Detail" segmented value={form.mode} options={[{ id: "quick", label: "Expected" }, { id: "detailed", label: "Detailed" }]} onChange={(v) => set("mode", v)} />
           <p className="t-meta" style={{ color: "var(--text-6)" }}>{detailed ? "Detailed: adds packaging, advertising, operating costs, return/RTO handling fees, fee refunds, price bands and damaged stock." : "Expected: only the key numbers (price, cost, fees, returns). A quick profit and loss. It leaves out packaging, advertising, operating costs and return/RTO handling fees."}</p>
         </div>
         <div className="flex flex-col gap-2.5" data-testid="progress">
@@ -254,8 +267,8 @@ export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form:
             ))}
           </ul>
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={onExample} className="mt-btn mt-focus min-h-9 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--accent-border-strong)", color: "var(--accent)" }}>Try with example numbers</button>
-            <button type="button" onClick={onReset} className="mt-btn mt-focus min-h-9 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>Reset</button>
+            <button type="button" onClick={onExample} className="mt-btn mt-focus min-h-10 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--accent-border-strong)", color: "var(--accent)" }}>Try with example numbers</button>
+            <button type="button" onClick={onReset} className="mt-btn mt-focus min-h-10 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>Reset</button>
             <span className="t-meta" style={{ color: "var(--text-6)" }}>Not saved. Sent to Metrion only to work out the estimate.</span>
           </div>
           {form.isExample && (
@@ -266,7 +279,8 @@ export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form:
         </div>
       </div>
 
-      <StepCard n={1} title="Product and price" subtitle="What you sell it for and what it costs you" done={steps[0].done} open={openSteps[1]} onToggle={() => toggle(1)}>
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+      <StepCard n={1} icon="tag" tone="info" title="Product and price" subtitle="What you sell it for and what it costs you" done={steps[0].done} open={openSteps[1]} onToggle={() => toggle(1)}>
         <div className="grid gap-4 sm:grid-cols-2">
           <NumberField label="Selling price per unit" unit="₹" value={form.sellingPrice} onChange={field("sellingPrice")} error={errors.sellingPrice} allowNa={false} hint="What the customer pays, including GST. Enter it after any seller discount." />
           <NumberField label="Product cost per unit" unit="₹" value={form.productCost} onChange={field("productCost")} error={errors.productCost} hint="What you pay for one unit, as paid including GST." />
@@ -283,16 +297,16 @@ export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form:
         </div>
       </StepCard>
 
-      <StepCard n={2} title={`${PNL_MARKETPLACES.find((m) => m.id === form.marketplace)?.label ?? ""} fees`} subtitle="From your seller dashboard or settlement report, excluding GST. We never assume a rate." done={steps[1].done} open={openSteps[2]} onToggle={() => toggle(2)}>
+      <StepCard n={2} icon="store" tone="warning" title={`${PNL_MARKETPLACES.find((m) => m.id === form.marketplace)?.label ?? ""} fees`} subtitle="From your seller dashboard or settlement report, excluding GST. We never assume a rate." done={steps[1].done} open={openSteps[2]} onToggle={() => toggle(2)}>
         <p className="mb-3 t-meta" style={{ color: "var(--text-6)" }}>Metrion does not fill any fee in. A fee left blank is shown as missing and left out of the profit.</p>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4">
           {fees.map((def) => {
             const entry = form.fees[def.id] ?? newFeeEntry();
             const hasRefund = detailed && def.chargedOn !== "kept";
             const tiers = detailed && def.tierable;
             const percent = def.unit === "percent";
             return (
-              <div key={def.id} className="flex flex-col gap-3 rounded-xl p-3.5 sm:col-span-2" style={{ border: "1px solid var(--border-subtle)" }} data-testid={`fee-${def.id}`}>
+              <div key={def.id} className="flex flex-col gap-3 rounded-xl p-3.5" style={{ border: "1px solid var(--border-subtle)", background: "var(--fill-hover)" }} data-testid={`fee-${def.id}`}>
                 {entry.useTiers && tiers ? (
                   <BandEditor def={def} entry={entry} errors={errors} onChange={(patch) => setFee(def.id, patch)} />
                 ) : (
@@ -300,7 +314,7 @@ export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form:
                 )}
                 {tiers && (
                   <label className="flex w-fit cursor-pointer items-center gap-2 t-body-sm" style={{ color: "var(--text-4)" }}>
-                    <input type="checkbox" className="mt-focus h-5 w-5 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={entry.useTiers} onChange={(e) => setFee(def.id, { useTiers: e.target.checked })} />
+                    <input type="checkbox" className="mt-focus h-6 w-6 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={entry.useTiers} onChange={(e) => setFee(def.id, { useTiers: e.target.checked })} />
                     This fee changes with the selling price
                   </label>
                 )}
@@ -327,8 +341,8 @@ export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form:
         </div>
       </StepCard>
 
-      <StepCard n={3} title="Orders and returns" subtitle="How many orders come back, and what you recover" done={steps[2].done} open={openSteps[3]} onToggle={() => toggle(3)}>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <StepCard n={3} wide icon="returns" tone="rose" title="Orders and returns" subtitle="How many orders come back, and what you recover" done={steps[2].done} open={openSteps[3]} onToggle={() => toggle(3)}>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <NumberField label="Orders placed per month" unit="orders" value={form.monthlyOrders} onChange={field("monthlyOrders")} error={errors.monthlyOrders} hint="Needed for monthly totals, advertising and operating costs." />
           <NumberField label="RTO rate" unit="%" value={form.rto} onChange={field("rto")} error={errors.rto} hint="Orders that never reach the customer." />
           <NumberField label="Customer return rate" unit="%" value={form.returns} onChange={field("returns")} error={errors.returns} hint="Delivered orders sent back." />
@@ -348,7 +362,7 @@ export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form:
       </StepCard>
 
       {detailed && (
-        <StepCard n={4} title="Advertising and overheads" subtitle="Monthly. Operating expenses only add an operating-profit line" done={steps[3].done} open={openSteps[4]} onToggle={() => toggle(4)}>
+        <StepCard n={4} wide icon="marketing" tone="violet" title="Advertising and overheads" subtitle="Monthly. Operating expenses only add an operating-profit line" done={steps[3].done} open={openSteps[4]} onToggle={() => toggle(4)}>
           <div className="grid gap-4 sm:grid-cols-2">
             <NumberField label="Advertising spend per month" unit="₹" value={form.adSpend} onChange={field("adSpend")} error={errors.adSpend} />
             <NumberField label="Sales attributed to ads per month" unit="₹" value={form.adRevenue} onChange={field("adRevenue")} error={errors.adRevenue} allowNa={false} hint="Optional. Adds ACOS and ROAS." />
@@ -357,16 +371,17 @@ export function PnlInputs({ form, setForm, errors, onReset, onExample }: { form:
         </StepCard>
       )}
 
-      <StepCard n={detailed ? 5 : 4} title="Price targets" subtitle="Assumes your order volume does not change with price" done={false} open={openSteps[5]} onToggle={() => toggle(5)}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex min-h-9 cursor-pointer items-center gap-2 t-body-sm" style={{ color: "var(--text-3)" }}>
-            <input type="checkbox" className="mt-focus h-5 w-5 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={form.wantBreakeven} onChange={(e) => set("wantBreakeven", e.target.checked)} />
+      <StepCard n={detailed ? 5 : 4} wide icon="target" tone="accent" title="Price targets" subtitle="Assumes your order volume does not change with price" done={false} open={openSteps[5]} onToggle={() => toggle(5)}>
+        <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="flex min-h-10 cursor-pointer items-center gap-2 t-body-sm" style={{ color: "var(--text-3)" }}>
+            <input type="checkbox" className="mt-focus h-6 w-6 flex-shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} checked={form.wantBreakeven} onChange={(e) => set("wantBreakeven", e.target.checked)} />
             Find my break-even price
           </label>
           <NumberField label="Find the price for a target margin" unit="%" value={form.targetMargin} onChange={field("targetMargin")} error={errors.targetMargin} allowNa={false} hint="Margin on revenue. Blank skips it." />
           <PillChoice legend="Margin type" value={form.targetBasis} options={[{ id: "contribution", label: "Contribution" }, { id: "operating", label: "Operating" }]} onChange={(v) => set("targetBasis", v)} />
         </div>
       </StepCard>
+      </div>
     </div>
   );
 }

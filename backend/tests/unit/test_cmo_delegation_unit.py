@@ -120,7 +120,7 @@ def test_answering_the_last_question_needs_no_further_question_even_at_the_limit
     ask = reply(ask, "Amazon")
     assert ask.card["delegation"]["questionCount"] == 3
     done = reply(ask, "Steel Water Bottle 1L Insulated")
-    assert isinstance(done, ins.Done) and done.inputs == {"product_name": "steel water bottle", "marketplace": "AMAZON", "seller_title": "Steel Water Bottle 1L Insulated"}
+    assert isinstance(done, ins.Done) and done.inputs == {"product_name": "steel water bottle", "marketplace": "AMAZON", "seller_title": "Steel Water Bottle 1L Insulated", "sku": "steel-water-bottle"}
 
 
 # ------------------------------------------------------------------------------------------------ the re-ask limit (a field asked at most 3 times)

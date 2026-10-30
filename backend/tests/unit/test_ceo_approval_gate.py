@@ -30,7 +30,7 @@ def _playbook(*legs: tuple[str, bool]) -> Playbook:
 # ------------------------------------------------------------------------------------------------ the 37 registered actions
 def test_the_gate_agrees_with_the_registry_metadata_for_every_registered_action():
     specs = get_registry().specs()
-    assert len(specs) == 57  # +1 cfo.performance (read); +1 cfo.cash_position (read); +1 cfo.import_attachments (approved import of attached reports); CP4: +11 CI conversational actions (CI spec 6.21.3); +1 cfo.query (CFO 2.0 planner); +5 Expense Tracker actions (one read, four approval-gated writes)
+    assert len(specs) == 59  # CMO 3.0 M3: +1 cmo.analyze_titles; CMO 3.0 M2: +1 cmo.keyword_intelligence (zero-unit analysis); +1 cfo.performance (read); +1 cfo.cash_position (read); +1 cfo.import_attachments (approved import of attached reports); CP4: +11 CI conversational actions (CI spec 6.21.3); +1 cfo.query (CFO 2.0 planner); +5 Expense Tracker actions (one read, four approval-gated writes)
     for spec in specs:
         assert spec.effects is not None, spec.key
         decision = gate_leg(spec.key)
@@ -187,7 +187,7 @@ def test_the_gate_is_used_in_exactly_the_three_d8_places_and_the_module_does_no_
 # ------------------------------------------------------------------------------------------------ the known conflict, pinned (not blessed)
 CHAT_ACTIONS_NEEDING_APPROVAL_TODAY = frozenset({
     "pi.discover", "cmo.market_trends", "cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords",
-    "cmo.generate_bullets", "cmo.generate_backend_terms", "cmo.generate_listing_copy",
+    "cmo.generate_bullets", "cmo.generate_backend_terms", "cmo.generate_listing_copy", "cmo.catalog_answer",  # CMO 3.0 M0: catalog details, metered, plan card
     "ci.discover_competitors",  # CI spec C34: the seller's product search terms go to Tavily, so it needs a stored approval plan like pi.discover
     # The Expense Tracker through the CEO (owner decision 2026-10-23, ceo-expense-tracker-chat.md): a saved financial record needs the seller's Approve on an exact card.
     "cfo.expense_add", "cfo.expense_correct", "cfo.expense_void", "cfo.expense_paid",

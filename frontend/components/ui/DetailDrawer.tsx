@@ -107,7 +107,7 @@ export function DetailDrawer({
             )}
             {status && <div className="mt-2">{status}</div>}
           </div>
-          <button type="button" onClick={onClose} aria-label="Close details" className="mt-btn mt-focus rounded-lg p-1.5" style={{ color: "var(--text-5)" }}>
+          <button type="button" onClick={onClose} aria-label="Close details" className="mt-btn mt-focus inline-flex h-9 w-9 items-center justify-center rounded-lg" style={{ color: "var(--text-5)" }}>
             <Icon name="close" size={16} />
           </button>
         </div>

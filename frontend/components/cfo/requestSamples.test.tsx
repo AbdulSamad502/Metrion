@@ -33,6 +33,10 @@ const D = { start: "2026-09-01", end: "2026-09-30", asOf: "2026-09-30" };
 
 async function typeInto(u: ReturnType<typeof user>, label: string | RegExp, value: string, nth = 0) {
   const el = screen.getAllByLabelText(label)[nth];
+  if (el.tagName === "SELECT") {
+    await u.selectOptions(el, value); // the marketplace is a choice of the three supported ids; the value sent is the same id the text box used to take
+    return;
+  }
   await u.clear(el);
   await u.type(el, value);
 }
@@ -99,7 +103,7 @@ describe("what the Profit & Finance forms send", () => {
   it("period comparison", async () => {
     await submit(
       <PeriodComparisonSection getToken={token} />,
-      [[/Result A id/, "7c1d3e50-0000-4000-8000-000000000001"], [/Result B id/, "7c1d3e50-0000-4000-8000-000000000002"], ["As-of date", D.asOf]],
+      [[/First result reference/, "7c1d3e50-0000-4000-8000-000000000001"], [/Second result reference/, "7c1d3e50-0000-4000-8000-000000000002"], ["As-of date", D.asOf]],
       "Compare periods",
     );
   });

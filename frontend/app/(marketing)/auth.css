@@ -1,0 +1,4 @@
+/* Sign-in, sign-up, forgot-password and onboarding: the same black-and-white palette as the dashboards (tokens bridged by overview.css via .mt-auth). */
+.mt-auth { background: var(--ov-page, var(--bg-base)); color: var(--ov-ink); }
+.mt-auth-mark { display: inline-block; flex: none; background: var(--ov-brand); -webkit-mask: url(/metrion-mark-transparent.png) center / contain no-repeat; mask: url(/metrion-mark-transparent.png) center / contain no-repeat; }
+body:has(.mt-auth) { background: #000; }

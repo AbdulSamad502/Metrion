@@ -1,0 +1,55 @@
+/* Everything clickable pops when the pointer reaches it. One rule set for the whole signed-in dashboard (html.mt-dash-type).
+   Nothing glows: no shadow, halo or coloured outline appears under the pointer, only the small size change.
+   - Small controls (buttons, chips, tabs, icons, links styled as buttons) grow a little.
+   - Wide items (rows, tiles, cards that are links, menu items) grow less, so they never jump around their neighbours.
+   Only the `scale` property is used, so existing transforms (the press-in on :active, centred popovers) are left alone.
+   Pointer devices only; stops under prefers-reduced-motion; disabled controls do not react. */
+
+@media (hover: hover) and (pointer: fine) {
+  html.mt-dash-type :is(a[href], button, [role="button"], [role="tab"], summary, select, label:has(> input[type="checkbox"], > input[type="radio"])):not(:disabled):not([aria-disabled="true"]) {
+    cursor: pointer;
+    transition: scale 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms ease, background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1), opacity 160ms ease;
+  }
+
+  /* small controls */
+  html.mt-dash-type :is(button, [role="button"], [role="tab"], summary, select, .ov-btn, .ov-chip, .ci-pick, .ov-icon-btn, .cmo-seg button, .mt-btn, .mt-chip, .mt-tab):not(:disabled):not([aria-disabled="true"]):hover {
+    scale: 1.04;
+    position: relative;
+    z-index: 1;
+  }
+  /* a control placed with absolute or fixed positioning (the connect and remove buttons on the CEO Hub agent cards) must stay where it is:
+     forcing it to position: relative on hover moved it out from under the pointer, so it flipped back and forth and looked like shaking */
+  html.mt-dash-type :is(button, a, [role="button"]).absolute:not(:disabled):not([aria-disabled="true"]):hover { position: absolute; }
+  html.mt-dash-type :is(button, a, [role="button"]).fixed:not(:disabled):not([aria-disabled="true"]):hover { position: fixed; }
+  /* an icon-only control reads better with a gentler pop */
+  html.mt-dash-type :is(button, a).ov-icon-btn:not(:disabled):not([aria-disabled="true"]):hover,
+  html.mt-dash-type button.sb-signout:not(:disabled):hover { scale: 1.08; }
+
+  /* wide items */
+  html.mt-dash-type :is(a.ov-row, .ov-tile, .ov-agent, .pi-pick, .mt-nav-item, .sb-collapse, a.ci-item, .cmo-item, a.ov-card, .ci-asks a, .ov-flow-link):not(:disabled):not([aria-disabled="true"]):hover {
+    scale: 1.015;
+    position: relative;
+    z-index: 1;
+  }
+  /* plain text links inside a sentence cannot scale; they thicken their underline instead */
+  html.mt-dash-type p a[href]:hover, html.mt-dash-type li > a[href]:not([class*="ov-"]):hover { text-decoration-thickness: 2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.mt-dash-type :is(a[href], button, [role="button"], [role="tab"], summary, select, label) { transition: none; }
+  html.mt-dash-type :is(a, button, [role="button"], [role="tab"], summary, select, label):hover { scale: none; }
+}
+
+/* no glow under the pointer, on any card or panel: cancel the older hover shadows, coloured edges and cursor-following light */
+html.mt-dash-type :is(.mt-dash-card--interactive, .mt-dash-card--interactive-lite, .mt-hover-card, .mt-glow-panel):is(:hover, :focus-visible) {
+  box-shadow: none;
+  transform: none;
+}
+html.mt-dash-type :is(.mt-dash-card--interactive, .mt-glow-panel)::before { opacity: 0 !important; }
+html.mt-dash-type :is(.mt-dash-card--interactive, .mt-hover-card):is(:hover, :focus-visible) { border-color: var(--border-default); }
+html.mt-dash-type :is(.mt-dash-card, .mt-panel)[data-sheen] { background-image: none; box-shadow: none; }
+
+/* rows that fill their card edge to edge (Action Center) must never grow past the card: they tint instead of scaling */
+@media (hover: hover) and (pointer: fine) {
+  html.mt-dash-type :is(button.ov-row, ul.ov-card a.ov-row):not(:disabled):hover { scale: 1; background: var(--ov-soft); border-radius: 16px; }
+}

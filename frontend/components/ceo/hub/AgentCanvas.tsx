@@ -152,7 +152,7 @@ export function AgentCanvas({
       style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px)", backgroundSize: "22px 22px", border: "none", backgroundColor: "transparent" }}
       data-testid="agent-canvas" aria-label="CEO orchestration canvas"
     >
-      <AddAgent nodes={nodes} busy={busy} onToggle={onToggle} />
+      <AddAgent />
       <div className="absolute left-1 top-1 z-10 hidden items-center gap-2 t-meta @[640px]:flex" style={{ color: "var(--text-6)" }}>
         <span>Drag a card to arrange it</span>
         {moved && (
@@ -179,7 +179,7 @@ export function AgentCanvas({
                 data-testid={`edge-${n.code}`}
                 className={attached ? `mt-hub-edge ${working[n.code] ? "" : "mt-hub-edge--flow"}` : undefined}
                 strokeDasharray={working[n.code] ? "6 6" : attached ? "4 4" : "5 5"}
-                stroke={working[n.code] ? "var(--accent)" : attached ? "var(--accent)" : "rgba(140,148,138,0.5)"}
+                stroke={working[n.code] ? "var(--accent)" : attached ? "var(--accent)" : "var(--ov-edge)"}
                 opacity={dead ? 0.55 : 1}
               >
                 {working[n.code] && !still && <animate attributeName="stroke-dashoffset" from="12" to="0" dur="0.8s" repeatCount="indefinite" />}
@@ -261,45 +261,20 @@ function TreeConnector({ node, first, last, running }: { node: CanvasNode; first
   );
 }
 
-/** Top-right "Add agent": wires a detached agent back in. Only agents that CAN be attached are offered (locked / no-access ones never are). */
-function AddAgent({ nodes, busy, onToggle }: { nodes: CanvasNode[]; busy: AgentCode | null; onToggle: (c: AgentCode, attach: boolean) => void }) {
-  const [open, setOpen] = useState(false);
-  const addable = nodes.filter((n) => n.canToggle && n.state === "DETACHED");
+/** Top-right "Add specialist": the Agents page is where specialists are added to the account, so this leads there. A specialist already on the account that was removed from this
+ * conversation is reconnected from its own card (the + on it), not from here. */
+function AddAgent() {
   return (
     <div className="absolute right-0 top-0 z-10 flex flex-col items-end gap-1.5">
-      <button
-        type="button"
+      <Link
+        href="/dashboard/agents"
         data-testid="add-agent"
-        disabled={addable.length === 0}
-        aria-expanded={open && addable.length > 0}
-        title={addable.length === 0 ? "Every specialist you can use is already connected." : "Connect a specialist to this conversation"}
-        onClick={() => setOpen((o) => !o)}
+        title="See the specialists you can add to your account"
         className="mt-btn mt-focus flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 t-meta font-bold"
-        style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)", opacity: addable.length === 0 ? 0.5 : 1 }}
+        style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}
       >
         <Icon name="plus" size={13} strokeWidth={1.9} /> Add specialist
-      </button>
-      {open && addable.length > 0 && (
-        <ul className="m-0 flex list-none flex-col gap-1 rounded-xl p-2" style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }} aria-label="Specialists you can add">
-          {addable.map((n) => (
-            <li key={n.code}>
-              <button
-                type="button"
-                data-testid={`add-${n.code}`}
-                disabled={busy === n.code}
-                onClick={() => {
-                  onToggle(n.code, true);
-                  setOpen(false);
-                }}
-                className="mt-btn mt-focus w-full rounded-lg px-2.5 py-1 text-left t-body-sm"
-                style={{ color: "var(--text-2)" }}
-              >
-                {n.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      </Link>
     </div>
   );
 }
@@ -313,6 +288,7 @@ function AgentNode({ node, busy, onToggle, working }: { node: CanvasNode; busy: 
     <div
       data-testid={`agent-node-${node.code}`}
       data-state={node.state}
+      data-busy={busy ? "true" : undefined}
       className={`mt-glow-card ${live ? "" : "mt-glow-card--off"} ${working ? "mt-agent-glow" : ""} relative flex h-full flex-col items-center gap-0.5 rounded-lg px-1.5 py-1.5 text-center`}
     >
       {node.canToggle && (node.state === "ATTACHED" || node.state === "DETACHED") && (
@@ -337,7 +313,7 @@ function AgentNode({ node, busy, onToggle, working }: { node: CanvasNode; busy: 
       <span className="block break-words t-micro leading-tight" style={{ color: "var(--text-5)" }}>{TAGLINE[node.code]}</span>
       <span className="flex items-center gap-1 t-micro" style={{ color: live ? "var(--accent)" : "var(--text-5)" }}>
         {working ? <Spinner size={9} /> : <span aria-hidden className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: live ? "var(--positive)" : node.state === "UNKNOWN" ? "var(--warning)" : "var(--text-6)" }} />}
-        {working ?? STATE_LABEL[node.state]}
+        {working ?? (busy ? (live ? "Removing…" : "Connecting…") : STATE_LABEL[node.state])}
       </span>
       {meta.href && !dead && (
         <Link href={meta.href} data-testid={`workspace-${node.code}`} className="mt-focus inline-flex min-h-5 items-center self-center t-micro font-bold" style={{ color: "var(--text-3)" }}>

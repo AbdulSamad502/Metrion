@@ -2,27 +2,29 @@
 
 import { PAGE_COPY } from "@/lib/navigation";
 import { useAuth, useUser } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { Button } from "@/components/ui/Button";
-import { ErrorNotice } from "@/components/ui/ErrorNotice";
+import { ErrorBanner, LoadingLines, Pill } from "@/components/overview/parts";
 import { FormField } from "@/components/ui/FormField";
-import { LoadingState } from "@/components/ui/LoadingState";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import "@/components/overview/overview.css";
+import "./settings.css";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { ApiError, apiFetch, type DigestSubscription } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
 import { BusinessDetailsDialog } from "@/components/profile/BusinessDetailsDialog";
 import { errorText } from "@/lib/clerkErrors";
 import { estimatePasswordStrength } from "@/lib/passwordStrength";
+import { useToast } from "@/components/ui/Toast";
+import { getServerTheme, getTheme, setTheme, subscribeTheme, type Theme } from "@/lib/theme";
 import { useShell } from "@/lib/ShellContext";
 import { useHashTab } from "@/lib/useHashTab";
 import { useSubmitGuard } from "@/lib/useSubmitGuard";
+import { DEMO_AVAILABLE, setDemo, useDemo } from "@/lib/demo/mode";
 
 const SETTINGS_TABS = [
   { id: "account", label: "Account & security" },
   { id: "business", label: "Business" },
-  { id: "notifications", label: "Notifications" },
+  { id: "notifications", label: "Competitor digest" },
 ] as const;
 
 /** Settings. "Account & security" exists specifically to close the auth.md gap: a user who
@@ -30,7 +32,7 @@ const SETTINGS_TABS = [
  * add one — that tab is that path, using Clerk's own supported mechanism (`user.updatePassword`)
  * so it's the SAME Clerk user, tenant and membership throughout — never a second account.
  * "Business" shows the workspace and opens the mandatory Business details form (business-profile.md), and
- * "Notifications" edits the one preference the backend really stores (the CI digest
+ * "Competitor digest" (hash `#notifications`, kept so old links work) edits the one preference the backend really stores (the CI digest
  * subscription). Marketplace and WhatsApp settings are intentionally absent: no backend exists. */
 export default function SettingsPage() {
   return (
@@ -44,17 +46,23 @@ function SettingsWorkspace() {
   const { user, isLoaded } = useUser();
   const [tab, setTab] = useHashTab(SETTINGS_TABS.map((t) => t.id), "account");
 
-  if (!isLoaded || !user) return <LoadingState label="Loading your account…" />;
+  if (!isLoaded || !user) return <div className="ov"><LoadingLines label="Loading your account…" /></div>;
 
   const googleAccount = user.externalAccounts.find((a) => a.provider === "google");
 
   return (
-    <div className="mt-content flex max-w-3xl flex-col gap-6">
+    <div className="ov mt-content">
       <Tabs tabs={[...SETTINGS_TABS]} active={tab} onChange={setTab} label="Settings sections" idPrefix="settings" />
       <TabPanel id="account" active={tab} idPrefix="settings">
-        <div className="flex flex-col gap-6">
+        <div className="set-stack">
+          <div className="set-cols">
+            <div className="ov-col"><PasswordCard user={user} passwordEnabled={user.passwordEnabled} /></div>
+            <div className="ov-col">
+              <AppearanceCard />
+              {DEMO_AVAILABLE && <SampleDataCard />}
+            </div>
+          </div>
           <SignInMethodsCard googleConnected={!!googleAccount} passwordEnabled={user.passwordEnabled} />
-          <PasswordCard user={user} passwordEnabled={user.passwordEnabled} />
         </div>
       </TabPanel>
       <TabPanel id="business" active={tab} idPrefix="settings">
@@ -70,7 +78,7 @@ function SettingsWorkspace() {
 function BusinessCard({ email }: { email: string | null }) {
   const { session, displayName, roleLabel } = useShell();
   const [editing, setEditing] = useState(false);
-  const [savedAt, setSavedAt] = useState(false);
+  const toast = useToast();
   const rows: [string, string][] = [
     ["Name", displayName],
     ["Email", email ?? "Not available"],
@@ -80,44 +88,18 @@ function BusinessCard({ email }: { email: string | null }) {
   ];
   return (
     <Card>
-      <div className="text-base font-bold" style={{ color: "var(--text-2)" }}>
-        Workspace
-      </div>
-      <div className="mt-1 text-xs" style={{ color: "var(--text-6)" }}>
-        How Metrion knows you, and the details of your business that its assistants use to tailor their advice.
-      </div>
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => {
-            setSavedAt(false);
-            setEditing(true);
-          }}
-          className="mt-btn mt-focus min-h-[44px] rounded-xl px-4 py-2 text-sm font-bold"
-          style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}
-        >
+      <Head title="Workspace" hint="You and your business." />
+      <div>
+        <button type="button" onClick={() => setEditing(true)} className="ov-btn ov-btn--brand min-h-10">
           Business details
         </button>
-        {savedAt && (
-          <span role="status" className="text-sm" style={{ color: "var(--accent)" }}>
-            Business details saved.
-          </span>
-        )}
       </div>
-      {editing && <BusinessDetailsDialog onClose={() => setEditing(false)} onSaved={() => setSavedAt(true)} />}
-      <dl className="mt-4 flex flex-col gap-2.5">
+      {editing && <BusinessDetailsDialog onClose={() => setEditing(false)} onSaved={() => toast.success("Business details saved.")} />}
+      <dl className="set-list">
         {rows.map(([k, v]) => (
-          <div
-            key={k}
-            className="flex items-center justify-between gap-4 rounded-lg px-3.5 py-2.5"
-            style={{ background: "var(--bg-input)", border: "1px solid var(--border-subtle)" }}
-          >
-            <dt className="text-sm" style={{ color: "var(--text-5)" }}>
-              {k}
-            </dt>
-            <dd className="truncate text-sm font-semibold" style={{ color: "var(--text-2)" }}>
-              {v}
-            </dd>
+          <div key={k} className="set-row">
+            <dt>{k}</dt>
+            <dd>{v}</dd>
           </div>
         ))}
       </dl>
@@ -179,59 +161,49 @@ function DigestPreferenceCard() {
 
   return (
     <Card>
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-base font-bold" style={{ color: "var(--text-2)" }}>
-          Competitor digest
-        </div>
-        <StatusBadge tone="warning">Delivery not live yet</StatusBadge>
-      </div>
-      <div className="mt-1 text-xs" style={{ color: "var(--text-6)" }}>
-        Your preferred digest frequency is stored, but Metrion does not send digests yet — the digest preview lives in
-        Competitors. Email and WhatsApp delivery are not available.
-      </div>
-      <div className="mt-4">
+      <Head
+        title="Competitor digest"
+        badge={<Pill tone="warn">Delivery not live yet</Pill>}
+        hint="Your choice is saved. Digests aren’t sent yet."
+      />
+      <div>
         {forbidden ? (
-          <div className="text-sm" style={{ color: "var(--text-5)" }}>
-            Your role does not have access to Competitor Intelligence, so there is no digest to configure.
-          </div>
+          <p className="ov-body">
+            Your role has no access to Competitor Intelligence.
+          </p>
         ) : loadError ? (
-          <ErrorNotice message={loadError} onRetry={() => void load()} />
+          <ErrorBanner message={loadError} onRetry={() => void load()} />
         ) : !sub ? (
-          <LoadingState label="Loading your preference…" />
+          <LoadingLines label="Loading your preference…" />
         ) : (
           <>
-            <div role="radiogroup" aria-label="Digest frequency" aria-busy={saving} className="flex gap-2">
+            <div role="group" aria-label="Digest frequency" aria-busy={saving} className="set-chips">
               {FREQUENCIES.map((f) => {
                 const selected = sub.frequency === f.value;
                 return (
                   <button
                     key={f.value}
                     type="button"
-                    role="radio"
-                    aria-checked={selected}
+                    aria-pressed={selected}
                     disabled={saving}
                     onClick={() => void save(f.value)}
-                    className="mt-chip mt-focus rounded-xl px-4 py-2 t-body-sm font-semibold disabled:opacity-60"
-                    style={{
-                      color: selected ? "var(--accent)" : "var(--text-4)",
-                      background: selected ? "var(--accent-fill-default)" : "transparent",
-                      border: `1px solid ${selected ? "var(--accent-border-default)" : "var(--border-default)"}`,
-                    }}
+                    className="ci-pick mt-focus min-h-[40px]"
+                    style={saving ? { opacity: 0.6 } : undefined}
                   >
                     {f.label}
                   </button>
                 );
               })}
             </div>
-            <div className="mt-3 text-xs" style={{ color: "var(--text-6)" }} aria-live="polite">
+            <div className="ov-meta" style={{ marginTop: 16 }} aria-live="polite">
               {saving ? (
                 "Saving…"
               ) : saveError ? (
-                <span role="alert" style={{ color: "var(--negative)" }}>{saveError}</span>
+                <span role="alert" style={{ color: "var(--ov-bad)" }}>{saveError}</span>
               ) : saved ? (
                 "Saved."
               ) : sub.isDefault ? (
-                "Showing the workspace default — you have not chosen a preference yet."
+                "Workspace default. You haven’t chosen yet."
               ) : null}
             </div>
           </>
@@ -242,23 +214,79 @@ function DigestPreferenceCard() {
 }
 
 function Card({ children }: { children: React.ReactNode }) {
+  return <section className="ov-card ov-rise">{children}</section>;
+}
+
+/** A card's heading and its one plain sentence. */
+function Head({ title, hint, badge }: { title: string; hint?: React.ReactNode; badge?: React.ReactNode }) {
   return (
-    <div className="mt-panel" style={{ padding: "22px 24px" }}>
-      {children}
+    <div>
+      <div className="ov-card-head">
+        <h2 className="ov-title">{title}</h2>
+        {badge}
+      </div>
+      {hint && <p className="ov-meta" style={{ marginTop: 4 }}>{hint}</p>}
     </div>
+  );
+}
+
+/** Dark is the default look; light is opt-in. The choice is kept in this browser only, and the CEO Hub always stays dark. */
+function AppearanceCard() {
+  const theme = useSyncExternalStore(subscribeTheme, getTheme, getServerTheme);
+  const options: { value: Theme; label: string }[] = [
+    { value: "dark", label: "Dark" },
+    { value: "light", label: "Light" },
+  ];
+  return (
+    <Card>
+      <Head title="Appearance" hint="Saved on this device." />
+      <div className="set-chips" role="group" aria-label="Theme">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={theme === o.value}
+            onClick={() => setTheme(o.value)}
+            className="ci-pick mt-focus min-h-[40px]"
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+/** Preview only (`NEXT_PUBLIC_ENABLE_DEMO_DATA=1`): fills the dashboards with hand-written sample responses so every page can be seen filled in. Sample figures are
+ * fictional, nothing is saved, the CEO Hub never shows them, and a "Sample data" label stays on screen while it is on. */
+function SampleDataCard() {
+  const on = useDemo();
+  return (
+    <Card>
+      <Head
+        title="Sample data"
+        badge={<Pill tone="warn">Preview only</Pill>}
+        hint="Made-up figures to preview pages. Nothing is saved."
+      />
+      <div>
+        <button
+          type="button"
+          aria-pressed={on}
+          onClick={() => setDemo(!on)}
+          className={`ov-btn min-h-10${on ? " ov-btn--brand" : ""}`}
+        >
+          {on ? "Sample data is on — turn off" : "Fill with sample data"}
+        </button>
+      </div>
+    </Card>
   );
 }
 
 function SignInMethodsCard({ googleConnected, passwordEnabled }: { googleConnected: boolean; passwordEnabled: boolean }) {
   return (
     <Card>
-      <div className="text-base font-bold" style={{ color: "var(--text-2)" }}>
-        Sign-in methods
-      </div>
-      <div className="mt-1 text-xs" style={{ color: "var(--text-6)" }}>
-        How you can sign in to Metrion.
-      </div>
-      <div className="mt-4 flex flex-col gap-2.5">
+      <Head title="Sign-in methods" hint="How you can sign in to Metrion." />
+      <div className="set-list">
         <MethodRow label="Google" connected={googleConnected} />
         <MethodRow label="Email & password" connected={passwordEnabled} />
       </div>
@@ -268,19 +296,9 @@ function SignInMethodsCard({ googleConnected, passwordEnabled }: { googleConnect
 
 function MethodRow({ label, connected }: { label: string; connected: boolean }) {
   return (
-    <div
-      className="flex items-center justify-between rounded-lg px-3.5 py-2.5"
-      style={{ background: "var(--bg-input)", border: "1px solid var(--border-subtle)" }}
-    >
-      <span className="text-sm" style={{ color: "var(--text-3)" }}>
-        {label}
-      </span>
-      <span
-        className="text-xs font-semibold"
-        style={{ color: connected ? "var(--accent)" : "var(--text-5)" }}
-      >
-        {connected ? "Connected" : "Not set up"}
-      </span>
+    <div className="set-row">
+      <span>{label}</span>
+      {connected ? <Pill tone="good" icon="check">Connected</Pill> : <Pill>Not set up</Pill>}
     </div>
   );
 }
@@ -331,18 +349,17 @@ function PasswordCard({ user, passwordEnabled }: { user: AppUser; passwordEnable
 
   return (
     <Card>
-      <div className="text-base font-bold" style={{ color: "var(--text-2)" }}>
-        {passwordEnabled ? "Change password" : "Add a password"}
-      </div>
-      <div className="mt-1 text-xs" style={{ color: "var(--text-6)" }}>
-        {passwordEnabled
-          ? "Update the password used for email sign-in."
-          : "Your account currently only signs in with Google. Add a password so you can also sign in with your email address — this is the same account, same workspace, nothing changes but the options you have to get in."}
-      </div>
+      <Head
+        title={passwordEnabled ? "Change password" : "Add a password"}
+        hint={passwordEnabled
+          ? "For email sign-in."
+          : "You sign in with Google. Add a password to also use your email. Same account."}
+      />
 
-      <form onSubmit={submit} className="mt-4 flex flex-col gap-4">
+      <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {passwordEnabled && (
           <FormField
+            soft
             label="Current password"
             type="password"
             required
@@ -352,6 +369,7 @@ function PasswordCard({ user, passwordEnabled }: { user: AppUser; passwordEnable
           />
         )}
         <FormField
+          soft
           label={passwordEnabled ? "New password" : "Password"}
           type="password"
           required
@@ -361,29 +379,19 @@ function PasswordCard({ user, passwordEnabled }: { user: AppUser; passwordEnable
           onChange={(e) => setNewPassword(e.target.value)}
         />
         {newPassword.length > 0 && (
-          <div className="-mt-2 flex items-center gap-2" aria-live="polite">
-            <div className="flex h-1 flex-1 gap-1">
+          <div className="set-strength" aria-live="polite">
+            <div>
               {[0, 1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-full flex-1 rounded-full transition-colors"
-                  style={{
-                    background:
-                      i < strength.score
-                        ? strength.score >= 3
-                          ? "var(--accent)"
-                          : "var(--warning)"
-                        : "var(--border-subtle)",
-                  }}
-                />
+                <i key={i} className={i < strength.score ? (strength.score >= 3 ? "on" : "warn") : ""} />
               ))}
             </div>
-            <span className="text-xs" style={{ color: "var(--text-7)" }}>
+            <span className="ov-meta" style={{ color: "var(--text-6)" }}>
               {strength.label}
             </span>
           </div>
         )}
         <FormField
+          soft
           label="Confirm password"
           type="password"
           required
@@ -394,19 +402,19 @@ function PasswordCard({ user, passwordEnabled }: { user: AppUser; passwordEnable
         />
 
         {error && (
-          <p className="text-sm" style={{ color: "var(--negative)" }}>
+          <p role="alert" className="ov-body" style={{ color: "var(--ov-bad)" }}>
             {error}
           </p>
         )}
         {success && (
-          <p className="text-sm" style={{ color: "var(--accent)" }}>
+          <p role="status" className="ov-body" style={{ color: "var(--ov-good)" }}>
             {passwordEnabled ? "Password updated." : "Password added — you can now sign in with either Google or email and password."}
           </p>
         )}
 
-        <Button type="submit" loading={submitting}>
-          {passwordEnabled ? "Update password" : "Add password"}
-        </Button>
+        <button type="submit" disabled={submitting} className="ov-btn ov-btn--brand min-h-10" style={{ width: "fit-content" }}>
+          {submitting ? "Please wait…" : passwordEnabled ? "Update password" : "Add password"}
+        </button>
       </form>
     </Card>
   );

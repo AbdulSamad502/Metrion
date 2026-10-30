@@ -71,7 +71,7 @@ export function PnlWhatIf({ form, hasResult }: { form: PnlForm; hasResult: boole
 
   return (
     <Section title="What if…?" hint="Type a new value for anything you want to test. Leave a box empty to keep your current number. Order volume is assumed unchanged. Your inputs above are not changed." panel={false}>
-      <div className="flex flex-col gap-4" data-testid="what-if">
+      <div className="flex flex-col gap-4 rounded-2xl p-4" style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }} data-testid="what-if">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           {FIELDS.filter((f) => !f.detailedOnly || detailed).map((f) => {
             const id = `${idBase}-${f.key}`;
@@ -90,10 +90,10 @@ export function PnlWhatIf({ form, hasResult }: { form: PnlForm; hasResult: boole
           })}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={compare} disabled={busy || !hasResult} className="mt-btn mt-focus min-h-9 rounded-lg px-4 t-body-sm font-semibold" style={{ border: "1px solid var(--accent-border-strong)", color: "var(--accent)" }}>
+          <button type="button" onClick={compare} disabled={busy || !hasResult} className="mt-btn mt-focus min-h-10 rounded-lg px-4 t-body-sm font-semibold" style={{ border: "1px solid var(--accent-border-strong)", color: "var(--accent)" }}>
             {busy ? "Comparing…" : "Compare"}
           </button>
-          <button type="button" onClick={() => { setOv(NO_OVERRIDES); setErrors({}); setError(null); setOut(null); }} className="mt-btn mt-focus min-h-9 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>Clear</button>
+          <button type="button" onClick={() => { setOv(NO_OVERRIDES); setErrors({}); setError(null); setOut(null); }} className="mt-btn mt-focus min-h-10 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>Clear</button>
           {!hasResult && <span className="t-meta" style={{ color: "var(--text-6)" }}>Choose Calculate first, so there is a current result to compare with.</span>}
         </div>
         {error && <ErrorNotice message={error} />}

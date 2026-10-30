@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useContext, useId } from "react";
+import { createContext, useContext, useId, useRef } from "react";
+import { Spinner } from "@/components/ui/LoadingState";
+import { useToast } from "@/components/ui/Toast";
 import { rupeesToPaise } from "@/lib/costInput";
 import { type MetricResult, type PeriodPnlMetricResult } from "@/lib/api";
 
@@ -68,6 +70,46 @@ export function SelectInput({
   );
 }
 
+/** The marketplaces Metrion supports (the business profile only allows these three). The value is the exact upper-case id the backend already receives. */
+export const MARKETPLACE_OPTIONS = [
+  { value: "AMAZON", label: "Amazon" },
+  { value: "FLIPKART", label: "Flipkart" },
+  { value: "MEESHO", label: "Meesho" },
+];
+
+/** A marketplace chooser for the forms where it is required: same three ids the free-text box used to take, nothing else, and nothing chosen until the seller picks one. */
+export function MarketplaceSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return <SelectInput value={value} onChange={onChange} options={[{ value: "", label: "Choose a marketplace" }, ...MARKETPLACE_OPTIONS]} />;
+}
+
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** The start and end dates a shortcut fills in. Calendar dates only (the seller's own local day), written as the same YYYY-MM-DD the date fields hold; no money and no new parameter. */
+export function presetPeriods(now: Date = new Date()): { id: string; label: string; start: string; end: string }[] {
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const thirtyAgo = new Date(y, m, now.getDate() - 29);
+  return [
+    { id: "this-month", label: "This month", start: iso(new Date(y, m, 1)), end: iso(now) },
+    { id: "last-month", label: "Last month", start: iso(new Date(y, m - 1, 1)), end: iso(new Date(y, m, 0)) },
+    { id: "last-30", label: "Last 30 days", start: iso(thirtyAgo), end: iso(now) },
+  ];
+}
+
+/** Shortcuts that fill the existing period start and end fields. They send nothing and change no other field; the seller can still type any dates. */
+export function PeriodPresets({ onPick }: { onPick: (start: string, end: string) => void }) {
+  return (
+    <div className="col-span-full flex flex-wrap items-center gap-2" role="group" aria-label="Fill in the period">
+      <span className="t-meta" style={{ color: "var(--text-5)" }}>Quick pick</span>
+      {presetPeriods().map((p) => (
+        <button key={p.id} type="button" onClick={() => onPick(p.start, p.end)} className="mt-chip mt-focus min-h-10 rounded-full px-3.5 t-body-sm font-medium" style={{ border: "1px solid var(--border-default)", color: "var(--text-3)" }}>
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function SubmitButton({
   onClick,
   busy,
@@ -75,21 +117,35 @@ export function SubmitButton({
   busyLabel,
   primary = false,
 }: {
-  onClick: () => void;
+  onClick: () => void | Promise<void>;
   busy: boolean;
   label: string;
   busyLabel: string;
   /** The one green action of a view; every other submit is a neutral secondary button. */
   primary?: boolean;
 }) {
+  // `busy` only disables the button after the parent re-renders, so a fast double-click could send two requests. This ref drops the second click at once.
+  const inFlight = useRef(false);
+  const press = () => {
+    if (busy || inFlight.current) return;
+    inFlight.current = true;
+    const done = () => {
+      inFlight.current = false;
+    };
+    const out = onClick();
+    if (out instanceof Promise) void out.finally(done);
+    else done();
+  };
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={press}
       disabled={busy}
-      className={`mt-btn mt-focus w-fit rounded-lg px-4 py-2 t-body font-bold disabled:cursor-not-allowed ${primary ? "" : "mt-btn-secondary"}`}
+      aria-busy={busy}
+      className={`mt-btn mt-focus inline-flex w-fit items-center gap-2 rounded-lg px-4 py-2 t-body font-bold disabled:cursor-not-allowed ${primary ? "" : "mt-btn-secondary"}`}
       style={primary ? { background: "var(--accent)", color: "var(--accent-on-fill)", opacity: busy ? 0.6 : 1 } : { opacity: busy ? 0.6 : 1 }}
     >
+      {busy && <Spinner size={12} />}
       {busy ? busyLabel : label}
     </button>
   );
@@ -110,6 +166,25 @@ export function rupees(paise: number | null): string {
 
 export function toPaise(rupeesStr: string): number {
   return rupeesToPaise(rupeesStr) ?? Number.NaN; // exact integer parsing, never a float; an unparsable amount stays NaN (rejected by the server) rather than a guess
+}
+
+/** Copies a result's full reference (ID). The result row only shows its first characters, and the "Compare two results" form needs the whole ID. The message appears only
+ * after the browser has accepted the copy; if it refuses, it says so instead. */
+function CopyIdButton({ id }: { id: string }) {
+  const toast = useToast();
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(id);
+      toast.success("ID copied.");
+    } catch {
+      toast.error("Could not copy the ID. Your browser did not allow it.");
+    }
+  };
+  return (
+    <button type="button" onClick={copy} className="mt-btn mt-focus ml-2 min-h-10 rounded-lg px-2.5 t-meta font-semibold" style={{ border: "1px solid var(--border-default)", color: "var(--text-3)" }}>
+      Copy ID
+    </button>
+  );
 }
 
 /** Mirrors ceo-hub/page.tsx's own `MetricResultRow` — reused for every `MetricResult`-shaped
@@ -146,6 +221,7 @@ export function CfoMetricResultRow({ label, result }: { label: string; result: M
       <div className="mt-ledger__meta">
         {!result.isAvailable && result.unavailableReason ? <span style={{ color: "var(--warning)" }}>{result.unavailableReason} · </span> : null}
         confidence {result.confidence} · basis {result.calculationBasis ?? "—"} · ref <code>{result.engineResultRef.slice(0, 8)}</code>
+        <CopyIdButton id={result.engineResultRef} />
       </div>
     </div>
   );

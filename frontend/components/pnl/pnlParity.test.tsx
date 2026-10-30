@@ -362,7 +362,7 @@ describe("the print stylesheet", () => {
     const { join } = await import("node:path");
     const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
     const print = css.slice(css.indexOf("@media print"));
-    expect(print).toMatch(/body \* \{ visibility: hidden; \}/);
+    expect(print).toMatch(/:where\(body:has\(\.mt-print-area\)\) \* \{ visibility: hidden; \}/); // only a page that has a print area hides the rest (the PI report has none)
     expect(print).toMatch(/\.mt-print-area, \.mt-print-area \* \{ visibility: visible; \}/);
     expect(print).toMatch(/\.mt-no-print[^}]*display: none !important/);
     expect(print).toMatch(/--text-1: #111/);

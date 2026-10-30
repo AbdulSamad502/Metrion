@@ -1,13 +1,20 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ShellProvider } from "@/lib/ShellContext";
 import { useAppSession } from "@/lib/useAppSession";
 import { useNotificationsFeed } from "@/lib/useNotifications";
+import { getServerTheme, getTheme, subscribeTheme } from "@/lib/theme";
 import { useSurfaceSheen } from "@/lib/useSurfaceSheen";
+import { BottomNav } from "./BottomNav";
 import { Sidebar } from "./Sidebar";
 import { Icon } from "@/components/ui/Icon";
+import { ToastProvider } from "@/components/ui/Toast";
+import "./typography.css";
+import "./layered.css";
+import { useRevealOnView } from "./useRevealOnView";
+import "./interaction.css";
 
 const COLLAPSE_KEY = "metrion.sidebar.collapsed";
 
@@ -35,8 +42,35 @@ function OwnFrame({ children }: { children: ReactNode }) {
   const mobileOpen = drawerOpenAt === pathname;
   // The CEO Hub is a full-screen workspace: the navigation is closed by default there (an overlay opened from the menu button in the hub's own header), at every width.
   const focusMode = pathname.startsWith("/dashboard/ceo-hub");
+  // The chosen theme applies to the signed-in app only, and never to the CEO Hub, which keeps its own dark canvas.
+  const chosen = useSyncExternalStore(subscribeTheme, getTheme, getServerTheme);
+  const theme = focusMode ? "dark" : chosen;
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.dataset.theme = theme;
+    return () => {
+      delete root.dataset.theme; // marketing and sign-in pages are always dark
+    };
+  }, [theme]);
+  useRevealOnView();
   const surfaceRef = useRef<HTMLDivElement | null>(null);
-  useSurfaceSheen(surfaceRef, Boolean(session) && !error); // the surface div only exists once the session has loaded
+  useSurfaceSheen(surfaceRef, false); // the cursor-following glow on cards is switched off; nothing glows under the pointer // the surface div only exists once the session has loaded
+
+  // The app reads as a browser at 80%: on a desktop-width window everything is drawn at four-fifths size (see .mt-zoom in sidebar.css).
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("mt-zoom", "mt-dash-type");
+    return () => root.classList.remove("mt-zoom", "mt-dash-type");
+  }, []);
+
+  // Layered surfaces (deep page, lighter cards; see layered.css) on every dashboard page except the CEO Hub, which keeps its own look.
+  // To switch the treatment off, delete layered.css, its import above and this effect.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (focusMode) return;
+    root.dataset.surface = "layered";
+    return () => { delete root.dataset.surface; };
+  }, [focusMode]);
 
   // Restore the remembered collapse state after hydration (never during render: SSR has no storage).
   useEffect(() => {
@@ -87,6 +121,7 @@ function OwnFrame({ children }: { children: ReactNode }) {
 
   return (
     <ShellProvider value={{ session, displayName, roleLabel, notifications }}>
+      <ToastProvider>
       <FrameContext.Provider value={{ openMenu: () => setDrawerOpenAt(pathname) }}>
         <div ref={surfaceRef} className="mt-app-surface flex">
           <a
@@ -106,23 +141,11 @@ function OwnFrame({ children }: { children: ReactNode }) {
             onCloseMobile={() => setDrawerOpenAt(null)}
             overlay={focusMode}
           />
-          {/* A visible edge handle for sliding the sidebar in and out (the same toggle as the Collapse button at the bottom of the sidebar). */}
-          {!focusMode && <button
-            type="button"
-            onClick={toggleCollapsed}
-            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-            title={collapsed ? "Expand navigation" : "Collapse navigation"}
-            data-testid="sidebar-edge-toggle"
-            className="mt-btn mt-focus fixed top-1/2 z-[75] hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full transition-[left] duration-200 lg:flex"
-            style={{ left: collapsed ? 62 : 226, background: "var(--bg-popover)", border: "1px solid var(--border-hover)", color: "var(--text-3)" }}
-          >
-            <span style={{ display: "inline-flex", transform: collapsed ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}>
-              <Icon name="collapse" size={14} />
-            </span>
-          </button>}
           <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+          <BottomNav />
         </div>
       </FrameContext.Provider>
+      </ToastProvider>
     </ShellProvider>
   );
 }

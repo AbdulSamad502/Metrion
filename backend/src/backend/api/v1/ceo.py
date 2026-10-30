@@ -33,7 +33,7 @@ from uuid import UUID
 import hashlib
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
 from backend.auth.context import AuthContext, require_auth
@@ -381,6 +381,22 @@ def decline_plan(
     except approval.ApprovalRefused as exc:
         raise _refused(exc) from None
     return _plan_json(ctx, row, with_events=False)
+
+
+_IMAGE_MEDIA = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
+
+
+@router.get("/investigations/{investigation_id}/attachments/{attachment_id}/image")
+def attachment_image(investigation_id: UUID, attachment_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CEO)) -> Response:
+    """The seller's own uploaded PICTURE from this conversation, for the listing preview (CMO 3.0 M4). Only a PNG / JPEG / WEBP detected from the content is ever served, with that
+    type and `nosniff`; any other file, another conversation's file or another tenant's file is the same 404. Read-only; nothing is generated or changed."""
+    _also(ctx, INVESTIGATION_VIEW)
+    _require_visible(ctx, investigation_id)
+    rows = repo.get_attachment_contents(_tenant(ctx), investigation_id, [attachment_id])
+    if len(rows) != 1 or rows[0]["detected_type"] not in _IMAGE_MEDIA:
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND"})
+    return Response(content=rows[0]["content"], media_type=_IMAGE_MEDIA[rows[0]["detected_type"]],
+                    headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=300", "Content-Disposition": "inline"})
 
 
 @router.post("/investigations/{investigation_id}/attachments", status_code=201)

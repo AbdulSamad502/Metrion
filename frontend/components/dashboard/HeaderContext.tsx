@@ -17,7 +17,7 @@ export function HeaderContext({ kind }: { kind: "requests" | "alerts" | "both" }
   return (
     <div className="flex items-center gap-2">
       {showRequests && (
-        <Link href="/dashboard/cfo#anomalies" className="mt-focus rounded-lg" title="Open the CFO's data requests">
+        <Link href="/dashboard/cfo#requests" className="mt-focus rounded-lg" title="Open the CFO's data requests">
           <StatusBadge tone="warning" dot>
             {requests} open data {requests === 1 ? "request" : "requests"}
           </StatusBadge>

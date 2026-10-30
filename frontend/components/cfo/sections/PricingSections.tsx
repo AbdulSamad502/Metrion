@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { LineChart } from "@/components/overview/charts";
 import { Section } from "@/components/ui/Section";
 import { CostInput } from "@/components/ui/CostInput";
 import { costReady, costToApi, EMPTY_COST, type CostChoice } from "@/lib/costInput";
 import { apiFetch, type BatchSizeResponse, type FundingReadinessResponse, type LandedCostResponse, type PricingCurveResponse, type SupplierRankingResponse } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
 import { DataRequestNote } from "@/components/cfo/DataRequestNote";
-import { CfoMetricResultRow, ComponentRowsEditor, EditableGstSummaryLine, ErrorText, Field, SelectInput, SubmitButton, TextInput, componentRowsToPayload, newGstSummaryLine, toPaise } from "@/components/cfo/primitives";
+import { CfoMetricResultRow, ComponentRowsEditor, EditableGstSummaryLine, ErrorText, Field, SelectInput, SubmitButton, TextInput, componentRowsToPayload, newGstSummaryLine, toPaise, PeriodPresets } from "@/components/cfo/primitives";
+
+const rupeeText = (paise: number) => `${paise < 0 ? "-" : ""}₹${(Math.abs(paise) / 100).toFixed(2)}`;
 
 // --- 6. Pricing curve (POST /cfo/pricing) --------------------------------------------
 
@@ -87,7 +90,7 @@ export function PricingCurveSection({ getToken }: { getToken: () => Promise<stri
   };
 
   return (
-    <Section title="Pricing Curve">
+    <Section title="Pricing curve" hint="Shows the margin at each price you list.">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="SKU"><TextInput value={sku} onChange={setSku} /></Field>
@@ -169,6 +172,10 @@ export function PricingCurveSection({ getToken }: { getToken: () => Promise<stri
         <ErrorText>{error}</ErrorText>
         {result && (
           <div className="mt-ledger">
+            <LineChart
+              summary={`Result at each price you listed: ${result.curve.map((r) => `${r.calculationBasis ?? r.metricCode} ${r.isAvailable && r.valuePaise !== null ? rupeeText(r.valuePaise) : "unavailable"}`).join(", ")}.`}
+              points={result.curve.map((r, i) => ({ key: `${i}-${r.engineResultRef}`, label: r.calculationBasis ?? r.metricCode, y: r.isAvailable ? r.valuePaise : null }))}
+            />
             {result.curve.map((r) => (
               <CfoMetricResultRow key={r.engineResultRef} label={r.calculationBasis ?? r.metricCode} result={r} />
             ))}
@@ -220,7 +227,7 @@ export function LandedCostSection({ getToken }: { getToken: () => Promise<string
   };
 
   return (
-    <Section title="Landed Cost">
+    <Section title="Landed cost" hint="The landed cost of a supplier quote you saved.">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="SKU"><TextInput value={sku} onChange={setSku} /></Field>
@@ -291,7 +298,7 @@ export function SupplierRankingSection({ getToken }: { getToken: () => Promise<s
   };
 
   return (
-    <Section title="Supplier Ranking">
+    <Section title="Supplier ranking" hint="Ranks your saved supplier quotes for a SKU, lowest landed cost per unit first. It does not find suppliers.">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="SKU"><TextInput value={sku} onChange={setSku} /></Field>
@@ -403,7 +410,7 @@ export function BatchSizeSection({ getToken }: { getToken: () => Promise<string 
   };
 
   return (
-    <Section title="Batch Size Estimate">
+    <Section title="Batch size" hint="An estimate of the order quantity your budget allows. It is not a forecast of demand or sales.">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="SKU"><TextInput value={sku} onChange={setSku} /></Field>
@@ -492,6 +499,7 @@ export function BatchSizeSection({ getToken }: { getToken: () => Promise<string 
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
+          <PeriodPresets onPick={(s, e) => { setPeriodStart(s); setPeriodEnd(e); }} />
         </div>
         <div>
           <SubmitButton onClick={submit} busy={busy} label="Estimate batch size" busyLabel="Estimating…" />
@@ -566,12 +574,13 @@ export function FundingReadinessSection({ getToken }: { getToken: () => Promise<
   };
 
   return (
-    <Section title="Funding Readiness">
+    <Section title="Funding readiness" hint="Your contribution profit history and trend, and what is missing from it. There is no score.">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
+          <PeriodPresets onPick={(s, e) => { setPeriodStart(s); setPeriodEnd(e); }} />
         </div>
         <Field label="Expected periods (optional, comma-separated, e.g. 2024-01-01/2024-01-31)">
           <TextInput value={expectedPeriods} onChange={setExpectedPeriods} />

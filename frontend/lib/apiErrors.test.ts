@@ -44,7 +44,8 @@ describe("friendlyApiError", () => {
   });
 
   it("keeps the existing message for other statuses and the caller's fallback for non-API errors", () => {
-    expect(friendlyApiError(new ApiError(404, "Not found"), "f")).toBe("Not found");
+    expect(friendlyApiError(new ApiError(404, "Not found"), "f")).toBe("We could not find that. It may have been removed, so refresh and try again. (Not found)");
+    expect(friendlyApiError(new ApiError(418, "Teapot"), "f")).toBe("Teapot");
     expect(friendlyApiError(new ApiError(418, { x: 1 }), "f")).toBe("Request failed with 418");
     expect(friendlyApiError(new Error("network down"), "Could not reach the backend")).toBe("Could not reach the backend");
     expect(friendlyApiError("weird", "fallback")).toBe("fallback");

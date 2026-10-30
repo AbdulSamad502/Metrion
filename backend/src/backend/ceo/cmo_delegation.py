@@ -35,7 +35,7 @@ DELEGATED_ACTIONS: frozenset[str] = frozenset(input_session.CMO_SESSIONS)  # the
 IMAGE_TYPES: frozenset[str] = frozenset({"PNG", "JPEG", "WEBP"})  # attachment types (detected from content) the CMO reads as a product photo
 IMAGE_ACTION = "cmo.analyze_attachment"  # the CEO -> CMO photo hand-off (by reference); always its own small plan card
 IMAGE_FOLLOWUPS: frozenset[str] = DELEGATED_ACTIONS - {"cmo.market_trends"}  # the generation actions that can start from an attached product photo
-CI_INFORMED: frozenset[str] = DELEGATED_ACTIONS - {"cmo.market_trends"}  # the writing actions that may be informed by the seller's saved competitor listing themes (CEO-brokered)
+CI_INFORMED: frozenset[str] = DELEGATED_ACTIONS - {"cmo.market_trends", "cmo.catalog_answer"}  # the writing actions that may be informed by the seller's saved competitor listing themes (CEO-brokered)
 CI_USED_LINE = (
     "Informed by themes from {n} of your tracked competitors' saved listings (derived words only, no competitor text, no prices). "
     "Metrion writes original text from your own product facts and checks it is not a copy or close rewrite of any competitor's wording, and makes no search-volume, ranking or sales claim."
@@ -321,6 +321,7 @@ _WHAT = {
     "cmo.generate_title_sets": "write listing title options", "cmo.generate_hashtags": "suggest hashtags", "cmo.generate_description": "write a product description",
     "cmo.generate_keywords": "suggest search keywords", "cmo.market_trends": "research current market trends", "cmo.generate_bullets": "write the five listing bullet points",
     "cmo.generate_backend_terms": "write Amazon backend search terms", "cmo.generate_listing_copy": "write the full listing copy pack (description, bullet points and keywords)",
+    "cmo.catalog_answer": "work out the catalog details (category, colour, material, size, weight, dimensions, brand) and say how sure each one is",
 }
 MAX_QUERIES_SHOWN = 12
 
@@ -358,7 +359,9 @@ def plan_extras(key: str, slots: Mapping[str, Any], preview: Mapping[str, Any] |
                 details.append(f"(and {len(queries) - MAX_QUERIES_SHOWN} more)")
         details.append("Quota effect: 1 CMO unit and 1 shared market-research unit, counted only if the report completes.")
     else:
-        details.append(_model_line())
+        details.append(
+            "No language model is used: the details are worked out by code from what you told me and your saved facts, and each one says how sure it is." if key == "cmo.catalog_answer"
+            else _model_line())
         n = len(mps) if key == "cmo.generate_title_sets" and mps else 1
         if key == "cmo.generate_title_sets":
             units[key] = n
@@ -371,6 +374,7 @@ _TITLE_WHAT = {
     "cmo.generate_title_sets": "Write listing titles", "cmo.generate_hashtags": "Suggest hashtags", "cmo.generate_description": "Write a product description",
     "cmo.generate_keywords": "Suggest search keywords", "cmo.market_trends": "Research market trends and news", "cmo.generate_bullets": "Write listing bullet points",
     "cmo.generate_backend_terms": "Write Amazon backend search terms", "cmo.generate_listing_copy": "Write the full listing copy pack",
+    "cmo.catalog_answer": "Work out catalog details",
 }
 
 
@@ -416,10 +420,13 @@ def compact_lines(key: str, slots: Mapping[str, Any], preview: Mapping[str, Any]
         if is_thin(slots):  # on the same line, so the card stays at five lines
             using += " Thin input - add brand/size/features for stronger " + ("titles." if key == "cmo.generate_title_sets" else "results.")
         lines.append(using)
-        try:
-            lines.append(f"Model: {config.cmo_llm_model()} (Metrion's own server).")
-        except Exception:  # noqa: BLE001 - not configured: said plainly, never a made-up name
-            lines.append("Model: not configured yet, so a run would be refused and nothing used up.")
+        if key == "cmo.catalog_answer":
+            lines.append("No language model is used; the answers come from your own facts.")
+        else:
+            try:
+                lines.append(f"Model: {config.cmo_llm_model()} (Metrion's own server).")
+            except Exception:  # noqa: BLE001 - not configured: said plainly, never a made-up name
+                lines.append("Model: not configured yet, so a run would be refused and nothing used up.")
         n = len(slots["marketplaces"]) if key == "cmo.generate_title_sets" and isinstance(slots.get("marketplaces"), list) and slots["marketplaces"] else 1
         lines.append(f"Cost: {n} CMO units, only for results that complete." if n != 1 else "Cost: 1 CMO unit, only if it completes.")
     if slots.get("ci_insight_ids"):
@@ -559,6 +566,8 @@ def result_footer(legs: Sequence[LegResult]) -> str:
         if isinstance(p.get("unitsBilled"), int):
             units += p["unitsBilled"]
     lines = []
+    if any(a.get("status") == "COMPLETE" and a.get("outputType") == "TITLE_SET" for leg in legs if leg.action_key in DELEGATED_ACTIONS for a in (leg.payload or {}).get("artefacts") or []):
+        lines.append("To compare them, say “compare these titles”. To choose one, say “use option 2” (or its number), or type the exact title you want. Choosing only saves your choice in Metrion; nothing is published.")
     if refs:
         lines.append("Saved as: " + "; ".join(refs) + ".")
     lines.append(f"Used from your plan: {units} CMO unit{'s' if units != 1 else ''}.")

@@ -41,9 +41,7 @@ function ShellPage({ title, subtitle, context, actions, children }: ShellProps) 
   const fullBleed = pathname.startsWith("/dashboard/ceo-hub");
   return (
     <>
-      {fullBleed ? (
-        <h1 className="sr-only">{title}</h1>
-      ) : (
+      {fullBleed ? null : (
         <Topbar
           title={title}
           subtitle={subtitle}
@@ -60,6 +58,7 @@ function ShellPage({ title, subtitle, context, actions, children }: ShellProps) 
         tabIndex={-1}
         className={`min-h-0 flex-1 overflow-y-auto outline-none ${fullBleed ? "p-3 sm:p-4 xl:overflow-hidden" : "px-4 py-6 sm:px-8 sm:py-8"}`}
       >
+        {fullBleed && <h1 className="sr-only">{title}</h1> /* the page name stays inside the main landmark */}
         {children}
       </main>
     </>

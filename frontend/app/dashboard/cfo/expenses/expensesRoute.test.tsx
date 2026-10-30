@@ -19,10 +19,11 @@ describe("the Expense Tracker route", () => {
     expect(layout.metadata.title).toBe(pageTitle("cfo-expenses"));
   });
 
-  it("is its own entry in the sidebar, right after Profit & Finance, and only that entry is highlighted on its page", () => {
+  it("is its own entry in the sidebar, under Tools, and only that entry is highlighted on its page", () => {
     expect(NAV_GROUPS.map((g) => g.items.map((i) => i.label))).toEqual([
       ["Overview", "CEO Hub", "Action Center"],
-      ["Products", "Competitors", "Profit & Finance", "Expense Tracker", "Profit Calculator", "Listings & Marketing"],
+      ["Products", "Competitors", "Profit & Finance", "Listings & Marketing"],
+      ["Profit Calculator", "Expense Tracker"],
     ]);
     const items = allNavItems();
     const tracker = items.find((i) => i.id === "cfo-expenses")!;
@@ -31,8 +32,8 @@ describe("the Expense Tracker route", () => {
     expect(items.filter((i) => isActive(i, "/dashboard/cfo")).map((i) => i.id)).toEqual(["cfo"]);
   });
 
-  it("is linked from the CFO page", () => {
-    const src = readFileSync(join(process.cwd(), "app/dashboard/cfo/page.tsx"), "utf8");
+  it("is linked from the CFO tools page", () => {
+    const src = readFileSync(join(process.cwd(), "app/dashboard/cfo/tools/page.tsx"), "utf8");
     expect(src).toContain("/dashboard/cfo/expenses");
   });
 });

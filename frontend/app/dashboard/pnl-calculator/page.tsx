@@ -2,6 +2,8 @@
 
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { PnlWorkspace } from "@/components/pnl/PnlWorkspace";
+import "@/components/overview/overview.css";
+import "@/components/cfo/cfo-skin.css";
 import { PAGE_COPY } from "@/lib/navigation";
 
 /** The in-app Profit Calculator (docs/specs/calculator.md §14). A dashboard capability, not an agent: it collects typed numbers and shows the Brain 1
@@ -10,7 +12,15 @@ import { PAGE_COPY } from "@/lib/navigation";
 export default function PnlCalculatorPage() {
   return (
     <DashboardShell {...PAGE_COPY["pnl-calculator"]}>
-      <PnlWorkspace />
+      <div className="ov cfo-skin">
+        <header className="ov-head ov-rise">
+          <div>
+            <h2 className="ov-h">What would you earn?</h2>
+            <p className="ov-body" style={{ marginTop: 4 }}>Try a price with your own costs. An estimate, never saved.</p>
+          </div>
+        </header>
+        <PnlWorkspace />
+      </div>
     </DashboardShell>
   );
 }
