@@ -175,7 +175,7 @@ RULES: tuple[Rule, ...] = _EXPENSE_RULES + (Rule("COMPETITOR_PRICE_IMPACT", "CI"
     # Description AND bullets together: the listing copy pack already writes both (plus keywords) as ONE artefact, one approval, one CMO unit.
     Rule("cmo.generate_listing_copy", "CMO", _rx(rf"^(?!.*\bgst\b)(?!\s*(?:tell me about|explain|what|how|why|were|are|is|do|does|did)\b)(?=.*\b{_BULLETS}\b)(?=.*\b{_DESC}\b)(?=.*\b{_WRITE}\b|.*\b(?:and|together|also|with|plus)\b)")),
     Rule("gst_lookup", "CFO", _rx(r"\bgst\b.*\b(?:rate|percent|percentage|%|slab|apply|applies|applicable|charge)\b|\b(?:rate|percent|percentage|slab)\b.*\bgst\b|\bgst (?:on|for|of)\b")),
-    Rule("NEW_PRODUCT_DECISION", "CFO", _rx(r"\bworth (?:stocking|buying|importing|selling)\b|\bshould i (?:stock|buy|import|order)\b|\b(?:product )?evaluation\b|\bevaluate\b[^.?!]*\b(?:product|item|goods|selling|stocking)\b|\bevaluate\b|\bproduct feasibility\b"), "PLAYBOOK"),
+    Rule("NEW_PRODUCT_DECISION", "CFO", _rx(r"\bworth (?:stocking|buying|importing|selling)\b|\bshould i (?:stock|buy|import|order)\b|\b(?:product )?evaluation\b|\bevaluate\b[^.?!]*\b(?:product|item|goods|selling|stocking)\b|\bevaluate\b(?![^.?!]*\btitles?\b)|\bproduct feasibility\b"), "PLAYBOOK"),
     Rule("COMPETITOR_PRICE_IMPACT", "CI", _rx(r"(?=.*\bmargin\b)(?:.*\b(?:at|match|matched|matching|beat|undercut)\b.*\bprice\b|.*\b(?:is|are|dropped|cut|lowered)\b.*\b(?:at|to)\s*(?:₹|rs\.?)?\s*\d)"), "PLAYBOOK"),
     # A price scenario for ONE competitor (the saved list of competitor prices is a state read, matched earlier and excluded when the word "scenario" is used).
     Rule("ci.request_price_scenario", "CI", _rx(r"\bprice scenarios?\b|\bscenarios?\b.*\bprices?\b|\bprices?\b.*\bscenarios?\b|\bprice positioning\b")),
