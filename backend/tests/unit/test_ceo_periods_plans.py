@@ -93,6 +93,9 @@ def test_every_planned_action_is_a_wired_registry_action_with_valid_slots():
         "cfo.expense_correct": {"expense_id": str(uuid.uuid4()), "effective_date": "2026-10-01", "category": "software", "amount_paise": 99900, "request_key": "k"},
         "cfo.expense_void": {"expense_id": str(uuid.uuid4()), "reason": "duplicate", "request_key": "k"},
         "cfo.expense_paid": {"expense_id": str(uuid.uuid4()), "status": "paid", "request_key": "k"},
+        "cfo.cash_position": {},
+        "cfo.performance": {"period_start": "2026-09-01", "period_end": "2026-09-30", "as_of_date": "2026-10-23"},
+        "cfo.import_attachments": {"investigation_id": str(uuid.uuid4()), "files": [{"attachment_id": str(uuid.uuid4()), "filename": "r.csv", "marketplace": "AMAZON"}], "request_key": "k"},
     }
     for key, plan in ACTIONS.items():
         built = plan.build_slots(dataclasses.replace(resolved, direct=sample[key]) if key in sample else resolved)

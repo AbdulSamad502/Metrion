@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from backend.ceo import plain_reasons
 from backend.ceo.composition_gate import MARKER_RE, check_composition
 from backend.ceo.contract import Figure, Register
 from backend.llm.model import STATIC_END, Completion, LlmModel
@@ -172,8 +173,11 @@ def render_template(table: EvidenceTable, *, heading: str | None = None, ai_note
             lines.append(f"  ({note})")
     if any(not title.startswith(WEB_ARTEFACT_TITLE) for title, _, _ in table.artefacts):  # web findings carry their own, stronger note
         lines.append(ARTEFACT_NOTICE)
-    for _, msg in table.gaps:
+    kept, plain = plain_reasons.summarise([msg for _, msg in table.gaps])  # the engine's coverage wording becomes ONE explanation of what is missing and what to do
+    for msg in kept:
         lines.append(f"- Not available: {msg}")
+    if plain:
+        lines.append(f"- Not available yet: {plain}")
     for _, _, block in table.conflicts:
         lines.append(f"- Conflict: {block}")
     for _, _, body in table.disclaimers:

@@ -29,7 +29,7 @@ from typing import Any
 from uuid import UUID
 
 from backend import config
-from backend.ceo import approval, cmo_delegation, expense_chat, input_session, orchestrator, pi_research
+from backend.ceo import approval, cmo_delegation, expense_chat, import_chat, input_session, orchestrator, pi_research
 from backend.ceo.approval import ApprovalRefused
 from backend.ceo.billing import unit_decision
 from backend.ceo.composer import template_only
@@ -258,6 +258,7 @@ def _run_frozen(ctx: AuthContext, runtime: CeoRuntime, plan_id: UUID, plan: dict
                                     anchor_status=turn.derive_status() if turn.legs else "FAILED", error_reason="a required leg did not complete")
     delegated = key in cmo_delegation.DELEGATED_ACTIONS
     heading = (expense_chat.heading_for(str(key)) if key in expense_chat.WRITE_KEYS
+               else import_chat.heading() if key == import_chat.IMPORT_KEY
                else "Here is what Product Intelligence found for your niche." if key == "pi.discover"
                else "I could not complete this plan. Here is what is available:" if delegated and cmo_delegation.any_leg_failed(legs)
                else cmo_delegation.heading_for(key) if delegated else "Here is what was produced for the plan you approved.")

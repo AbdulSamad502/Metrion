@@ -19,7 +19,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
-from backend.ceo import expense_chat, memory, slot_resolvers
+from backend.ceo import expense_chat, import_chat, memory, slot_resolvers
 from backend.ceo.periods import PeriodUnresolvable, resolve_period
 from backend.services import ceo_reads
 
@@ -97,6 +97,24 @@ def is_cancel_request(text: str) -> bool:
     return bool(_CANCEL_PHRASE.search(text)) and len(text.split()) <= 6
 
 
+_NEW_REQUEST_OPENER = re.compile(
+    r"^(?:what|how|which|why|when|where|who|can you|could you|would you|please (?:show|give|tell|compare|calculate|explain|check|analy[sz]e)|show|give me|tell me|compare|calculate|explain|list|analy[sz]e|"
+    r"check|help me|should i|am i|do i|is my|are my|create|run|find|add|record|import|remove|delete|mark|change|update)\b", re.IGNORECASE)
+
+
+def _opens_a_new_request(t: str, closed: bool) -> bool:
+    """A sentence that opens like a question or a command of its own (and is long enough to be one), or that a plain routing rule reads as a request, is not an answer to an open question.
+    A free-text field (a note, a vendor) only yields to a real question mark: those answers are legitimately sentences."""
+    words = len(t.split())
+    if not closed:
+        return "?" in t and words >= 5
+    if words >= 4 and (_NEW_REQUEST_OPENER.match(t) or "?" in t):
+        return True
+    from backend.ceo import intent_router  # noqa: PLC0415 - local: the router must not be imported while this module loads
+
+    return words >= 3 and intent_router.matches_a_rule(t)
+
+
 def is_unrelated_to_open_question(card: Mapping[str, Any], text: str, ctx: Ctx) -> bool:
     """True when what the seller typed is clearly a NEW request and not an answer to the open question: it cannot be read as an answer AND it is a sentence or a question.
     A short or readable answer, and the cancel words, are always answers. Used so an open question never swallows the seller's next request."""
@@ -112,8 +130,11 @@ def is_unrelated_to_open_question(card: Mapping[str, Any], text: str, ctx: Ctx) 
         f = _next_field(fields, ctx, collected)
         if f is None:
             return False
-        if f.name not in _FREE_TEXT_FIELDS and not f.name.startswith("fact_") and len(t.split()) >= 8:
+        closed = f.name not in _FREE_TEXT_FIELDS and not f.name.startswith("fact_")
+        if closed and len(t.split()) >= 8:
             return True  # a closed question (an amount, a product, a choice) is answered in a few words: a long sentence is a new request, whatever else it mentions
+        if _opens_a_new_request(t, closed):
+            return True  # "What should I focus on to grow...?" is a question of its own, never the value a half-finished form was waiting for
         if not isinstance(f.parse(t, ctx, collected), Reject):
             return False
     except Exception:  # noqa: BLE001
@@ -918,6 +939,16 @@ EXP_PAID: tuple[Field, ...] = (
           lambda c, g: (Option("Paid", "paid"), Option("Unpaid", "unpaid"), Option("Partially paid", "partially paid"))),
     Field("expense_paid_amount", lambda c, g: "How much of it has been paid, in rupees?", _exp_amount, applies=lambda c, g: g.get("expense_status") == "partially_paid"),
 )
+def _import_marketplace(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    mk = import_chat.parse_marketplace(raw)
+    return mk if mk is not None else Reject("Please say Amazon, Flipkart or Meesho.")
+
+
+IMPORT_FIELDS: tuple[Field, ...] = (
+    Field("import_marketplace", lambda c, g: "Which marketplace are these reports from? I could not tell from the file names.", _import_marketplace,
+          lambda c, g: (Option("Amazon", "Amazon"), Option("Flipkart", "Flipkart"), Option("Meesho", "Meesho")), applies=lambda c, g: bool(g.get("_needs_marketplace"))),
+)
+IMPORT_SESSIONS = ("cfo.import_attachments",)
 EXPENSE_SESSIONS = ("cfo.expense_add", "cfo.expense_correct", "cfo.expense_void", "cfo.expense_paid")
 
 
@@ -961,7 +992,7 @@ SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "pi.discover": PI_DISCOVER,
     "cmo.market_trends": CMO_TRENDS, "dr.trend_run": DR_TREND_RUN,
     "dr.cogs_per_unit": DR_COGS, "dr.supplier_quote": DR_QUOTE, "dr.batch_budget": DR_BUDGET,
-    "cfo.expense_add": EXP_ADD, "cfo.expense_correct": EXP_CORRECT, "cfo.expense_void": EXP_VOID, "cfo.expense_paid": EXP_PAID,
+    "cfo.import_attachments": IMPORT_FIELDS, "cfo.expense_add": EXP_ADD, "cfo.expense_correct": EXP_CORRECT, "cfo.expense_void": EXP_VOID, "cfo.expense_paid": EXP_PAID,
     "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_DESCRIPTION, "cmo.generate_keywords": CMO_KEYWORDS,
     "cmo.generate_bullets": CMO_BULLETS, "cmo.generate_backend_terms": CMO_BACKEND_TERMS, "cmo.generate_listing_copy": CMO_LISTING,
 }
@@ -1202,6 +1233,8 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
     """The same shape `playbook_inputs.validate_inputs` checks for the form (§6.33). Nothing is added that the seller did not give."""
     if playbook in EXPENSE_SESSIONS:
         return _expense_inputs(playbook, c)
+    if playbook in IMPORT_SESSIONS:
+        return import_chat.inputs_from(c)
     if playbook == "dr.trend_run":
         return {}
     if playbook == "dr.cogs_per_unit":

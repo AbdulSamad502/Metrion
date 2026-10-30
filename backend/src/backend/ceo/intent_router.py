@@ -99,7 +99,9 @@ STATE_RULES: tuple[Rule, ...] = (
 BRIEFING_RULES: tuple[Rule, ...] = (
     Rule("BUSINESS_BRIEFING", "CFO", _rx(
         r"\b(?:business|cross[- ]domain|overall|overview|executive|morning)\s+(?:briefing|brief|overview|summary|snapshot)\b|\bbriefing\b.*\b(?:business|my (?:store|company|shop))\b|\bbrief me\b"
-        r"|\b(?:overview|summary|snapshot) of (?:my|the|our) (?:whole |entire )?(?:business|store|company|shop)\b"), "PLAYBOOK"),
+        r"|\b(?:overview|summary|snapshot) of (?:my|the|our) (?:whole |entire )?(?:business|store|company|shop)\b"
+        r"|\b(?:complete|full|overall|whole)\s+(?:financial|finance)\s+(?:health|position|picture|report|review|performance)\b|\bhow (?:is|am|are|did|was) (?:my |our )?(?:business|i doing|we doing)\b"
+        r"|\bwhat should i (?:focus on|fix first|work on)\b[^.?!]*\b(?:profit\w*|grow\w*|financ\w*|business)\b|\bimprove (?:my |our )?(?:profit\w*|margins?)\b[^.?!]*\bgrow\w*\b"), "PLAYBOOK"),
 )
 
 # Ordered: the first match wins. Each pattern needs a clear verb or noun for the work, not just a keyword anywhere.
@@ -111,13 +113,52 @@ _PRICE_DECISION = _rx(
 # expenses, and - last of these - a first-person payment STATEMENT, which only starts a question ("is this your expense?"), never a save.
 _EXP_NOUN = r"(?:an? |the |my |our |that |this |these |those |one |some |new )*expenses?"
 _NOT_HOWTO = r"^(?!\s*(?:how (?:do|does|can|to|would)|where|what (?:is|are|does)|why|is it|are there)\b)"
+# Adding ATTACHED data to the financial records ("add the verified information to my CFO dashboard", "import these files"). Reading an attachment is a different request and matches nothing here.
+_IMPORT_PATTERN = (
+    r"^(?!\s*(?:how (?:do|does|can|to|would)|where|what (?:is|are|does)|why|is it|are there)\b)(?!.*\bexpenses?\b)"
+    r"(?=.*\b(?:import|add|upload|load|save|put|bring|ingest|record|sync)\b)"
+    r"(?=.*\b(?:these|those|this|that|them|it|files?|reports?|attach\w*|spreadsheets?|csv|xlsx|data|information|figures)\b)"
+    r"(?=.*\b(?:dashboard|records?|ledger|cfo|finance|financial|profit|books|accounts?)\b)"
+)
+
+
+def is_import_request(text: str) -> bool:
+    return bool(re.search(_IMPORT_PATTERN, " ".join((text or "").split()), re.IGNORECASE))
+
+
+# Cash: what the seller expects to receive from the marketplaces and what they owe. Not the leak check (missing money), not funding or loans, not an expense request.
+_CASH_PATTERN = (
+    r"^(?!.*\b(?:leaks?|leaking|discrepanc\w*|reconcil\w*|claims?|loan|borrow\w*|funding|fund(?:s|ed)?\b|what if|what happens|delayed?|invest\w*|expenses?|spent|spend|gst|tcs|tds|competitors?)\b)"
+    r"(?=.*\b(?:cash(?:[- ]?flow)?|cash position|cash runway|runway|settlements?|payables?|receivables?|(?:money|payments?|payouts?) (?:i )?(?:expect|will receive|coming|due|owed|to receive|to make|do i need)"
+    r"|(?:expect|receive|get paid)\b[^.?!]*\b(?:from|in|over|within|next)\b|upcoming payments|what (?:do )?i (?:owe|need to pay)|bills? (?:due|to pay)|short of cash|run out of cash)\b)"
+)
+
+
+# How the business performed (sales, performance, financial health) with figures from the imported reports. Profit-only questions stay the saved-result read they have always been.
+_PERFORMANCE_PATTERN = (
+    r"^(?!.*\b(?:expenses?|spent|spend|cash|settlements?|payables?|loan|borrow\w*|fund\w*|leaks?|claims?|gst|competitors?|listings?|hashtags?|titles?|import|upload\w*|files?|attach\w*|what if|plan|forecast)\b)"
+    r"(?=.*\b(?:perform(?:ed|ance)?|how much did (?:i|we) (?:sell|make|earn)|total sales|my sales|sales (?:by|across|for|in|of)|financial health|how (?:is|was|did) my business|business doing)\b)"
+)
+
+
+def is_cash_question(text: str) -> bool:
+    return bool(re.search(_CASH_PATTERN, " ".join((text or "").split()), re.IGNORECASE))
+
+
 _EXPENSE_RULES: tuple[Rule, ...] = (
+    Rule("cfo.import_attachments", "CFO", _rx(_IMPORT_PATTERN)),
+    Rule("cfo.cash_position", "CFO", _rx(_CASH_PATTERN)),
+    Rule("cfo.performance", "CFO", _rx(_PERFORMANCE_PATTERN)),
     Rule("cfo.expense_void", "CFO", _rx(_NOT_HOWTO + r"(?=.*\b(?:remove|delete|void|undo|discard|cancel)\b)(?=.*\b" + _EXP_NOUN + r"\b)(?!.*\b(?:competitors?|rivals?)\b)")),
     Rule("cfo.expense_paid", "CFO", _rx(_NOT_HOWTO + r"(?=.*\b(?:mark|set|update|change|make)\b)(?=.*\b" + _EXP_NOUN + r"\b)(?=.*\b(?:as |to )?(?:paid|unpaid|partially paid|partly paid)\b)")),
     Rule("cfo.expense_correct", "CFO", _rx(_NOT_HOWTO + r"(?=.*\b(?:edit|change|correct|update|fix|modify|amend)\b)(?=.*\b" + _EXP_NOUN + r"\b)")),
     Rule("cfo.expense_add", "CFO", _rx(_NOT_HOWTO + r"(?=.*\b(?:add|record|log|enter|save|put|book|note down|insert)\b)(?=.*\b" + _EXP_NOUN + r"\b)")),
+    Rule("cfo.expense_add", "CFO", _rx(
+        _NOT_HOWTO + r"(?!.*(?:\?|\bshould i\b|\bif i\b|\bwhat if\b|\bcan i\b|\bwould i\b|\bplanning to\b|\bwill (?:pay|spend)\b|\bsold\b|\breceived\b|\brefund))"
+        r"(?=.*\b(?:add|record|log|enter|book|note down|insert)\b)(?=.*(?:₹|\brs\.?\s*\d|\binr\b|\d\s*(?:rupees?|rs\b|inr\b)))"
+        r"(?=.*\b(?:as|for|towards|under)\b[^.?!]*\b(?:rent|salary|salaries|wages|electricity|utility|utilities|internet|software|subscription|packaging|packing|tape|courier|freight|warehouse|storage|office|stationery|insurance|maintenance|transport|fuel|fees?|charges|interest|emi|tax(?:es)?)\b)")),
     Rule("cfo.expense_summary", "CFO", _rx(
-        r"^(?!.*\b(?:ad|ads|advertising) spend\b)(?!.*\b(?:add|record|log|enter|remove|delete|void|correct|edit|mark)\b)(?:"
+        r"^(?!.*\b(?:profit|revenue|sales|returns?|risks?|health|briefing|overview|performance|growth|grow)\b)(?!.*\b(?:ad|ads|advertising) spend\b)(?!.*\b(?:add|record|log|enter|remove|delete|void|correct|edit|mark)\b)(?:"
         r".*\bhow much\b[^.?!]*\b(?:spen[dt]|spending|expenses?)\b|.*\b(?:show|list|view|see|give|tell|what(?:'s| is| are| was| were)|display)\b[^.?!]*\b(?:my |our |the |all )?expenses?\b"
         r"|.*\b(?:month[- ]?wise|monthly|date[- ]?wise|day[- ]?wise|daily)\b[^.?!]*\bexpenses?\b|.*\bexpenses?\b[^.?!]*\b(?:month[- ]?wise|monthly|date[- ]?wise|day[- ]?wise|daily)\b"
         r"|.*\bexpense (?:summary|report|breakdown|list|history)\b|.*\bwhat did (?:i|we) spend\b)")),
@@ -273,6 +314,11 @@ def _slots(rule: Rule, text: str) -> dict[str, str]:
         if product:
             out["product"] = product.group(1).strip()
     return out
+
+
+def matches_a_rule(text: str) -> bool:
+    """True when the message is plainly a request of its own (one of the plain rules reads it), so it is never taken as the answer to a question that was open."""
+    return any(r.pattern.search(text) for r in RULES)
 
 
 def route(text: str, cat: Catalog) -> Decision | None:

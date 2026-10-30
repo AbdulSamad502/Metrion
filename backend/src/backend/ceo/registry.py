@@ -365,6 +365,13 @@ def build_default_registry() -> ActionRegistry:
         ("cfo.expense_void", expense_ops.void, "cfo.expense_ledger.write", Effect.RECORD_ENTRY, (FINANCIALS_ADJUST,)),
         ("cfo.expense_paid", expense_ops.paid, "cfo.expense_ledger.write", Effect.RECORD_ENTRY, (FINANCIALS_ADJUST,)),
     ]
+    from backend.services import ceo_cash_ops as cash_ops
+    from backend.services import ceo_perf_ops as perf_ops
+    from backend.services import ceo_import_ops as import_ops
+
+    expense_rows.append(("cfo.import_attachments", import_ops.run, "cfo.ingest", Effect.IMPORT_DATA, ()))
+    expense_rows.append(("cfo.cash_position", cash_ops.position, "cfo.query", Effect.READ, ()))
+    expense_rows.append(("cfo.performance", perf_ops.summary, "cfo.query", Effect.READ, ()))
     for key, fn, code, effect, extra_perms in expense_rows:
         specs.append(
             ActionSpec(

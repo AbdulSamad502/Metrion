@@ -2514,7 +2514,11 @@ def post_financial_query(body: FinancialQueryHttpRequest, ctx: AuthContext = req
     result = answer_financial_query(ctx.tenant_id, requested_by=ctx.app_user_id, question=body.question, periods=periods)
     if not isinstance(result, PlannerAnswer):
         return {"status": "REFUSED", "code": result.code, "message": result.message, "ruleIds": list(result.rule_ids)}
-    p = result.packet
+    return packet_payload(result.packet)
+
+
+def packet_payload(p: Any) -> dict[str, object]:
+    """An evidence packet as the HTTP response and the CEO's reads show it: figures that each cite a result reference, disclosures, no raw rows."""
     return {
         "status": "ANSWERED", "cached": p.cached, "planHash": p.plan_hash, "catalogVersion": p.catalog_version, "dataVersion": p.data_version,
         "asOfDate": p.as_of_date.isoformat(), "figures": [_figure_to_dict(f) for f in p.figures],

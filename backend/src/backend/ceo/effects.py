@@ -81,10 +81,13 @@ ACTION_EFFECTS: Mapping[str, ActionEffects] = {
     # The expense ledger through the CEO (ceo-expense-tracker-chat.md): the read changes nothing; each write is a record the seller dictated, approved on an exact plan card,
     # and can undo with a void. Nothing leaves Metrion and nothing is metered; the card is forced because a financial record is saved.
     "cfo.expense_summary": _NONE,
+    "cfo.performance": _NONE,  # a read of the deterministic planner path; nothing leaves Metrion
+    "cfo.cash_position": _NONE,  # a read of the deterministic cash view; nothing leaves Metrion
     "cfo.expense_add": ActionEffects(force_approval=True),
     "cfo.expense_correct": ActionEffects(force_approval=True),
     "cfo.expense_void": ActionEffects(force_approval=True),
     "cfo.expense_paid": ActionEffects(force_approval=True),
+    "cfo.import_attachments": ActionEffects(force_approval=True),  # a financial write from a file: a card the seller approves; nothing leaves Metrion and nothing is metered
     "cfo.period_comparison": _MODEL_NARRATION,  # always calls the LLM (api/v1/cfo.py post_period_comparison)
     # ---- GST: fixed public pages + a model call over the product title; no seller data in any HTTP request ----
     "cfo.gst_lookup": ActionEffects(external=External.PUBLIC_FETCH, destinations=("Public GST reference pages",), model_egress=("PRODUCT_TITLE",)),

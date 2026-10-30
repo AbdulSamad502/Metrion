@@ -20,6 +20,7 @@ from uuid import UUID
 from backend.ceo import conflicts as conflict_rules
 from backend.ceo import provenance
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, EvidenceTable, figures_with_tokens
+from backend.ceo import plain_reasons
 from backend.ceo.contract import (
     BusinessStateEntry, Conflict, Denial, EntryStatus, Fact, Figure, Gap, LegResult, LegStatus, Ref, RefKind, Register,
 )
@@ -180,6 +181,7 @@ LEG_LABELS: Mapping[str, str] = {
     "cfo.query": "The answer to your financial question",
     "cfo.expense_summary": "Your expenses",
     "cfo.expense_add": "Adding your expense", "cfo.expense_correct": "Changing your expense", "cfo.expense_void": "Removing your expense", "cfo.expense_paid": "Updating your expense",
+    "cfo.import_attachments": "Adding your reports to your financial records", "cfo.cash_position": "Your cash position", "cfo.performance": "How your business performed",
     "cfo.reconcile": "The marketplace reconciliation",
     "cfo.cash_reconciliation": "The cash reconciliation",
     "cfo.gst_lookup": "The GST rate lookup",
@@ -435,12 +437,16 @@ class EvidenceCollector:
             pass  # the reading is shown to the seller by the photo-reading step as labelled suggestions; it is not a deliverable and carries no figure
         elif leg.action_key.startswith("cmo."):
             self._cmo_artefacts(payload)
-        elif leg.action_key == "cfo.query":
+        elif leg.action_key in ("cfo.query", "cfo.performance"):
             self._planner_result(payload)
         elif leg.action_key == "cfo.expense_summary":
             self._expense_summary(payload)
         elif leg.action_key in ("cfo.expense_add", "cfo.expense_correct", "cfo.expense_void", "cfo.expense_paid"):
             self._expense_write(leg.action_key, payload)
+        elif leg.action_key == "cfo.import_attachments":
+            self._import_result(payload)
+        elif leg.action_key == "cfo.cash_position":
+            self._cash_position(payload)
         elif leg.action_key == "cfo.strategic_briefing":
             for signal in payload.get("signals") or []:
                 self.add_fact(f"Briefing signal: {str(signal.get('category', 'signal')).replace('_', ' ').lower()}",
@@ -468,6 +474,52 @@ class EvidenceCollector:
         elif payload.get("breakdown") == "MONTH":
             self.add_fact("How this is cut", "one total for each calendar month", "SOURCE_DERIVED")
         self.add_fact("Where this comes from", "the expenses in your CFO expense ledger; entries on hold are left out of the totals", "SOURCE_DERIVED")
+
+    def _cash_position(self, payload: Mapping[str, Any]) -> None:
+        """Expected settlements and payables. The expected-receipts figures arrive through their estimate references (the leg's refs); here: what could not be projected and why, each payable as
+        a figure that points at the seller's own entry, and the plain statement of what this is not."""
+        from backend.ceo.contract import Figure, Ref, RefKind, Register  # noqa: PLC0415
+
+        if payload.get("status") == "REFUSED":
+            self.add_gap("The cash view could not be produced: " + _PLANNER_REFUSAL.get(str(payload.get("code")), "it is outside what I can read from your saved data") + ".")
+        for f in payload.get("figures") or []:
+            if not f.get("valueDisplay") and not f.get("estimateRef") and not f.get("engineResultRef"):
+                why = f.get("unavailableReason") or "a required input is missing"
+                self.add_gap(f"{f.get('label') or 'This figure'} cannot be projected yet: {why}. Settlement reports and your open orders are what it is built from.")
+        payables = payload.get("payables") or []
+        if not payables:
+            self.add_fact("Payables", "you have not recorded any payable (money you owe), so none is counted", "SOURCE_DERIVED")
+        for p in payables:
+            try:
+                ref = Ref(RefKind.SELLER_PROVIDED, UUID(str(p["id"])))
+            except (ValueError, KeyError):
+                continue
+            who = f" to {p['supplierRef']}" if p.get("supplierRef") else ""
+            self._add_figure(Figure(f"Payable due {p.get('dueDate') or 'on no stated date'}{who}", p["amount"]["display"], Register.MANUAL, ref))
+        self.add_fact("What this is", "expected settlements are an estimate from your own settlement history; neither they nor your payables are your bank balance", "SOURCE_DERIVED")
+
+    def _import_result(self, payload: Mapping[str, Any]) -> None:
+        """What the importer reported for each approved file, in words written by code from its own report: rows read and saved, what was held, what needs the seller's column mapping."""
+        files = payload.get("files") or []
+        added = False
+        for f in files:
+            name, outcome = f.get("filename", "a file"), f.get("outcome")
+            rows = f.get("rows") or {}
+            if outcome == "IMPORTED":
+                added = True
+                extra = f"; {rows['held_total']} held for your review" if rows.get("held_total") else ""
+                skipped = f"; {rows['duplicate_overlap_with_earlier_uploads']} already there from an earlier upload" if rows.get("duplicate_overlap_with_earlier_uploads") else ""
+                self.add_fact(name, f"added to your financial records: {rows.get('posted')} of {rows.get('read')} rows saved{extra}{skipped}", "SOURCE_DERIVED")
+            elif outcome == "ALREADY_IMPORTED":
+                self.add_fact(name, "this exact file was imported before, so nothing was added twice", "SOURCE_DERIVED")
+            elif outcome == "NEEDS_MAPPING":
+                self.add_gap(f"{name} was not added: I do not recognise its columns. Open CFO, Data & imports, choose 'Map the columns yourself', confirm the mapping, and it will be added.")
+            elif outcome == "STILL_RUNNING":
+                self.add_gap(f"{name} is still being imported. Its progress shows on CFO, Data & imports.")
+            else:
+                self.add_gap(f"{name} was not added: {f.get('reason') or 'the importer refused it'}. Nothing from it was saved.")
+        if added:
+            self.add_fact("Next", "your CFO dashboard now reads these records. Profit also needs what each product costs you and which orders were returned.", "SOURCE_DERIVED")
 
     def _expense_write(self, key: str, payload: Mapping[str, Any]) -> None:
         """What an approved expense change did, in words written by code, with the saved entry as a figure that points at itself."""
@@ -713,10 +765,12 @@ class EvidenceCollector:
         for g in gated.gaps:
             self.add_gap(g.message)
         verified = self.verified_conflicts()
+        kept_gaps, plain_gap = plain_reasons.summarise(self.gaps)  # the engine's coverage wording becomes ONE plain explanation, for the model-written answer and the template alike
+        final_gaps = [*kept_gaps, *([plain_gap] if plain_gap else [])]
         return EvidenceTable(
             figures=figures_with_tokens(gated.kept),
             facts=tuple(self.facts),
-            gaps=tuple((f"G{i}", m) for i, m in enumerate(self.gaps, start=1)),
+            gaps=tuple((f"G{i}", m) for i, m in enumerate(final_gaps, start=1)),
             disclaimers=tuple((f"D{i}", k, t) for i, (k, t) in enumerate([*self.disclaimers, *disclaimers], start=1)),
             attach=tuple((f"A{i}", a) for i, a in enumerate([*self.attach, *attach], start=1)),
             offers=tuple((f"O{i}", k, lbl) for i, (k, lbl) in enumerate(self.offers, start=1)),
