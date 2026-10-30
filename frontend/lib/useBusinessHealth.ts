@@ -4,15 +4,18 @@ import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createCeoClient, type HealthEntry } from "@/lib/ceo";
 import type { HealthState } from "@/lib/useCeoHub";
+import { demoActive } from "@/lib/demo/mode";
 
 /** The Overview's profit snapshot: the same persisted, backend-presented results the CEO Hub's "business at a glance" shows
  * (`GET /api/v1/ceo/state/health` — CFO bands and the latest saved P&L as verified display snapshots). Nothing is computed here.
  * There is still no portfolio-level profit/margin endpoint; until one exists this is the only honest source, and a missing result
  * says so instead of showing a number. */
-export function useBusinessHealth(): { health: HealthState; refresh: () => void } {
+export function useBusinessHealth(): { health: HealthState; refresh: () => void; refreshing: boolean; checkedAt: string | null } {
   const { getToken } = useAuth();
   const client = useMemo(() => createCeoClient(getToken), [getToken]);
   const [health, setHealth] = useState<HealthState>({ status: "loading", entries: [] });
+  const [refreshing, setRefreshing] = useState(false); // a retry in flight: the shown results stay put, the button says so
+  const [checkedAt, setCheckedAt] = useState<string | null>(null); // when the last read that WORKED finished (this browser's clock); a failed read does not move it
 
   const alive = useRef(true); // a reply that arrives after the page is gone must not update it
   useEffect(() => {
@@ -23,11 +26,18 @@ export function useBusinessHealth(): { health: HealthState; refresh: () => void 
   }, []);
 
   const refresh = useCallback(async () => {
+    setRefreshing(true);
     try {
-      const { entries } = await client.getHealth();
-      if (alive.current) setHealth({ status: "ready", entries });
+      // Sample-data preview (dev/preview builds only). This is the Overview's own hook; the CEO Hub's reads of the same endpoint are untouched.
+      const { entries } = demoActive() ? (await import("@/lib/demo/fixtures/health")).demoHealth() : await client.getHealth();
+      if (alive.current) {
+        setHealth({ status: "ready", entries });
+        setCheckedAt(new Date().toISOString());
+      }
     } catch {
       if (alive.current) setHealth((h) => ({ status: "error", entries: h.entries }));
+    } finally {
+      if (alive.current) setRefreshing(false);
     }
   }, [client]);
 
@@ -37,7 +47,7 @@ export function useBusinessHealth(): { health: HealthState; refresh: () => void 
     })();
   }, [refresh]);
 
-  return { health, refresh: () => void refresh() };
+  return { health, refresh: () => void refresh(), refreshing, checkedAt };
 }
 
 /** The most recent as-of date among the saved results (ISO string comparison only; no arithmetic), for the freshness line. */

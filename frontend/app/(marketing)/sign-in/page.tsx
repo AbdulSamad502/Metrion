@@ -118,7 +118,7 @@ export default function SignInPage() {
       footer={
         <span style={{ color: "var(--text-6)" }}>
           Don&apos;t have an account?{" "}
-          <Link href="/sign-up" style={{ color: "var(--accent)", fontWeight: 700 }}>
+          <Link href="/sign-up" className="inline-flex min-h-10 items-center" style={{ color: "var(--accent)", fontWeight: 700 }}>
             Sign up
           </Link>
         </span>
@@ -164,7 +164,7 @@ export default function SignInPage() {
           />
           <Link
             href="/forgot-password"
-            className="self-end text-xs font-semibold"
+            className="inline-flex min-h-10 items-center self-end text-xs font-semibold"
             style={{ color: "var(--text-6)" }}
           >
             Forgot password?
@@ -172,15 +172,15 @@ export default function SignInPage() {
         </div>
 
         {wrongStrategy && (
-          <p className="text-sm" style={{ color: "var(--negative)" }}>
+          <p role="alert" className="text-sm" style={{ color: "var(--negative)" }}>
             An account already exists for this email, signed in with Google — it doesn&apos;t have a
             password yet. Use &quot;Continue with Google&quot; above, then add a password from{" "}
-            <strong>Settings → Security</strong> so you can use either from then on.
+            <strong>Settings → Account &amp; security</strong> so you can use either from then on.
           </p>
         )}
 
         {!wrongStrategy && globalError && (
-          <p className="text-sm" style={{ color: "var(--negative)" }}>
+          <p role="alert" className="text-sm" style={{ color: "var(--negative)" }}>
             {globalError}
           </p>
         )}

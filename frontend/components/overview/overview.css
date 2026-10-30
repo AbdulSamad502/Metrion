@@ -1,0 +1,493 @@
+/* Overview — one calm, friendly dashboard.
+   Rules this file keeps:
+   - four type sizes only (--ov-s1 … --ov-s4); weight and colour carry the rest of the hierarchy
+   - spacing in multiples of 8 (4 only inside a control)
+   - warm surfaces, one brand colour, status always carries a word or a shape as well as a colour
+   - motion is feedback: press, hover, a gentle first rise; all of it stops under prefers-reduced-motion */
+
+:root {
+  --ov-s1: 13px;
+  --ov-s2: 15px;
+  --ov-s3: 24px;
+  --ov-s4: 48px;
+
+  --ov-ink: #fafafa;
+  --ov-ink-2: #d4d4d8;
+  --ov-ink-3: #a1a1aa;
+  --ov-card: #0f0f11;
+  --ov-soft: #1a1a1d;
+  --ov-line: #27272a;
+  --ov-edge: #3f3f46;
+  --ov-field-edge: #80808a;
+  --ov-brand: #ffffff;
+  --ov-brand-ink: #e4e4e7;
+  --ov-brand-soft: rgba(255, 255, 255, 0.1);
+  --ov-on-brand: #000000;
+  --ov-good: #4fd9a0;
+  --ov-good-soft: rgba(79, 217, 160, 0.14);
+  --ov-warn: #f0b955;
+  --ov-warn-soft: rgba(240, 185, 85, 0.14);
+  --ov-warn-fill: #f0b955; /* amber for bars and rings (not text) */
+  --ov-bad: #ff8294;
+  --ov-bad-soft: rgba(255, 130, 148, 0.14);
+  --ov-hero-a: #232325;
+  --ov-hero-b: #161617;
+  --ov-hero-bad: #ffd0d6;
+  --ov-scrim: rgba(0, 0, 0, 0.6);
+  --ov-hero-c: #202024;
+  --ov-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 32px -24px rgba(0, 0, 0, 0.7);
+  --ov-shadow-lift: 0 1px 2px rgba(0, 0, 0, 0.4), 0 24px 40px -24px rgba(0, 0, 0, 0.85);
+  --ov-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --ov-gap: 24px; /* the one space between cards, on every page */
+
+  /* chart colours: tell slices and lines apart only; the label and figure are always written beside them */
+  --ov-c1: #fafafa;
+  --ov-c2: #60a5fa;
+  --ov-c3: #a78bfa;
+  --ov-c4: #2dd4bf;
+  --ov-c5: #f472b6;
+  --ov-c6: #fb923c;
+  --ov-c7: #8b8b94;
+
+  /* fixed surfaces: the hero banner and the solid button keep their own contrast in every theme */
+  --ov-solid-bg: #ffffff;
+  --ov-solid-ink: #000000;
+  --ov-hero-ink: #ffffff;
+  --ov-hero-ink-2: rgba(255, 255, 255, 0.92);
+  --ov-hero-glass: rgba(255, 255, 255, 0.1);
+  --ov-hero-glass-2: rgba(255, 255, 255, 0.18);
+  --ov-hero-track: rgba(255, 255, 255, 0.12);
+  --ov-hero-rest: rgba(255, 255, 255, 0.34);
+  --ov-hero-fees: #ffd48a;
+  --ov-hero-well: rgba(0, 0, 0, 0.18);
+  --ov-hero-glow: rgba(255, 255, 255, 0.16);
+}
+
+/* the older tools (calculator, expense tracker, finance tools) read these names; they follow the same palette */
+.ov, .mt-sidebar, .mt-topbar, .mt-auth, .mt-demo {
+  --accent: var(--ov-brand);
+  --accent-hover: var(--ov-brand-ink);
+  --accent-on-fill: var(--ov-on-brand);
+  --accent-fill-subtle: var(--ov-brand-soft);
+  --accent-fill-default: var(--ov-brand-soft);
+  --accent-border-subtle: color-mix(in srgb, var(--ov-brand) 22%, transparent);
+  --accent-border-default: color-mix(in srgb, var(--ov-brand) 36%, transparent);
+  --accent-border-strong: color-mix(in srgb, var(--ov-brand) 56%, transparent);
+  --positive: var(--ov-good);
+  --negative: var(--ov-bad);
+  --negative-fill: var(--ov-bad-soft);
+  --warning: var(--ov-warn);
+  --warning-fill: var(--ov-warn-soft);
+  --warning-border: color-mix(in srgb, var(--ov-warn) 40%, transparent);
+  --info: var(--ov-c4);
+  --info-fill: var(--ov-brand-soft);
+  --info-border: color-mix(in srgb, var(--ov-c4) 40%, transparent);
+  --text-1: var(--ov-ink);
+  --text-2: var(--ov-ink);
+  --text-3: var(--ov-ink-2);
+  --text-4: var(--ov-ink-2);
+  --text-5: var(--ov-ink-3);
+  --text-6: var(--ov-ink-3);
+  --text-7: var(--ov-ink-3);
+  --text-8: var(--ov-ink-3);
+  --text-mint: var(--ov-good);
+  --text-green-muted: var(--ov-good);
+  --bg-card: var(--ov-card);
+  --bg-card-elevated: var(--ov-card);
+  --bg-popover: var(--ov-card);
+  --bg-input: var(--ov-card);
+  --border-subtle: var(--ov-line);
+  --border-default: var(--ov-edge);
+  --border-hover: var(--ov-field-edge);
+  --fill-hover: var(--ov-soft);
+  --shadow-float: var(--ov-shadow-lift);
+}
+
+.ov {
+  max-width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ov-gap);
+  font-family: var(--font-body, var(--font-geist-sans)), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--ov-s2);
+  line-height: 1.5;
+  color: var(--ov-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme="light"] {
+  --ov-ink: #0a0a0b;
+  --ov-ink-2: #3f3f46;
+  --ov-ink-3: #52525b;
+  --ov-card: #ffffff;
+  --ov-soft: #f4f4f5;
+  --ov-line: #e4e4e7;
+  --ov-edge: #d4d4d8;
+  --ov-field-edge: #71717a;
+  --ov-brand: #0a0a0b;
+  --ov-brand-ink: #27272a;
+  --ov-brand-soft: rgba(0, 0, 0, 0.06);
+  --ov-on-brand: #ffffff;
+  --ov-good: #0a7050;
+  --ov-good-soft: #dcf3ea;
+  --ov-warn: #965800;
+  --ov-warn-soft: #fff1d3;
+  --ov-warn-fill: #e7a21c;
+  --ov-bad: #b3263e;
+  --ov-bad-soft: #fde6ea;
+  --ov-c1: #0a0a0b;
+  --ov-c2: #2563eb;
+  --ov-c3: #7c3aed;
+  --ov-c4: #0f766e;
+  --ov-c5: #be185d;
+  --ov-c6: #c2410c;
+  --ov-c7: #71717a;
+  --ov-hero-a: #1c1c1e;
+  --ov-hero-bad: #ffd0d6;
+  --ov-scrim: rgba(0, 0, 0, 0.45);
+  --ov-hero-b: #0a0a0b;
+  --ov-hero-c: #121214;
+  --ov-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 16px 32px -24px rgba(0, 0, 0, 0.22);
+  --ov-shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.06), 0 24px 40px -24px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 479px) {
+  :root { --ov-s4: 40px; --ov-gap: 16px; }
+}
+
+.ov *, .ov *::before, .ov *::after { box-sizing: border-box; }
+.ov h2, .ov h3, .ov p, .ov ul, .ov ol, .ov dl, .ov dd { margin: 0; padding: 0; }
+.ov ul, .ov ol { list-style: none; }
+
+/* ---------- type: four sizes ---------- */
+.ov-meta  { font-size: var(--ov-s1); font-weight: 600; color: var(--ov-ink-3); letter-spacing: 0.01em; }
+.ov-body  { font-size: var(--ov-s2); font-weight: 500; color: var(--ov-ink-2); }
+.ov-title { font-size: var(--ov-s2); font-weight: 700; color: var(--ov-ink); letter-spacing: -0.005em; }
+.ov-h     { font-size: var(--ov-s3); font-weight: 800; color: var(--ov-ink); letter-spacing: -0.025em; line-height: 1.2; }
+.ov-fig   { font-size: var(--ov-s3); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--ov-ink); overflow-wrap: anywhere; }
+.ov-fig-lg{ font-size: var(--ov-s4); font-weight: 800; letter-spacing: -0.04em; line-height: 1.05; overflow-wrap: anywhere; }
+
+/* ---------- surfaces ---------- */
+.ov-card {
+  position: relative;
+  background: var(--ov-card);
+  border: 1px solid var(--ov-edge);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: var(--ov-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.ov-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-height: 40px; }
+.ov-card-head > :first-child { min-width: 0; }
+
+/* ---------- layout ---------- */
+.ov-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; }
+.ov-head-l { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ov-head-r { display: flex; align-items: center; gap: 8px; }
+.ov-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.ov-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--ov-gap); align-items: stretch; }
+.ov-span-7 { grid-column: span 7; min-width: 0; }
+.ov-span-5 { grid-column: span 5; min-width: 0; }
+.ov-span-6 { grid-column: span 6; min-width: 0; }
+.ov-span-12 { grid-column: span 12; min-width: 0; }
+.ov-span-7 > .ov-card, .ov-span-5 > .ov-card, .ov-span-6 > .ov-card, .ov-span-12 > .ov-card { flex: 1; }
+.ov-col { display: flex; flex-direction: column; gap: var(--ov-gap); min-width: 0; }
+.ov-col > .ov-card:last-child { flex: 1; }
+@media (max-width: 1100px) {
+  .ov-span-7, .ov-span-5, .ov-span-6 { grid-column: span 12; }
+}
+
+/* the shared tabs, softened */
+.ov .mt-tab { gap: 8px; }
+.ov .mt-tab__count { font-size: var(--ov-s1); }
+.ov .mt-tabs { gap: 8px; padding: 4px; border-radius: 999px; background: var(--ov-soft); width: fit-content; max-width: 100%; border: 0; }
+.ov .mt-tab { min-height: 40px; padding: 0 16px; border-radius: 999px; border: 0; background: transparent; color: var(--ov-ink-2); font-size: var(--ov-s2); font-weight: 700; }
+.ov .mt-tab[aria-selected="true"] { background: var(--ov-card); color: var(--ov-brand-ink); box-shadow: var(--ov-shadow); }
+.ov .mt-tab::after, .ov .mt-tab::before { display: none; }
+
+
+/* choice chips (a product, a theme, a frequency) */
+.ci-pick {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 8px 16px; border-radius: 20px; text-align: left; font: inherit; font-size: var(--ov-s2); font-weight: 700;
+  border: 1px solid var(--ov-edge); background: var(--ov-card); color: var(--ov-ink-2); cursor: pointer;
+  transition: transform 160ms var(--ov-ease), background 160ms, border-color 160ms, color 160ms;
+}
+.ci-pick:active { transform: scale(0.97); }
+.ci-pick[aria-pressed="true"] { background: var(--ov-brand-soft); border-color: var(--ov-brand); color: var(--ov-brand-ink); }
+@media (hover: hover) and (pointer: fine) { .ci-pick:hover { border-color: var(--ov-brand); } }
+
+/* fields */
+.ov-input { width: 100%; min-height: 48px; padding: 0 16px; border-radius: 16px; border: 1px solid var(--ov-field-edge); background: var(--ov-card); color: var(--ov-ink); font: inherit; font-size: var(--ov-s2); font-weight: 500; transition: border-color 160ms, box-shadow 160ms; }
+.ov-input::placeholder { color: var(--ov-ink-3); }
+.ov-input:focus-visible { outline: none; border-color: var(--ov-brand); box-shadow: 0 0 0 3px var(--ov-brand-soft); }
+.ov-input[aria-invalid="true"] { border-color: var(--ov-bad); }
+
+/* ---------- first rise (once, gentle) ---------- */
+/* everything appears together and quickly: a short fade, no slide and no stagger, so no card waits on the one above it */
+@keyframes ov-rise { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
+.ov-rise { animation: ov-rise 260ms var(--ov-ease) both; }
+
+/* ---------- pills, chips, buttons ---------- */
+.ov-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: 24px; padding: 0 8px; border-radius: 999px;
+  font-size: var(--ov-s1); font-weight: 700; white-space: nowrap;
+  background: var(--ov-soft); color: var(--ov-ink-2);
+}
+.ov-pill svg { flex: none; }
+.ov-pill--good { background: var(--ov-good-soft); color: var(--ov-good); }
+.ov-pill--warn { background: var(--ov-warn-soft); color: var(--ov-warn); }
+.ov-pill--bad  { background: var(--ov-bad-soft);  color: var(--ov-bad); }
+.ov-pill--brand{ background: var(--ov-brand-soft); color: var(--ov-brand-ink); }
+
+.ov-chip {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px;
+  border-radius: 999px; border: 1px solid var(--ov-edge); background: var(--ov-card); color: var(--ov-ink);
+  font-size: var(--ov-s2); font-weight: 700; text-decoration: none; cursor: pointer;
+  transition: transform 160ms var(--ov-ease), border-color 160ms, background 160ms, box-shadow 160ms;
+}
+.ov-chip b { color: var(--ov-brand-ink); font-weight: 800; }
+.ov-chip--warn b { color: var(--ov-warn); }
+
+.ov-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 40px; padding: 0 16px; border-radius: 999px; border: 0;
+  font: inherit; font-size: var(--ov-s2); font-weight: 700; text-decoration: none; cursor: pointer;
+  background: var(--ov-soft); color: var(--ov-ink);
+  transition: transform 160ms var(--ov-ease), background 160ms, box-shadow 160ms, opacity 160ms;
+}
+.ov-btn--solid { background: var(--ov-solid-bg); color: var(--ov-solid-ink); }
+.ov-btn--brand { background: var(--ov-brand); color: var(--ov-on-brand); }
+.ov-btn--glass { background: var(--ov-hero-glass); color: var(--ov-hero-ink); }
+.ov-btn--ghost { background: transparent; color: var(--ov-brand-ink); padding: 0 8px; }
+.ov-btn[disabled] { opacity: 0.6; cursor: default; }
+.ov-icon-btn {
+  display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 999px;
+  border: 1px solid var(--ov-edge); background: var(--ov-card); color: var(--ov-ink-2); cursor: pointer;
+  transition: transform 160ms var(--ov-ease), color 160ms, border-color 160ms;
+}
+
+.ov-btn:active, .ov-chip:active, .ov-icon-btn:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+  .ov-chip:hover { border-color: var(--ov-brand); }
+  .ov-btn:hover { background: color-mix(in srgb, var(--ov-soft) 80%, var(--ov-brand) 20%); }
+  .ov-btn--brand:hover { background: var(--ov-brand-ink); }
+  .ov-btn--solid:hover { background: color-mix(in srgb, var(--ov-solid-bg) 90%, var(--ov-brand) 10%); }
+  .ov-btn--glass:hover { background: var(--ov-hero-glass-2); }
+  .ov-btn--ghost:hover { background: var(--ov-brand-soft); }
+  .ov-icon-btn:hover { color: var(--ov-brand-ink); border-color: var(--ov-brand); }
+}
+.ov a:focus-visible, .ov button:focus-visible, .ov summary:focus-visible {
+  outline: 2px solid var(--ov-brand); outline-offset: 2px; border-radius: 12px;
+}
+.ov-hero a:focus-visible, .ov-hero button:focus-visible, .ov-hero summary:focus-visible { outline-color: var(--ov-hero-ink); }
+
+.ov-arrow { transition: transform 160ms var(--ov-ease); }
+a:hover > .ov-arrow, a:focus-visible > .ov-arrow, button:hover > .ov-arrow { transform: translateX(4px); }
+
+@keyframes ov-spin { to { transform: rotate(360deg); } }
+.ov-spin { animation: ov-spin 900ms linear infinite; }
+
+/* ---------- hero ---------- */
+.ov-hero {
+  color: var(--ov-hero-ink); border: 1px solid var(--ov-edge); gap: 24px; padding: 32px; overflow: hidden; justify-content: space-between;
+  background: var(--ov-hero-b);
+  box-shadow: none;
+}
+.ov-hero .ov-meta, .ov-hero .ov-body { color: var(--ov-hero-ink-2); }
+.ov-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.ov-hero .ov-title { color: var(--ov-hero-ink); }
+.ov-hero .ov-pill { background: var(--ov-hero-glass); color: var(--ov-hero-ink); }
+.ov-hero-fig { display: flex; flex-direction: column; gap: 8px; }
+.ov-hero-fig .ov-fig-lg { color: var(--ov-hero-ink); }
+
+.ov-flow { display: flex; flex-direction: column; gap: 16px; }
+.ov-flow-bar {
+  display: flex; height: 16px; width: 100%; gap: 4px; border-radius: 999px; overflow: hidden;
+  background: var(--ov-hero-track);
+}
+.ov-flow-seg {
+  height: 100%; border-radius: 4px; min-width: 8px; flex: none;
+  transform-origin: left center; animation: ov-grow 400ms var(--ov-ease) both;
+}
+.ov-flow-seg:first-child { border-radius: 999px 4px 4px 999px; }
+.ov-flow-seg:last-child { border-radius: 4px 999px 999px 4px; }
+@keyframes ov-grow { from { transform: scaleX(0); opacity: 0.4; } to { transform: none; opacity: 1; } }
+.ov-flow-seg--fees { background: var(--ov-hero-fees); }
+.ov-flow-seg--rest { background: var(--ov-hero-rest); flex: 1 1 auto; }
+.ov-flow-seg--profit { background: var(--ov-hero-ink); }
+.ov-flow-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.ov-flow-key { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ov-flow-key > span { display: inline-flex; align-items: center; gap: 8px; font-size: var(--ov-s1); font-weight: 700; color: var(--ov-hero-ink-2); }
+.ov-flow-key i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ov-flow-key b { font-size: var(--ov-s2); font-weight: 800; overflow-wrap: anywhere; }
+@media (max-width: 560px) { .ov-flow-legend { grid-template-columns: 1fr; gap: 8px; } .ov-flow-key { flex-direction: row; align-items: center; justify-content: space-between; } }
+
+.ov-flow-link { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; font-size: var(--ov-s2); font-weight: 800; color: var(--ov-hero-ink); text-decoration: none; }
+@media (hover: hover) and (pointer: fine) { .ov-flow-link:hover { text-decoration: underline; text-underline-offset: 4px; } }
+.ov-hero-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ov-why summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 4px; min-height: 40px; font-size: var(--ov-s1); font-weight: 700; color: var(--ov-hero-ink-2); }
+.ov-why summary::-webkit-details-marker { display: none; }
+.ov-why[open] summary .ov-arrow { transform: rotate(90deg); }
+.ov-why-list { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 16px; background: var(--ov-hero-well); }
+.ov-why-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; font-size: var(--ov-s1); font-weight: 600; color: var(--ov-hero-ink-2); }
+.ov-why-row b { color: var(--ov-hero-ink); font-weight: 800; }
+
+/* ---------- rows (health, leaks, needs you) ---------- */
+.ov-rows { display: flex; flex-direction: column; }
+.ov-row {
+  display: flex; align-items: center; gap: 16px; min-height: 64px; padding: 8px 16px; margin: 0 -16px;
+  border-radius: 16px; color: inherit; text-decoration: none;
+  transition: background 160ms, transform 160ms var(--ov-ease);
+}
+a.ov-row { cursor: pointer; }
+a.ov-row:active { transform: scale(0.99); }
+@media (hover: hover) and (pointer: fine) { a.ov-row:hover { background: var(--ov-soft); } }
+.ov-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ov-row-main .ov-title, .ov-row-main .ov-meta { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.ov-row-end { display: flex; align-items: center; gap: 8px; flex: none; font-weight: 800; }
+.ov-badge-circle {
+  display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; flex: none;
+  background: var(--ov-soft); color: var(--ov-ink-2);
+}
+.ov-badge-circle--warn { background: var(--ov-warn-soft); color: var(--ov-warn); }
+.ov-badge-circle--bad  { background: var(--ov-bad-soft);  color: var(--ov-bad); }
+.ov-badge-circle--good { background: var(--ov-good-soft); color: var(--ov-good); }
+.ov-badge-circle--brand{ background: var(--ov-brand-soft); color: var(--ov-brand-ink); }
+
+.ov-amount { font-size: var(--ov-s2); font-weight: 800; color: var(--ov-ink); letter-spacing: -0.01em; }
+
+/* a thin bar under each leak: how big it is next to the others */
+a.ov-row:has(.ov-leakbar) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px; }
+.ov-leakbar { flex-basis: 100%; height: 4px; border-radius: 999px; background: var(--ov-line); margin-left: 56px; width: calc(100% - 56px); overflow: hidden; }
+.ov-leakbar > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-warn-fill); transform-origin: left; animation: ov-grow 400ms var(--ov-ease) both; }
+
+/* ---------- goal meter ---------- */
+.ov-meter { height: 8px; border-radius: 999px; background: var(--ov-soft); overflow: hidden; }
+.ov-meter > i { display: block; height: 100%; border-radius: 999px; background: var(--ov-brand); transform-origin: left; animation: ov-grow 400ms var(--ov-ease) both; }
+
+/* ---------- market tiles ---------- */
+.ov-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .ov-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ov-tile {
+  display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 16px; background: var(--ov-soft); border: 1px solid var(--ov-line);
+  color: inherit; text-decoration: none; min-width: 0;
+  transition: transform 160ms var(--ov-ease), background 160ms, box-shadow 160ms;
+}
+.ov-tile:active { transform: scale(0.98); }
+.ov-tile-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ov-tile--warn .ov-fig { color: var(--ov-warn); }
+
+/* ---------- team ---------- */
+.ov-team { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1100px) { .ov-team { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .ov-team { grid-template-columns: 1fr; } }
+.ov-agent {
+  display: flex; flex-direction: column; gap: 16px; padding: 24px; border-radius: 24px; min-width: 0;
+  background: var(--ov-card); border: 1px solid var(--ov-edge); box-shadow: var(--ov-shadow);
+  color: inherit; text-decoration: none;
+  transition: transform 200ms var(--ov-ease), box-shadow 200ms var(--ov-ease);
+}
+.ov-agent:active { transform: scale(0.985); }
+.ov-agent-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ov-agent-top > .ov-badge-circle { background: var(--ov-brand-soft); color: var(--ov-brand-ink); }
+.ov-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ov-ink-3); flex: none; }
+.ov-dot--good { background: var(--ov-good); }
+
+/* ---------- states ---------- */
+.ov-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 8px 0; }
+.ov-empty .ov-badge-circle { width: 56px; height: 56px; background: var(--ov-brand-soft); color: var(--ov-brand-ink); }
+.ov-note { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 16px; border-radius: 16px; background: var(--ov-warn-soft); color: var(--ov-warn); font-weight: 600; }
+.ov-note--bad { background: var(--ov-bad-soft); color: var(--ov-bad); }
+
+@keyframes ov-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.ov-skel {
+  display: block; border-radius: 12px;
+  background: linear-gradient(90deg, var(--ov-soft) 25%, color-mix(in srgb, var(--ov-soft) 60%, var(--ov-line)) 50%, var(--ov-soft) 75%);
+  background-size: 200% 100%; animation: ov-shimmer 1600ms linear infinite;
+}
+.ov-hero .ov-skel { background: linear-gradient(90deg, rgba(255,255,255,.12) 25%, rgba(255,255,255,.24) 50%, rgba(255,255,255,.12) 75%); background-size: 200% 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ov-rise, .ov-flow-seg, .ov-meter > i, .ov-leakbar > i, .ov-skel, .ov-spin { animation: none; }
+  .ov-btn, .ov-chip, .ov-icon-btn, .ov-row, .ov-tile, .ov-agent, .ov-arrow { transition: none; }
+  .ov-btn:active, .ov-chip:active, .ov-icon-btn:active, .ov-tile:hover, .ov-agent:hover, a.ov-row:active { transform: none; }
+  a:hover > .ov-arrow, a:focus-visible > .ov-arrow { transform: none; }
+}
+
+/* ---------- charts (drawn from tokens, so a new palette recolours them) ---------- */
+.ov-donut { position: relative; flex: none; }
+.ov-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 32px; gap: 4px; pointer-events: none; }
+/* the ring is drawn by a circular sweep (a mask whose stroke is traced once round), quick enough not to be waited on */
+.ov-donut-sweep { stroke-dasharray: 1; animation: ov-draw 520ms cubic-bezier(.4, 0, .2, 1) both; }
+.ov-line-path { stroke-dasharray: 1; animation: ov-draw 500ms var(--ov-ease) both; }
+@keyframes ov-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.ov-chart { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; }
+.ov-chart-key { display: flex; flex-direction: column; gap: 8px; flex: 1 1 200px; min-width: 0; }
+.ov-chart-key li { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: var(--ov-s2); font-weight: 600; color: var(--ov-ink-2); }
+.ov-chart-key i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ov-chart-key b { margin-left: auto; color: var(--ov-ink); font-weight: 800; padding-left: 8px; text-align: right; overflow-wrap: anywhere; }
+.ov-xlabels { display: flex; justify-content: space-between; gap: 8px; font-size: var(--ov-s1); font-weight: 600; color: var(--ov-ink-3); }
+/* formation: pieces of a visual aid build in together, each from its own base */
+@keyframes ov-up { from { transform: scaleY(0); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@keyframes ov-fill { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+.ov-wf-step { transform-origin: bottom; animation: ov-up 420ms var(--ov-ease) both; }
+.ov-wf-col:nth-child(2) .ov-wf-step { animation-delay: 60ms; } .ov-wf-col:nth-child(3) .ov-wf-step { animation-delay: 120ms; } .ov-wf-col:nth-child(4) .ov-wf-step { animation-delay: 180ms; }
+.ci-pips i { animation: ov-fill 240ms var(--ov-ease) both; }
+.ci-pips i:nth-child(2) { animation-delay: 40ms; } .ci-pips i:nth-child(3) { animation-delay: 80ms; } .ci-pips i:nth-child(4) { animation-delay: 120ms; } .ci-pips i:nth-child(5) { animation-delay: 160ms; }
+.ov-chart-key li { animation: ov-rise 260ms var(--ov-ease) both; }
+@media (prefers-reduced-motion: reduce) { .ov-donut-sweep, .ov-line-path, .ov-wf-step, .ci-pips i, .ov-chart-key li { animation: none; } }
+.ov-bars { display: flex; flex-direction: column; gap: 16px; }
+.ov-bars-top { display: flex; justify-content: space-between; gap: 16px; font-size: var(--ov-s2); font-weight: 600; color: var(--ov-ink-2); }
+.ov-bars-top b { color: var(--ov-ink); font-weight: 800; text-align: right; overflow-wrap: anywhere; }
+.ov-bars-track { display: block; height: 8px; margin-top: 8px; border-radius: 999px; background: var(--ov-soft); overflow: hidden; }
+.ov-bars-track > i { display: block; height: 100%; border-radius: 999px; transform-origin: left; animation: ov-grow 400ms var(--ov-ease) both; }
+@media (prefers-reduced-motion: reduce) { .ov-bars-track > i { animation: none; } }
+
+/* phones: the row's tag drops under its text so the text keeps the width */
+@media (max-width: 560px) {
+  .ov-row { flex-wrap: wrap; }
+  .ov-row-end { flex-basis: 100%; padding-left: 56px; }
+  .ov-row-end .ov-arrow { display: none; }
+}
+
+/* every card title sits in the same 40px band at the top, so titles line up across a row; what trails it (a pill, a link, a button) centres in that band */
+.ov-card-head > :first-child .ov-title:first-child, .ov-card-head > .ov-title { line-height: 40px; }
+.ov-card-head > :first-child .ov-title:first-child + .ov-meta { margin-top: -8px !important; }
+.ov-card-head > :not(:first-child) { align-self: flex-start; min-height: 40px; display: inline-flex; align-items: center; }
+
+/* a text-style button lines its words up with the text around it, not its own padding */
+.ov-btn--ghost { margin-left: -8px; }
+.ov-card-head > .ov-btn--ghost, .ov-head-r .ov-btn--ghost { margin-left: 0; margin-right: -8px; }
+
+/* waterfall (Profit & Finance hero): revenue, then fees and other costs step down, then profit. Heights size the steps only; the figures are the backend's. */
+.ov-wf { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.ov-wf-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ov-wf-plot { position: relative; height: 96px; border-radius: 8px; background: var(--ov-hero-well); }
+.ov-wf-step { position: absolute; left: 0; right: 0; border-radius: 6px; }
+.ov-wf-step--rev { background: var(--ov-hero-rest); }
+.ov-wf-step--fees { background: var(--ov-hero-fees); }
+.ov-wf-step--rest { background: repeating-linear-gradient(135deg, var(--ov-hero-rest) 0 4px, transparent 4px 8px); border: 1px solid var(--ov-hero-rest); }
+.ov-wf-step--profit { background: var(--ov-hero-ink); }
+.ov-wf-label { font-size: var(--ov-s1); font-weight: 700; color: var(--ov-hero-ink-2); }
+.ov-wf-value { font-size: var(--ov-s2); font-weight: 800; white-space: nowrap; } /* a money figure is never broken across lines */
+@media (max-width: 560px) { .ov-wf { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 24px; } }
+@media (max-width: 560px) { .ov-wf { gap: 8px; } .ov-wf-plot { height: 72px; } }
+
+/* a text link that stands on its own line is at least 24px tall (also used on the Competitors and Profit & Finance pages) */
+.pi-link { color: var(--ov-brand-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; display: inline-flex; align-items: center; min-height: 24px; }
+
+/* on a phone cards sit closer to the screen edge and give the content the room: nested panels no longer lose a third of the width to padding */
+@media (max-width: 480px) { .ov-card { padding: 20px 16px; border-radius: 20px; } }
+
+/* first run: three numbered steps under the upload button */
+.ov-steps { list-style: none; counter-reset: ovstep; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 8px 0 0; padding: 0; width: 100%; }
+.ov-steps li { counter-increment: ovstep; display: flex; flex-direction: column; gap: 4px; padding-top: 12px; border-top: 1px solid var(--ov-line); font-size: var(--ov-s1); color: var(--ov-ink-3); }
+.ov-steps li::before { content: counter(ovstep); font-weight: 700; color: var(--ov-ink-2); }
+.ov-steps b { font-size: var(--ov-s2); color: var(--ov-ink); }
+@media (max-width: 640px) { .ov-steps { grid-template-columns: 1fr; } }

@@ -20,7 +20,7 @@ describe("Agents page", () => {
     render(<AgentsPage />);
     expect(await screen.findByText("Product Intelligence")).toBeInTheDocument();
     expect(screen.getByText("Not available yet")).toBeInTheDocument();
-    expect(screen.getByText(/nothing on this page changes it/)).toBeInTheDocument();
+    expect(screen.getByText(/Adding or removing agents isn’t available yet/)).toBeInTheDocument();
   });
 
   it("says so when the backend returns no agents", async () => {
@@ -34,7 +34,9 @@ describe("Agents page", () => {
     stub(() => (++n === 1 ? json("down", 503) : json([{ id: "CFO", name: "CFO", status: "CONNECTED" }])));
     render(<AgentsPage />);
     expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/Adding or removing agents isn’t available yet/)).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("CFO")).toBeInTheDocument();
+    expect(screen.getByText(/Adding or removing agents isn’t available yet/)).toBeInTheDocument();
   });
 });

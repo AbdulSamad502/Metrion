@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Section } from "@/components/ui/Section";
 import { apiFetch, type PeriodPnlResponse } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
-import { CfoMetricResultRow, ComponentRowsEditor, EditableComponentRow, ErrorText, Field, SelectInput, SubmitButton, TextInput, componentRowsToPayload, rupees, toPaise } from "@/components/cfo/primitives";
+import { CfoMetricResultRow, ComponentRowsEditor, EditableComponentRow, ErrorText, Field, SelectInput, SubmitButton, TextInput, componentRowsToPayload, rupees, toPaise, PeriodPresets, MarketplaceSelect } from "@/components/cfo/primitives";
 
 // --- 2. Period P&L (POST /cfo/pnl) --------------------------------------------------
 
@@ -71,7 +71,7 @@ export function PeriodPnlSection({ getToken }: { getToken: () => Promise<string 
   };
 
   return (
-    <Section title="Period P&L (quick single-line)">
+    <Section title="Period profit & loss (one line)" hint="Net realized revenue, contribution profit, margin, fee ratio and return rate for the sales line you enter, worked out by the engine.">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Field label="Sales line id (UUID)">
@@ -87,7 +87,7 @@ export function PeriodPnlSection({ getToken }: { getToken: () => Promise<string 
               </button>
             </div>
           </Field>
-          <Field label="Marketplace"><TextInput value={marketplace} onChange={setMarketplace} placeholder="AMAZON" /></Field>
+          <Field label="Marketplace"><MarketplaceSelect value={marketplace} onChange={setMarketplace} /></Field>
           <Field label="Document type"><TextInput value={documentType} onChange={setDocumentType} placeholder="INVOICE" /></Field>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -113,6 +113,7 @@ export function PeriodPnlSection({ getToken }: { getToken: () => Promise<string 
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
+          <PeriodPresets onPick={(s, e) => { setPeriodStart(s); setPeriodEnd(e); }} />
         </div>
         <div>
           <SubmitButton onClick={submit} busy={busy} label="Compute period P&L" busyLabel="Computing…" />

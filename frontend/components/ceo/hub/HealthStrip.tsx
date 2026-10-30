@@ -1,6 +1,7 @@
 "use client";
 
 import { PresentationView } from "@/components/ceo/hub/PresentationView";
+import { Spinner } from "@/components/ui/LoadingState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { actionLabel, asOfLabel } from "@/lib/ceoModel";
 import type { HealthState } from "@/lib/useCeoHub";
@@ -8,7 +9,7 @@ import type { HealthState } from "@/lib/useCeoHub";
 /** The business at a glance: CFO's GOOD / WATCH / AT-RISK bands and the latest saved profit & loss, straight from persisted results.
  * There is no composite score and no projection here by design (CP1-U1): each tile is one saved result with its own date, and a result that
  * is missing says so instead of showing a number. Nothing on this strip is computed in the browser. */
-export function HealthStrip({ health, onRefresh }: { health: HealthState; onRefresh: () => void }) {
+export function HealthStrip({ health, onRefresh, refreshing = false }: { health: HealthState; onRefresh: () => void; refreshing?: boolean }) {
   if (health.status === "loading" && health.entries.length === 0) {
     return (
       <p className="t-body-sm" style={{ color: "var(--text-5)" }} data-testid="health-loading">
@@ -28,8 +29,14 @@ export function HealthStrip({ health, onRefresh }: { health: HealthState; onRefr
     return (
       <div className="flex flex-wrap items-center gap-3 t-body-sm" style={{ color: "var(--text-5)" }} data-testid="health-unavailable">
         Your saved results are not available to show here.
-        <button type="button" onClick={onRefresh} className="mt-btn mt-focus min-h-[36px] rounded-lg px-3 py-1 t-meta font-bold sm:min-h-0 sm:px-2.5" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
-          Try again
+        <button type="button" onClick={onRefresh} disabled={refreshing} className="mt-btn mt-focus min-h-[36px] rounded-lg px-3 py-1 t-meta font-bold sm:min-h-0 sm:px-2.5" style={{ border: "1px solid var(--border-hover)", color: "var(--text-3)" }}>
+          {refreshing ? (
+            <span className="inline-flex items-center gap-2">
+              <Spinner size={12} /> Trying again…
+            </span>
+          ) : (
+            "Try again"
+          )}
         </button>
       </div>
     );

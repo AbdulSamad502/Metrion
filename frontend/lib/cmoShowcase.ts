@@ -4,6 +4,7 @@
  * fire-and-forget (failures are ignored and never block the seller). There is nothing here that generates, approves, uploads or
  * writes to a marketplace, and nothing computes a figure: char/byte counts come from the API as stored. */
 
+import { demoActive } from "@/lib/demo/mode";
 import { apiFetch } from "@/lib/api";
 
 export type Marketplace = "AMAZON" | "FLIPKART" | "MEESHO";
@@ -97,8 +98,8 @@ export type ShowcaseClient = {
   copyPacks(f: PackFilters): Promise<{ items: CopyPack[] }>;
   hashtags(f: { sku?: string; q?: string }): Promise<{ items: HashtagSet[] }>;
   compliance(f: { sku?: string; marketplace?: Marketplace }): Promise<ComplianceSummary>;
-  /** Fire-and-forget: never rejects, never blocks. */
-  recordUsage(e: UsageEvent): void;
+  /** Never rejects and never blocks. Callers that do not care ignore the result (copy, view); "Mark as used" waits for it, so it only says "recorded" once the server accepted the event. */
+  recordUsage(e: UsageEvent): void | Promise<boolean>;
 };
 
 const BASE = "/api/v1/cmo/showcase";
@@ -122,19 +123,19 @@ export function createShowcaseClient(getToken: GetToken): ShowcaseClient {
     copyPacks: (f) => get(`${BASE}/copy-packs` + qs({ marketplace: f.marketplace, sku: f.sku, q: f.q })),
     hashtags: (f) => get(`${BASE}/hashtags` + qs({ sku: f.sku, q: f.q })),
     compliance: (f) => get(`${BASE}/compliance` + qs({ sku: f.sku, marketplace: f.marketplace })),
-    recordUsage: (e) => {
-      void (async () => {
-        try {
-          const token = await getToken();
-          await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}${BASE}/usage-events`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-            body: JSON.stringify(e),
-          });
-        } catch {
-          /* telemetry only: a failure is ignored by design (CD14) */
-        }
-      })();
+    recordUsage: async (e) => {
+      try {
+        if (demoActive()) return false; // sample data records nothing, and this call bypasses apiFetch
+        const token = await getToken();
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}${BASE}/usage-events`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify(e),
+        });
+        return res.ok;
+      } catch {
+        return false; // telemetry only: a failure never blocks the seller (CD14)
+      }
     },
   };
 }

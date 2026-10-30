@@ -103,7 +103,7 @@ export function AgentFlow() {
             </filter>
           </defs>
           {lines.map((ln, i) => (
-            <path key={`path-${i}`} d={ln.path} stroke="rgba(62,207,116,0.4)" strokeWidth={1.3} fill="none" filter="url(#mtLineGlow)" />
+            <path key={`path-${i}`} d={ln.path} stroke="color-mix(in srgb, var(--accent) 40%, transparent)" strokeWidth={1.3} fill="none" filter="url(#mtLineGlow)" />
           ))}
           {lines.map(
             (ln, i) =>
@@ -114,7 +114,7 @@ export function AgentFlow() {
                   cy={ln.midY}
                   r={2.6}
                   fill="var(--accent)"
-                  style={{ animation: `mt-node-pulse 1.8s ease-in-out ${ln.delay} infinite`, filter: "drop-shadow(0 0 3px rgba(62,207,116,0.8))" }}
+                  style={{ animation: `mt-node-pulse 1.8s ease-in-out ${ln.delay} infinite`, filter: "drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 80%, transparent))" }}
                 />
               ),
           )}
@@ -137,7 +137,7 @@ export function AgentFlow() {
               style={{
                 background: "var(--bg-card)",
                 backdropFilter: "blur(22px) saturate(150%)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+                boxShadow: "inset 0 1px 0 var(--border-subtle)",
                 border: "1px solid var(--border-default)",
               }}
             >
@@ -156,8 +156,8 @@ export function AgentFlow() {
             ref={ceoRef}
             className="flex flex-col items-center gap-2.5 rounded-2xl px-8 py-[18px]"
             style={{
-              background: "radial-gradient(circle at 30% 25%, #1C3D28, #0B140E)",
-              border: "1px solid rgba(62,207,116,0.5)",
+              background: "radial-gradient(circle at 30% 25%, var(--accent-deep-2), var(--accent-deep-3))",
+              border: "1px solid color-mix(in srgb, var(--accent) 50%, transparent)",
               animation: "mt-ceo-pulse 2.6s ease-in-out infinite",
             }}
           >

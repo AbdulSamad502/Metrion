@@ -283,13 +283,12 @@ describe("Profit Calculator page", () => {
     expect(screen.queryByText("How this estimate treats fees and GST")).toBeNull();
   });
 
-  it("makes the Doesn't apply checkbox larger, with its label still clickable, keyboard-operable and named", async () => {
+  it("gives the Doesn't apply checkbox a 40px target, with its label still clickable, keyboard-operable and named", async () => {
     const user = userEvent.setup();
     render(<PnlCalculatorPage />);
     const cost = screen.getByLabelText("Product cost per unit") as HTMLInputElement;
     const box = within(cost.closest("div")!.parentElement!).getByRole("checkbox", { name: /Doesn't apply/ });
-    expect(box.className).toMatch(/(^| )h-5( |$)/);
-    expect(box.className).toMatch(/(^| )w-5( |$)/);
+    expect(box.closest("label")!.className).toMatch(/(^| )min-h-10( |$)/); // the whole pill is a 40px target around a small box
     expect(box.closest("label")).toHaveTextContent("Doesn't apply (₹0)"); // the whole label is the click target
     await user.click(within(cost.closest("div")!.parentElement!).getByText("Doesn't apply (₹0)"));
     expect(box).toBeChecked();

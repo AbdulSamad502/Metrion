@@ -3,10 +3,8 @@
 import { PAGE_COPY } from "@/lib/navigation";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { AgentCard } from "@/components/ceo/AgentCard";
-import { ErrorNotice } from "@/components/ui/ErrorNotice";
-import { LoadingState } from "@/components/ui/LoadingState";
-import { Section } from "@/components/ui/Section";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ErrorBanner, Pill } from "@/components/overview/parts";
+import "@/components/overview/overview.css";
 import { useAgentRoster } from "@/lib/agents";
 import { useCiSummary } from "@/lib/useCiSummary";
 
@@ -22,37 +20,35 @@ function Agents() {
   const { agents, error, reload } = useAgentRoster();
   const ci = useCiSummary();
   return (
-    <div className="mt-content mt-stack mt-pure-black">
+    <div className="ov mt-content">
       {error ? (
-        <ErrorNotice message={error} onRetry={reload} />
+        <ErrorBanner message={error} onRetry={reload} />
       ) : !agents ? (
-        <LoadingState lines={4} label="Loading agents" />
+        <div className="ov-team" aria-label="Loading agents" role="status"><span className="sr-only">Loading agents…</span>{[0, 1, 2, 3].map((i) => <span key={i} className="ov-skel" style={{ height: 200, borderRadius: 24 }} />)}</div>
       ) : agents.length === 0 ? (
-        <div className="text-sm" style={{ color: "var(--text-6)" }}>
-          The backend returned no agents.
-        </div>
+        <p className="ov-body">The backend returned no agents.</p>
       ) : (
-        <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-4">
+        <ul className="ov-team ov-rise" style={{ margin: 0, padding: 0, listStyle: "none" }}>
           {agents.map((a) => (
-            <li key={a.id}>
-              <AgentCard agent={a} lastActivity={a.id === "CI" && ci.summary ? ci.summary.lastResearchAt : undefined} />
+            <li key={a.id} style={{ display: "flex", minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <AgentCard agent={a} lastActivity={a.id === "CI" && ci.summary ? ci.summary.lastResearchAt : undefined} />
+              </div>
             </li>
           ))}
         </ul>
       )}
 
-      <Section title="Adding and removing agents" panel={false}>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="t-body-lg font-semibold" style={{ color: "var(--text-3)" }}>
-            Agent Cart and entitlements
-          </span>
-          <StatusBadge tone="neutral">Not available yet</StatusBadge>
+      <section className="ov-card ov-rise" style={{ ["--i" as string]: 2, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: "8px 24px" }} aria-labelledby="ag-add">
+        <h2 id="ag-add" className="ov-sr-only sr-only">Adding and removing agents</h2>
+        <div className="ov-head-r" style={{ flexWrap: "wrap" }}>
+          <span className="ov-title">Buying and removing agents</span>
+          <Pill>Not available yet</Pill>
         </div>
-        <p className="mt-2 max-w-[70ch] t-body leading-relaxed" style={{ color: "var(--text-4)" }}>
-          There is no entitlement or purchasing service in the backend yet, so Metrion cannot unlock, lock, add or remove an
-          agent. The roster above is exactly what the backend reports — nothing on this page changes it.
+        <p className="ov-body" style={{ maxWidth: "70ch", flex: "1 1 320px" }}>
+          Adding or removing agents isn’t available yet.
         </p>
-      </Section>
+      </section>
     </div>
   );
 }

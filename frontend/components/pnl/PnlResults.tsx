@@ -19,7 +19,7 @@ const STATUS: Record<PnlStatus, { tone: Tone; label: string; detail: string }> =
 /** The standing label that keeps this separate from verified results. It is on every state of the panel, including errors and stale results. */
 export function EstimateBanner() {
   return (
-    <div className="flex flex-wrap items-start gap-3 rounded-xl px-4 py-3" style={{ background: "var(--info-fill)", border: "1px solid var(--info-border)" }} data-testid="estimate-banner">
+    <div className="flex flex-col items-start gap-2 rounded-xl px-4 py-3 sm:flex-row sm:gap-3" style={{ background: "var(--info-fill)", border: "1px solid var(--info-border)" }} data-testid="estimate-banner">
       <StatusBadge tone="info" dot>Hypothetical estimate — not verified</StatusBadge>
       <p className="min-w-0 flex-1 t-body-sm" style={{ color: "var(--text-4)" }}>
         Worked out from the numbers you typed. It is not saved, is not part of your Profit &amp; Finance results, and never changes your records.
@@ -32,6 +32,7 @@ export function EstimateBanner() {
  * applied to the GST-inclusive price), so an unknown code is shown as a rule, never wrongly described as a blank input. */
 const BLANK_INPUT_ASSUMPTIONS: ReadonlySet<string> = new Set(["purchase_gst_default", "services_gst_default", "recovery_default", "refund_default"]);
 
+const CARD = { background: "var(--bg-card)", border: "1px solid var(--border-subtle)" } as const;
 const money = (v: string | null | undefined) => formatPaise(v);
 
 /** The statement's blocks, in the order the public calculator shows them. A line whose group is not listed here still prints, after the blocks. */
@@ -63,7 +64,7 @@ function Ledger({ view, label }: { view: PnlView; label: string }) {
             if (lines.length === 0) return null;
             return [
               <tr key={`h-${block.title}`} style={{ borderTop: "1px solid var(--border-subtle)" }}>
-                <th scope="colgroup" colSpan={2} className="pb-1 pt-3 text-left t-label" style={{ color: "var(--text-5)" }}>{block.title}</th>
+                <th scope="colgroup" colSpan={2} className="px-2 py-1.5 text-left t-label" style={{ color: "var(--text-5)", background: "var(--fill-hover)" }}>{block.title}</th>
               </tr>,
               ...lines.map((l) => (
                 <tr key={l.id}>
@@ -125,7 +126,7 @@ function Solution({ s, onUsePrice }: { s: PnlSolution; onUsePrice?: (paise: stri
         </p>
       )}
       {s.outcome === "price" && s.price && onUsePrice && (
-        <button type="button" onClick={() => onUsePrice(s.price as string)} className="mt-btn mt-focus mt-3 min-h-9 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--accent-border-strong)", color: "var(--accent)" }}>
+        <button type="button" onClick={() => onUsePrice(s.price as string)} className="mt-btn mt-focus mt-no-print mt-3 min-h-10 rounded-lg px-3 t-body-sm font-semibold" style={{ border: "1px solid var(--accent-border-strong)", color: "var(--accent)" }}>
           Use this price
         </button>
       )}
@@ -159,7 +160,7 @@ function Hero({ result, beforeMissing }: { result: PnlScenarioResponse; beforeMi
     </div>
   );
   return (
-    <div className="flex flex-col gap-3 rounded-2xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
+    <div className="flex flex-col gap-3 rounded-2xl p-5" style={{ ...CARD, borderTop: `3px solid ${kept ? tone(kept.contribution) : "var(--border-default)"}` }}>
       <div className="t-label" style={{ color: "var(--text-5)" }}>Contribution profit per order kept</div>
       {kept ? (
         <>
@@ -221,7 +222,7 @@ export function PnlResults({ result, stale, busy, onUsePrice }: { result: PnlSce
           You changed an input after this was worked out. Choose Calculate to refresh it.
         </p>
       )}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
         <StatusBadge tone={st.tone} dot>{st.label}</StatusBadge>
         <p className="min-w-0 flex-1 t-body-sm" style={{ color: "var(--text-4)" }}>{st.detail}</p>
       </div>
@@ -241,38 +242,70 @@ export function PnlResults({ result, stale, busy, onUsePrice }: { result: PnlSce
       )}
 
       {result.perKept || result.perPlaced ? (
-        <>
-          <Hero result={result} beforeMissing={beforeMissing} />
-
-          {result.breakdown && <WhereEachRupeeGoes breakdown={result.breakdown} marginBps={m?.contributionMarginBps ?? null} beforeMissing={beforeMissing !== undefined} />}
-
-          <Section title="Profit and loss statement" hint={result.orders ? `${result.orders.placed.text} placed, ${result.orders.kept.text} kept (${result.orders.rto.text} RTO, ${result.orders.returned.text} returned).` : undefined} panel={false}>
-            {tabs.length > 1 && <Tabs tabs={tabs} active={activeId} onChange={setView} label="Profit view" idPrefix="pnl-view" />}
-            {views.map((x) => x.v && (
-              <TabPanel key={x.id} id={x.id} active={activeId} idPrefix="pnl-view">
-                <Ledger view={x.v} label={x.label} />
-              </TabPanel>
-            ))}
-          </Section>
-
-          {m && (
-            <Section title="Ratios" hint="Each shows Not available until its inputs are entered." panel={false}>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <MetricCard label="Fees as a share of revenue" value={formatBps(m.effectiveFeeBps)} unavailableReason="Needs revenue." />
-                <MetricCard label="GST recovered per order kept" value={m.gstRecoveredPerKept != null ? money(m.gstRecoveredPerKept) : null} unavailableReason="Only when claiming input tax credit." />
-                <MetricCard label="ACOS" value={m.acosBps != null ? formatBps(m.acosBps) : null} unavailableReason="Needs ad spend and sales attributed to ads." />
-                <MetricCard label="TACoS" value={m.tacosBps != null ? formatBps(m.tacosBps) : null} unavailableReason="Needs ad spend." />
-                <MetricCard label="ROAS" value={m.roasBps != null ? formatRoas(m.roasBps) : null} unavailableReason="Needs ad spend and sales attributed to ads." />
-                <MetricCard label="Break-even ROAS" value={m.breakEvenRoasBps != null ? formatRoas(m.breakEvenRoasBps) : null} unavailableReason="Needs ad spend and a positive profit before ads." />
-                <MetricCard label="Highest ad cost per order kept" value={m.maxCac != null ? money(m.maxCac) : null} unavailableReason="Needs ad spend and a positive profit before ads." />
-                <MetricCard label="Operating margin" value={m.operatingMarginBps != null ? formatBps(m.operatingMarginBps) : null} unavailableReason="Enter operating expenses and orders per month." />
+        <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
+          <div className="flex min-w-0 flex-col gap-6 xl:col-start-1">
+            <Hero result={result} beforeMissing={beforeMissing} />
+            {result.breakdown && <WhereEachRupeeGoes breakdown={result.breakdown} marginBps={m?.contributionMarginBps ?? null} beforeMissing={beforeMissing !== undefined} />}
+            {result.breakdown && <WhatIsKillingYourMargin costs={result.breakdown.topCosts} beforeMissing={beforeMissing !== undefined} />}
+          </div>
+          <div className="flex min-w-0 flex-col gap-6 xl:col-start-2 xl:row-span-2 xl:row-start-1">
+            <Section title="Profit and loss statement" hint={result.orders ? `${result.orders.placed.text} placed, ${result.orders.kept.text} kept (${result.orders.rto.text} RTO, ${result.orders.returned.text} returned).` : undefined} panel={false}>
+              <div className="rounded-2xl p-4" style={CARD}>
+                {tabs.length > 1 && <Tabs tabs={tabs} active={activeId} onChange={setView} label="Profit view" idPrefix="pnl-view" />}
+                {views.map((x) => x.v && (
+                  <TabPanel key={x.id} id={x.id} active={activeId} idPrefix="pnl-view">
+                    <Ledger view={x.v} label={x.label} />
+                  </TabPanel>
+                ))}
               </div>
+            </Section>
+            {m && (
+              <Section title="Ratios" hint="Each shows Not available until its inputs are entered." panel={false}>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <MetricCard label="Fees as a share of revenue" value={formatBps(m.effectiveFeeBps)} unavailableReason="Needs revenue." />
+                  <MetricCard label="GST recovered per order kept" value={m.gstRecoveredPerKept != null ? money(m.gstRecoveredPerKept) : null} unavailableReason="Only when claiming input tax credit." />
+                  <MetricCard label="ACOS" value={m.acosBps != null ? formatBps(m.acosBps) : null} unavailableReason="Needs ad spend and sales attributed to ads." />
+                  <MetricCard label="TACoS" value={m.tacosBps != null ? formatBps(m.tacosBps) : null} unavailableReason="Needs ad spend." />
+                  <MetricCard label="ROAS" value={m.roasBps != null ? formatRoas(m.roasBps) : null} unavailableReason="Needs ad spend and sales attributed to ads." />
+                  <MetricCard label="Break-even ROAS" value={m.breakEvenRoasBps != null ? formatRoas(m.breakEvenRoasBps) : null} unavailableReason="Needs ad spend and a positive profit before ads." />
+                  <MetricCard label="Highest ad cost per order kept" value={m.maxCac != null ? money(m.maxCac) : null} unavailableReason="Needs ad spend and a positive profit before ads." />
+                  <MetricCard label="Operating margin" value={m.operatingMarginBps != null ? formatBps(m.operatingMarginBps) : null} unavailableReason="Enter operating expenses and orders per month." />
+                </div>
+              </Section>
+            )}
+          </div>
+          <div className="flex min-w-0 flex-col gap-6 xl:col-start-1">
+            {blankAssumptions.length > 0 && (
+              <Section title="Assumed because an input was left blank" hint="Enter the real value to replace each one." panel={false}>
+                <ul className="m-0 list-disc rounded-2xl py-4 pl-9 pr-4 t-body-sm" style={{ ...CARD, color: "var(--text-4)" }}>
+                  {blankAssumptions.map((a) => <li key={a.code}>{a.label}</li>)}
+                </ul>
+              </Section>
+            )}
+            {ruleAssumptions.length > 0 && (
+              <Section title="How this estimate treats fees and GST" hint="Rules the calculation applies. They do not come from a blank input." panel={false}>
+                <ul className="m-0 list-disc rounded-2xl py-4 pl-9 pr-4 t-body-sm" style={{ ...CARD, color: "var(--text-4)" }}>
+                  {ruleAssumptions.map((a) => <li key={a.code}>{a.label}</li>)}
+                </ul>
+              </Section>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          {result.breakdown && <WhatIsKillingYourMargin costs={result.breakdown.topCosts} beforeMissing={beforeMissing !== undefined} />}
+          {blankAssumptions.length > 0 && (
+            <Section title="Assumed because an input was left blank" hint="Enter the real value to replace each one." panel={false}>
+              <ul className="list-disc pl-5 t-body-sm" style={{ color: "var(--text-4)" }}>{blankAssumptions.map((a) => <li key={a.code}>{a.label}</li>)}</ul>
+            </Section>
+          )}
+          {ruleAssumptions.length > 0 && (
+            <Section title="How this estimate treats fees and GST" hint="Rules the calculation applies. They do not come from a blank input." panel={false}>
+              <ul className="list-disc pl-5 t-body-sm" style={{ color: "var(--text-4)" }}>{ruleAssumptions.map((a) => <li key={a.code}>{a.label}</li>)}</ul>
             </Section>
           )}
         </>
-      ) : null}
-
-      {result.breakdown && <WhatIsKillingYourMargin costs={result.breakdown.topCosts} beforeMissing={beforeMissing !== undefined} />}
+      )}
 
       {result.solutions.length > 0 && (
         <Section title="Price targets" hint="The lowest selling price that reaches each target, using the same costs and fees." panel={false}>
@@ -280,20 +313,6 @@ export function PnlResults({ result, stale, busy, onUsePrice }: { result: PnlSce
         </Section>
       )}
 
-      {blankAssumptions.length > 0 && (
-        <Section title="Assumed because an input was left blank" hint="Enter the real value to replace each one." panel={false}>
-          <ul className="list-disc pl-5 t-body-sm" style={{ color: "var(--text-4)" }}>
-            {blankAssumptions.map((a) => <li key={a.code}>{a.label}</li>)}
-          </ul>
-        </Section>
-      )}
-      {ruleAssumptions.length > 0 && (
-        <Section title="How this estimate treats fees and GST" hint="Rules the calculation applies. They do not come from a blank input." panel={false}>
-          <ul className="list-disc pl-5 t-body-sm" style={{ color: "var(--text-4)" }}>
-            {ruleAssumptions.map((a) => <li key={a.code}>{a.label}</li>)}
-          </ul>
-        </Section>
-      )}
       {info.length > 0 && <ul className="t-meta" style={{ color: "var(--text-5)" }}>{info.map((i) => <li key={i.code}>{i.message}</li>)}</ul>}
       <p className="t-meta" style={{ color: "var(--text-6)" }}>
         GST and input-tax-credit treatment is informational and still to be reviewed by a chartered accountant. TCS and TDS are cash items and are not in profit. Reference {result.estimateRef}.

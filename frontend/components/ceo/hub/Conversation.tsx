@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
@@ -81,7 +80,7 @@ export function Conversation({
   const turnById = new Map(detail.turns.map((t) => [t.id, t]));
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-3" data-testid="conversation" data-state={state}>
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-6" data-testid="conversation" data-state={state}>
       <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
           <h2 className="m-0 truncate t-card-title font-semibold" title={investigationTitle(inv)} style={{ color: "var(--text-1)" }}>
@@ -211,7 +210,7 @@ function Thread({
   }, [messages.length]);
   if (messages.length === 0) return <Welcome agents={agents} onAsk={onAsk} onAction={onSuggest} onOpenForm={onOpenForm} />;
   return (
-    <ol tabIndex={0} className="mt-focus m-0 flex min-h-0 flex-1 list-none flex-col gap-4 overflow-y-auto rounded-lg p-0 pr-1" aria-label="Conversation" aria-live="polite">
+    <ol tabIndex={0} className="mt-focus m-0 flex min-h-0 flex-1 list-none flex-col gap-7 overflow-y-auto rounded-lg p-0 pr-1" aria-label="Conversation" aria-live="polite">
       {messages.map((m) => (
         <li key={m.id}>
           <Bubble message={m} turnById={turnById} findings={findings} />
@@ -277,7 +276,7 @@ function ReportButtons({ links }: { links: { href: string; label: string }[] }) 
 
 const timeOf = (iso: string): string => {
   const d = new Date(iso);
-  return d.toString() === "Invalid Date" ? "" : d.toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return d.toString() === "Invalid Date" ? "" : d.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 
 /** "Key Insights": only when this answer's own saved results carry structured facts or figures (the backend's snapshot, verbatim, never re-worded or computed here). */
@@ -310,16 +309,6 @@ function KeyInsights({ items }: { items: { key: string; text: string; register?:
   );
 }
 
-function Avatar({ mine }: { mine: boolean }) {
-  return mine ? (
-    <span aria-hidden className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full" style={{ background: "var(--fill-hover)", border: "1px solid var(--border-default)", color: "var(--text-3)" }}><Icon name="customers" size={17} /></span>
-  ) : (
-    <span aria-hidden className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full" style={{ background: "var(--hub-card-bg)", border: "1px solid var(--accent-border-strong)", boxShadow: "0 0 10px var(--hub-glow-soft)" }}>
-      <Image src="/metrion-mark.png" alt="" width={22} height={14} />
-    </span>
-  );
-}
-
 function Bubble({ message, turnById, findings }: { message: CeoMessage; turnById: Map<string, TurnRow>; findings: FindingRow[] }) {
   const v = messageView(message, turnById);
   if (v.tone === "note") {
@@ -331,27 +320,18 @@ function Bubble({ message, turnById, findings }: { message: CeoMessage; turnById
   }
   const mine = v.tone === "user";
   const insights = !mine && message.kind === "ANSWER" ? insightsFor(findings, message.turn_id) : [];
+  const state = message.pending ? "Sending…" : message.failed ? "Not sent" : null;
   return (
-    <div
-      data-testid={mine ? "message-user" : "message-ceo"}
-      className={`flex items-start gap-2.5 ${mine ? "flex-row-reverse" : ""}`}
-      style={{ opacity: message.pending ? 0.7 : 1 }}
-    >
-      <Avatar mine={mine} />
+    <div data-testid={mine ? "message-user" : "message-ceo"} className={`ceo-msg flex flex-col gap-2 ${mine ? "items-end" : "items-start"}`} style={{ opacity: message.pending ? 0.7 : 1 }}>
+      <span className="sr-only">{mine ? "You" : "CEO Agent"}</span>
+      {/* the seller's words sit in a soft pill on the right; the CEO's answer is plain text on the page, with no box, as in a chat app */}
       <div
-        className={`min-w-0 rounded-2xl px-4 py-3 ${mine ? "max-w-[85%] rounded-tr-md" : "flex-1 rounded-tl-md"}`}
-        style={{
-          background: mine ? "var(--accent-fill-default)" : "rgba(255,255,255,0.035)",
-          border: `1px solid ${v.tone === "clarify" ? "var(--warning-border)" : mine ? "var(--accent-border-default)" : "var(--border-subtle)"}`,
-        }}
+        className={mine ? "ceo-msg-user min-w-0 max-w-[78%] rounded-3xl px-4 py-2.5" : `min-w-0 w-full ${v.tone === "clarify" ? "border-l-2 pl-3" : ""}`}
+        style={v.tone === "clarify" ? { borderColor: "var(--warning)" } : undefined}
       >
-        <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="t-meta font-semibold" style={{ color: mine ? "var(--accent)" : "var(--text-2)" }}>{mine ? "You" : "CEO Agent"}</span>
-          {v.badge && <StatusBadge tone={v.tone === "clarify" ? "warning" : "neutral"}>{v.badge}</StatusBadge>}
-          <time className="ml-auto t-meta" dateTime={message.created_at} style={{ color: "var(--text-6)" }}>{message.pending ? "Sending…" : message.failed ? "Not sent" : timeOf(message.created_at)}</time>
-        </div>
+        {v.badge && <div className="mb-1"><StatusBadge tone={v.tone === "clarify" ? "warning" : "neutral"}>{v.badge}</StatusBadge></div>}
         {/* the backend's gated text, shown verbatim: line breaks kept, nothing re-formatted or re-computed here */}
-        <div className={`${mine ? "whitespace-pre-wrap " : ""}break-words t-body`} style={{ color: mine ? "var(--text-1)" : "var(--text-3)", lineHeight: 1.65 }}>
+        <div className={`${mine ? "whitespace-pre-wrap " : ""}break-words t-body`} style={{ color: "var(--text-1)", lineHeight: 1.7 }}>
           {mine ? message.content : <RichText text={message.content} />}
         </div>
         {v.footnote && (
@@ -361,7 +341,21 @@ function Bubble({ message, turnById, findings }: { message: CeoMessage; turnById
         )}
         <KeyInsights items={insights} />
       </div>
+      <div className={`flex items-center gap-2 t-meta ${mine ? "pr-1" : ""}`} style={{ color: "var(--text-6)" }}>
+        {state ? <span>{state}</span> : <time dateTime={message.created_at}>{timeOf(message.created_at)}</time>}
+        {!mine && !state && <CopyButton text={message.content} />}
+      </div>
     </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button type="button" aria-label={done ? "Copied" : "Copy answer"} title={done ? "Copied" : "Copy answer"} className="ceo-icon mt-focus" style={{ width: 28, height: 28 }}
+      onClick={() => { void navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500); }).catch(() => {}); }}>
+      <Icon name={done ? "check" : "copy"} size={15} />
+    </button>
   );
 }
 

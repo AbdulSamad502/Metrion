@@ -1,5 +1,7 @@
 import { Show, UserButton } from "@clerk/nextjs";
-import Image from "next/image";
+import "@/components/overview/overview.css";
+import "./auth.css";
+import { DarkOnly } from "./DarkOnly";
 import Link from "next/link";
 
 /** Header for the public/auth-flow pages (landing, sign-in, sign-up, onboarding). The
@@ -8,13 +10,14 @@ import Link from "next/link";
  * redundant nav surface. */
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="mt-auth flex min-h-full flex-col" style={{ colorScheme: "dark" }}>
+      <DarkOnly />
       <header
         className="flex h-16 flex-shrink-0 items-center justify-between px-6"
         style={{ borderBottom: "1px solid var(--border-subtle)" }}
       >
         <Link href="/" className="flex items-center gap-2">
-          <Image src="/metrion-mark.png" alt="Metrion" width={24} height={24} />
+          <span role="img" aria-label="Metrion" className="mt-auth-mark" style={{ width: 32, height: 20 }} />
           <span className="text-sm font-bold" style={{ color: "var(--text-1)" }}>
             Metrion
           </span>

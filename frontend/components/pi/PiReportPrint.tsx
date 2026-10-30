@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useDemo } from "@/lib/demo/mode";
 import { evidenceOf, explainPiError, formatPaise, imageDomain, safeHref, SOURCE_LABEL, type PiCase, type PiClient, type PiProduct } from "@/lib/piShowcase";
 
 /** The print / Save-as-PDF layout of one saved Product Intelligence report (docs/specs/ceo-pi-research-flow.md C7). Black on white, no app chrome, nothing that starts research.
@@ -12,15 +13,15 @@ const muted = "#555";
 const rule = "#ccc";
 const fmtDate = (iso: string | null | undefined) => {
   const d = iso ? new Date(iso) : null;
-  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "date not stated";
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "date not stated";
 };
 const score = (s: string | null) => (s ? `${s}/100` : "no score");
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid gap-x-3 py-0.5" style={{ gridTemplateColumns: "9.5rem 1fr" }}>
+    <div className="grid gap-x-3 py-0.5" style={{ gridTemplateColumns: "9.5rem minmax(0, 1fr)" }}>
       <div style={{ color: muted, fontWeight: 600 }}>{label}</div>
-      <div>{children}</div>
+      <div style={{ overflowWrap: "anywhere" }}>{children}</div>
     </div>
   );
 }
@@ -112,7 +113,7 @@ export function PiReportPrint({ client, runId }: { client: PiClient; runId: stri
 
   return (
     <div style={{ background: "#fff", color: ink, minHeight: "100vh", fontSize: 12, lineHeight: 1.45 }}>
-      <style>{"@page { margin: 14mm; } @media print { .pi-no-print { display: none !important; } }"}</style>
+      <style>{"@page { margin: 14mm; } @media print { html:root { background: #fff !important; color-scheme: light !important; } .pi-no-print { display: none !important; } }"}</style>
       <main className="mx-auto max-w-[800px] px-6 py-6">
         {state.status === "loading" && <p role="status">Loading the saved report…</p>}
         {state.status === "error" && <p role="alert">{state.message}</p>}
@@ -124,8 +125,14 @@ export function PiReportPrint({ client, runId }: { client: PiClient; runId: stri
 
 function Body({ c }: { c: PiCase }) {
   const b = c.brief;
+  const sample = useDemo(); // sample-data preview (dev/preview builds only): the report is made up, and the paper copy must say so
   return (
     <>
+      {sample && (
+        <p role="note" className="mb-2 font-bold" style={{ border: `2px solid ${ink}`, padding: "4px 8px" }}>
+          SAMPLE DATA: this report is fictional and is not a real research result.
+        </p>
+      )}
       <header className="mb-3 flex flex-wrap items-start justify-between gap-3" style={{ borderBottom: `2px solid ${ink}`, paddingBottom: 8 }}>
         <div>
           <div style={{ fontSize: 10, letterSpacing: 1, color: muted, fontWeight: 700 }}>METRION · PRODUCT INTELLIGENCE REPORT</div>

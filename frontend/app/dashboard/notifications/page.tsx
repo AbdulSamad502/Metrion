@@ -5,11 +5,10 @@ import Link from "next/link";
 import { useState } from "react";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { DetailDrawer } from "@/components/ui/DetailDrawer";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
-import { ErrorNotice } from "@/components/ui/ErrorNotice";
+import { ErrorBanner, LoadingLines, Pill, RefreshButton } from "@/components/overview/parts";
+import "@/components/overview/overview.css";
 import { EvidenceStateBadge, evidenceStateForTier } from "@/components/ui/EvidenceStateBadge";
-import { LoadingState } from "@/components/ui/LoadingState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import type { DataRequestItem, Layer1Alert } from "@/lib/api";
@@ -23,7 +22,8 @@ const TABS = [
   { id: "requests", label: "Data requests" },
 ] as const;
 
-type Selected = { kind: "alert"; alert: Layer1Alert } | { kind: "request"; request: DataRequestItem } | null;
+/** What is open in the drawer is remembered by id, not as a copy: after a refresh the drawer reads the current item, and says so if it is gone. */
+type Selected = { kind: "alert"; id: string } | { kind: "request"; id: string } | null;
 
 export default function NotificationsPage() {
   return (
@@ -48,29 +48,50 @@ function Notifications() {
   const all = [...alertRows, ...requestRows].sort((x, y) => (x.at < y.at ? 1 : -1));
 
   const loading = n.alertsStatus === "loading" || n.dataRequestsStatus === "loading";
+  const refreshing = !loading && Boolean(n.refreshing);
+  const alertsFailed = n.alertsStatus === "error";
+  const requestsFailed = n.dataRequestsStatus === "error";
+  const alertsHidden = n.alertsStatus === "forbidden";
 
-  const list = (rows: Row[], emptyTitle: string, emptyBody: string) => {
-    if (loading) return <LoadingState lines={4} label="Loading notifications" />;
+  /** `sources` are the feeds this tab depends on. A list that is empty because a feed could not be read (or is hidden from this role) is NOT "all caught up". */
+  const list = (rows: Row[], sources: ("alerts" | "requests")[], emptyTitle: string, emptyBody: string) => {
+    if (loading) return <LoadingLines lines={4} label="Loading notifications" />;
+    const failed = sources.some((x) => (x === "alerts" ? alertsFailed : requestsFailed));
+    const hidden = sources.length === 1 && sources[0] === "alerts" && alertsHidden;
+    const hasAlerts = n.alerts.length > 0;
+    const hasRequests = openRequests.length > 0;
     return (
-      <div className="flex flex-col gap-3">
-        {n.alertsError && <ErrorNotice message={`Competitor alerts: ${n.alertsError}`} onRetry={n.reload} />}
-        {n.dataRequestsError && <ErrorNotice message={`Data requests: ${n.dataRequestsError}`} onRetry={n.reload} />}
-        {n.alertsStatus === "forbidden" && (
-          <p className="t-meta" style={{ color: "var(--text-6)" }}>
-            Competitor alerts are hidden: your role does not have access to Competitor Intelligence.
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }} aria-busy={refreshing}>
+        {n.alertsError && <ErrorBanner message={`Competitor alerts: ${n.alertsError}${hasAlerts ? " Showing the last alerts that loaded." : ""}`} onRetry={n.reload} />}
+        {n.dataRequestsError && <ErrorBanner message={`Data requests: ${n.dataRequestsError}${hasRequests ? " Showing the last requests that loaded." : ""}`} onRetry={n.reload} />}
+        {alertsHidden && (
+          <p className="ov-meta">
+            Alerts are hidden for your role.
           </p>
         )}
         {rows.length === 0 ? (
-          <div className="mt-panel">
-            <EmptyState icon="check" title={emptyTitle} description={emptyBody} />
-          </div>
+          failed ? (
+            <p className="ov-note" role="status">
+              This isn’t an all-clear: the list didn’t load.
+            </p>
+          ) : hidden ? null : (
+            <div className="ov-card">
+              <div className="ov-empty">
+                <span className="ov-badge-circle ov-badge-circle--good"><Icon name="check" size={24} /></span>
+                <div>
+                  <h3 className="ov-h">{emptyTitle}</h3>
+                  <p className="ov-body" style={{ marginTop: 8, maxWidth: "52ch" }}>{emptyBody}</p>
+                </div>
+              </div>
+            </div>
+          )
         ) : (
-          <ul className="m-0 flex list-none flex-col p-0">
+          <ul className="ov-card ov-rows" style={{ opacity: refreshing ? 0.7 : 1, transition: "opacity 200ms ease", gap: 0, padding: 8 }}>
             {rows.map((r) => (
               <li key={r.key}>
                 <NotificationItem
                   row={r}
-                  onOpen={() => setSelected(r.kind === "alert" ? { kind: "alert", alert: r.alert } : { kind: "request", request: r.request })}
+                  onOpen={() => setSelected(r.kind === "alert" ? { kind: "alert", id: r.alert.priceEventId } : { kind: "request", id: r.request.id })}
                 />
               </li>
             ))}
@@ -80,8 +101,13 @@ function Notifications() {
     );
   };
 
+  // The drawer reads the CURRENT item for what is selected, so a refresh can never leave an outdated copy on screen as if it were current.
+  const selAlert = selected?.kind === "alert" ? n.alerts.find((a) => a.priceEventId === selected.id) : undefined;
+  const selRequest = selected?.kind === "request" ? openRequests.find((r) => r.id === selected.id) : undefined;
+  const gone = selected !== null && !selAlert && !selRequest;
+
   return (
-    <div className="mt-content flex flex-col gap-6">
+    <div className="ov mt-content">
       <Tabs
         tabs={TABS.map((t) => ({
           ...t,
@@ -92,72 +118,70 @@ function Notifications() {
         label="Notification types"
         idPrefix="notif"
       />
-      <p className="t-body" style={{ color: "var(--text-5)" }}>
-        Shows competitor alerts from the last {ALERT_WINDOW_DAYS} days and data requests that are still open. Metrion does not
-        track read or unread yet, so nothing here can be marked as read.
+      <div className="ov-head-r" style={{ justifyContent: "space-between" }} data-testid="notif-context">
+        <p role="status" className="ov-meta" style={{ margin: 0 }}>
+          {loading ? "Loading…" : refreshing ? "Refreshing… what is shown is the last list that loaded." : n.checkedAt ? `${all.length} ${all.length === 1 ? "item" : "items"} · checked ${n.checkedAt}` : "Not checked yet."}
+        </p>
+        <RefreshButton spinning={refreshing} onClick={n.reload} />
+      </div>
+      <p className="ov-body">
+        Last {ALERT_WINDOW_DAYS} days. Nothing is marked read.
       </p>
       <TabPanel id="all" active={tab} idPrefix="notif">
-        {list(all, "You're all caught up", "No competitor alerts and no open data requests right now.")}
+        {list(all, ["alerts", "requests"], alertsHidden ? "No open data requests" : "You're all caught up", alertsHidden ? "Nothing waiting on you. Alerts aren’t shown for your role." : "No alerts or open requests.")}
       </TabPanel>
       <TabPanel id="alerts" active={tab} idPrefix="notif">
-        {list(alertRows, "No competitor alerts", `No price or availability alerts in the last ${ALERT_WINDOW_DAYS} days.`)}
+        {list(alertRows, ["alerts"], "No competitor alerts", `None in the last ${ALERT_WINDOW_DAYS} days.`)}
       </TabPanel>
       <TabPanel id="requests" active={tab} idPrefix="notif">
-        {list(requestRows, "No open data requests", "The CFO is not waiting on any input from you.")}
+        {list(requestRows, ["requests"], "No open data requests", "Nothing waiting on you.")}
       </TabPanel>
 
       <DetailDrawer
         open={selected !== null}
         onClose={() => setSelected(null)}
-        title={selected?.kind === "alert" ? selected.alert.competitorLabel : "Data request"}
+        title={selAlert ? selAlert.competitorLabel : selected?.kind === "request" ? "Data request" : selected ? "Competitor alert" : ""}
         subtitle={selected?.kind === "alert" ? "Competitor alert" : "Needs your input"}
         status={
-          selected?.kind === "alert" ? (
-            <StatusBadge tone={selected.alert.thresholdBreached ? "negative" : "info"} dot>
-              {selected.alert.thresholdBreached ? "Alert-worthy" : "Informational"}
+          selAlert ? (
+            <StatusBadge tone="neutral" dot>
+              {selAlert.thresholdBreached ? "Crossed alert threshold" : "Informational"}
             </StatusBadge>
-          ) : selected?.kind === "request" ? (
+          ) : selRequest ? (
             <StatusBadge tone="warning" dot>
-              {selected.request.status.toLowerCase()}
+              {requestStatusLabel(selRequest.status)}
             </StatusBadge>
           ) : undefined
         }
       >
-        {selected?.kind === "alert" && <AlertDetail alert={selected.alert} />}
-        {selected?.kind === "request" && <RequestDetail request={selected.request} />}
+        {selAlert && <AlertDetail alert={selAlert} />}
+        {selRequest && <RequestDetail request={selRequest} />}
+        {gone && (
+          <p role="status" className="ov-body">
+            {selected?.kind === "alert" ? `This alert is no longer in the last ${ALERT_WINDOW_DAYS} days of alerts.` : "This request is no longer open: it may have been answered."} The list has been updated.
+          </p>
+        )}
       </DetailDrawer>
     </div>
   );
 }
 
+/** `OPEN` is the one status the backend contract establishes for a data request; anything else is shown exactly as returned, never mapped to a guessed meaning. */
+function requestStatusLabel(status: string): string {
+  return status.toUpperCase() === "OPEN" ? "Open" : status;
+}
+
 function NotificationItem({ row, onOpen }: { row: Row; onOpen: () => void }) {
   const isAlert = row.kind === "alert";
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="mt-row mt-focus flex w-full items-start gap-4 rounded-lg px-2 py-4 text-left"
-      style={{ borderBottom: "1px solid var(--border-subtle)" }}
-    >
-      <span className="mt-0.5 w-[112px] flex-shrink-0">
-        <StatusBadge tone={isAlert ? "info" : "warning"}>{isAlert ? "Competitor" : "CFO needs input"}</StatusBadge>
+    <button type="button" onClick={onOpen} className="ov-row mt-focus" style={{ width: "100%", border: 0, background: "transparent", textAlign: "left", font: "inherit", cursor: "pointer", alignItems: "flex-start", padding: 16 }}>
+      <span className={`ov-badge-circle ov-badge-circle--${isAlert ? "brand" : "warn"}`}><Icon name={isAlert ? "competitors" : "finance"} size={18} /></span>
+      <span className="ov-row-main">
+        <span className="ov-title" style={{ display: "block" }}>{isAlert ? row.alert.message : row.request.requestedField}</span>
+        {!isAlert && row.request.reason && <span className="ov-meta">{row.request.reason}</span>}
+        <time className="ov-meta" dateTime={row.at}>{new Date(row.at).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}</time>
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block t-body-lg font-semibold" style={{ color: "var(--text-2)" }}>
-          {isAlert ? row.alert.message : row.request.requestedField}
-        </span>
-        {!isAlert && row.request.reason && (
-          <span className="mt-0.5 block t-meta" style={{ color: "var(--text-6)" }}>
-            {row.request.reason}
-          </span>
-        )}
-        <time className="mt-1 block t-meta-sm" style={{ color: "var(--text-7)" }} dateTime={row.at}>
-          {new Date(row.at).toLocaleString()}
-        </time>
-      </span>
-      <span className="mt-1 flex-shrink-0" style={{ color: "var(--text-6)" }}>
-        <Icon name="chevron" size={16} />
-      </span>
+      <span className="ov-row-end"><Pill tone={isAlert ? "brand" : "warn"}>{isAlert ? "Competitor" : "CFO needs input"}</Pill><Icon name="arrow" size={14} strokeWidth={2} className="ov-arrow" /></span>
     </button>
   );
 }
@@ -165,10 +189,10 @@ function NotificationItem({ row, onOpen }: { row: Row; onOpen: () => void }) {
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="t-micro font-bold uppercase tracking-wider" style={{ color: "var(--text-6)" }}>
+      <div className="ov-meta">
         {label}
       </div>
-      <div className="mt-1 t-body" style={{ color: "var(--text-3)" }}>
+      <div className="ov-body" style={{ marginTop: 4, color: "var(--ov-ink)" }}>
         {children}
       </div>
     </div>
@@ -178,7 +202,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 function AlertDetail({ alert }: { alert: Layer1Alert }) {
   const h = alert.handoff;
   return (
-    <div className="flex flex-col gap-4">
+    <div className="ov" style={{ gap: 24, maxWidth: "none" }}>
       <Fact label="What happened">{alert.message}</Fact>
       {h.validatedFact.length > 0 && (
         <Fact label="Evidence">
@@ -200,12 +224,11 @@ function AlertDetail({ alert }: { alert: Layer1Alert }) {
       {h.suggestedAction && <Fact label="Suggested next question">{h.suggestedAction.suggestedQuestion}</Fact>}
       <Link
         href="/dashboard/competitors"
-        className="mt-btn mt-focus inline-flex w-fit items-center rounded-lg px-3 py-2 t-body-sm font-bold"
-        style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}
+        className="ov-btn ov-btn--brand min-h-10" style={{ width: "fit-content" }}
       >
         Open Competitors
       </Link>
-      <p className="t-meta-sm" style={{ color: "var(--text-6)" }}>
+      <p className="ov-meta">
         Metrion only recommends. It never changes a price or a listing on a marketplace.
       </p>
     </div>
@@ -214,15 +237,14 @@ function AlertDetail({ alert }: { alert: Layer1Alert }) {
 
 function RequestDetail({ request }: { request: DataRequestItem }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="ov" style={{ gap: 24, maxWidth: "none" }}>
       <Fact label="Needed">{request.requestedField}</Fact>
       <Fact label="Why">{request.reason ?? "No reason was recorded."}</Fact>
       {request.blockingMetric && <Fact label="Blocking this figure">{request.blockingMetric}</Fact>}
-      <Fact label="Status">{request.status.toLowerCase()}</Fact>
+      <Fact label="Status">{requestStatusLabel(request.status)}</Fact>
       <Link
-        href="/dashboard/cfo#anomalies"
-        className="mt-btn mt-focus inline-flex w-fit items-center rounded-lg px-3 py-2 t-body-sm font-bold"
-        style={{ background: "var(--accent)", color: "var(--accent-on-fill)" }}
+        href="/dashboard/cfo#requests"
+        className="ov-btn ov-btn--brand min-h-10" style={{ width: "fit-content" }}
       >
         Open in CFO
       </Link>

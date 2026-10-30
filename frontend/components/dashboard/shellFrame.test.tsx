@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -29,7 +29,10 @@ beforeEach(() => {
     return json({});
   }));
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  cleanup(); // unmount first: a late state update must not run an effect after the globals it uses (ResizeObserver) have been removed
+  vi.unstubAllGlobals();
+});
 
 const page = (name: string) => (
   <DashboardShell title={`Page ${name}`} subtitle="">
@@ -119,6 +122,7 @@ describe("Settings and the dashboard share one frame", () => {
     const link = screen.getByRole("link", { name: /Settings/ });
     link.focus(); // the seller tabbed to the Settings link and pressed Enter
     expect(link).toHaveFocus();
+    await waitFor(() => expect(calls("/ci/alerts")).toBe(1)); // the first read has finished: a navigation made while one is running is folded into a single follow-up read (see useNotifications)
 
     pathname = "/settings"; // dashboard -> settings
     rerender(<AppFrame>{page("Settings")}</AppFrame>);
@@ -126,6 +130,8 @@ describe("Settings and the dashboard share one frame", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument(); // before: a full-screen "Loading…"
     expect(screen.getByLabelText("Primary")).toBe(sidebar); // before: a new sidebar element
     expect(link).toHaveFocus(); // before: focus fell to <body>
+
+    await waitFor(() => expect(calls("/ci/alerts")).toBe(2));
 
     pathname = "/dashboard/cfo"; // settings -> dashboard
     rerender(<AppFrame>{page("CFO")}</AppFrame>);
@@ -155,14 +161,14 @@ describe("orientation: where am I, and where can I go", () => {
     expect(document.title).toBe("Page CFO · Metrion");
   });
 
-  it("groups the menu as Start, Business and System, and marks exactly the current page", async () => {
+  it("groups the menu as Start, Agents, Tools and System, and marks exactly the current page", async () => {
     pathname = "/dashboard/cfo";
     render(<ShellFrame>{page("Finance")}</ShellFrame>);
     await screen.findByText("body Finance");
     const nav = screen.getByLabelText("Sections");
-    for (const heading of ["Start", "Business", "System"]) expect(within(nav).getByText(heading)).toBeInTheDocument();
+    expect([...nav.querySelectorAll(".sb-label")].map((l) => l.textContent)).toEqual(["Start", "Agents", "Tools", "System"]);
     const labels = within(nav).getAllByRole("link").map((l) => l.textContent?.trim());
-    expect(labels).toEqual(["Overview", "CEO Hub", "Action Center", "Products", "Competitors", "Profit & Finance", "Expense Tracker", "Profit Calculator", "Listings & Marketing", "Agents", "Settings"]);
+    expect(labels).toEqual(["Overview", "CEO Hub", "Action Center", "Products", "Competitors", "Profit & Finance", "Listings & Marketing", "Profit Calculator", "Expense Tracker", "Agents", "Settings"]);
     const current = within(nav).getAllByRole("link").filter((l) => l.getAttribute("aria-current") === "page");
     expect(current).toHaveLength(1);
     expect(current[0]).toHaveTextContent("Profit & Finance");

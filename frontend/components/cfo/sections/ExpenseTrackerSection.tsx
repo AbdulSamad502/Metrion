@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { Section } from "@/components/ui/Section";
+import { Spinner } from "@/components/ui/LoadingState";
+import { useToast } from "@/components/ui/Toast";
 import { apiFetch, type BudgetStatus, type ExpenseListResponse, type ManualAdjustmentIdResponse } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
 import { ErrorText, Field, SelectInput, SubmitButton, TextInput, rupees, toPaise } from "@/components/cfo/primitives";
+import { Pill } from "@/components/overview/parts";
 
 // --- 1. Expense tracker (PUT/GET /cfo/expenses, PUT /cfo/expenses/budget, GET /cfo/expenses/budget-status) --
 
@@ -15,6 +18,7 @@ import { ErrorText, Field, SelectInput, SubmitButton, TextInput, rupees, toPaise
 const EXPENSE_CATEGORIES = ["advertising", "packaging", "storage", "logistics", "other"] as const;
 
 export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<string | null> }) {
+  const toast = useToast();
   const [addCategory, setAddCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
   const [addAmount, setAddAmount] = useState("");
   const [addMarketplace, setAddMarketplace] = useState("");
@@ -24,7 +28,6 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
   const [addDescription, setAddDescription] = useState("");
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
-  const [addResult, setAddResult] = useState<ManualAdjustmentIdResponse | null>(null);
 
   const addExpense = async () => {
     if (!addCategory.trim() || !addAmount.trim()) {
@@ -33,7 +36,6 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
     }
     setAddBusy(true);
     setAddError(null);
-    setAddResult(null);
     try {
       const value: Record<string, unknown> = { amount_paise: toPaise(addAmount) };
       if (addMarketplace.trim()) value.marketplace = addMarketplace.trim();
@@ -47,8 +49,9 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
           reason: addDescription.trim() || null,
         }),
       });
-      setAddResult(res);
-      setAddCategory("");
+      toast.success(`Expense added (ref ${res.manualAdjustmentId.slice(0, 8)}).`);
+      setAddCategory(EXPENSE_CATEGORIES[0]); // not "": an empty category would make the next add fail
+      if (listResult) void loadExpenses(listQuery); // the list on screen no longer includes this entry, so refresh it with the same filters
       setAddAmount("");
       setAddMarketplace("");
       setAddDescription("");
@@ -68,21 +71,28 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
   const [listBusy, setListBusy] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [listResult, setListResult] = useState<ExpenseListResponse | null>(null);
+  // The filters and time the list ON SCREEN was loaded with, so it never reads as newer or broader than it is (the inputs above may have changed since).
+  const [listQuery, setListQuery] = useState("");
+  const [listLoadedAt, setListLoadedAt] = useState<string | null>(null);
 
-  const loadExpenses = async () => {
+  const loadExpenses = async (queryOverride?: string) => {
     setListBusy(true);
     setListError(null);
     try {
       const params = new URLSearchParams();
-      if (listPeriodStart) params.set("period_start", listPeriodStart);
-      if (listPeriodEnd) params.set("period_end", listPeriodEnd);
-      if (listCategory.trim()) params.set("category", listCategory.trim());
-      const qs = params.toString();
+      if (queryOverride === undefined) {
+        if (listPeriodStart) params.set("period_start", listPeriodStart);
+        if (listPeriodEnd) params.set("period_end", listPeriodEnd);
+        if (listCategory.trim()) params.set("category", listCategory.trim());
+      }
+      const qs = queryOverride ?? params.toString();
       const res = await apiFetch<ExpenseListResponse>(`/api/v1/cfo/expenses${qs ? `?${qs}` : ""}`, await getToken());
       setListResult(res);
+      setListQuery(qs);
+      setListLoadedAt(new Date().toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }));
     } catch (e) {
+      // A failed refresh keeps the last list that did load; the notice below says so.
       setListError(friendlyApiError(e, "Could not load expenses"));
-      setListResult(null);
     } finally {
       setListBusy(false);
     }
@@ -94,7 +104,6 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
   const [budgetPeriodEnd, setBudgetPeriodEnd] = useState("");
   const [budgetBusy, setBudgetBusy] = useState(false);
   const [budgetError, setBudgetError] = useState<string | null>(null);
-  const [budgetResult, setBudgetResult] = useState<ManualAdjustmentIdResponse | null>(null);
 
   const setBudget = async () => {
     if (!budgetCategory.trim() || !budgetAmount.trim() || !budgetPeriodStart || !budgetPeriodEnd) {
@@ -103,7 +112,6 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
     }
     setBudgetBusy(true);
     setBudgetError(null);
-    setBudgetResult(null);
     try {
       const res = await apiFetch<ManualAdjustmentIdResponse>("/api/v1/cfo/expenses/budget", await getToken(), {
         method: "PUT",
@@ -114,7 +122,7 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
           period_end: budgetPeriodEnd,
         }),
       });
-      setBudgetResult(res);
+      toast.success(`Budget saved (ref ${res.manualAdjustmentId.slice(0, 8)}).`);
     } catch (e) {
       setBudgetError(friendlyApiError(e, "Could not set budget"));
     } finally {
@@ -128,6 +136,7 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [statusResult, setStatusResult] = useState<BudgetStatus | null>(null);
+  const [statusShown, setStatusShown] = useState(""); // which category and period the result on screen answers
 
   const checkStatus = async () => {
     if (!statusCategory.trim() || !statusPeriodStart || !statusPeriodEnd) {
@@ -144,19 +153,19 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
       });
       const res = await apiFetch<BudgetStatus>(`/api/v1/cfo/expenses/budget-status?${params.toString()}`, await getToken());
       setStatusResult(res);
+      setStatusShown(`${statusCategory.trim()}, ${statusPeriodStart} to ${statusPeriodEnd}`);
     } catch (e) {
-      setStatusError(friendlyApiError(e, "Could not check budget status"));
-      setStatusResult(null);
+      setStatusError(friendlyApiError(e, "Could not check budget status")); // the earlier result, if any, stays and is labelled with its own category and period
     } finally {
       setStatusBusy(false);
     }
   };
 
   return (
-    <Section title="Expense Tracker">
-      <div className="flex flex-col gap-6">
-        <div>
-          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Add expense</div>
+    <Section title="Expense tracker">
+      <div className="exp-grid">
+        <div className="exp-panel exp-add">
+          <h3 className="exp-title">Add expense</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Category">
               <SelectInput
@@ -169,7 +178,7 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
               <TextInput value={addAmount} onChange={setAddAmount} placeholder="e.g. 499" />
             </Field>
             <Field label="Marketplace (optional)">
-              <TextInput value={addMarketplace} onChange={setAddMarketplace} placeholder="AMAZON" />
+              <TextInput value={addMarketplace} onChange={setAddMarketplace} placeholder="e.g. Amazon" />
             </Field>
           </div>
           <div className="mt-3">
@@ -181,15 +190,10 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
             <SubmitButton onClick={addExpense} busy={addBusy} label="Add expense" busyLabel="Adding…" />
           </div>
           <ErrorText>{addError}</ErrorText>
-          {addResult && (
-            <div className="mt-1 t-body-sm" style={{ color: "var(--accent)" }}>
-              Added — manual adjustment <code>{addResult.manualAdjustmentId.slice(0, 8)}</code>
-            </div>
-          )}
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
-          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>List expenses</div>
+        <div className="exp-panel exp-list">
+          <h3 className="exp-title">List expenses</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Period start (optional)">
               <TextInput type="date" value={listPeriodStart} onChange={setListPeriodStart} />
@@ -206,11 +210,23 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
             </Field>
           </div>
           <div className="mt-3">
-            <SubmitButton onClick={loadExpenses} busy={listBusy} label="List expenses" busyLabel="Loading…" />
+            <SubmitButton onClick={() => loadExpenses()} busy={listBusy} label="List expenses" busyLabel="Loading…" />
           </div>
           <ErrorText>{listError}</ErrorText>
           {listResult && (
-            <div className="mt-3">
+            <div className="mt-3" aria-busy={listBusy}>
+              <div className="mb-2 flex flex-wrap items-center gap-2 t-meta" style={{ color: "var(--text-5)" }}>
+                <span>
+                  {listQuery ? `Filtered: ${listQuery.replace(/&/g, ", ").replace(/=/g, " ")}` : "All expenses"} · loaded {listLoadedAt}
+                  {listError ? " · could not refresh, this is the last list that loaded" : ""}
+                </span>
+                {listBusy && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Spinner size={12} /> Updating…
+                  </span>
+                )}
+              </div>
+              <div style={{ opacity: listBusy ? 0.6 : 1 }}>
               {listResult.entries.length === 0 ? (
                 <div style={{ color: "var(--text-6)" }}>No expenses recorded yet for this filter.</div>
               ) : (
@@ -231,19 +247,20 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
                         <td className="py-2" style={{ color: "var(--text-5)" }}>{e.reason ?? "—"}</td>
                         <td className="py-2" style={{ color: "var(--text-3)" }}>{rupees(e.amountPaise)}</td>
                         <td className="py-2" style={{ color: "var(--text-5)" }}>{e.targetType}/{e.targetRef}</td>
-                        <td className="py-2" style={{ color: "var(--text-5)" }}>{new Date(e.createdAt).toLocaleString()}</td>
+                        <td className="py-2" style={{ color: "var(--text-5)" }}>{new Date(e.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table></div>
               )}
-              <div className="mt-2 t-body" style={{ color: "var(--text-2)" }}>Total: {rupees(listResult.totalPaise)}</div>
+              <div className="exp-total"><span className="ov-meta">Total</span><b className="ov-fig">{rupees(listResult.totalPaise)}</b></div>
+              </div>
             </div>
           )}
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
-          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Set category budget</div>
+        <div className="exp-panel exp-budget">
+          <h3 className="exp-title">Set category budget</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Field label="Category">
               <SelectInput
@@ -260,15 +277,10 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
             <SubmitButton onClick={setBudget} busy={budgetBusy} label="Set budget" busyLabel="Saving…" />
           </div>
           <ErrorText>{budgetError}</ErrorText>
-          {budgetResult && (
-            <div className="mt-1 t-body-sm" style={{ color: "var(--accent)" }}>
-              Saved — manual adjustment <code>{budgetResult.manualAdjustmentId.slice(0, 8)}</code>
-            </div>
-          )}
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 16 }}>
-          <div className="mb-2 t-body font-semibold" style={{ color: "var(--text-3)" }}>Check budget status</div>
+        <div className="exp-panel exp-status">
+          <h3 className="exp-title">Check budget status</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Field label="Category">
               <SelectInput
@@ -286,17 +298,27 @@ export function ExpenseTrackerSection({ getToken }: { getToken: () => Promise<st
           <ErrorText>{statusError}</ErrorText>
           {statusResult && (
             <div className="mt-2 t-body" style={{ color: "var(--text-2)" }}>
+              <div className="mb-1 t-meta" style={{ color: "var(--text-5)" }}>
+                {statusError ? "Last successful check: " : "Result for "}
+                {statusShown}
+              </div>
               {statusResult.noBudgetSet ? (
                 <div style={{ color: "var(--text-6)" }}>No budget set for this category/period.</div>
               ) : (
                 <>
-                  <div>
-                    Spent: {rupees(statusResult.spentPaise)} · Budget: {rupees(statusResult.budgetPaise)} · Remaining:{" "}
-                    {rupees(statusResult.remainingPaise)}
+                  <div className="exp-stats">
+                    <div><span className="ov-meta">Spent</span><b className="ov-fig">{rupees(statusResult.spentPaise)}</b></div>
+                    <div><span className="ov-meta">Budget</span><b className="ov-fig">{rupees(statusResult.budgetPaise)}</b></div>
+                    <div><span className="ov-meta">Remaining</span><b className="ov-fig">{rupees(statusResult.remainingPaise)}</b></div>
                   </div>
-                  <div style={{ color: statusResult.exceeded ? "var(--negative)" : "var(--accent)" }}>
+                  {statusResult.budgetPaise !== null && statusResult.budgetPaise > 0 && (
+                    <div className="ov-meter my-2" role="img" aria-label={`${rupees(statusResult.spentPaise)} spent of a ${rupees(statusResult.budgetPaise)} budget`}>
+                      <i style={{ width: `${Math.min(100, (statusResult.spentPaise / statusResult.budgetPaise) * 100)}%`, background: statusResult.exceeded ? "var(--ov-bad)" : "var(--ov-brand)" }} />
+                    </div>
+                  )}
+                  <Pill tone={statusResult.exceeded ? "bad" : "good"} icon={statusResult.exceeded ? "alert" : "check"}>
                     {statusResult.exceeded ? "Budget exceeded" : "Within budget"}
-                  </div>
+                  </Pill>
                 </>
               )}
             </div>

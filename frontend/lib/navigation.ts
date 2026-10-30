@@ -19,13 +19,14 @@ export type NavGroup = { label: string; items: NavItem[] };
 /** What each page is called and what it is for, in plain words. The navigation labels ARE these titles (same constants), so a menu entry and the page it
  * opens can never disagree. Internal role names (CFO, CMO, CEO) belong inside the pages that explain them, not in the menu or the headings. */
 export const PAGE_COPY = {
-  overview: { title: "Overview", subtitle: "What is happening, what matters, and what to do next" },
+  overview: { title: "Overview", subtitle: "Your business today" },
   "ceo-hub": { title: "CEO Hub", subtitle: "Ask in plain words. Metrion answers from your data, or hands the question to the right specialist." },
   notifications: { title: "Action Center", subtitle: "Competitor price alerts and information Metrion needs from you, each with its next step" },
   products: { title: "Products", subtitle: "Find product ideas, check whether they are worth stocking, and shortlist suppliers" },
   competitors: { title: "Competitors", subtitle: "What the CEO has found about your competitors: prices, changes and what customers say. Ask the CEO to do anything new" },
   "pnl-calculator": { title: "Profit Calculator", subtitle: "Try prices, costs and fees before you commit. A what-if from the numbers you type, never your verified results" },
   cfo: { title: "Profit & Finance", subtitle: "Profit, cash, GST and where money leaks, calculated from the reports you upload" },
+  "expense-tracker": { title: "Expense Budgets", subtitle: "Log what you spend and keep each category inside a budget" },
   "cfo-expenses": { title: "Expense Tracker", subtitle: "Every expense, where it landed in your profit, and what still needs your review" },
   cmo: { title: "Listings & Marketing", subtitle: "Titles, listing copy, catalog answers and market research, for you to copy and never published for you" },
   agents: { title: "Agents", subtitle: "The specialists behind Metrion: what each one does and whether it is available to you" },
@@ -37,8 +38,8 @@ const label = (id: keyof typeof PAGE_COPY) => PAGE_COPY[id].title;
 /** The full browser-tab title. Complete in every route segment (no template): Next applied a parent's title template inconsistently on client navigation. */
 export const pageTitle = (id: keyof typeof PAGE_COPY): string => `${PAGE_COPY[id].title} · Metrion`;
 
-/** Start: where a seller begins. Business: the four workspaces, in the order a seller thinks about them (what to sell, who competes, what it earns,
- * how to list it). System sits below (`FOOTER_NAV`). */
+/** Start: where a seller begins. Agents: the four specialists, in the order a seller thinks about them (what to sell, who competes, what it earns,
+ * how to list it). Tools: the calculator and the expense tracker, which belong to no agent. System sits below (`FOOTER_NAV`). */
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Start",
@@ -49,14 +50,19 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "Business",
+    label: "Agents",
     items: [
       { id: "products", label: label("products"), icon: "products", href: "/dashboard/pi" },
       { id: "competitors", label: label("competitors"), icon: "competitors", href: "/dashboard/competitors" },
       { id: "cfo", label: label("cfo"), icon: "finance", href: "/dashboard/cfo", exact: true }, // exact: the Expense Tracker below is its own page, so it must not also light this one
-      { id: "cfo-expenses", label: label("cfo-expenses"), icon: "expenses", href: "/dashboard/cfo/expenses" },
-      { id: "pnl-calculator", label: label("pnl-calculator"), icon: "reports", href: "/dashboard/pnl-calculator" },
       { id: "cmo", label: label("cmo"), icon: "marketing", href: "/dashboard/cmo" },
+    ],
+  },
+  {
+    label: "Tools",
+    items: [
+      { id: "pnl-calculator", label: label("pnl-calculator"), icon: "reports", href: "/dashboard/pnl-calculator" },
+      { id: "cfo-expenses", label: label("cfo-expenses"), icon: "expenses", href: "/dashboard/cfo/expenses" },
     ],
   },
 ];

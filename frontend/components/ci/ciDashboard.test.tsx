@@ -133,7 +133,7 @@ describe("what the dashboard states, and what it refuses to", () => {
     render(<CiDashboard client={client(FULL)} />);
     await screen.findByTestId("ci-dashboard");
     expect(screen.getAllByText(/not verified yet/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Search leads\. They are not verified prices/)).toBeInTheDocument();
+    expect(screen.getByText(/Not verified yet/)).toBeInTheDocument();
     expect(document.querySelectorAll('a[href*="flipkart.com"], a[href*="amazon.in"]')).toHaveLength(0);
   });
 
@@ -142,7 +142,7 @@ describe("what the dashboard states, and what it refuses to", () => {
     await screen.findByTestId("ci-dashboard");
     expect(screen.getByText("Titan Octane: price down 9.2%")).toBeInTheDocument();
     expect(screen.getByText(/from the screenshot of/)).toBeInTheDocument();
-    expect(screen.getByText(/not watched between your screenshots/)).toBeInTheDocument();
+    expect(screen.getByText(/Dated screenshots, not live/)).toBeInTheDocument();
   });
 
   it("shows review themes with how many reviews were read, and pending confirmations", async () => {
@@ -260,3 +260,161 @@ describe("a search lead is shown by what the search called it, with where it is,
     expect(screen.getByRole("link", { name: "Open listing" })).toHaveAttribute("href", "https://www.amazon.in/dp/B0AAAAAAA1");
   });
 });
+
+describe("what the dashboard does when data is loading, refreshing or failing", () => {
+  const SKU2: CiWorkspace = { ...FULL, selectedProductId: "SKU-2", competitors: [comp({ id: "z1", label: "Rival Two" })] };
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => ((resolve = res), (reject = rej)));
+    return { promise, resolve, reject };
+  };
+
+  it("names the product, the data's own date and when it was checked", async () => {
+    render(<CiDashboard client={client(FULL)} />);
+    const ctx = await screen.findByTestId("ci-context");
+    expect(ctx).toHaveTextContent(/Data as of .* · checked /);
+  });
+
+  it("offers a retry when the first load fails, and shows the workspace once it works", async () => {
+    let fail = true;
+    const c: CiClient = { workspace: vi.fn(async () => { if (fail) throw new Error("boom"); return FULL; }), market: vi.fn(async () => BAND) };
+    render(<CiDashboard client={c} />);
+    await screen.findByRole("alert");
+    fail = false;
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByTestId("ci-dashboard")).toBeInTheDocument();
+  });
+
+  it("keeps the workspace on screen when a refresh fails, and says it may be out of date", async () => {
+    let fail = false;
+    const c: CiClient = { workspace: vi.fn(async () => { if (fail) throw new Error("boom"); return FULL; }), market: vi.fn(async () => BAND) };
+    render(<CiDashboard client={c} />);
+    await screen.findByTestId("ci-dashboard");
+    fail = true;
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/may be out of date/);
+    expect(screen.getByTestId("ci-dashboard")).toBeInTheDocument();
+    expect(screen.getAllByText("Titan Octane").length).toBeGreaterThan(0);
+  });
+
+  it("says a refresh is running, shows the last result meanwhile, and cannot start a second one", async () => {
+    const d = deferred<CiWorkspace>();
+    let calls = 0;
+    const c: CiClient = { workspace: vi.fn(() => (calls++ === 0 ? Promise.resolve(FULL) : d.promise)), market: vi.fn(async () => BAND) };
+    render(<CiDashboard client={c} />);
+    await screen.findByTestId("ci-dashboard");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+    expect(screen.getByTestId("ci-context")).toHaveTextContent(/Refreshing… what is shown is the last result that loaded/);
+    expect(screen.getAllByText("Titan Octane").length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole("button", { name: "Refreshing…" }));
+    expect(c.workspace).toHaveBeenCalledTimes(2);
+    d.resolve(FULL);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled());
+  });
+
+  it("does not present the old product's results as the new product's while it loads", async () => {
+    const d = deferred<CiWorkspace>();
+    let calls = 0;
+    const c: CiClient = { workspace: vi.fn(() => (calls++ === 0 ? Promise.resolve(FULL) : d.promise)), market: vi.fn(async () => BAND) };
+    render(<CiDashboard client={c} />);
+    await screen.findByTestId("ci-dashboard");
+    await userEvent.click(screen.getByRole("button", { name: "SKU-2" }));
+    expect(screen.getByTestId("ci-context")).toHaveTextContent(/Loading .* the .* view below is the previous one/);
+    expect(screen.getByRole("button", { name: "SKU-2" })).toHaveAttribute("aria-pressed", "true");
+    d.resolve(SKU2);
+    expect((await screen.findAllByText("Rival Two")).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("ci-context")).toHaveTextContent(/Data as of /);
+  });
+
+  it("keeps the previous product and names the failure when a switch fails, with a retry", async () => {
+    let fail = true;
+    let calls = 0;
+    const c: CiClient = { workspace: vi.fn(async () => { if (calls++ > 0 && fail) throw new Error("boom"); return calls > 1 ? SKU2 : FULL; }), market: vi.fn(async () => BAND) };
+    render(<CiDashboard client={c} />);
+    await screen.findByTestId("ci-dashboard");
+    await userEvent.click(screen.getByRole("button", { name: "SKU-2" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Still showing/);
+    expect(screen.getAllByText("Titan Octane").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Emerald Chrono" })).toHaveAttribute("aria-pressed", "true"); // the selection follows what is shown
+    fail = false;
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect((await screen.findAllByText("Rival Two")).length).toBeGreaterThan(0);
+  });
+
+  it("shows only the latest choice when replies arrive out of order", async () => {
+    const slow = deferred<CiWorkspace>();
+    const SKU1_AGAIN: CiWorkspace = { ...FULL, competitors: [comp({ id: "y1", label: "Rival One Again" })] };
+    let calls = 0;
+    const c: CiClient = { workspace: vi.fn((id: string | null) => { calls++; if (calls === 1) return Promise.resolve(FULL); return id === "SKU-2" ? slow.promise : Promise.resolve(SKU1_AGAIN); }), market: vi.fn(async () => BAND) };
+    render(<CiDashboard client={c} />);
+    await screen.findByTestId("ci-dashboard");
+    await userEvent.click(screen.getByRole("button", { name: "SKU-2" })); // slow
+    await userEvent.click(screen.getByRole("button", { name: "Emerald Chrono" })); // then back to SKU-1, which answers first
+    expect((await screen.findAllByText("Rival One Again")).length).toBeGreaterThan(0);
+    slow.resolve(SKU2); // the older reply arrives last and must be ignored
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText("Rival Two")).toBeNull();
+    expect(screen.getAllByText("Rival One Again").length).toBeGreaterThan(0);
+  });
+
+  it("does not ask again for the product already shown", async () => {
+    const c = client(FULL);
+    render(<CiDashboard client={c} />);
+    await screen.findByTestId("ci-dashboard");
+    await userEvent.click(screen.getByRole("button", { name: "Emerald Chrono" }));
+    expect(c.workspace).toHaveBeenCalledTimes(1);
+  });
+
+  it("says the price band is loading, not that there is none", async () => {
+    const m = deferred<MarketOverview>();
+    const c: CiClient = { workspace: vi.fn(async () => FULL), market: vi.fn(() => m.promise) };
+    render(<CiDashboard client={c} />);
+    await screen.findByTestId("ci-dashboard");
+    expect(screen.getByText("Loading the price band…")).toBeInTheDocument();
+    expect(screen.queryByText("No price band yet")).toBeNull();
+    m.resolve(BAND);
+    expect(await screen.findByText("Typical low")).toBeInTheDocument();
+  });
+});
+
+describe("CI: one strong action per view, with every link still going to the same place", () => {
+  const solid = (el: HTMLElement) => el.classList.contains("ov-btn--solid"); // the one white-on-indigo button of the "What to do next" card
+
+  it("keeps a single solid link: the next step. Row actions and shortcuts are calm", async () => {
+    render(<CiDashboard client={client(FULL)} />);
+    await screen.findByTestId("ci-dashboard");
+    const links = screen.getAllByRole("link");
+    const strong = links.filter(solid);
+    expect(strong.map((l) => l.textContent)).toEqual(["Confirm in chat"]); // the "What to do next" action
+    for (const name of ["Find competitors", "Track a competitor", "Verify price", "Track this", "Stop tracking", "Explain this"]) {
+      for (const l of screen.getAllByRole("link", { name })) expect(solid(l), name).toBe(false);
+    }
+  });
+
+  it("still sends each action to the CEO Hub with the same structured link as before", async () => {
+    render(<CiDashboard client={client(FULL)} />);
+    await screen.findByTestId("ci-dashboard");
+    expect(screen.getAllByRole("link", { name: "Find competitors" })[0]).toHaveAttribute("href", askHref("research", null));
+    expect(screen.getByRole("link", { name: "Track a competitor" })).toHaveAttribute("href", askHref("track", null));
+    expect(screen.getAllByRole("link", { name: "Verify price" })[0]).toHaveAttribute("href", askHref("verify", "Fossil Grant"));
+    expect(screen.getAllByRole("link", { name: "Stop tracking" })[0]).toHaveAttribute("href", askHref("stop", "Titan Octane"));
+  });
+
+  it("keeps every shortcut at least 40px tall, and the selected product reads as selected without relying on a solid fill", async () => {
+    render(<CiDashboard client={client(FULL)} />);
+    await screen.findByTestId("ci-dashboard");
+    for (const l of screen.getAllByRole("link", { name: /Find competitors|Track a competitor|Verify price|Stop tracking|Explain this/ })) expect(l.className).toMatch(/min-h-10/);
+    const selected = screen.getByRole("button", { name: /Emerald Chrono/ });
+    expect(selected).toHaveAttribute("aria-pressed", "true");
+    expect(solid(selected)).toBe(false);
+  });
+
+  it("keeps the table's hidden 'Actions' heading inside the table so it cannot widen the page on a phone", async () => {
+    render(<CiDashboard client={client(FULL)} />);
+    await screen.findByTestId("ci-dashboard");
+    expect(screen.getByText("Actions").closest("th")).toHaveClass("relative");
+  });
+});
+

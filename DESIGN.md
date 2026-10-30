@@ -4,7 +4,7 @@
 Operate mode: scanability and trust over expression. Brand lives in precise detail. Theme direction (dark vs light) is undecided; the near-black below is today's implementation, not a commitment. Express every colour as a token so a light theme stays possible.
 
 ## Colour (verified against frontend/app/globals.css)
-- Surfaces: --bg-base #0A0B0A, --bg-panel #0D0B08, --bg-popover #14150F, cards rgba(32,36,30,.30) / elevated .40
+- Surfaces: --bg-base #020302, --bg-panel #0D0B08, --bg-popover #14150F, cards rgba(32,36,30,.30) / elevated .40
 - Borders: --border-subtle rgba(255,255,255,.06), --border-default .11
 - Text: --text-1 #F7FAF6, --text-2 #F2F4F0, --text-3 #DADFD6, --text-4 #C7CDC2, --text-5 #8F968C, --text-6 #8B9288 (all >=4.5:1, tested by app/textTokens.contrast.test.ts)
 - Decoration only, never essential text or numbers: --text-7 #6B7268 (3.45:1), --text-8 #5E655B (2.85:1), --text-group-label #4E534B (2.17:1). Measured with the test's formula; not covered by the test.
@@ -25,7 +25,22 @@ Current, Stale, Processing, Estimated, Partial, Unavailable, Failed, Demo. Each 
 Every figure names its source type: engine-calculated, seller-entered, or settlement-derived, plus source report and period.
 
 ## Typography
-Inter via next/font (Geist fallback). Type floor: body and meta 12px or above; nothing essential below 11px. Smaller sizes are for non-essential labels only. Scale: 12-16.5px text, 19/22px titles, metrics 24/40px. Tracking: label 0.06em, metric -0.01em.
+Inter via next/font (Geist fallback). Four sizes only, across the whole app:
+- 12px: labels and meta. This is the floor; nothing is smaller.
+- 14px: body and controls.
+- 20px: titles.
+- 32px: metrics.
+Weight, colour and spacing carry any further hierarchy, never a fifth size. Tracking: label 0.06em, metric -0.01em.
+
+## Spacing
+8-point grid. Gaps, padding and margins are multiples of 8 (8, 16, 24, 32, 40, 48); 4 is allowed only inside a control. Touch targets are at least 40px. No other values.
+
+## Copy
+Plain words, short sentences, written for sellers, not specialists. Say it in fewer words when nothing is lost.
+- Prefer "Needs your input" to internal role names (CFO, CMO, CEO) in headings and labels.
+- Technical terms (engine-calculated, settlement-derived) get a short plain label; the exact term lives in a tooltip or detail view.
+- "Unavailable" and "Not yet calculable" stay distinct, each with a one-line reason.
+- Source, period and status stay on every figure, worded simply.
 
 ## Money display
 - Integer paise only. The display helper (formatPaise) formats with Indian digit grouping (₹4,25,000) and never does arithmetic.

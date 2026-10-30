@@ -11,7 +11,7 @@ export function ErrorNotice({ message, onRetry }: { message: string; onRetry?: (
       <Icon name="alert" size={16} />
       <span className="min-w-0 flex-1">{message}</span>
       {onRetry && (
-        <button type="button" onClick={onRetry} className="mt-btn mt-focus min-h-[36px] rounded-lg px-3 py-1 t-meta font-bold sm:min-h-0 sm:px-2.5" style={{ border: "1px solid var(--negative)" }}>
+        <button type="button" onClick={onRetry} className="mt-btn mt-focus min-h-[40px] rounded-lg px-3 py-1 t-meta font-bold" style={{ border: "1px solid var(--negative)" }}>
           Retry
         </button>
       )}

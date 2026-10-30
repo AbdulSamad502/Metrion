@@ -5,7 +5,7 @@ import { formatBps, formatPaise } from "@/lib/pnlText";
 import type { PnlBreakdown, PnlLineShare } from "@/lib/pnlScenario";
 
 /** Slice colours. They only tell slices apart; they carry no meaning (the label and percentage are always written beside each one). Profit is the accent. */
-const PALETTE = ["#5BA8FF", "#E7AC42", "#A78BFA", "#F16B61", "#2DD4BF", "#F472B6", "#94A3B8", "#C084FC"] as const;
+const PALETTE = ["var(--ov-c4)", "var(--ov-c3)", "var(--ov-c6)", "var(--ov-c5)", "var(--ov-c2)", "var(--ov-c1)", "var(--ov-c7)", "var(--ov-warn)"] as const;
 const PROFIT = "var(--accent)";
 
 const colourOf = (id: string, index: number): string => (id === "profit" ? PROFIT : PALETTE[index % PALETTE.length]);
@@ -84,7 +84,7 @@ export function WhatIsKillingYourMargin({ costs, beforeMissing }: { costs: PnlLi
     <Section title="What's killing your margin?" hint={`Your biggest costs per order kept, as a share of revenue${beforeMissing ? ", before the costs not entered" : ""}.`} panel={false}>
       <ol className="m-0 flex list-none flex-col gap-2 p-0">
         {costs.map((c, i) => (
-          <li key={c.id} className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ border: "1px solid var(--border-default)" }}>
+          <li key={c.id} className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ border: "1px solid var(--border-default)", background: "var(--bg-card)" }}>
             <span aria-hidden className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full t-body-sm font-bold" style={{ background: "var(--accent-fill-default)", color: PROFIT }}>{RANKS[i]}</span>
             <span className="min-w-0 flex-1 t-body-sm font-medium" style={{ color: "var(--text-2)" }}><span className="sr-only">Number {RANKS[i]}: </span>{c.label}</span>
             <span className="tabular-nums t-body-sm" style={{ color: "var(--text-4)" }}>{formatPaise(c.amount)}</span>

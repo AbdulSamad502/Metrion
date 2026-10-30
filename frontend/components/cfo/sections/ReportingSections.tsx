@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Section } from "@/components/ui/Section";
 import { apiFetch, type AnomalyCheckResponse, type CashReconciliationResponse, type CfoPreviewResponse, type DataRequestItem, type PeriodComparisonResponse, type ReconcileResponse } from "@/lib/api";
 import { friendlyApiError } from "@/lib/apiErrors";
-import { CfoMetricResultRow, ErrorText, Field, SubmitButton, TextInput, rupees } from "@/components/cfo/primitives";
+import { CfoMetricResultRow, ErrorText, Field, SubmitButton, TextInput, rupees, PeriodPresets, MarketplaceSelect } from "@/components/cfo/primitives";
 
 // --- 11. Leak Shield / Reconciliation (POST /cfo/reconcile) ---------------------------
 
@@ -39,13 +39,14 @@ export function ReconcileSection({ getToken }: { getToken: () => Promise<string 
   };
 
   return (
-    <Section title="Leak Shield / Reconciliation">
+    <Section title="Leak Shield" hint="Compares what the marketplace settled with your invoices for a period and lists the discrepancies. It only reports: nothing is claimed or filed for you.">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <Field label="Marketplace"><TextInput value={marketplace} onChange={setMarketplace} placeholder="AMAZON / FLIPKART / MEESHO" /></Field>
+          <Field label="Marketplace"><MarketplaceSelect value={marketplace} onChange={setMarketplace} /></Field>
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
+          <PeriodPresets onPick={(s, e) => { setPeriodStart(s); setPeriodEnd(e); }} />
         </div>
         <div>
           <SubmitButton onClick={submit} busy={busy} label="Run reconciliation" busyLabel="Reconciling…" />
@@ -138,10 +139,11 @@ export function CashReconciliationSection({ getToken }: { getToken: () => Promis
           Cash received comes from the settlement reports you uploaded. Expected cash, the variance and TDS are shown as unavailable when your reports do not carry what they need; they are never estimated.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <Field label="Marketplace"><TextInput value={marketplace} onChange={setMarketplace} placeholder="AMAZON / FLIPKART / MEESHO" /></Field>
+          <Field label="Marketplace"><MarketplaceSelect value={marketplace} onChange={setMarketplace} /></Field>
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
+          <PeriodPresets onPick={(s, e) => { setPeriodStart(s); setPeriodEnd(e); }} />
         </div>
         <div>
           <SubmitButton onClick={submit} busy={busy} label="Check cash received" busyLabel="Checking…" />
@@ -199,31 +201,32 @@ export function CfoPreviewSection({ getToken }: { getToken: () => Promise<string
   };
 
   return (
-    <Section title="CFO Preview (free-tier)">
+    <Section title="Free preview" hint="A free-plan preview of the Leak Shield check. It runs the same check and reveals less.">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Marketplace"><TextInput value={marketplace} onChange={setMarketplace} /></Field>
+          <Field label="Marketplace"><MarketplaceSelect value={marketplace} onChange={setMarketplace} /></Field>
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
+          <PeriodPresets onPick={(s, e) => { setPeriodStart(s); setPeriodEnd(e); }} />
         </div>
         <div>
           <SubmitButton onClick={submit} busy={busy} label="Load preview" busyLabel="Loading…" />
         </div>
         <ErrorText>{error}</ErrorText>
         {result && (
-          <div className="flex flex-col gap-2 t-body" style={{ color: "var(--text-2)" }}>
-            <div>
-              Headline total: {rupees(result.headlineTotalPaise)}
+          <div className="flex flex-col gap-2 t-body" style={{ color: "var(--text-2)" }} data-testid="preview-result">
+            <div data-testid="preview-total">
+              Total of all discrepancies: {result.headlineTotalPaise === null ? "Not available" : rupees(result.headlineTotalPaise)}
               {result.headlineEngineResultRef && (
                 <span style={{ color: "var(--text-6)" }}> (ref: <code>{result.headlineEngineResultRef.slice(0, 8)}</code>)</span>
               )}
             </div>
-            <div>
+            <div data-testid="preview-skus">
               Affected SKUs:{" "}
               {result.affectedSkuCountUnavailable
-                ? `UNAVAILABLE — ${result.affectedSkuCountUnavailable}`
-                : result.affectedSkuCount ?? "—"}
+                ? "Not available: the findings do not say which SKU they belong to."
+                : result.affectedSkuCount ?? "Not available"}
             </div>
             {result.revealedFinding ? (
               <div
@@ -234,7 +237,14 @@ export function CfoPreviewSection({ getToken }: { getToken: () => Promise<string
                 {rupees(result.revealedFinding.amountPaise)} · SKU: {result.revealedFinding.sku ?? "—"}
               </div>
             ) : (
-              <div style={{ color: "var(--text-6)" }}>No leak finding to show in the data uploaded for this period.</div>
+              <div style={{ color: "var(--text-6)" }}>No leak finding was reported for this period.</div>
+            )}
+            {/* The preview's answer has no counts of the lines it checked, and the engine reports a total of 0 both when nothing was found and when there was nothing to check.
+                So a 0 is shown as the real result it is, and this says what it cannot tell you. Only the Leak Shield answer carries the counts. */}
+            {result.headlineTotalPaise === 0 && !result.revealedFinding && result.lockedFindingsCount === 0 && (
+              <div className="t-body-sm" style={{ color: "var(--text-5)" }} data-testid="preview-zero-note">
+                This preview does not show how many lines were checked, so a total of {rupees(0)} does not tell you whether reports were uploaded for these dates. Run Leak Shield (Cash &amp; reconciliation tab) for the same period to see how many lines were reconciled.
+              </div>
             )}
             {result.lockedFindingsCount > 0 && (
               <div style={{ color: "var(--text-6)" }}>{result.lockedFindingsCount} more finding(s) locked — upgrade to see them all.</div>
@@ -291,13 +301,14 @@ export function AnomalyCheckSection({ getToken }: { getToken: () => Promise<stri
   };
 
   return (
-    <Section title="Anomaly Check">
+    <Section title="Anomaly check" hint="Checks the contribution margin history of one SKU, account or marketplace for unusual changes, using three statistical methods.">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="Target ref (SKU/ACCOUNT/MARKETPLACE)"><TextInput value={targetRef} onChange={setTargetRef} /></Field>
           <Field label="Period start"><TextInput type="date" value={periodStart} onChange={setPeriodStart} /></Field>
           <Field label="Period end"><TextInput type="date" value={periodEnd} onChange={setPeriodEnd} /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
+          <PeriodPresets onPick={(s, e) => { setPeriodStart(s); setPeriodEnd(e); }} />
         </div>
         <label className="flex min-h-6 items-center gap-2 t-body-sm" style={{ color: "var(--text-6)" }}>
           <input type="checkbox" checked={includeNarration} onChange={(e) => setIncludeNarration(e.target.checked)} />
@@ -382,15 +393,14 @@ export function PeriodComparisonSection({ getToken }: { getToken: () => Promise<
   };
 
   return (
-    <Section title="Period Comparison (Brain-3 narration)">
+    <Section title="Compare two results" hint="Explains what changed between two saved results of the same measure.">
       <div className="flex flex-col gap-3">
         <div className="t-body-sm" style={{ color: "var(--text-6)" }}>
-          Both ids must be real, already-persisted <code>engineResultRef</code> values for the same metric code — e.g.
-          two different periods&apos; Contribution Profit refs copied from the Period P&amp;L section above.
+          Both IDs must be saved results of the same measure, for example the contribution profit of two different periods. Use the Copy ID button under a result in Period profit &amp; loss.
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <Field label="Result A id (engineResultRef)"><TextInput value={resultAId} onChange={setResultAId} placeholder="UUID" /></Field>
-          <Field label="Result B id (engineResultRef)"><TextInput value={resultBId} onChange={setResultBId} placeholder="UUID" /></Field>
+          <Field label="First result reference (ID)"><TextInput value={resultAId} onChange={setResultAId} placeholder="UUID" /></Field>
+          <Field label="Second result reference (ID)"><TextInput value={resultBId} onChange={setResultBId} placeholder="UUID" /></Field>
           <Field label="As-of date"><TextInput type="date" value={asOfDate} onChange={setAsOfDate} /></Field>
         </div>
         <div>
@@ -433,7 +443,7 @@ export function DataRequestsSection({
   onReload: () => void;
 }) {
   return (
-    <Section title="Data Requests">
+    <Section title="What Metrion needs from you" hint="Inputs the finance agent is waiting on. You can give them in the CEO Hub.">
       <div className="flex flex-col gap-3">
         <button type="button" onClick={onReload} className="w-fit t-meta font-semibold" style={{ color: "var(--text-3)" }}>
           Refresh
@@ -461,7 +471,7 @@ export function DataRequestsSection({
                   <td className="py-2" style={{ color: "var(--text-3)" }}>{r.reason ?? "—"}</td>
                   <td className="py-2" style={{ color: "var(--text-5)" }}>{r.blockingMetric ?? "—"}</td>
                   <td className="py-2" style={{ color: "var(--text-5)" }}>{r.status}</td>
-                  <td className="py-2" style={{ color: "var(--text-5)" }}>{new Date(r.createdAt).toLocaleString()}</td>
+                  <td className="py-2" style={{ color: "var(--text-5)" }}>{new Date(r.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}</td>
                 </tr>
               ))}
             </tbody>

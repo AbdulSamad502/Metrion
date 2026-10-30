@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, apiFetch, type DataRequestItem, type Layer1Alert, type Layer1AlertsResponse } from "@/lib/api";
 
 /** One source's load state. `forbidden` is a real outcome, not an error: the signed-in role
@@ -19,6 +19,10 @@ export type NotificationsState = {
    * an "unread" count — the backend has no read/unread state. */
   attentionCount: number;
   reload: () => void;
+  /** A re-read is in flight (the lists above are the last ones that loaded). Optional so a screen built without a live feed can omit it. */
+  refreshing?: boolean;
+  /** When (this browser's clock) a feed last loaded successfully; null before the first success. */
+  checkedAt?: string | null;
 };
 
 /** Days of CI alerts the feed covers. */
@@ -40,12 +44,25 @@ export function useNotificationsFeed(enabled: boolean): NotificationsState {
   const [dataRequestsStatus, setDataRequestsStatus] = useState<FeedStatus>("loading");
   const [dataRequestsError, setDataRequestsError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  const [settled, setSettled] = useState(-1); // the nonce whose request has finished: a request is in flight while it differs from `nonce`
+  const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const inFlight = useRef(false);
+  const queued = useRef(false);
 
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  // Asking again while a read is running does not start a second parallel one: it is remembered and one more read follows when this one ends, so the
+  // newest request is always honoured and the requests never pile up or overlap.
+  const reload = useCallback(() => {
+    if (inFlight.current) {
+      queued.current = true;
+      return;
+    }
+    setNonce((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
+    inFlight.current = true;
     (async () => {
       const token = await getToken();
       const [a, d] = await Promise.allSettled([
@@ -73,9 +90,17 @@ export function useNotificationsFeed(enabled: boolean): NotificationsState {
       };
       settle(a, (v) => setAlerts(v.alerts), setAlertsStatus, setAlertsError);
       settle(d, setDataRequests, setDataRequestsStatus, setDataRequestsError);
+      if (a.status === "fulfilled" || d.status === "fulfilled") setCheckedAt(new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }));
+      inFlight.current = false;
+      setSettled(nonce);
+      if (queued.current) {
+        queued.current = false;
+        setNonce((n) => n + 1);
+      }
     })();
     return () => {
       cancelled = true;
+      inFlight.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, nonce]);
@@ -89,6 +114,8 @@ export function useNotificationsFeed(enabled: boolean): NotificationsState {
     dataRequestsError,
     attentionCount: alerts.length + dataRequests.filter(isOpenRequest).length,
     reload,
+    refreshing: enabled && settled !== nonce,
+    checkedAt,
   };
 }
 

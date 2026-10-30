@@ -1,0 +1,146 @@
+/* The CEO Hub in the Metrion palette: black and white with the shared chart accents, no green and no glow.
+   Scoped to a page that holds the hub canvas (.mt-galaxy), so no other page is affected. */
+html:root:not([data-theme="light"]) {
+  --hub-space: #000;
+  --hub-glow: rgba(255, 255, 255, 0.28);
+  --hub-glow-soft: transparent;
+  --hub-card-bg: var(--ov-card, #0e0e10);
+  --agent-ci: var(--ov-c3);
+  --agent-cfo: var(--ov-c4);
+  --agent-pi: var(--ov-c5);
+  --agent-cmo: var(--ov-c6);
+}
+body:has(.mt-galaxy) {
+  --accent: var(--ov-brand);
+  --accent-hover: var(--ov-brand-ink);
+  --accent-on-fill: var(--ov-on-brand);
+  --accent-fill-subtle: var(--ov-brand-soft);
+  --accent-fill-default: var(--ov-brand-soft);
+  --accent-border-subtle: color-mix(in srgb, var(--ov-brand) 22%, transparent);
+  --accent-border-default: color-mix(in srgb, var(--ov-brand) 36%, transparent);
+  --accent-border-strong: color-mix(in srgb, var(--ov-brand) 56%, transparent);
+  --positive: var(--ov-good);
+  --negative: var(--ov-bad);
+  --negative-fill: var(--ov-bad-soft);
+  --warning: var(--ov-warn);
+  --warning-fill: var(--ov-warn-soft);
+  --text-1: var(--ov-ink);
+  --text-2: var(--ov-ink);
+  --text-3: var(--ov-ink-2);
+  --text-4: var(--ov-ink-2);
+  --text-5: var(--ov-ink-3);
+  --text-6: var(--ov-ink-3);
+  --text-mint: var(--ov-good);
+  --text-green-muted: var(--ov-good);
+  --border-subtle: var(--ov-line);
+  --border-default: var(--ov-edge);
+  --border-hover: var(--ov-field-edge);
+  --fill-hover: var(--ov-soft);
+  background: #000;
+}
+body:has(.mt-galaxy)::before { background-image: none; }
+.mt-galaxy { background: none; border: 0; }
+.mt-glow-card, .mt-glow-card.mt-agent-glow { box-shadow: none; animation: none; }
+.mt-glow-card { border-color: var(--ov-edge); }
+.mt-glow-card.mt-agent-glow { border-color: var(--ov-brand); }
+.mt-hub-edge { filter: none; }
+
+/* ---- layout: a top bar, one full-width view, the chat bar at the bottom; no boxes ---- */
+.ceo-top { padding: 4px 0 0; border-bottom: 1px solid var(--ov-line); }
+.ceo-icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; color: var(--ov-ink-2); background: none; border: 0; cursor: pointer; }
+.ceo-icon:hover { color: var(--ov-ink); background: var(--ov-soft); }
+.ceo-tab { flex: none; position: relative; background: none; border: 0; color: var(--ov-ink-3); cursor: pointer; transition: color 0.15s; }
+.ceo-tab:hover { color: var(--ov-ink); }
+.ceo-tab[data-on="true"] { color: var(--ov-ink); }
+.ceo-tab[data-on="true"]::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--ov-brand); }
+.ceo-action { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: none; color: var(--ov-ink-2); font-size: 14px; font-weight: 600; cursor: pointer; }
+.ceo-action:hover:not(:disabled) { color: var(--ov-ink); background: var(--ov-soft); }
+.ceo-action:disabled { opacity: 0.45; cursor: default; }
+
+/* ---- hover: a dot grid that lights up in a soft circle trailing the pointer (the reference recording) ----
+   Rest: a very faint grid, 12px apart. Pointer over the page: the dots near it darken inside a ~100px circle that eases after the cursor and fades when it stops.
+   Pointer over a button or card: the same grid shows inside that element only. Reduced motion: no trailing, no fades. */
+.ceo-root { --dot: rgba(255, 255, 255, 0.08); --dot-hi: rgba(255, 255, 255, 0.7); }
+.ceo-dots, [data-dots]::before {
+  background-image: radial-gradient(circle, var(--dot-hi) 1.3px, transparent 1.8px);
+  background-size: 12px 12px;
+}
+.ceo-dots { position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 0.45s ease; background-position: 6px 6px;
+  -webkit-mask-image: radial-gradient(circle 150px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
+  mask-image: radial-gradient(circle 150px at var(--mx, -999px) var(--my, -999px), #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%); }
+.ceo-root::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-image: radial-gradient(circle, var(--dot) 1.2px, transparent 1.7px); background-size: 12px 12px; background-position: 6px 6px; }
+.ceo-root[data-spot="on"] .ceo-dots { opacity: 1; transition-duration: 0.15s; }
+[data-dots="static"] { position: relative; }
+[data-dots] { isolation: isolate; }
+[data-dots]::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity 0.18s ease;
+  -webkit-mask-image: radial-gradient(circle 100px at var(--lx, 50%) var(--ly, 50%), #000 0%, rgba(0, 0, 0, 0.5) 50%, transparent 100%);
+  mask-image: radial-gradient(circle 100px at var(--lx, 50%) var(--ly, 50%), #000 0%, rgba(0, 0, 0, 0.5) 50%, transparent 100%);
+}
+[data-dots][data-hot]::before, [data-dots]:focus-visible::before { opacity: 1; }
+[data-dots]:focus-visible::before { --lx: 50%; --ly: 50%; }
+@media (prefers-reduced-motion: reduce) { .ceo-dots, [data-dots]::before { transition: none; } }
+@media (hover: none) { .ceo-dots, [data-dots]::before { display: none; } }
+.ceo-root:not([data-view="agents"])::before, .ceo-root:not([data-view="agents"]) .ceo-dots { display: none; }
+
+/* ---- fixes from review ---- */
+/* the cards on the agents view are solid, so a wire never shows through their text (the page-level --hub-card-bg is translucent inside .mt-galaxy) */
+.mt-galaxy { --hub-card-bg: var(--ov-card, #0e0e10); }
+/* the tab row scrolls sideways only: the active underline used to push it into a vertical scrollbar */
+.ceo-tabs { justify-content: safe center; overflow-y: hidden; scrollbar-width: none; }
+.ceo-tabs::-webkit-scrollbar { display: none; }
+.ceo-tab[data-on="true"]::after { bottom: 0; }
+/* conversation on the left, activity and insights in a panel on the right (wide screens); stacked below that */
+.ceo-activity { flex: none; overflow: visible; max-height: none; background: var(--ov-card, #0e0e10); border: 1px solid var(--ov-edge); border-radius: 16px; padding: 20px; }
+.ceo-activity > h2 { font-size: 20px; letter-spacing: 0; text-transform: none; color: var(--ov-ink); font-weight: 600; }
+.ceo-activity .mt-panel, .ceo-activity .mt-hub-card { background: transparent; box-shadow: none; }
+@media (min-width: 1280px) {
+  .ceo-split { max-width: none; padding-inline: 24px; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 0 32px; align-items: start; }
+  .ceo-split .ceo-conv { width: 100%; max-width: 860px; margin-inline: auto; min-height: 100%; }
+  .ceo-split { height: 100%; align-items: stretch; }
+  .ceo-split .ceo-activity { align-self: stretch; height: auto; margin-block: 8px; overflow-y: auto; }
+  .ceo-bar { max-width: none; padding-inline: 24px; }
+  .ceo-root[data-view="chat"] .ceo-bar { padding-right: 456px; }
+  .ceo-bar > * { width: 100%; max-width: 860px; margin-inline: auto; }
+  /* the bar floats over the foot of the view, so the activity card can run to the bottom; only the bar itself is opaque */
+  .ceo-root { position: relative; }
+  [data-testid="chat-bar"] { position: absolute !important; left: 0; right: 0; bottom: 0; background: none !important; pointer-events: none; }
+  [data-testid="chat-bar"] .ceo-bar > * { pointer-events: auto; }
+  [data-testid="chat-column"] .ceo-conv, [data-testid="work-area"] { padding-bottom: 190px; }
+  [data-testid="chat-column"] .ceo-activity { margin-bottom: 8px; }
+  [data-testid="chat-column"] .ceo-split { min-height: 100%; }
+  .ceo-composer { min-height: 64px; }
+}
+
+[data-testid="chat-bar"] { background: none !important; }
+
+/* the hub's default size: one step smaller than the rest of the app (80% of the app's own 80%), on desktop windows only */
+@media (min-width: 1024px) { .ceo-root { zoom: 0.8; } }
+
+/* connecting and removing a specialist: the card and its wire change state with a short fade, and the card shows it is working while the server answers */
+.mt-glow-card { transition: opacity 0.3s ease, border-color 0.3s ease, background-color 0.3s ease; }
+svg path[data-testid^="edge-"] { transition: stroke 0.3s ease, stroke-opacity 0.3s ease, opacity 0.3s ease; }
+[data-testid^="agent-node-"][data-busy="true"] { opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) { .mt-glow-card, svg path[data-testid^="edge-"] { transition: none; } }
+
+/* ---- reading views: conversation, activity, chat bar ----
+   The hub is drawn one step smaller than the app, which left chat and results looking small and empty; they read at the app's own size. */
+@media (min-width: 1024px) { .ceo-read { zoom: 1.25; } }
+.ceo-msg-user { background: var(--ov-soft); }
+.ceo-composer { background: var(--ov-card, #0e0e10); border: 1px solid var(--ov-edge); min-height: 56px; align-items: center; }
+.ceo-composer:focus-within { border-color: var(--ov-field-edge); }
+.ceo-composer textarea { min-height: 40px; }
+
+/* the connect / remove control on each specialist card: the hub is drawn small, so the button is made large enough to hit comfortably (about 20px on screen), with a wider invisible hit area */
+[data-testid^="remove-"], [data-testid^="attach-"] { width: 30px !important; height: 30px !important; top: -15px !important; cursor: pointer; }
+[data-testid^="remove-"] svg, [data-testid^="attach-"] svg { width: 16px; height: 16px; }
+[data-testid^="remove-"]::after, [data-testid^="attach-"]::after { content: ""; position: absolute; inset: -8px; }
+
+/* the top bar reads larger: the hub is drawn small, so its main controls are scaled up */
+.ceo-top { padding-top: 8px; }
+.ceo-tab { font-size: 17px !important; min-height: 52px !important; padding-inline: 18px !important; }
+.ceo-tab[data-on="true"]::after { left: 18px; right: 18px; height: 3px; }
+.ceo-action { font-size: 17px !important; min-height: 48px; padding: 0 16px; gap: 8px; }
+.ceo-action svg { width: 20px; height: 20px; }
+.ceo-icon { width: 48px; height: 48px; }
+.ceo-icon svg { width: 22px; height: 22px; }

@@ -102,7 +102,7 @@ export function InvestigationList({
                 <span className="flex items-center gap-2">
                   <StatusBadge tone={STATUS_TONE[i.status]}>{STATUS_LABEL[i.status]}</StatusBadge>
                   <time className="t-meta" dateTime={i.last_message_at} style={{ color: "var(--text-6)" }}>
-                    {new Date(i.last_message_at).toLocaleDateString()}
+                    {new Date(i.last_message_at).toLocaleDateString("en-IN")}
                   </time>
                 </span>
               </button>
@@ -112,10 +112,11 @@ export function InvestigationList({
                   aria-label={`Delete conversation ${investigationTitle(i)}`}
                   title="Delete conversation"
                   onClick={() => setConfirmId(i.id)}
-                  className="mt-btn mt-focus absolute right-2 top-2 rounded-md p-1.5 opacity-60 transition-opacity hover:opacity-100 focus:opacity-100"
-                  style={{ color: "var(--text-4)" }}
+                  className="mt-btn mt-focus absolute bottom-2 right-2 inline-flex min-h-[32px] items-center gap-1.5 rounded-lg px-2.5 t-meta font-semibold hover:opacity-100"
+                  style={{ color: "var(--text-3)", border: "1px solid var(--border-default)" }}
                 >
                   <Icon name="trash" size={14} />
+                  Delete
                 </button>
               )}
               {confirmId === i.id && onDelete && (
