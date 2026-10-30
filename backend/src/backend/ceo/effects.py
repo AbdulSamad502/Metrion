@@ -129,7 +129,7 @@ ACTION_EFFECTS: Mapping[str, ActionEffects] = {
     "cmo.generate_keywords": _cmo_metered("cmo.generate_keywords"),
     "cmo.generate_backend_terms": _cmo_metered("cmo.generate_backend_terms"),
     "cmo.generate_hashtags": _cmo_metered("cmo.generate_hashtags"),
-    "cmo.catalog_answer": _cmo_metered("cmo.catalog_answer"),
+    "cmo.catalog_answer": ActionEffects(meters=("cmo.catalog_answer",)),  # worked out by code from the seller's own facts: no model call, nothing leaves Metrion
     "cmo.market_trends": ActionEffects(
         meters=("cmo.market_trends", "research.market_trends"), external=External.SELLER_DATA_OUT, egress=("CONFIRMED_NICHE_TERMS",),
         destinations=("Tavily", "YouTube Data API"), model_egress=("PUBLIC_SEARCH_RESULT_TEXT",),

@@ -31,9 +31,9 @@ from uuid import UUID
 
 from backend import config
 from backend.auth.context import AuthContext
-from backend.auth.permissions import AGENT_CEO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
+from backend.auth.permissions import AGENT_CEO, AGENT_CMO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
 from backend.ceo.approval_gate import evaluate_playbook, plan_required
-from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_delegation, compound, conversational, deadlines, expense_chat, import_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, periods, profile_context, references
+from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_chat, cmo_delegation, compound, conversational, deadlines, expense_chat, import_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, periods, profile_context, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.billing import UnitDecision, unit_decision
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
@@ -550,6 +550,10 @@ def _run_admitted(
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, conversational.WELCOME_TEXT, now, marker={"directGreeting": True})
         if conversational.is_capability_question(text):
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, conversational.capability_answer(caps), now, marker={"directCapabilities": True})
+    if ui_action is None and not attachments and "CMO" in attached and has_permission(role=ctx.role, permissions=ctx.permissions, key=AGENT_CMO):
+        cmo_reply = cmo_chat.direct_reply(ctx, text)  # CMO 3.0 M0: "is my bottle dishwasher safe?" is answered from what the seller confirmed, else "not confirmed"; no model, nothing run
+        if cmo_reply is not None:
+            return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, cmo_reply, now, marker={"cmoDirect": True})
     if ui_action is None:  # a competitor screenshot, a confirmation answer, "track this link", "approve 1 and 3", or the dashboard's Ask CEO on one finding (CI spec 6.21)
         ci_turn = _ci_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, attached, attachments, text, now, cat)
         if ci_turn is not None:
@@ -705,7 +709,11 @@ def _run_admitted(
                 prefill = cmo_delegation.prefill_for(key, decision.slots, repo.list_messages(tenant, inv_id), all_plans)
                 if prefill.get("marketplace") and normalise_marketplace(text) is None:  # a marketplace the seller did not write is never taken from a model: it is asked
                     prefill = {k: v for k, v in prefill.items() if k != "marketplace"}
-                carry = {**ceo_reads_product_facts(tenant, prefill.get("product")), **cmo_delegation.carried_facts(key, prefill.get("product"), all_plans)}  # saved profile first, this conversation's answers win
+                saved, saved_name = ({}, None) if key == "cmo.market_trends" else cmo_chat.saved_answers(tenant, prefill.get("product"))  # CMO 3.0 M0: what the seller confirmed about this product before
+                carry = {**ceo_reads_product_facts(tenant, prefill.get("product")), **saved, **({"product_name": saved_name} if saved_name else {}), **cmo_delegation.carried_facts(key, prefill.get("product"), all_plans)}
+                note = cmo_chat.saved_answers_note(saved_name or prefill.get("product"), saved)
+                if note:
+                    _ACKS.set([*_ACKS.get(), note])  # saved profile first, this conversation's answers win
             hidden = expense_chat.hidden_for(key, decision.slots, decision.flags)
             if key == import_chat.IMPORT_KEY:  # the preview of every file, read and described by code; nothing is written
                 prep = ceo_import_ops.prepare(tenant, inv_id, list(attachments))
@@ -761,6 +769,14 @@ def _run_admitted(
                 ci_ids, _ = cmo_ci_inputs.broker(tenant, ctx.role, ctx.permissions, now=now)
                 if ci_ids:
                     direct["ci_insight_ids"] = ci_ids
+            if key in cmo_delegation.DELEGATED_ACTIONS and key != "cmo.market_trends":
+                if cmo_chat.record_image_hints(ctx, run_inputs):  # the seller confirmed a photo hint with their own answer: recorded as their statement (zero units)
+                    _ACKS.set([*_ACKS.get(), "I recorded the photo details you confirmed as your own statements."])
+                if direct.get("seller_title") and direct.get("marketplace") and key in GROUNDED_CMO_KEYS:  # the title the seller approved grounds the copy as their APPROVED title
+                    approval_id = cmo_chat.matching_approval(tenant, direct.get("product_name"), str(direct["marketplace"]), str(direct["seller_title"]))
+                    if approval_id:
+                        direct.pop("seller_title")
+                        direct["approval_id"] = approval_id
             resolved = ResolvedSlots(tenant_id=tenant, today=now.date(), direct=direct)
             notes = list(resolved.echoes())
             input_session.remember_confirmed(tenant, key, run_inputs, source_ref={"message_id": str(user_msg)}, user_id=ctx.app_user_id)  # CMO's private choice, best-effort (agent-memory C6)
@@ -942,7 +958,9 @@ def _run_admitted(
         if route == "ACTION" and ACTIONS[key].session:
             template_only_answer = True  # what the specialist wrote is shown as it is, quoted and labelled, never re-worded by a second model
             heading = ("Here is what Product Intelligence found for your niche." if key == "pi.discover"
-                       else "Here is what the market-trend research found." if key == "cmo.market_trends" else "Here is what was written for the details you gave.")
+                       else "Here is what the market-trend research found." if key == "cmo.market_trends"
+                       else "Your title choice is saved." if key == "cmo.approve_title"
+                       else "Here is what Slim CMO worked out from your own facts." if key == "cmo.catalog_answer" else "Here is what was written for the details you gave.")
         if route == "PLAYBOOK" and PLAYBOOKS[key].needs_form:
             # Several figures of one metric (one margin per candidate price, one cost per supplier) can only be told apart by their labels, which the fixed
             # layout carries and prose with markers cannot. The answer is therefore the deterministic layout, with no model call (spec 6.33).
@@ -981,6 +999,7 @@ def _run_admitted(
 
 
 # ------------------------------------------------------------------------------------------------ pieces
+GROUNDED_CMO_KEYS = frozenset({"cmo.generate_description", "cmo.generate_keywords", "cmo.generate_bullets", "cmo.generate_backend_terms", "cmo.generate_listing_copy"})
 VISION_UNAVAILABLE_TEXT = (
     "The vision service that reads photos is not available (it is not set up as one Metrion controls), so I did not read your photo, sent nothing, and used nothing up. "
     "You can type the product details instead and I will ask for what is missing."
@@ -1038,6 +1057,12 @@ def _plan_turn(
                 d.append(cmo_delegation.ci_unused_line(cmo_ci_inputs.broker(ctx.tenant_id, ctx.role, ctx.permissions, now=runtime.clock())[1]))
         if d and len(legs) == 1:  # a delegated CMO task: a purpose-written title and short lines for the card; the full details above stay complete in the plan
             compact, title = cmo_delegation.compact_lines(k, slots, preview), cmo_delegation.plan_title(k, slots)
+        if d and slots.get("approval_id"):
+            approved = cmo_chat.approval_text(ctx.tenant_id, str(slots["approval_id"]))
+            if approved:
+                d.append(f"Written from the title you approved: “{approved}”.")
+                if compact:
+                    compact.insert(max(len(compact) - 1, 0), f"From your approved title: “{approved[:120]}”.")
         details.extend(d)
         units.update(u)
     # Asking for the same competitor search again while its plan is still open re-shows that stored plan (its hash and expiry are unchanged) instead of asking a second time.

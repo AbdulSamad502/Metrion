@@ -9,8 +9,8 @@ writes to a marketplace.
 
 CMO actions run through the very same handler code as the direct HTTP routes (`api/v1/cmo.py`), so authentication-independent
 rules (tenant from context only, quota admission, metering, idempotency, trust gates) cannot drift between the two paths. This
-module never imports CFO, PI or CI code for a CMO action (CMO never calls them) and never reads CI data (the optional CI attachment
-is phase P11).
+module never imports CFO, PI or CI code for a CMO action (CMO never calls them) and never reads CI data itself: the optional CI themes are
+brokered by the CEO orchestrator (`services/cmo_ci_inputs.py`) and arrive as plain request fields, so this dummy hub stays CI-free.
 
 SECURITY NOTE: these functions take `tenant_id`, `role` and `permissions` as ARGUMENTS and build the auth context themselves. Their only
 callers today are tests; the future CEO caller MUST pass values taken from the authenticated session, never from a request or a model.

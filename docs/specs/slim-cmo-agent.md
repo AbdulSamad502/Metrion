@@ -258,6 +258,10 @@ Configuration, resolved at generation time, never hardcoded — same principle a
 
 **Enforcement is deterministic, in code.** Character counts, bullet counts, option counts and byte caps are computed and validated by Python against the fetched row; the LLM never reports its own length and is never trusted to have met a limit. A violating option is regenerated (bounded internal retry, §8.3) or dropped; a title set that cannot reach `title_option_count` valid options is returned **short and labelled**, never padded with invalid text. `source_url` and `verified_at` are cited on every output.
 
+### 6.3a Product identity from chat (CMO 3.0 M0, amendment 2026-10-30)
+
+When the CEO runs a CMO writing action from chat it supplies `sku` = a deterministic slug of the product name the seller gave (lower-case letters, digits and hyphens, at most 120 characters; the same name always gives the same value). This is what lets the facts the seller confirmed (`seller_fact`, loaded by exact non-null `sku`) be found in a later conversation and lets the dashboard list the product under its name. It does not replace a seller's own catalog SKU where one is supplied on the direct path. A name that is too short to identify a product gives no `sku` and nothing is remembered. Authority for the chat behaviour: `ceo-cmo-delegation.md` §6.12.
+
 ### 6.4 Title sets, approval and marketplace-specific copy packs
 
 **Workflow, per marketplace the seller selected:** title set → seller approval → copy pack. Each marketplace runs this workflow independently with its own constraint row, its own approval and its own pack.

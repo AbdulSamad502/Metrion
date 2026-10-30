@@ -81,8 +81,26 @@ _PI_LIMITS: Mapping[str, str] = {
 MAX_TREND_ITEMS = 4
 _CMO_KINDS: Mapping[str, str] = {
     "TITLE_SET": "Title options", "DESCRIPTION": "Description", "KEYWORDS": "Search keywords", "HASHTAGS": "Hashtags", "BULLETS": "Bullet points",
-    "LISTING_COPY": "Listing copy", "BACKEND_TERMS": "Backend search terms",
+    "LISTING_COPY": "Listing copy", "BACKEND_TERMS": "Backend search terms", "CATALOG_ANSWER": "Product details",
 }
+_BASIS_WORDS: Mapping[str, str] = {
+    "SELLER_PROVIDED": "you told me", "IMAGE_OBSERVED": "seen in your photo", "SOURCE_DERIVED": "from a cited source",
+    "ESTIMATED": "an estimate, confirm it before you list", "UNKNOWN": "not known yet",
+}
+
+
+def _catalog_item(x: Mapping[str, Any]) -> str:
+    """One catalog answer line: the value only if there is one, and always how sure it is. An unknown stays unknown; it is never filled in."""
+    name = str(x.get("attribute") or "detail").replace("_", " ").title()
+    basis = _BASIS_WORDS.get(str(x.get("basis")), "not known yet")
+    value = x.get("value")
+    if value in (None, ""):
+        est = x.get("estimate") or {}
+        sug = (x.get("suggestion") or {}).get("text")
+        guess = f" Suggestion: {sug}." if sug else ""
+        return f"{name}: not known yet ({basis}).{guess}" + (" Tell me this and I will use it." if x.get("requiresSellerInput") else "") + (f" Estimate: {est}." if est and not sug else "")
+    return f"{name}: {value} ({basis})"
+
 def _counted(text: str, a: Mapping[str, Any], stored: Any = None) -> str:
     """The text with its length, counted by CODE: the CMO's own stored count for a title, else the marketplace's counting rule applied here (UTF-16 code units unless the
     stored rule says otherwise). Never a model's figure."""
@@ -100,6 +118,7 @@ _CMO_ITEMS: Mapping[str, Any] = {
     "LISTING_COPY": lambda a: ([f"Description: {_counted(str(a['description']), a)}"] if a.get("description") else [])
     + [_counted(str(b), a) for b in a.get("bullets") or []]
     + ([f"Keywords: {', '.join(str(k) for k in a['keywords'])}"] if a.get("keywords") else []),
+    "CATALOG_ANSWER": lambda a: [_catalog_item(x) for x in a.get("attributes") or [] if isinstance(x, Mapping)],
     "BACKEND_TERMS": lambda a: ([f"{' '.join(str(t) for t in a['terms'])} ({a['byteCount']} bytes)" if isinstance(a.get("byteCount"), int) and not isinstance(a.get("byteCount"), bool)
                                 else ' '.join(str(t) for t in a['terms'])] if a.get("terms") else []),
 }
@@ -173,6 +192,9 @@ LEG_LABELS: Mapping[str, str] = {
     "cmo.generate_backend_terms": "The backend search terms",
     "cmo.generate_listing_copy": "The listing copy",
     "cmo.analyze_attachment": "The reading of your photo",
+    "cmo.approve_title": "Your title choice",
+    "cmo.catalog_answer": "The product details",
+    "cmo.confirm_image_hint": "Your photo confirmation",
     "cmo.market_trends": "The market trend research",
     "cmo.market_trends_preview": "The market research plan",
     "cfo.financial_health": "The financial health check",
@@ -435,6 +457,10 @@ class EvidenceCollector:
             self._trend_report(payload)
         elif leg.action_key == "cmo.analyze_attachment":
             pass  # the reading is shown to the seller by the photo-reading step as labelled suggestions; it is not a deliverable and carries no figure
+        elif leg.action_key == "cmo.approve_title":
+            self._title_choice(payload)
+        elif leg.action_key == "cmo.confirm_image_hint":
+            pass  # a zero-unit record of the seller's own confirmation; nothing to present
         elif leg.action_key.startswith("cmo."):
             self._cmo_artefacts(payload)
         elif leg.action_key in ("cfo.query", "cfo.performance"):
@@ -679,6 +705,16 @@ class EvidenceCollector:
         stmts = [" ".join(str(i.get("statement", "")).split())[:260] for i in (interp.get("items") or [])[:MAX_TREND_ITEMS] if i.get("statement")]
         if stmts:
             self.artefacts.append(("What the CMO makes of it", tuple(stmts), "The CMO's reading of the findings above, not verified. Decide for yourself before acting on it."))
+
+    def _title_choice(self, payload: Mapping[str, Any]) -> None:
+        """The seller's own title choice, quoted as saved. It is a record of their choice in Metrion; it is not a publication and not a marketplace approval."""
+        text = payload.get("approvedText")
+        if not text:
+            self.add_gap("Your title choice could not be saved.")
+            return
+        self.add_fact("The title you chose", f"“{text}”" + (" (worded by you)" if payload.get("editedBySeller") else ""), "SELLER_PROVIDED")
+        self.add_fact("What this means", "It is saved in Metrion as your choice. Nothing was published to any marketplace, and copying it later only records that you did.", "SOURCE_DERIVED")
+        self.add_fact("Next step", "Ask me to write the listing copy (description, bullet points and keywords) and I will base it on this title. That is a separate plan you approve.", "SOURCE_DERIVED")
 
     def _cmo_artefacts(self, payload: Mapping[str, Any]) -> None:
         """What CMO wrote. The text is the specialist's own content, shown quoted and labelled; it is never a figure and is not run through the money provenance path.

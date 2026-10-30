@@ -186,7 +186,7 @@ def _photo_reading_result(
     now = runtime.clock()
     started: Any = None
     if readable:
-        hidden = {"_obs": seen, "_attachment": {"id": str(attachment_id), "sha256": str(rows[0].get("sha256")) if rows else None}}
+        hidden = {"_obs": seen, "_attachment": {"id": str(attachment_id), "sha256": str(rows[0].get("sha256")) if rows else None, "analysis_id": analysis.get("analysisId")}}
         started = input_session.start(str(followup["action_key"]), input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices), prefill=followup.get("slots") or {}, hidden=hidden)
     if not isinstance(started, input_session.Ask):
         tail = ("Nothing usable could be read from it, so I have not guessed anything. " if not readable else "Nothing in it needs your confirmation for this request. ") + (

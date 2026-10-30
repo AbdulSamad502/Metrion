@@ -105,7 +105,7 @@ def test_a_quick_action_for_an_agent_the_member_lacks_is_refused(two_tenants, ap
     assert res.status == "DENIED" and repo.list_findings(a, inv) == []
 
 
-@pytest.mark.parametrize("key", ["cfo.enter_expense", "cfo.pricing", "cmo.approve_title", "cmo.catalog_answer", "cfo.gst_lookup", "service.gst_lookup", "not.a.real.key", "ci.research_now"])
+@pytest.mark.parametrize("key", ["cfo.enter_expense", "cfo.pricing", "cfo.gst_lookup", "service.gst_lookup", "not.a.real.key", "ci.research_now"])
 def test_a_quick_action_cannot_reach_anything_outside_the_closed_catalog(two_tenants, app_user, key):
     """Write-class (C21), registry-but-not-chat-supported, unwired and nonexistent keys all fail identically: nothing is dispatched."""
     a, _ = two_tenants

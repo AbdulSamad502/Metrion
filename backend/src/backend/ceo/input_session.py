@@ -88,7 +88,7 @@ def _sku(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     return t
 
 
-_FREE_TEXT_FIELDS = frozenset({"seller_title", "niche", "product_name", "category", "category_hint", "supplier_name", "notes", "expense_note", "expense_vendor", "expense_reason", "expense_pick"})
+_FREE_TEXT_FIELDS = frozenset({"seller_title", "niche", "product_name", "category", "category_hint", "supplier_name", "notes", "expense_note", "expense_vendor", "expense_reason", "expense_pick", "title_pick"})
 _CANCEL_PHRASE = re.compile(r"\b(?:cancel|abort|never ?mind|forget (?:it|this|that)|stop (?:this|the|asking)|drop (?:this|it)|no thanks|not (?:my|an?) expense|(?:that'?s|that is|it'?s|it is) not (?:mine|an expense|my expense)|(?:do not|don'?t) add (?:it|this|that))\b", re.IGNORECASE)
 
 
@@ -457,8 +457,21 @@ def _fact_field(attr: str) -> Field:
 
 
 IMAGE_FACT_FIELDS: tuple[Field, ...] = tuple(_fact_field(a) for a in IMAGE_FACT_ATTRS)
+def _seller_title_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    """The title the seller already approved for this product and marketplace comes first (the copy is then grounded on that approval); their product name is the fallback."""
+    from backend.ceo import cmo_chat  # noqa: PLC0415
+
+    out: list[Option] = []
+    approved = cmo_chat.approved_title_text(ctx.tenant_id, got.get("product_name"), got.get("marketplace"))
+    if approved:
+        out.append(Option(f"Use the title you approved: “{approved[:90]}{'…' if len(approved) > 90 else ''}”", approved, "You chose this title earlier"))
+    if got.get("product_name"):
+        out.append(Option(f"Use “{got['product_name']}”", str(got["product_name"]), "Your product name, as you gave it"))
+    return out
+
+
 _SELLER_TITLE = Field("seller_title", lambda c, g: "What title do you use for it today (or want to use)? I will write from it, so what you give me is what the copy is based on.", _text(500),
-                      lambda c, g: (Option(f"Use “{g['product_name']}”", str(g["product_name"]), "Your product name, as you gave it"),) if g.get("product_name") else ())
+                      _seller_title_options)
 
 def _fit(words: Sequence[str], limit: int = 100) -> str:
     out: list[str] = []
@@ -548,6 +561,92 @@ CMO_BACKEND_TERMS: tuple[Field, ...] = (
     _SELLER_TITLE,
     _BRAND_Q, _FEATURES_Q,
 )
+# ---- CMO 3.0 M0: choosing one of the title options in chat (cmo.approve_title) and asking for catalog details (cmo.catalog_answer) ----
+def _title_sets(ctx: Ctx) -> list[dict[str, Any]]:
+    from backend.ceo import cmo_chat  # noqa: PLC0415
+
+    return cmo_chat.title_sets(ctx.tenant_id)
+
+
+def _chosen_set(ctx: Ctx, got: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    from backend.ceo import cmo_chat  # noqa: PLC0415
+
+    return cmo_chat.choose_set(_title_sets(ctx), got.get("title_marketplace"))
+
+
+def _title_marketplace(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    have = {s["marketplace"] for s in _title_sets(ctx)}
+    found = [m for m in _MARKETPLACE_NAMES if m in raw.upper() and m in have]
+    return found[0] if len(found) == 1 else Reject("Which marketplace's titles: " + ", ".join(m.title() for m in sorted(have)) + "?")
+
+
+def _title_marketplace_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    return tuple(Option(str(s["marketplace"]).title(), str(s["marketplace"]).title(), "Your newest title options for it") for s in _title_sets(ctx)[:MAX_OPTIONS])
+
+
+def _title_pick_question(ctx: Ctx, got: Mapping[str, Any]) -> str:
+    from backend.ceo import cmo_chat  # noqa: PLC0415
+
+    chosen = _chosen_set(ctx, got)
+    if chosen is None:
+        return "Which title do you want to use?"
+    return (f"Here are your {str(chosen['marketplace']).title()} title options:\n{cmo_chat.options_text(chosen)}\n"
+            "Which one do you want to use? Pick one below, say its number, or type the exact title you want. Only the title you choose is saved as your choice.")
+
+
+def _title_pick(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    from backend.ceo import cmo_chat  # noqa: PLC0415
+
+    chosen = _chosen_set(ctx, got)
+    if chosen is None:
+        return Reject("I could not find title options to choose from. Ask me to write titles first.")
+    found = cmo_chat.parse_choice(raw, chosen["options"])
+    if found is None:
+        return Reject(f"Say the number of the title you want (1 to {len(chosen['options'])}), or type the exact title you want to use in full.")
+    kind, value = found
+    return f"{chosen['generationId']}|option|{value['id']}" if kind == "OPTION" else f"{chosen['generationId']}|edit|{value}"
+
+
+def _title_pick_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
+    chosen = _chosen_set(ctx, got)
+    if chosen is None:
+        return ()
+    return tuple(Option(f"Use option {o['rank']}", str(o["rank"]), o["text"][:140]) for o in chosen["options"][:MAX_OPTIONS])
+
+
+def _no_titles(ctx: Ctx, got: Mapping[str, Any]) -> str | None:
+    return None if _title_sets(ctx) else "You have no title options saved yet, so there is nothing to choose from. Ask me to write titles for a product first. Nothing was saved."
+
+
+CMO_APPROVE_TITLE: tuple[Field, ...] = (
+    Field("title_marketplace", lambda c, g: "You have title options for more than one marketplace. Which one are you choosing for?", _title_marketplace, _title_marketplace_options,
+          unanswerable=_no_titles, applies=lambda c, g: len(_title_sets(c)) > 1),
+    Field("title_pick", _title_pick_question, _title_pick, _title_pick_options, unanswerable=_no_titles),
+)
+
+_CATALOG_WORDS: Mapping[str, tuple[str, ...]] = {
+    "CATEGORY": ("category", "categories", "browse node", "department"), "COLOR": ("colour", "color", "colours", "colors"), "MATERIAL": ("material", "made of", "made from"),
+    "SIZE": ("size", "capacity", "volume"), "WEIGHT": ("weight",), "DIMENSIONS": ("dimension", "dimensions", "measurements"), "BRAND": ("brand",),
+}
+CATALOG_ALL = ("CATEGORY", "COLOR", "MATERIAL", "SIZE", "WEIGHT", "DIMENSIONS", "BRAND")
+
+
+def _catalog_questions(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = " ".join(raw.casefold().split()).strip(" .!?")
+    if t in ("all", "everything", "all of them", "all details", "all of these"):
+        return ",".join(CATALOG_ALL)
+    found = [name for name, words in _CATALOG_WORDS.items() if any(re.search(rf"\b{re.escape(w)}\b", t) for w in words)]
+    return ",".join(found) if found else Reject("Name the details you want (category, colour, material, size, weight, dimensions, brand), or say all.")
+
+
+CMO_CATALOG: tuple[Field, ...] = (
+    *_COMMON_FIRST,
+    Field("catalog_questions", lambda c, g: "Which details do you want me to work out for this product: category, colour, material, size, weight, dimensions, brand? Say all, or name them.",
+          _catalog_questions, lambda c, g: (Option("All of them", "all", "Each answer says whether it is your own statement, estimated or unknown"), Option("Colour, material and size", "colour, material, size"))),
+    _BRAND_Q, _SIZE_Q, _FEATURES_Q,
+)
+
+
 def _niche(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     t = " ".join(raw.split())
     if not (2 <= len(t) <= 100) or re.fullmatch(r"[\d\s.,₹-]+", t):
@@ -815,7 +914,7 @@ CMO_TRENDS: tuple[Field, ...] = (
                                 "I will save them as your confirmed niche terms, and only those terms are sent to the search providers.", _niche_terms, _niche_options,
           applies=lambda c, g: g.get("news_kind") in ("NICHE", "BOTH") and not _has_confirmed_niche(c)),
 )
-CEO_ONLY_INPUTS = frozenset({"niche", "news_kind"})  # collected by the CEO, never a slot of the CMO action
+CEO_ONLY_INPUTS = frozenset({"niche", "news_kind", "image_hints", "hint_analysis_id"})  # collected by the CEO, never a slot of the CMO action
 DR_TREND_RUN: tuple[Field, ...] = (
     Field("preview", lambda c, g: "", _text(4000)),
     Field("confirm", lambda c, g: str(g.get("preview", "")), _yes, lambda c, g: (Option("Yes, run the research", "yes", "Sends exactly these searches"),)),
@@ -981,9 +1080,9 @@ def _expense_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
 
 
 CMO_SESSIONS = ("cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords", "cmo.generate_bullets", "cmo.generate_backend_terms",
-                "cmo.generate_listing_copy", "cmo.market_trends")
+                "cmo.generate_listing_copy", "cmo.market_trends", "cmo.catalog_answer")
 # classifier slot name -> session field it can pre-fill (the seller already said it); the answer still goes through the same parser
-PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces"), "amount": ("budget", "candidate_prices_paise", "expense_amount"),
+PREFILL: Mapping[str, tuple[str, ...]] = {"product": ("product_name", "category", "sku"), "marketplace": ("marketplace", "marketplaces", "title_marketplace"), "amount": ("budget", "candidate_prices_paise", "expense_amount"),
                                           "competitor": ("competitor",), "period": ("expense_date",), "category": ("expense_category",), "note": ("expense_note", "expense_pick")}
 PLAYBOOK_PREFILL: Mapping[str, frozenset[str]] = {"NEW_PRODUCT_DECISION": frozenset({"sku"}), "COMPETITOR_PRICE_IMPACT": frozenset({"competitor", "candidate_prices_paise"})}  # what a decision playbook may be told up front
 
@@ -995,6 +1094,7 @@ SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "cfo.import_attachments": IMPORT_FIELDS, "cfo.expense_add": EXP_ADD, "cfo.expense_correct": EXP_CORRECT, "cfo.expense_void": EXP_VOID, "cfo.expense_paid": EXP_PAID,
     "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_DESCRIPTION, "cmo.generate_keywords": CMO_KEYWORDS,
     "cmo.generate_bullets": CMO_BULLETS, "cmo.generate_backend_terms": CMO_BACKEND_TERMS, "cmo.generate_listing_copy": CMO_LISTING,
+    "cmo.catalog_answer": CMO_CATALOG, "cmo.approve_title": CMO_APPROVE_TITLE,
 }
 
 
@@ -1255,6 +1355,9 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
             "category_text": c["category"], "budget_paise": c["budget"], "marketplaces": c["marketplaces"], "depth": "SHALLOW",
             **({"target_price_min_paise": rng["min"], "target_price_max_paise": rng["max"]} if rng else {}),
         }
+    if playbook == "cmo.approve_title":
+        generation_id, kind, value = str(c["title_pick"]).split("|", 2)
+        return {"generation_id": generation_id, **({"option_id": value} if kind == "option" else {"edited_text": value})}
     if playbook in CMO_SESSIONS:
         out = {k: v for k, v in c.items() if v is not None and not k.startswith("_")}  # a skipped optional field is simply absent: nothing is defaulted
         if playbook == "cmo.market_trends":
@@ -1262,6 +1365,20 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
             if "niche" in c and c["niche"] is None:  # the seller was asked for a niche and skipped it: no niche searches exist, so the everyday trending news is what runs (the plan card lists the searches)
                 out["sections"] = [s for s in out["sections"] if s != "NICHE"] or list(NEWS_SECTIONS["TRENDING"])
             out.pop("marketplaces", None)
+        if playbook != "cmo.market_trends":  # CMO 3.0 M0: a stable product identity, so what the seller confirmed is saved against the product and found again next time
+            from backend.ceo import cmo_chat  # noqa: PLC0415
+
+            sku = cmo_chat.product_sku(out.get("product_name"))
+            if sku:
+                out["sku"] = sku
+        if playbook == "cmo.catalog_answer":
+            out["questions"] = [q for q in str(out.pop("catalog_questions", "")).split(",") if q]
+        obs = c.get("_obs")
+        analysis = (c.get("_attachment") or {}).get("analysis_id") if isinstance(c.get("_attachment"), Mapping) else None
+        if isinstance(obs, Mapping) and analysis:  # a photo hint the seller confirmed or corrected with their own answer is also recorded as their statement (zero units)
+            hints = [{"attribute": a, "value": out[f"fact_{a}"]} for a in IMAGE_FACT_ATTRS if obs.get(a) and isinstance(out.get(f"fact_{a}"), str) and out[f"fact_{a}"].strip()]
+            if hints:
+                out["image_hints"], out["hint_analysis_id"] = hints, str(analysis)
         facts = {k[len("fact_"):]: out.pop(k) for k in list(out) if k.startswith("fact_")}  # only what the seller CONFIRMED or typed, as their own statement
         if "brand" in facts:
             out["brand"] = facts.pop("brand")

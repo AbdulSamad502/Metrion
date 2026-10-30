@@ -87,6 +87,8 @@ def test_every_planned_action_is_a_wired_registry_action_with_valid_slots():
         "cmo.generate_bullets": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
         "cmo.generate_backend_terms": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
         "cmo.generate_listing_copy": {"request_key": "k", "product_name": "bottle", "marketplace": "AMAZON", "seller_title": "Steel Bottle"},
+        "cmo.catalog_answer": {"request_key": "k", "product_name": "bottle", "questions": ["COLOR"]},
+        "cmo.approve_title": {"generation_id": "00000000-0000-0000-0000-000000000001", "option_id": "00000000-0000-0000-0000-000000000002"},
         "cmo.market_trends": {"request_key": "k", "marketplaces": ["AMAZON"], "plan_digest": "a" * 64},  # spec 6.40: the run is bound to a confirmed preview
         "cmo.market_trends_preview": {"marketplaces": ["AMAZON"]},
         "cfo.expense_add": {"effective_date": "2026-10-01", "category": "operating_overhead", "amount_paise": 500000, "request_key": "k"},

@@ -187,7 +187,7 @@ def test_the_gate_is_used_in_exactly_the_three_d8_places_and_the_module_does_no_
 # ------------------------------------------------------------------------------------------------ the known conflict, pinned (not blessed)
 CHAT_ACTIONS_NEEDING_APPROVAL_TODAY = frozenset({
     "pi.discover", "cmo.market_trends", "cmo.generate_title_sets", "cmo.generate_hashtags", "cmo.generate_description", "cmo.generate_keywords",
-    "cmo.generate_bullets", "cmo.generate_backend_terms", "cmo.generate_listing_copy",
+    "cmo.generate_bullets", "cmo.generate_backend_terms", "cmo.generate_listing_copy", "cmo.catalog_answer",  # CMO 3.0 M0: catalog details, metered, plan card
     "ci.discover_competitors",  # CI spec C34: the seller's product search terms go to Tavily, so it needs a stored approval plan like pi.discover
     # The Expense Tracker through the CEO (owner decision 2026-10-23, ceo-expense-tracker-chat.md): a saved financial record needs the seller's Approve on an exact card.
     "cfo.expense_add", "cfo.expense_correct", "cfo.expense_void", "cfo.expense_paid",

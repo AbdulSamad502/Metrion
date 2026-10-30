@@ -73,6 +73,9 @@ STATE_RULES: tuple[Rule, ...] = (
         r"\bwhat (?:product )?(?:ideas?|products?)\b.*\b(?:did you|have you|you) (?:find|found|list|listed|come up with)\b|\bproduct ideas? (?:you|we) (?:found|listed|have)\b|\bwhat did (?:you|the (?:product )?research|product intelligence) (?:find|found)\b"), "BUSINESS_STATE"),
     Rule("QT_LISTING_CONTENT", "CMO", _rx(
         r"\bwhat (?:titles?|descriptions?|hashtags?|keywords?|listing (?:content|copy)|content)\b.*\b(?:did|have) (?:we|you|i)\b.*\b(?:write|wrote|written|generat\w+|made|create\w*)\b|\b(?:titles?|descriptions?|hashtags?) (?:we|you) (?:wrote|made|generated|created)\b"), "BUSINESS_STATE"),
+    Rule("QT_LISTING_CONTENT", "CMO", _rx(
+        r"\b(?:show|see|give|tell|what|which|where)\b[^.?!]{0,60}\b(?:selected|approved|chosen|chose|picked|previously (?:selected|approved|chosen))\b[^.?!]{0,40}\b(?:titles?|descriptions?|bullets?|listing)\b"
+        r"|\b(?:which|what) (?:titles?|description) (?:did|have) (?:i|we) (?:select|choose|chose|pick|approve)\w*\b"), "BUSINESS_STATE"),
     Rule("QT_GOALS", "CFO", _rx(r"\bwhat(?:'s| is| are) (?:my|our) (?:goals?|targets?|target margin)\b|\bwhat (?:goal|target) (?:did i|have i|did we) (?:set|give|gave)\b"), "BUSINESS_STATE"),
     Rule("QT_AGENT_FINDINGS", "CFO", _rx(
         r"\bwhat (?:has|have|did) (?:each|every|the|all)(?: of the)? (?:agents?|specialists?)\b.*\b(?:found|find|report\w*)\b|\bwhat (?:has|have) (?:the )?agents? found\b"), "BUSINESS_STATE"),
@@ -172,6 +175,13 @@ RULES: tuple[Rule, ...] = _EXPENSE_RULES + (Rule("COMPETITOR_PRICE_IMPACT", "CI"
     Rule("ci.monitor_competitors", "CI", _rx(r"\b(?:monitor|re-?check|refresh|see how)\b.*\b(?:my )?(?:competitors?|rivals?)\b|\bhow are (?:my )?(?:competitors?|rivals?)\b|\bany (?:changes|news|updates?) (?:from|with|on) (?:my )?(?:competitors?|rivals?)\b|\bcheck\b[^.?!]*\b(?:my )?(?:tracked )?(?:competitors?|rivals?)\b")),
     Rule("ci.review_findings", "CI", _rx(r"\b(?:complaints?|complain\w*|reviews?)\b.*\bcompetitors?\b|\bcompetitors?\b.*\b(?:complaints?|reviews?)\b|\bwhat do customers (?:say|complain)\b.*\b(?:about|of)\b.*\b(?:competitor|rival)|\banaly[sz]e\b[^.?!]*\breviews?\b|\breview screenshots?\b|\bcustomer reviews?\b")),
     Rule("ci.discover_competitors", "CI", _rx(r"^(?!.*\b(?:screenshots?|uploaded|upload|research now|reviews?|complaints?)\b).*\b(?:find|discover|research|look for|search for|identify)\b.*\b(?:new |more |my |the )?(?:competitors?|rivals?)\b|\b(?:new|more|other) competitors?\b.*\b(?:for|of)\b|^(?!.*https?://)(?!.*\b(?:stop|remove|untrack)\b).*\b(?:track|add|follow)\b[^.?!]*\b(?:a|an|new|another)\s+(?:new\s+)?(?:competitors?|rivals?)\b")),
+    # CMO 3.0 M0: choosing one of the title options CMO wrote ("use option 2", "I like title 3", "approve this title"). It only records the seller's own choice.
+    Rule("cmo.approve_title", "CMO", _rx(
+        r"^(?!.*\b(?:write|generate|create|make|suggest|draft)\b)(?=.*\b(?:option|title|number|choice)s?\s*#?\s*(?:\d|one|two|three|four|five|first|second|third|fourth|fifth)\b)"
+        r".*\b(?:i (?:like|choose|pick|want|prefer|will use)|i'll use|let'?s (?:use|go with)|use|choose|pick|select|approve|go with|take|finali[sz]e)\b"
+        r"|^(?!.*\b(?:write|generate|create|make|suggest|draft)\b).*\b(?:approve|select|choose|pick|finali[sz]e)\b (?:this|that|the) (?:title|one)\b")),
+    Rule("cmo.catalog_answer", "CMO", _rx(
+        r"\bcatalog (?:details?|attributes?|answers?|info\w*|questions?)\b|\b(?:what|which) (?:is|are|'s)? ?(?:the )?(?:category|colou?r|material|brand|dimensions|weight)\b.{0,40}\b(?:of|for|on) (?:my|our|this)\b")),
     # B. hashtags: only an explicit request to GENERATE them. A question ABOUT hashtags (tell me about, what makes, how do, why, were those any good...) is not one.
     Rule(
         "cmo.generate_hashtags", "CMO",
