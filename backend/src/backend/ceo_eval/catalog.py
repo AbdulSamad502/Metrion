@@ -90,6 +90,7 @@ ACTION_TEXT: dict[str, tuple[str, tuple[str, ...]]] = {
     "ci.review_findings": ("What saved competitor review evidence says (recurring complaints, strengths)", ()),
     "ci.competitor_remove": ("Stop tracking one named competitor", ("competitor",)),
     "cmo.generate_title_sets": ("Write product title options for a product and marketplace (METERED)", ("product", "marketplace")),
+    "cmo.analyze_titles": ("Compare the saved title options for a marketplace, with reasons (no scores or ranking)", ("marketplace",)),
     "cmo.keyword_intelligence": ("Research which keywords fit a product, with the evidence for each (no search volume)", ("product",)),
     "cmo.approve_title": ("Record the seller's choice of one generated title option", ("option",)),
     "cmo.generate_listing_copy": ("Write a full listing (title, description, bullets) for a product and marketplace (METERED)", ("product", "marketplace")),

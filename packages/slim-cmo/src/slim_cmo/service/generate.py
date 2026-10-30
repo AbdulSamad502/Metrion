@@ -221,6 +221,11 @@ class GenerationService:
         self._clock = clock
         self._kinds = accepted_row_kinds
 
+    @property
+    def accepted_row_kinds(self) -> frozenset[ConstraintRowKind]:
+        """Which rule rows this service may read (VERIFIED in production). Read-only: the title analysis uses the same set."""
+        return self._kinds
+
     # ---- public actions ---------------------------------------------------------------------
 
     def generate_title_sets(self, actor: Actor, intake: Intake, marketplaces: Sequence[Marketplace]) -> RunReport:

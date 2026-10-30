@@ -194,6 +194,7 @@ LEG_LABELS: Mapping[str, str] = {
     "cmo.analyze_attachment": "The reading of your photo",
     "cmo.approve_title": "Your title choice",
     "cmo.keyword_intelligence": "The keyword research",
+    "cmo.analyze_titles": "The title comparison",
     "cmo.catalog_answer": "The product details",
     "cmo.confirm_image_hint": "Your photo confirmation",
     "cmo.market_trends": "The market trend research",
@@ -462,6 +463,8 @@ class EvidenceCollector:
             self._title_choice(payload)
         elif leg.action_key == "cmo.keyword_intelligence":
             self._keyword_intel(payload)
+        elif leg.action_key == "cmo.analyze_titles":
+            self._title_analysis(payload)
         elif leg.action_key == "cmo.confirm_image_hint":
             pass  # a zero-unit record of the seller's own confirmation; nothing to present
         elif leg.action_key.startswith("cmo."):
@@ -708,6 +711,55 @@ class EvidenceCollector:
         stmts = [" ".join(str(i.get("statement", "")).split())[:260] for i in (interp.get("items") or [])[:MAX_TREND_ITEMS] if i.get("statement")]
         if stmts:
             self.artefacts.append(("What the CMO makes of it", tuple(stmts), "The CMO's reading of the findings above, not verified. Decide for yourself before acting on it."))
+
+    def _title_analysis(self, payload: Mapping[str, Any]) -> None:
+        """The title options with their 0-100 internal quality score, the points of each criterion and why points were lost, quoted as saved. Marketplace compliance is shown beside
+        the score, never inside it. A hard failure is stated first and that option is never the recommendation, whatever its score. A criterion that could not be assessed says so; it
+        is never shown as zero. No ranking, conversion or sales claim is ever shown."""
+        rules = {"PASS": "PASS", "FAIL": "FAIL", "NOT_ASSESSED": "NOT_ASSESSED"}
+        names = {"keywordRelevance": "keywords", "factAccuracy": "confirmed facts", "readability": "readability", "buyerIntent": "buyer intent", "structure": "structure"}
+        options = payload.get("options") or []
+        items: list[str] = []
+        compare: list[str] = []
+        for o in options:
+            sc = o.get("scores") or {}
+            ov = sc.get("overall") or {}
+            crit = sc.get("criteria") or {}
+            comp = rules.get(str(((o.get("dimensions") or {}).get("marketplaceRules") or {}).get("status")), "NOT_ASSESSED")
+            parts = []
+            for k, label in names.items():
+                c = crit.get(k) or {}
+                parts.append(f"{label} {c['earned']}/{c['max']}" if c.get("status") == "ASSESSED" else f"{label} not assessed")
+            if ov.get("status") == "ASSESSED":
+                head = f"{ov['score']}/100 ({str(ov['band']).replace('_', ' ').lower()})"
+                cover = f" [{ov['assessablePoints']} of 100 points assessable]"
+            else:
+                head, cover = "no overall score", f" [{ov.get('note', 'not enough evidence')}]"
+            line = f"Option {o['rank']} ({o.get('strategy')}): {o['text']} | quality score {head}{cover} | " + ", ".join(parts) + f" | marketplace compliance (separate): {comp}"
+            if o.get("hardFailures"):
+                line = f"Option {o['rank']} ({o.get('strategy')}): {o['text']} | HARD FAIL, never recommended whatever its score: " + " ".join(o["hardFailures"]) + f" | score for reference {head}{cover}"
+            lost = [f"{names[k]} -{d['points']} ({d['reason']})" for k, c in crit.items() for d in (c.get("deductions") or []) if d.get("points")]
+            if lost and not o.get("hardFailures"):
+                line += " | points lost: " + "; ".join(lost)
+            if o.get("strengths") and not o.get("hardFailures"):
+                line += " | good: " + "; ".join(o["strengths"])
+            items.append(line)
+            compare.append(f"Option {o['rank']}: " + (f"{head}, {ov['assessablePoints']} of 100 points assessable" if ov.get("status") == "ASSESSED" else f"no overall score ({ov.get('assessablePoints', 0)} of 100 points assessable)") + (" - HARD FAIL" if o.get("hardFailures") else ""))
+        if items:
+            self.artefacts.append(("Title quality scores", tuple(items), "Internal listing-quality assessment of wording and fit with your own confirmed facts. Not a marketplace ranking, search position, conversion or sales prediction."))
+            self.artefacts.append(("Comparison of all options", tuple(compare), None))
+        else:
+            self.add_gap("There were no title options to compare.")
+        rec = payload.get("recommendation") or {}
+        if rec.get("text"):
+            self.add_fact("Recommendation", str(rec["text"]), "SOURCE_DERIVED")
+        scoring = payload.get("scoring") or {}
+        if scoring.get("criteria"):
+            self.add_fact("How the score works", "Out of 100: " + ", ".join(f"{names.get(k, k)} {v}" for k, v in scoring["criteria"].items()) + f". At least {scoring.get('minimumAssessedPoints')} points must be assessable for an overall score.", "SOURCE_DERIVED")
+        for n in payload.get("notes") or []:
+            self.add_fact("Not assessed", str(n), "SOURCE_DERIVED")
+        for line in payload.get("limits") or []:
+            self.add_fact("Limit", str(line), "SOURCE_DERIVED")
 
     def _keyword_intel(self, payload: Mapping[str, Any]) -> None:
         """Keyword candidates with their rule-based labels and evidence, quoted as saved. Volume, demand and rank are never shown as numbers: they are not assessed."""

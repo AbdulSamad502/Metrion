@@ -645,6 +645,11 @@ CMO_KEYWORD_INTEL: tuple[Field, ...] = (
           _cmo_marketplace_options(True, skip=True), optional=True),
 )
 
+CMO_ANALYZE_TITLES: tuple[Field, ...] = (
+    Field("title_marketplace", lambda c, g: "You have title options for more than one marketplace. Which one should I compare?", _title_marketplace, _title_marketplace_options,
+          unanswerable=_no_titles, applies=lambda c, g: len(_title_sets(c)) > 1),
+)
+
 CMO_CATALOG: tuple[Field, ...] = (
     *_COMMON_FIRST,
     Field("catalog_questions", lambda c, g: "Which details do you want me to work out for this product: category, colour, material, size, weight, dimensions, brand? Say all, or name them.",
@@ -1100,7 +1105,7 @@ SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "cfo.import_attachments": IMPORT_FIELDS, "cfo.expense_add": EXP_ADD, "cfo.expense_correct": EXP_CORRECT, "cfo.expense_void": EXP_VOID, "cfo.expense_paid": EXP_PAID,
     "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_DESCRIPTION, "cmo.generate_keywords": CMO_KEYWORDS,
     "cmo.generate_bullets": CMO_BULLETS, "cmo.generate_backend_terms": CMO_BACKEND_TERMS, "cmo.generate_listing_copy": CMO_LISTING,
-    "cmo.catalog_answer": CMO_CATALOG, "cmo.approve_title": CMO_APPROVE_TITLE, "cmo.keyword_intelligence": CMO_KEYWORD_INTEL,
+    "cmo.catalog_answer": CMO_CATALOG, "cmo.approve_title": CMO_APPROVE_TITLE, "cmo.keyword_intelligence": CMO_KEYWORD_INTEL, "cmo.analyze_titles": CMO_ANALYZE_TITLES,
 }
 
 
@@ -1361,6 +1366,8 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
             "category_text": c["category"], "budget_paise": c["budget"], "marketplaces": c["marketplaces"], "depth": "SHALLOW",
             **({"target_price_min_paise": rng["min"], "target_price_max_paise": rng["max"]} if rng else {}),
         }
+    if playbook == "cmo.analyze_titles":
+        return {**({"title_marketplace": c["title_marketplace"]} if c.get("title_marketplace") else {})}  # the orchestrator resolves the saved set (it holds the tenant)
     if playbook == "cmo.keyword_intelligence":
         from backend.ceo import cmo_chat  # noqa: PLC0415
 

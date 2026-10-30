@@ -276,6 +276,44 @@ When the CEO runs a CMO writing action from chat it supplies `sku` = a determini
 
 **Storage.** `cmo_keyword_analysis`: one immutable row per analysis (candidates, exclusions, evidence, limits exactly as shown), `FORCE` RLS, `SELECT, INSERT` only for the application role, idempotent per `(tenant, request_key)`. No volume, demand or rank column exists. **Open decisions (not invented):** whether analyses should ever be metered (V1: free, because they are derived from the seller's own data with no model); how long analyses are kept; a keyword-demand source (PI 2.0 may add one, which would fill the `NOT_ASSESSED` slots without changing this structure).
 
+### 6.15 Five-title quality analyzer and 0-100 Title Quality Score (CMO 3.0 M3, amendment 2026-10-30, scoring added 2026-10-30)
+
+**Status: implemented** (`slim_cmo/titles_analysis/analyzer.py` pure rules, method `title-analysis-v2`; `slim_cmo/service/title_analysis.py`; route `POST /api/v1/cmo/title-analysis`; CEO action `cmo.analyze_titles`; table `cmo_title_analysis`, migration `20261030_0005`). Tests: `tests/unit/titles_analysis/`, `backend/tests/unit/test_cmo_m3_unit.py`, `backend/tests/integration/test_cmo_m3_integration.py`.
+
+**Purpose.** "Compare these titles" / "which title is best?" scores each saved title option 0-100 against the seller's own confirmed facts, explains every point kept or lost, shows marketplace compliance separately, and recommends one only where the evidence supports it. Zero units, no model, no network, integer arithmetic only; one `agent_run` per new analysis. The options, their text and their `rank` are never changed (`rank` stays *presentation order, not a quality claim*). Choosing a title (§6.12) and billing are untouched.
+
+**The score is an internal listing-quality assessment** of wording and fit with the seller's confirmed facts. It is **not** an Amazon SEO ranking, a search position, search volume, a conversion rate or a sales prediction, and every result says so.
+
+**Scoring rules (fixed; change them only by amending this section).** Five criteria, 100 points:
+
+| Criterion | Points | Rule (integer, rounded half up) | Deductions shown |
+|---|---|---|---|
+| Keyword relevance | 25 | `25 x covered / total` of the title-worthy, recommended keywords from the §6.14 analysis of the same facts that the title carries | the missing keywords, by name |
+| Confirmed-fact accuracy | 25 | **25** if every claim is backed by the seller's facts; **0** on any hard failure (invented number, unconfirmed claim, forbidden wording, a value the seller never confirmed; the §6.5 gates plus the §6.14 claim list) | the finding, -25 |
+| Readability | 20 | start at 20, minus per flag: a content word repeated 3+ times -8; ALL CAPS words -5; more than 2 symbols -4; fewer than 3 words -8; more than 20 words -4 (floor 0) | each flag with its points |
+| Buyer intent | 15 | `15 x kept / total` over the kinds the seller confirmed, weighted: product type 6, brand 3, specification (size, material, colour) 4, use case 2 | the kinds left out |
+| Structure / positioning | 15 | `15 x kept / total` over: product type within the first 8 words (6); no repeated two-word phrase (3); at most 3 separators (3); brand within the first 3 words, only when a brand is confirmed (3) | the rules not met |
+
+**Overall score and band.** The overall score is the sum when all five criteria are assessed. Bands (internal, not marketplace terms): **80-100 STRONG, 65-79 GOOD, 50-64 FAIR, 0-49 WEAK**. The thresholds in the table (3 repeats, 2 symbols, 3 words, 20 words, 8 / 3 word windows) are internal rules of thumb about wording, stated as such.
+
+**Missing evidence is never a score.** A criterion whose essential evidence is missing (no confirmed facts for fact accuracy and buyer intent; no title-worthy keywords for keyword relevance) is `NOT_ASSESSED`: it earns nothing, and it is removed from **both** the points earned and the points assessable. It is never counted as zero or as full marks. The overall score is then `100 x earned / assessable` (rounded half up) and is shown with how many of the 100 points could be assessed. If fewer than **50** points are assessable there is **no overall score** (`NOT_ASSESSED`) and no recommendation. Readability and structure need only the title, so they are always assessable.
+
+**Every score states the evidence behind it.** Each title shows its overall score together with how many of the 100 points could be assessed (for example `82/100, 85 of 100 points assessable`), even when it is 100 of 100, and so does the comparison line and the recommendation.
+
+**Recommendations never compare unequal evidence.** Only options with no hard failure and an overall score compete, and only options assessed on the **same** number of assessable points compete with each other: if coverage differs, the comparison is limited to the group with the most assessable points and the answer names the options that were not compared and why (95/100 on 60 assessable points is not the same evidence as 80/100 on 100). Ties are decided only within a coverage group. Within one analysis all options share the same coverage today (fact, keyword and intent evidence belong to the product, not the title); the rule is the safeguard if that ever changes.
+
+**Marketplace compliance is not in the score.** It stays a separate `PASS` / `FAIL` / `NOT_ASSESSED` against the VERIFIED, current `format_constraint` row (the generator's own `check_title`). With no verified, current rule (no row, stale, counting rule unverified, configuration missing) it is `NOT_ASSESSED`, never a pass. A test-fixture row is accepted only in tests and is labelled *placeholder, not a verified marketplace rule*. The limit moves no point of the score.
+
+**Hard failures and the recommendation.** An unsupported claim or a verified-rule violation is a **hard failure**: the option's score is shown "for reference" with band **NOT USABLE**, and the option is **never** recommended, whatever its score. Among the remaining options with an overall score, the recommendation is the highest score and the answer names the next best. Equal top scores are a **tie** (no single best; it never picks by position). If every option fails or none can be scored, none is recommended and the answer says why.
+
+**Positioning** stays descriptive (Brand-first, Specification-first, Use-case-first, Search-coverage; competitor themes mentioned when supplied by the CEO, otherwise `NOT_ASSESSED`); it is not scored on its own.
+
+**What the seller sees in CEO chat.** For each option: the strategy, the title, the overall score and band, the five criterion scores (or "not assessed"), marketplace compliance beside it, the points lost with reasons, and what is good; then a one-line comparison of all options, the recommendation, how the score works, and the limits. Nothing states ranking, search volume, conversion or sales.
+
+**Storage and security.** `cmo_title_analysis`: one immutable row per analysis (all options' scores and deductions, hard failures, strategy per option, recommendation, scoring definition, limits, exactly as shown), `FORCE` RLS, composite `(tenant_id, generation_id)` foreign key to the title set, `SELECT, INSERT` only for the application role, idempotent per `(tenant, request_key)`. A foreign or unknown title set is a 404 identical to a missing one. No tenant, meter or cap field is accepted from the client.
+
+**Open decisions (not invented):** whether analyses should ever be metered (V1: free); retention (existing data policy); whether the weights and thresholds above should be tuned after real seller use; a keyword-demand source (would fill `NOT_ASSESSED` slots without changing this structure). **Not in M3:** the mobile / desktop preview (M4), listing audits and the readiness checklist (M5), CEO-proposed rewording of a title (M6).
+
 ### 6.4 Title sets, approval and marketplace-specific copy packs
 
 **Workflow, per marketplace the seller selected:** title set → seller approval → copy pack. Each marketplace runs this workflow independently with its own constraint row, its own approval and its own pack.

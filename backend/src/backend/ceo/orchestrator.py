@@ -217,7 +217,7 @@ def _resume_plain_question(tenant: UUID, investigation_id: UUID, text: str, toda
 def _with_request_key(done: Any, anchor: str) -> dict[str, Any]:
     """The collected inputs plus an idempotency key derived from the message that finished them: answering the same card twice reuses the finished result."""
     out = dict(done.inputs)
-    if done.playbook in input_session.CMO_SESSIONS or done.playbook == "cmo.keyword_intelligence" or done.playbook in input_session.EXPENSE_SESSIONS or done.playbook in input_session.IMPORT_SESSIONS:
+    if done.playbook in input_session.CMO_SESSIONS or done.playbook in ("cmo.keyword_intelligence", "cmo.analyze_titles") or done.playbook in input_session.EXPENSE_SESSIONS or done.playbook in input_session.IMPORT_SESSIONS:
         out["request_key"] = f"ceo-{anchor}"
     if done.playbook in ("pi.discover", "NEW_PRODUCT_DECISION"):
         out["ceo_ref"] = f"ceo-{anchor}"
@@ -765,7 +765,13 @@ def _run_admitted(
                 notes = [f"Researching: {run_inputs['category_text']} on " + ", ".join(str(m).title() for m in run_inputs["marketplaces"]) + "."]
         elif route == "ACTION":
             direct = {k: v for k, v in run_inputs.items() if k not in input_session.CEO_ONLY_INPUTS}
-            if key in cmo_delegation.CI_INFORMED or key == "cmo.keyword_intelligence":  # CEO-brokered: the seller's saved competitor listing themes inform the writing (slim-cmo-agent.md 6.7); none usable = independent, said on the card
+            if key == "cmo.analyze_titles":  # CMO 3.0 M3: the saved title set to compare is resolved by code from the seller's own sets (the marketplace they chose, or their only set)
+                chosen_set = cmo_chat.choose_set(cmo_chat.title_sets(tenant), direct.pop("title_marketplace", None))
+                if chosen_set is None:
+                    invalid_form = "you have no title options saved to compare yet. Ask me to write titles first"
+                else:
+                    direct["generation_id"] = chosen_set["generationId"]
+            if key in cmo_delegation.CI_INFORMED or key in ("cmo.keyword_intelligence", "cmo.analyze_titles"):  # CEO-brokered: the seller's saved competitor listing themes inform the writing (slim-cmo-agent.md 6.7); none usable = independent, said on the card
                 ci_ids, _ = cmo_ci_inputs.broker(tenant, ctx.role, ctx.permissions, now=now)
                 if ci_ids:
                     direct["ci_insight_ids"] = ci_ids

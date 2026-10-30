@@ -567,7 +567,7 @@ def result_footer(legs: Sequence[LegResult]) -> str:
             units += p["unitsBilled"]
     lines = []
     if any(a.get("status") == "COMPLETE" and a.get("outputType") == "TITLE_SET" for leg in legs if leg.action_key in DELEGATED_ACTIONS for a in (leg.payload or {}).get("artefacts") or []):
-        lines.append("To choose one, say “use option 2” (or its number), or type the exact title you want. Choosing only saves your choice in Metrion; nothing is published.")
+        lines.append("To compare them, say “compare these titles”. To choose one, say “use option 2” (or its number), or type the exact title you want. Choosing only saves your choice in Metrion; nothing is published.")
     if refs:
         lines.append("Saved as: " + "; ".join(refs) + ".")
     lines.append(f"Used from your plan: {units} CMO unit{'s' if units != 1 else ''}.")

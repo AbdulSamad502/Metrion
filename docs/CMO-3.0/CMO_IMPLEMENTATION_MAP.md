@@ -254,3 +254,7 @@ Smart Product Intelligence is implemented as a read model over `seller_fact` (no
 ## 13. M2 result (2026-10-30)
 
 Keyword Intelligence implemented: pure rules + one append-only table (`cmo_keyword_analysis`, migration `20261030_0004`), zero units, no model. Authority: `slim-cmo-agent.md` §6.14. Open: metering decision, retention, a demand source. Release blocker B5 added: a real run with saved competitor rows.
+
+## 14. M3 result (2026-10-30)
+
+Five-Title Quality Analyzer with a deterministic **0-100 Title Quality Score** (keywords 25, confirmed facts 25, readability 20, buyer intent 15, structure 15; bands 80/65/50), implemented as pure integer rules + one append-only table (`cmo_title_analysis`, migration `20261030_0005`), zero units, no model. Authority: `slim-cmo-agent.md` §6.15 (full scoring rules there). Marketplace compliance is separate (PASS / FAIL / NOT_ASSESSED); unsupported claims are hard failures never recommended; missing evidence is NOT_ASSESSED and left out of the score, never zero. Open question Q1 is resolved by the owner's instruction: numeric 0-100.

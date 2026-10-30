@@ -139,6 +139,7 @@ ACTION_EFFECTS: Mapping[str, ActionEffects] = {
     "cmo.approve_title": _NONE,
     "cmo.confirm_niche_terms": _NONE,
     "cmo.confirm_image_hint": _NONE,
+    "cmo.analyze_titles": _NONE,  # reads the seller's saved titles, confirmed facts and the stored marketplace rule; no model, nothing leaves Metrion, zero units
     "cmo.keyword_intelligence": _NONE,  # reads the seller's own saved facts and saved competitor themes; no model, nothing leaves Metrion, zero units
     # The seller's attached product photo goes (by reference; the CMO reads it itself) to Metrion's own operator-controlled vision model. 0 CMO units, but it ALWAYS needs its own
     # small plan card (ceo-cmo-delegation.md CD10, option A): the card names the photo and the endpoint label before anything is read.
