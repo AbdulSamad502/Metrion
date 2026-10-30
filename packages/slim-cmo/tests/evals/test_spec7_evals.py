@@ -179,14 +179,33 @@ def test_eval_07_vision_output_reports_nothing_that_is_not_literally_visible():
 
 # ---------------------------------------------------------------------------------------------------------- 8
 def test_eval_08_competitor_gap_themes_are_never_asserted_as_claims_about_the_sellers_product():
-    """CI-informed generation (spec §6.7) is phase P11 and is NOT built. The only honest assertion today: no CI input path exists,
-    so nothing CI-derived can be asserted. Reported as DEFERRED in the evaluation report, not as a pass of the P11 behaviour."""
-    import dataclasses
+    """CI-informed generation (spec §6.7): competitor gap themes and differentiation opportunities
+    are observations about the market field, never claims about the seller's product. If a model
+    asserts unsupported market claims or competitor claims, the originality and claims check sets
+    the draft aside and falls back to generation from seller facts alone with independent mode."""
+    from slim_cmo.ci_inputs import CiInputs, CiInsight
 
-    assert "ci_inputs" not in {f.name for f in dataclasses.fields(Intake)}
+    # 1. Independent generation without CI inputs never carries a CI snapshot
     svc, store, _p = make([TS])
     svc.generate_title_sets(ACTOR, INTAKE, [M.AMAZON])
     assert all(getattr(r, "output_structured", None) is None or "ci_inputs_snapshot" not in (r.output_structured or {}) for r in store.rows())
+    assert all(r.input_mode == "INDEPENDENT" for r in store.rows())
+
+    # 2. Hostile model attempting to assert competitor claims (#1 Best Seller, converts better) with CI inputs
+    ins = CiInsight("11111111-1111-1111-1111-111111111111", keyword_themes=("insulated", "leakproof", "steel"), differentiation_opportunities=("bpa",))
+    ci = CiInputs(insights=(ins,), references=("Caspian Stainless Steel Bottle 1 Litre",), exclude_terms=("caspian",))
+    hostile = j(titles=["AquaKeep Bottle #1 Best Seller in India", "AquaKeep Bottle converts better", "AquaKeep Caspian Bottle"])
+
+    store2 = InMemoryStore()
+    svc2, _s2, _p2 = make([hostile, TS, TS], store2)
+    intake_with_ci = replace(INTAKE, ci_inputs=ci)
+    svc2.generate_title_sets(ACTOR, intake_with_ci, [M.AMAZON])
+
+    # Assert hostile draft was rejected, set aside, and fell back to independent mode from seller facts alone
+    row = store2.rows()[-1]
+    assert row.input_mode == "INDEPENDENT"
+    assert row.ci_inputs_snapshot is None
+    assert all("#1" not in o.text and "Best Seller" not in o.text and "caspian" not in o.text.lower() for o in row.options)
 
 
 # ---------------------------------------------------------------------------------------------------------- 9

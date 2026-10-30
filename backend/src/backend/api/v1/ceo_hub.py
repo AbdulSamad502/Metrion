@@ -20,6 +20,7 @@ from backend.config import (
     ci_vision_model,
     ollama_host,
     ollama_keep_alive,
+    ollama_vision_think,
     ollama_vision_timeout_seconds,
 )
 from backend.repositories import agent_run_repo
@@ -39,7 +40,10 @@ def _vision_extractor() -> OllamaVisionExtractor:
     return OllamaVisionExtractor(
         image_store=LocalDiskImageStore(ci_evidence_storage_dir()),
         ollama=HttpOllamaClient(
-            host=ollama_host(), timeout_seconds=ollama_vision_timeout_seconds(), keep_alive=ollama_keep_alive()
+            host=ollama_host(),
+            timeout_seconds=ollama_vision_timeout_seconds(),
+            keep_alive=ollama_keep_alive(),
+            think=ollama_vision_think(),
         ),
         model=ci_vision_model(),
     )

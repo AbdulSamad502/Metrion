@@ -14,12 +14,15 @@ seam at all, let alone conditionally.
 from __future__ import annotations
 
 import base64
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
 
 from competitor_intelligence.evidence.ollama_errors import describe_ollama_error
+
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 
 
 class OllamaUnavailable(Exception):
@@ -43,12 +46,15 @@ class HttpOllamaClient:
     # that cold start was measured at ~140 s for llava on a CPU host. `None` leaves Ollama's
     # default untouched; an operator can pass e.g. "30m" to keep the model resident.
     keep_alive: str | None = None
+    think: bool | None = False
 
     def generate(self, *, model: str, prompt: str, image_bytes: bytes) -> str:
         image_b64 = base64.b64encode(image_bytes).decode("ascii")
         payload: dict[str, object] = {"model": model, "prompt": prompt, "images": [image_b64], "stream": False}
         if self.keep_alive is not None:
             payload["keep_alive"] = self.keep_alive
+        if self.think is not None:
+            payload["think"] = self.think
         try:
             response = httpx.post(
                 f"{self.host}/api/generate",
@@ -63,4 +69,4 @@ class HttpOllamaClient:
         text = body.get("response")
         if not isinstance(text, str):
             raise OllamaUnavailable("Ollama response had no 'response' text field")
-        return text
+        return _THINK_BLOCK_RE.sub("", text).strip()

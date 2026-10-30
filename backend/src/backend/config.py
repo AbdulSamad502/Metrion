@@ -619,6 +619,18 @@ def ollama_keep_alive() -> str | None:
 
 
 @lru_cache
+def ollama_vision_think() -> bool | None:
+    """Optional `CI_VISION_THINK=false|true` or `OLLAMA_VISION_THINK`. Default False disables
+    thinking/reasoning tokens for vision extraction (e.g. qwen3.5:4b), which otherwise takes ~90s on CPU."""
+    raw = os.environ.get("CI_VISION_THINK") or os.environ.get("OLLAMA_VISION_THINK")
+    if raw is None or not raw.strip():
+        return False
+    if raw.strip().lower() not in ("true", "false"):
+        raise ValueError(f"CI_VISION_THINK must be true or false, got {raw!r}")
+    return raw.strip().lower() == "true"
+
+
+@lru_cache
 def ci_vision_model() -> str:
     """The Ollama model used for listing-screenshot field extraction (`evidence/
     vision_extractor.py`). No model choice is locked by the spec (§1a item 4 / Q7 remains

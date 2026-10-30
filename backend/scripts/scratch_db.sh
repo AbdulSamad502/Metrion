@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Clean scratch Postgres 16 + pgvector on port 5544, roles from docker/postgres-init, every package migrated in CI order.
+# This is the DISPOSABLE verification database (metrion-verify-pg). The persistent manual-testing database is `metrion-manual-pg`, also on 5544
+# (docs/ci-v3-local-testing.md): only one of the two may run at a time, and `up` refuses while the manual one is running. `down` removes only metrion-verify-pg.
 # Usage: bash backend/scripts/scratch_db.sh up|down        (then `source` the env printed by `env`)
 set -euo pipefail
 export MSYS_NO_PATHCONV=1
@@ -15,6 +17,9 @@ export CLERK_JWT_KEY=$'-----BEGIN PUBLIC KEY-----\nCIPLACEHOLDER\n-----END PUBLI
 EOF
   exit 0 ;;
 esac
+if [ "$(docker ps -q -f name='^metrion-manual-pg$')" ]; then
+  echo "metrion-manual-pg (persistent manual-testing DB) is running on 5544. Stop it first: docker stop metrion-manual-pg" >&2; exit 1
+fi
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d --name "$NAME" -e POSTGRES_USER=metrion -e POSTGRES_PASSWORD=metrion_dev_password -e POSTGRES_DB=metrion -p 5544:5432 \
   -v "$(cygpath -w "$ROOT/docker/postgres-init"):/docker-entrypoint-initdb.d:ro" pgvector/pgvector:pg16 >/dev/null

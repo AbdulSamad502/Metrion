@@ -123,7 +123,7 @@ class OllamaEvalModel:
                     if chunk.get("done"):
                         final = chunk
         except httpx.HTTPError as exc:
-            raise OllamaUnavailable(f"Ollama request failed: {describe_ollama_error(exc, self.model)}") from None
+            raise OllamaUnavailable(f"Ollama request failed: {describe_ollama_error(exc, self.name)}") from None
         text = _THINK_BLOCK_RE.sub("", "".join(parts)).strip()
         return Completion(
             text=text, wall_ms=int((time.perf_counter() - started) * 1000), ttft_ms=ttft, load_ms=_ms(final.get("load_duration")),

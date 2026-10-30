@@ -332,7 +332,7 @@ def review_intake(slots: Any, ctx: AuthContext, leg: LegContext) -> dict[str, An
     from competitor_intelligence.review_insight.ollama_extractor import OllamaReviewVisionExtractor
     from competitor_intelligence.review_insight.submit import submit_review_research
 
-    from backend.config import LlmEndpointNotVerified, ci_review_vision_model, ollama_host, ollama_keep_alive, ollama_vision_timeout_seconds, verified_llm_endpoint
+    from backend.config import LlmEndpointNotVerified, ci_review_vision_model, ollama_host, ollama_keep_alive, ollama_vision_think, ollama_vision_timeout_seconds, verified_llm_endpoint
 
     tenant_id = _tenant(ctx)
     if leg.investigation_id is None:
@@ -354,7 +354,12 @@ def review_intake(slots: Any, ctx: AuthContext, leg: LegContext) -> dict[str, An
     image_ref = store.write(data)
     extractor = OllamaReviewVisionExtractor(
         image_store=store,
-        ollama=HttpOllamaClient(host=ollama_host(), timeout_seconds=ollama_vision_timeout_seconds(), keep_alive=ollama_keep_alive()),
+        ollama=HttpOllamaClient(
+            host=ollama_host(),
+            timeout_seconds=ollama_vision_timeout_seconds(),
+            keep_alive=ollama_keep_alive(),
+            think=ollama_vision_think(),
+        ),
         model=ci_review_vision_model(),
     )
     snapshot = competitor_snapshot_repo.latest_usable_snapshot(tenant_id, slots.competitor_url_id)

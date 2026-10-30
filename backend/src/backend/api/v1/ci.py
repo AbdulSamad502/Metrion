@@ -23,6 +23,7 @@ from backend.config import (
     ci_review_vision_model,
     ollama_host,
     ollama_keep_alive,
+    ollama_vision_think,
     ollama_vision_timeout_seconds,
 )
 from backend.entitlement import entitlement_check_value, resolve_ci_entitlement
@@ -463,7 +464,10 @@ def submit_review_research_endpoint(
     extractor = OllamaReviewVisionExtractor(
         image_store=LocalDiskImageStore(ci_evidence_storage_dir()),
         ollama=HttpOllamaClient(
-            host=ollama_host(), timeout_seconds=ollama_vision_timeout_seconds(), keep_alive=ollama_keep_alive()
+            host=ollama_host(),
+            timeout_seconds=ollama_vision_timeout_seconds(),
+            keep_alive=ollama_keep_alive(),
+            think=ollama_vision_think(),
         ),
         model=ci_review_vision_model(),
     )

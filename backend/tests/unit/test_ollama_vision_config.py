@@ -26,10 +26,10 @@ class _Resp:
 
 @pytest.fixture(autouse=True)
 def _clear_config_cache():
-    for fn in (config.ollama_vision_timeout_seconds, config.ollama_keep_alive):
+    for fn in (config.ollama_vision_timeout_seconds, config.ollama_keep_alive, config.ollama_vision_think):
         fn.cache_clear()
     yield
-    for fn in (config.ollama_vision_timeout_seconds, config.ollama_keep_alive):
+    for fn in (config.ollama_vision_timeout_seconds, config.ollama_keep_alive, config.ollama_vision_think):
         fn.cache_clear()
 
 
@@ -93,3 +93,45 @@ def test_both_production_composition_roots_use_the_configured_values(monkeypatch
     # ci.py builds its (review) extractor inline in the route; assert via the same config helpers it imports
     assert ci_routes.ollama_vision_timeout_seconds() == 240.0
     assert ci_routes.ollama_keep_alive() == "30m"
+
+
+def test_think_is_sent_as_false_by_default(monkeypatch) -> None:
+    seen = _capture(monkeypatch)
+    HttpOllamaClient(host="http://h").generate(model="llava", prompt="p", image_bytes=b"x")
+    assert seen["json"]["think"] is False
+
+
+def test_think_can_be_configured_or_omitted(monkeypatch) -> None:
+    seen = _capture(monkeypatch)
+    HttpOllamaClient(host="http://h", think=True).generate(model="llava", prompt="p", image_bytes=b"x")
+    assert seen["json"]["think"] is True
+
+    seen.clear()
+    HttpOllamaClient(host="http://h", think=None).generate(model="llava", prompt="p", image_bytes=b"x")
+    assert "think" not in seen["json"]
+
+
+def test_think_tags_are_stripped(monkeypatch) -> None:
+    class _ThinkingResp(_Resp):
+        def json(self) -> dict[str, str]:
+            return {"response": "<think>some internal reasoning</think>  {\"listed_price\": 99}  "}
+
+    monkeypatch.setattr(httpx, "post", lambda *a, **kw: _ThinkingResp())
+    client = HttpOllamaClient(host="http://h")
+    assert client.generate(model="llava", prompt="p", image_bytes=b"x") == '{"listed_price": 99}'
+
+
+def test_env_configuration_think(monkeypatch) -> None:
+    monkeypatch.delenv("CI_VISION_THINK", raising=False)
+    monkeypatch.delenv("OLLAMA_VISION_THINK", raising=False)
+    assert config.ollama_vision_think() is False
+
+    config.ollama_vision_think.cache_clear()
+    monkeypatch.setenv("CI_VISION_THINK", "true")
+    assert config.ollama_vision_think() is True
+
+    config.ollama_vision_think.cache_clear()
+    monkeypatch.setenv("CI_VISION_THINK", "invalid")
+    with pytest.raises(ValueError):
+        config.ollama_vision_think()
+

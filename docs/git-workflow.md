@@ -71,12 +71,17 @@ Use a merge, not a rebase: both branches may be shared, and a merge never rewrit
 
 ## Safe local test database
 
-Use a throwaway container on port **5544** (the CI package's owner-role tests refuse any other port). Never point tests at the shared development database on 5432.
+Two containers use host port **5544** (the CI package's owner-role tests refuse any other port), **one at a time**. Never point tests at the shared development database on 5432.
+
+- `metrion-manual-pg`: the **persistent manual-testing database** (`metrion_manual` and per-branch databases). It keeps data you care about; never delete it or its volume.
+- `metrion-verify-pg`: the **disposable verification database**, created and destroyed by `backend/scripts/scratch_db.sh up` and `down`. `up` refuses while `metrion-manual-pg` is running.
 
 ```bash
-docker run -d --name ci-v3-pg -e POSTGRES_USER=metrion -e POSTGRES_PASSWORD=ci_scratch_pw -e POSTGRES_DB=metrion_ci \
-  -p 5544:5432 -v "$PWD/docker/postgres-init:/docker-entrypoint-initdb.d:ro" pgvector/pgvector:pg16
+docker start metrion-manual-pg     # manual testing (stop the other first: docker stop metrion-verify-pg)
+bash backend/scripts/scratch_db.sh up    # disposable verification (stop the manual one first: docker stop metrion-manual-pg)
 ```
+
+`ci-v3-pg` is retired; do not start or recreate it. Recreating `metrion-manual-pg` (only if missing, on the existing volume) is in `docs/ci-v3-local-testing.md`.
 
 Full setup and environment variables: `docs/ci-v3-local-testing.md`. Keep `.venv-ci/`, `.env` files and credentials out of commits (they are ignored).
 

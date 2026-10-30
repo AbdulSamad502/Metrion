@@ -77,21 +77,78 @@ Tests that go through the CEO planner (`test_ceo_cmo_delegation.py`, `test_ceo_c
 
 Real Clerk keys are required **only** for sign-in: `backend/.env` needs `CLERK_SECRET_KEY`, `CLERK_JWT_KEY`, `CLERK_WEBHOOK_SECRET`, and `frontend/.env.local` needs `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` (see the `.env*.example` files). Never use production keys, and never commit these files.
 
-`backend/.env` normally points `DATABASE_URL*` at the shared dev database (5432). `run_dev.py` loads that file **without overriding variables already set in your shell**, so set the scratch URLs first:
+`backend/.env` on this machine points `DATABASE_URL*` at the **persistent manual-testing database**: container `metrion-manual-pg`, host port **5544**, database `metrion_manual` (roles `metrion_migrate` for migrations and `metrion_app` for the app; the passwords are in `backend/.env`, never in code).
+
+### Required startup workflow
+
+#### 1. Database — persistent manual-testing database on port 5544
 
 ```powershell
-# terminal 1: backend (http://localhost:8000)
-docker start ci-v3-pg
-$db = "metrion_manual"
-$env:DATABASE_URL     = "postgresql+psycopg://metrion_migrate:metrion_migrate_dev_password@localhost:5544/$db"
-$env:DATABASE_URL_APP = "postgresql+psycopg://metrion_app:metrion_app_dev_password@localhost:5544/$db"
-.venv-ci\Scripts\python.exe backend\scripts\run_dev.py          # PORT=8010 to use another port; then set NEXT_PUBLIC_API_BASE_URL in frontend/.env.local
+Set-Location C:\dev\Metrion
+
+docker stop metrion-verify-pg 2>$null
+docker start metrion-manual-pg
 ```
 
+- `metrion-manual-pg` is the persistent database used for manual testing.
+- `metrion-verify-pg` must be stopped first if it is running because both containers use host port `5544`.
+- Verify that `metrion-manual-pg` starts successfully and becomes ready to accept connections (`docker exec metrion-manual-pg pg_isready -U metrion -d metrion_manual`).
+- Do not delete, recreate, reset, or replace either container or its data.
+
+#### 2. Supporting services
+
+- **Redis**: Ensure the local Redis container is running on host port `6379`:
+  ```powershell
+  docker start metrion-redis-1 2>$null
+  ```
+- **Ollama**: Ensure Ollama is running on `http://localhost:11434` with required models (`qwen3.5:4b` or `qwen3:8b`, `nomic-embed-text`, etc.):
+  ```powershell
+  ollama list
+  ```
+
+#### 3. Backend — port 8000
+
+Run in the same PowerShell terminal after starting the database:
+
 ```powershell
-# terminal 2: frontend (http://localhost:3000)
-cd frontend; npm run dev
+Remove-Item Env:DATABASE_URL,Env:DATABASE_URL_APP -ErrorAction SilentlyContinue
+.\.venv\Scripts\python.exe backend\scripts\run_dev.py          # PORT=8010 to use another port; then set NEXT_PUBLIC_API_BASE_URL in frontend/.env.local
 ```
+
+- The backend reads its configuration from `backend/.env`.
+- Ensure inherited `DATABASE_URL` and `DATABASE_URL_APP` environment variables cannot override the intended local database configuration.
+- Verify that the backend connects to the persistent manual-testing database on port `5544`, not a verification database or another database.
+- Confirm the backend starts successfully on port `8000`.
+- Do not automatically run migrations or seed data during ordinary startup unless the current repository explicitly requires this and the operation has been verified as safe.
+
+**Why the two variables are cleared.** `run_dev.py` loads `backend/.env` but, by design, never overrides a variable already set in your shell (that is how a run is pointed at the scratch database). So a leftover `DATABASE_URL` or `DATABASE_URL_APP` from an earlier session silently wins over the file. Clearing them makes the file the only source. If one is still set, `run_dev.py` now says so at startup, e.g. `WARNING: DATABASE_URL is set in this shell (...) and overrides backend/.env (...)`, and always prints where each URL points (`role@host:port/database`, never the password):
+
+```
+[run_dev] DATABASE_URL -> metrion_migrate@localhost:5544/metrion_manual
+[run_dev] DATABASE_URL_APP -> metrion_app@localhost:5544/metrion_manual
+```
+
+**Expected container.** `docker ps` shows `metrion-manual-pg` with `0.0.0.0:5544->5432/tcp`. Its data lives in the Docker volume it was created with (the former `ci-v3-pg` volume), so stopping or restarting the container loses nothing; never `docker rm` it or remove that volume.
+
+**If it does not work**
+- `docker start metrion-manual-pg` fails with "port is already allocated": another container holds 5544 (usually the disposable `metrion-verify-pg` from `scratch_db.sh`). Stop it first: `docker stop metrion-verify-pg`.
+- The container is not running: `docker ps -a --filter name=metrion-manual-pg`, then `docker logs --tail 30 metrion-manual-pg`. Check it accepts connections: `docker exec metrion-manual-pg pg_isready -U metrion -d metrion_manual`.
+- The backend starts but says `connection refused` / `password authentication failed` / `database "metrion_manual" does not exist`: read the two `[run_dev]` lines. A different host, port or database means a stale shell variable (clear it as above) or an edited `backend/.env`. A missing database means the wrong container is on 5544 (`docker ps`).
+- To confirm the app is on the manual database: `docker exec metrion-manual-pg psql -U metrion -d metrion_manual -c "select usename, datname, count(*) from pg_stat_activity where datname='metrion_manual' group by 1,2"` shows `metrion_app` connected.
+- The schema is behind the code (an error about a missing table or column): apply the pending migrations deliberately and after a backup, as in "One database per branch under test". The startup commands never run migrations.
+
+#### 4. Frontend — port 3000
+
+Run in a second PowerShell terminal:
+
+```powershell
+Set-Location C:\dev\Metrion\frontend
+npm run dev
+```
+
+- Ensure the frontend starts without missing dependencies, configuration errors, or port conflicts.
+- Confirm it is available on port `3000`.
+- Confirm that required dev dependencies, including UI or chart libraries used by current routes (e.g. `recharts`), are installed locally.
 
 (Do not start the backend with a bare `uvicorn backend.main:app`: that does not load `backend/.env`, so Clerk would reject every request.)
 

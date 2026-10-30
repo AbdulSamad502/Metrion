@@ -25,8 +25,19 @@ _WRITE = r"(?:write|give|generate|create|make|suggest|need|want|get|draft|find|s
 
 
 # A general "how should I think about..." question has no data in it: it is answered as general guidance (ADVISORY), never turned into a request for a marketplace or period.
-_GENERAL_ASK = re.compile(r"^\W*(?:tell me about\b|what makes (?:a|an|the) (?:good|great|best|effective)\b|how (?:should|do|can|would|could) (?:i|we)\b|what(?:'s| is) the best way to\b|any tips\b|tips (?:for|on)\b|explain\b|why is it important\b|what should i (?:think|know) about\b)", re.IGNORECASE)
-_DATA_WORDS = re.compile(r"\b(?:my|our|mine)\b.*\b(?:profit|margin|sales?|revenue|orders?|returns?|data|reports?|stock|inventory|costs?|competitors?|settlements?|gst|skus?)\b|\b(?:september|october|august|july|june|last month|this month|last week|today|yesterday)\b", re.IGNORECASE)
+_GENERAL_ASK = re.compile(
+    r"^\W*(?:tell me about\b|what makes (?:a|an|the) (?:good|great|best|effective)\b|"
+    r"how (?:should|do|can|would|could|does)\b|what(?:['\u2019]s| is| are| does)\b|"
+    r"can you (?:explain|tell me about)\b|"
+    r"any tips\b|tips (?:for|on)\b|explain\b|why is it important\b|what should i (?:think|know) about\b|"
+    r"help me (?:create |make |with )?(?:a )?marketing plan\b|marketing (?:plan|strategy|roadmap)\b)",
+    re.IGNORECASE,
+)
+_DATA_WORDS = re.compile(
+    r"\b(?:my|our|mine)\b.*\b(?:profit|margin|sales?|revenue|orders?|returns?|leaks?|data|reports?|stock|inventory|costs?|competitors?|settlements?|gst|skus?)\b|"
+    r"\b(?:september|october|august|july|june|last month|this month|last week|today|yesterday)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,11 +131,11 @@ RULES: tuple[Rule, ...] = _EXPENSE_RULES + (Rule("COMPETITOR_PRICE_IMPACT", "CI"
     # Description AND bullets together: the listing copy pack already writes both (plus keywords) as ONE artefact, one approval, one CMO unit.
     Rule("cmo.generate_listing_copy", "CMO", _rx(rf"^(?!.*\bgst\b)(?!\s*(?:tell me about|explain|what|how|why|were|are|is|do|does|did)\b)(?=.*\b{_BULLETS}\b)(?=.*\b{_DESC}\b)(?=.*\b{_WRITE}\b|.*\b(?:and|together|also|with|plus)\b)")),
     Rule("gst_lookup", "CFO", _rx(r"\bgst\b.*\b(?:rate|percent|percentage|%|slab|apply|applies|applicable|charge)\b|\b(?:rate|percent|percentage|slab)\b.*\bgst\b|\bgst (?:on|for|of)\b")),
-    Rule("NEW_PRODUCT_DECISION", "CFO", _rx(r"\bworth (?:stocking|buying|importing|selling)\b|\bshould i (?:stock|buy|import|order)\b"), "PLAYBOOK"),
+    Rule("NEW_PRODUCT_DECISION", "CFO", _rx(r"\bworth (?:stocking|buying|importing|selling)\b|\bshould i (?:stock|buy|import|order)\b|\b(?:product )?evaluation\b|\bevaluate\b[^.?!]*\b(?:product|item|goods|selling|stocking)\b|\bevaluate\b|\bproduct feasibility\b"), "PLAYBOOK"),
     Rule("COMPETITOR_PRICE_IMPACT", "CI", _rx(r"(?=.*\bmargin\b)(?:.*\b(?:at|match|matched|matching|beat|undercut)\b.*\bprice\b|.*\b(?:is|are|dropped|cut|lowered)\b.*\b(?:at|to)\s*(?:₹|rs\.?)?\s*\d)"), "PLAYBOOK"),
     # A price scenario for ONE competitor (the saved list of competitor prices is a state read, matched earlier and excluded when the word "scenario" is used).
     Rule("ci.request_price_scenario", "CI", _rx(r"\bprice scenarios?\b|\bscenarios?\b.*\bprices?\b|\bprices?\b.*\bscenarios?\b|\bprice positioning\b")),
-    Rule("ci.request_price_scenario", "CI", _rx(r"^(?=.*(?:₹|\brs\.?\s*\d|\binr\b))(?=.*\bcompare\b)(?=.*\b(?:with|against|versus|vs\.?)\b)(?=.*\bprice\b)(?!.*\b(?:margin|profitable)\b).*$")),
+    Rule("ci.request_price_scenario", "CI", _rx(r"\bcompare\b.*\b(?:my\s+)?prices?\b.*\b(?:with|against|versus|vs\.?)\b.*\bcompetitors\b|\bcompare\b.*\bprices?\b.*\b(?:with|against|versus|vs\.?)\b.*\bcompetitors?\b|\bcompare\b.*\b(?:with|against|versus|vs\.?)\b.*\b(?:competitor|rival)\s+prices?\b")),
     Rule("ci.request_price_scenario", "CI", _rx(r"\b(?:compare|compared|versus|vs\.?|against)\b.*(?:₹|\brs\.?\s*\d|\binr\b).*\b(?:competitors?|rivals?)\b|\b(?:competitors?|rivals?)\b.*\b(?:cheaper|pricier)\b.*(?:₹|\brs\.?\s*\d)|(?:₹|\brs\.?\s*\d).*\bhow much (?:cheaper|pricier|more|less)\b.*\b(?:competitors?|rivals?)\b")),
     # CI (CI spec 6.21.3). The seller talks to the CEO only: finding, re-checking and dropping competitors are fixed actions chosen by plain rules, never by a model guess.
     Rule("ci.competitor_remove", "CI", _rx(r"\b(?:remove|untrack|stop tracking|stop following|delete|drop)\b.*\bcompetitors?\b|\bstop tracking\b|\buntrack\b")),
@@ -199,6 +210,7 @@ _RIVAL_PRICE_OF = re.compile(r"\b(?:at|if i match(?:ed)?|matching|match|beat|und
 _RIVAL_AT_PRICE = re.compile(r"^\W*(?:so\s+|ok\s+)?(?P<c>[\w][\w \-']{1,40}?)\s+(?:is|are|dropped|cut|lowered)\b.*?\b(?:at|to)\s*(?P<p>(?:₹|rs\.?)?\s*\d+(?:,\d+)*(?:\.\d+)?)", re.IGNORECASE)
 _STOCK_BEFORE = re.compile(r"^\W*(?:is|are)\s+(?:the\s+|my\s+|a\s+)?(?P<p>[\w][\w \-']{1,60}?)\s+worth\s+(?:stocking|buying|importing|selling)", re.IGNORECASE)
 _STOCK_AFTER = re.compile(r"\bshould i (?:stock|buy|import|order)\s+(?:the\s+|some\s+|a\s+|an\s+|my\s+)?(?P<p>[\w][\w \-']{1,60}?)(?=\s*(?:[?.!,]|or not\b|from\b|$))", re.IGNORECASE)
+_EVAL_FOR = re.compile(r"\b(?:evaluation for|feasibility for|evaluate)\s+(?:the\s+|my\s+|a\s+|an\s+)?(?P<p>[\w][\w \-']{1,60}?)(?=\s*(?:[?.!,]|for selling|for stocking|$))", re.IGNORECASE)
 
 
 def _slots(rule: Rule, text: str) -> dict[str, str]:
@@ -239,7 +251,7 @@ def _slots(rule: Rule, text: str) -> dict[str, str]:
         amount, rival = _SCENARIO_AMOUNT.search(text), _SCENARIO_COMPETITOR.search(text)
         return {**({"competitor": rival.group(1).strip()} if rival else {}), **({"amount": amount.group(1).strip()} if amount else {})}
     if rule.key == "NEW_PRODUCT_DECISION":
-        m = _STOCK_BEFORE.search(text) or _STOCK_AFTER.search(text)
+        m = _STOCK_BEFORE.search(text) or _STOCK_AFTER.search(text) or _EVAL_FOR.search(text)
         product = _product_text(m.group("p") if m else None)
         return {"product": product} if product else {}
     if rule.key == "gst_lookup":
