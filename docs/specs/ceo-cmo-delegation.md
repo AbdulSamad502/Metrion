@@ -274,6 +274,16 @@ After a choice, the result says it is saved in Metrion, that nothing was publish
 
 **Not changed:** typed text never approves a plan; every metered action is still a stored plan with a hash; tenant comes from the session only; nothing is written to a marketplace; the dashboard stays read-only.
 
+### 6.13 CMO 3.0 M1 - the saved product profile (amendment, 2026-10-30)
+
+**Status: implemented** (`ceo/cmo_profile.py`, `repositories/cmo_chat_repo.profile_rows`; tests `test_cmo_m1_unit.py`, `test_ceo_cmo_m1_chat.py`). **No new table and no migration:** the profile is a *read* over the seller's append-only `seller_fact` rows for one exact `sku` (§6.12 M0-1), so it is append-only by construction and tenant-isolated by the same RLS.
+
+- Asking "remember my AquaNest bottle?" / "what do you know about my bottle?" / "show the saved profile of my bottle" returns, by code (no model, no unit): the product name; each detail's **latest value**, **where it came from** ("you told me" or "confirmed by you from a photo reading") and **the day**; the **earlier values it replaced**; the seller's notes; and the standard details the seller never gave (Brand, Size, Color, Material) as **"Not confirmed yet"**, with the statement that none will appear in a listing until confirmed.
+- A loose name resolves only when exactly one saved product fits (§6.12 M0-1); otherwise the seller is asked which product. A product with no saved details says so. Questions about the business itself ("what do you know about my business") are not product questions and are answered by the business Q&A.
+- Everything shown is the seller's own statement, labelled as not checked by Metrion. A photo suggestion is shown only after the seller confirmed it. Nothing is inferred, estimated or filled in; a missing detail is never zero or a default.
+- Re-confirmation: new writing already lists the reused facts on its plan card for the seller to approve (§6.12). A fixed "older than N days" window is **not** applied: no value has been decided for it (open question), so none is invented.
+- Not in M1: variants and product families (M8), a dashboard profile view, and editing a profile by form. A changed statement is made in chat; the old one stays in the history.
+
 ## 7. AI requirements
 
 **LLM role in this feature is deliberately minimal.** The classifier selects a key and fills declared slot text (existing); every question, option, plan line, label, card and count is written by code from the registry, validators and stored rows; the result is posted verbatim by a fixed template (no composer call, orchestration §6.35). The CMO's own LLM use (title/copy writing, vision description, trend interpretation) is unchanged and remains behind its deterministic validators. The dashboard and its API call no model.

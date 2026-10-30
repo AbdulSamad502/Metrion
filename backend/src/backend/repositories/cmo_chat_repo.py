@@ -80,6 +80,21 @@ def saved_facts(tenant_id: UUID, sku: str) -> list[dict[str, Any]]:
     return [{"type": str(r.fact_type), "name": r.attribute_name, "value": str(r.fact_value), "at": r.provided_at} for r in rows]
 
 
+def profile_rows(tenant_id: UUID, sku: str) -> list[dict[str, Any]]:
+    """Every statement the seller made about ONE exact sku, oldest first, with whether it was confirmed from a photo reading. No user ids leave this function."""
+    if not sku:
+        return []
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(
+            text(
+                "SELECT fact_type, attribute_name, fact_value, provided_at, image_analysis_id IS NOT NULL AS from_photo FROM seller_fact "
+                "WHERE tenant_id = :t AND sku = :sku AND fact_value IS NOT NULL ORDER BY provided_at, id"
+            ),
+            {"t": tenant_id, "sku": sku},
+        ).all()
+    return [{"type": str(r.fact_type), "name": r.attribute_name, "value": str(r.fact_value), "at": r.provided_at, "fromPhoto": bool(r.from_photo)} for r in rows]
+
+
 def product_names(tenant_id: UUID) -> list[tuple[str, str]]:
     """(sku, product name) for each product the seller named in chat, newest name per sku."""
     with tenant_scope(tenant_id) as conn:

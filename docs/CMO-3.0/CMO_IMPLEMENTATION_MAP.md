@@ -246,3 +246,7 @@ Order inside: 14.1 relevance filter → 14.4 change tracking → 14.2 policy ale
 M0.1 product identity, M0.2 title choice, M0.3 photo-hint recording, M0.4 catalog Q&A + property questions, M0.5 history, M0.6 integration run + readiness check, M0.7 stale docs: **done and tested**. Authority: `docs/specs/ceo-cmo-delegation.md` §6.12. The final report in the conversation lists files and test counts.
 
 **One external blocker remains and is not code:** the development database has **no `VERIFIED` marketplace rule rows** (`verify_cmo_readiness.py` reports AMAZON, FLIPKART and MEESHO blocked). Real generation fails closed (`COUNTING_RULE_UNVERIFIED`) until a human loads rules read from the marketplaces' own seller pages with `seed_format_constraints.py`. Tests use `TEST_FIXTURE` rows. Metrion must not invent these limits.
+
+## 12. M1 result (2026-10-30)
+
+Smart Product Intelligence is implemented as a read model over `seller_fact` (no table, no migration). Authority: `ceo-cmo-delegation.md` §6.13. Open decision: whether an "older than N days, please re-confirm" window is wanted, and its value.

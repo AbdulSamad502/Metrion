@@ -33,7 +33,7 @@ from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, AGENT_CMO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
 from backend.ceo.approval_gate import evaluate_playbook, plan_required
-from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_chat, cmo_delegation, compound, conversational, deadlines, expense_chat, import_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, periods, profile_context, references
+from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_chat, cmo_delegation, cmo_profile, compound, conversational, deadlines, expense_chat, import_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, periods, profile_context, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.billing import UnitDecision, unit_decision
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
@@ -551,7 +551,7 @@ def _run_admitted(
         if conversational.is_capability_question(text):
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, conversational.capability_answer(caps), now, marker={"directCapabilities": True})
     if ui_action is None and not attachments and "CMO" in attached and has_permission(role=ctx.role, permissions=ctx.permissions, key=AGENT_CMO):
-        cmo_reply = cmo_chat.direct_reply(ctx, text)  # CMO 3.0 M0: "is my bottle dishwasher safe?" is answered from what the seller confirmed, else "not confirmed"; no model, nothing run
+        cmo_reply = cmo_profile.direct_reply(ctx, text) or cmo_chat.direct_reply(ctx, text)  # CMO 3.0 M1: "remember my AquaNest bottle?" shows the saved profile; M0: "is my bottle dishwasher safe?" is answered from what the seller confirmed, else "not confirmed"; no model, nothing run
         if cmo_reply is not None:
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, cmo_reply, now, marker={"cmoDirect": True})
     if ui_action is None:  # a competitor screenshot, a confirmation answer, "track this link", "approve 1 and 3", or the dashboard's Ask CEO on one finding (CI spec 6.21)
