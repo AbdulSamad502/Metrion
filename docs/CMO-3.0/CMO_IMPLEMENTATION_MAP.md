@@ -250,3 +250,7 @@ M0.1 product identity, M0.2 title choice, M0.3 photo-hint recording, M0.4 catalo
 ## 12. M1 result (2026-10-30)
 
 Smart Product Intelligence is implemented as a read model over `seller_fact` (no table, no migration). Authority: `ceo-cmo-delegation.md` §6.13. Open decision: whether an "older than N days, please re-confirm" window is wanted, and its value.
+
+## 13. M2 result (2026-10-30)
+
+Keyword Intelligence implemented: pure rules + one append-only table (`cmo_keyword_analysis`, migration `20261030_0004`), zero units, no model. Authority: `slim-cmo-agent.md` §6.14. Open: metering decision, retention, a demand source. Release blocker B5 added: a real run with saved competitor rows.

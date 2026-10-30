@@ -53,6 +53,7 @@ NOT_EVALUATED = "NOT_EVALUATED"
 CMO_DISPATCH_ACTIONS: Mapping[str, tuple[str, tuple[str, ...]]] = {
     "cmo.generate_title_sets": ("post_title_sets", ()),
     "cmo.approve_title": ("post_title_approval", ()),
+    "cmo.keyword_intelligence": ("post_keyword_intelligence", ()),
     "cmo.generate_listing_copy": ("post_listing_copy", ()),
     "cmo.generate_description": ("post_description", ()),
     "cmo.generate_bullets": ("post_bullets", ()),

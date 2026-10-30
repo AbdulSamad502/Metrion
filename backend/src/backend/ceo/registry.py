@@ -471,6 +471,7 @@ def build_default_registry() -> ActionRegistry:
         ("cmo.generate_hashtags", "post_hashtags", Effect.GENERATE_METERED, ()),
         ("cmo.catalog_answer", "post_catalog_answers", Effect.GENERATE_METERED, ()),
         ("cmo.confirm_image_hint", "post_confirm_image_hint", Effect.RECORD_CHOICE, ()),
+        ("cmo.keyword_intelligence", "post_keyword_intelligence", Effect.COMPUTE_PERSIST, ()),
         ("cmo.suggest_niche_terms", "post_suggest_niche_terms", Effect.READ, (CATALOG_VIEW,)),
         ("cmo.confirm_niche_terms", "post_confirm_niche_terms", Effect.RECORD_CHOICE, ()),
         ("cmo.market_trends_preview", "post_market_trends_preview", Effect.READ, (RESEARCH_MARKET_TRENDS,)),

@@ -182,6 +182,8 @@ RULES: tuple[Rule, ...] = _EXPENSE_RULES + (Rule("COMPETITOR_PRICE_IMPACT", "CI"
         r"|^(?!.*\b(?:write|generate|create|make|suggest|draft)\b).*\b(?:approve|select|choose|pick|finali[sz]e)\b (?:this|that|the) (?:title|one)\b")),
     Rule("cmo.catalog_answer", "CMO", _rx(
         r"\bcatalog (?:details?|attributes?|answers?|info\w*|questions?)\b|\b(?:what|which) (?:is|are|'s)? ?(?:the )?(?:category|colou?r|material|brand|dimensions|weight)\b.{0,40}\b(?:of|for|on) (?:my|our|this)\b")),
+    # CMO 3.0 M2: researching which keywords fit a product (evidence for each, no search volume). Writing keywords for a listing stays cmo.generate_keywords.
+    Rule("cmo.keyword_intelligence", "CMO", _rx(r"\bkeyword (?:research|intelligence|analysis|candidates?)\b|\b(?:research|analy[sz]e|evaluate|compare)\b[^.?!]*\bkeywords?\b|\b(?:which|what) (?:search )?keywords (?:should|do|fit|work|are)\b")),
     # B. hashtags: only an explicit request to GENERATE them. A question ABOUT hashtags (tell me about, what makes, how do, why, were those any good...) is not one.
     Rule(
         "cmo.generate_hashtags", "CMO",

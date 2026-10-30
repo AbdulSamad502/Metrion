@@ -639,6 +639,12 @@ def _catalog_questions(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
     return ",".join(found) if found else Reject("Name the details you want (category, colour, material, size, weight, dimensions, brand), or say all.")
 
 
+CMO_KEYWORD_INTEL: tuple[Field, ...] = (
+    _PRODUCT,
+    Field("marketplace", lambda c, g: "Which marketplace is it for (Amazon, Flipkart, Meesho)? It only changes where the lower-priority keywords go. You can skip this.", _optional_marketplace,
+          _cmo_marketplace_options(True, skip=True), optional=True),
+)
+
 CMO_CATALOG: tuple[Field, ...] = (
     *_COMMON_FIRST,
     Field("catalog_questions", lambda c, g: "Which details do you want me to work out for this product: category, colour, material, size, weight, dimensions, brand? Say all, or name them.",
@@ -1094,7 +1100,7 @@ SESSIONS: Mapping[str, tuple[Field, ...]] = {
     "cfo.import_attachments": IMPORT_FIELDS, "cfo.expense_add": EXP_ADD, "cfo.expense_correct": EXP_CORRECT, "cfo.expense_void": EXP_VOID, "cfo.expense_paid": EXP_PAID,
     "cmo.generate_title_sets": CMO_TITLES, "cmo.generate_hashtags": CMO_HASHTAGS, "cmo.generate_description": CMO_DESCRIPTION, "cmo.generate_keywords": CMO_KEYWORDS,
     "cmo.generate_bullets": CMO_BULLETS, "cmo.generate_backend_terms": CMO_BACKEND_TERMS, "cmo.generate_listing_copy": CMO_LISTING,
-    "cmo.catalog_answer": CMO_CATALOG, "cmo.approve_title": CMO_APPROVE_TITLE,
+    "cmo.catalog_answer": CMO_CATALOG, "cmo.approve_title": CMO_APPROVE_TITLE, "cmo.keyword_intelligence": CMO_KEYWORD_INTEL,
 }
 
 
@@ -1355,6 +1361,11 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
             "category_text": c["category"], "budget_paise": c["budget"], "marketplaces": c["marketplaces"], "depth": "SHALLOW",
             **({"target_price_min_paise": rng["min"], "target_price_max_paise": rng["max"]} if rng else {}),
         }
+    if playbook == "cmo.keyword_intelligence":
+        from backend.ceo import cmo_chat  # noqa: PLC0415
+
+        sku = cmo_chat.product_sku(c.get("product_name"))
+        return {"sku": sku or str(c.get("product_name")), **({"marketplace": c["marketplace"]} if c.get("marketplace") else {})}
     if playbook == "cmo.approve_title":
         generation_id, kind, value = str(c["title_pick"]).split("|", 2)
         return {"generation_id": generation_id, **({"option_id": value} if kind == "option" else {"edited_text": value})}

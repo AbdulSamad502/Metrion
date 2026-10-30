@@ -193,6 +193,7 @@ LEG_LABELS: Mapping[str, str] = {
     "cmo.generate_listing_copy": "The listing copy",
     "cmo.analyze_attachment": "The reading of your photo",
     "cmo.approve_title": "Your title choice",
+    "cmo.keyword_intelligence": "The keyword research",
     "cmo.catalog_answer": "The product details",
     "cmo.confirm_image_hint": "Your photo confirmation",
     "cmo.market_trends": "The market trend research",
@@ -459,6 +460,8 @@ class EvidenceCollector:
             pass  # the reading is shown to the seller by the photo-reading step as labelled suggestions; it is not a deliverable and carries no figure
         elif leg.action_key == "cmo.approve_title":
             self._title_choice(payload)
+        elif leg.action_key == "cmo.keyword_intelligence":
+            self._keyword_intel(payload)
         elif leg.action_key == "cmo.confirm_image_hint":
             pass  # a zero-unit record of the seller's own confirmation; nothing to present
         elif leg.action_key.startswith("cmo."):
@@ -705,6 +708,29 @@ class EvidenceCollector:
         stmts = [" ".join(str(i.get("statement", "")).split())[:260] for i in (interp.get("items") or [])[:MAX_TREND_ITEMS] if i.get("statement")]
         if stmts:
             self.artefacts.append(("What the CMO makes of it", tuple(stmts), "The CMO's reading of the findings above, not verified. Decide for yourself before acting on it."))
+
+    def _keyword_intel(self, payload: Mapping[str, Any]) -> None:
+        """Keyword candidates with their rule-based labels and evidence, quoted as saved. Volume, demand and rank are never shown as numbers: they are not assessed."""
+        if payload.get("status") == "NO_FACTS":
+            self.add_gap("There are no confirmed details for this product yet, so there is nothing to base keywords on. Tell me " + " and ".join(payload.get("needs") or ["the product details"]) + ".")
+            return
+        where = {"TITLE": "title", "BULLETS": "bullet points", "DESCRIPTION": "description", "BACKEND_TERMS": "backend search terms", "KEYWORDS": "keywords field"}
+        items: list[str] = []
+        for c in payload.get("candidates") or []:
+            occ = c.get("competitorOccurrence") or {}
+            seen = f"seen in {occ['listings']} of {occ['of']} tracked competitor listings" if occ.get("status") == "OBSERVED" else "competitor use: not assessed"
+            evidence = ", ".join(sorted({str(e.get("detail")) for e in c.get("evidence") or []}))
+            note = "" if c.get("recommended") else " (weak fit with your product: not recommended)"
+            items.append(f"{c['keyword']}: {str(c['intent']).replace('_', ' ').lower()}; use in the {', '.join(where.get(p, str(p).lower()) for p in c['placement'])}; fit with your product {str(c['relevance']).lower()}; "
+                         f"evidence strength {str(c['confidence']).replace('_', ' ').lower()} ({evidence}); {seen}; search volume and demand: not assessed{note}")
+        if items:
+            self.artefacts.append(("Keyword candidates", tuple(items), "Fit and evidence describe how well each keyword matches your own confirmed facts. They are not search counts, rankings or sales predictions."))
+        else:
+            self.add_gap("No keyword candidates could be built from the confirmed details.")
+        for e in payload.get("excluded") or []:
+            self.add_gap(f"Excluded: “{e['keyword']}”. {e['reason']}")
+        for line in payload.get("limits") or []:
+            self.add_fact("Limit", str(line), "SOURCE_DERIVED")
 
     def _title_choice(self, payload: Mapping[str, Any]) -> None:
         """The seller's own title choice, quoted as saved. It is a record of their choice in Metrion; it is not a publication and not a marketplace approval."""
