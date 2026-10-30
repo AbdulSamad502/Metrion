@@ -180,9 +180,28 @@ Truncation model from **verified** width config; read-only preview component; al
 Questions framed as "to investigate"; checklist aggregates blockers / missing facts / optional / next actions; unrun checks show `NOT_ASSESSED`; final status can only say "Draft generated; readiness not verified" unless every required gate ran.
 - **Acceptance:** N-10, N-12, N-11, R-06.
 
-### M6 — Advanced Listing Generation (5) + structured CI evidence (4) — Complexity L — depends on M2, M3, M5
-Pack generated from selected strategy, keyword placement plan and buyer needs; competitor differentiation only through the existing CEO broker, and only for features the seller confirmed; audit runs after generation. Re-read the CI 4.0 spec first.
-- **Acceptance:** N-05, N-08, R-07, R-08.
+### M6 — Advanced Listing Generation (5) + structured CI evidence (4) — Complexity L — depends on M2, M3, M5 (all done)
+**Status: specified and approved 2026-10-30; not implemented.** Authority: `slim-cmo-agent.md` §6.18 and `ceo-cmo-delegation.md` §6.16. Tests: `CMO_ACCEPTANCE_TESTS.md` §F (50 designed tests). Every decision is approved: Q8, Q26-Q33 (§6.18.10). B1 is relaxed for M6 only (§6.18.11): title steps inside a full-listing request and the listing itself may be generated on a labelled, unverified-rules basis when `listing_unverified_rules_enabled` (default `false`) is on, with `rules_unavailable_bullet_target = 5`; C13 is unchanged for everything else.
+
+**Scope (what the seller gets).** After the seller has an approved title: ONE separate plan card for a complete listing; a coordinated pack (title verbatim, bullets, description, keywords), Amazon backend terms (Amazon only), optional hashtags (off by default); a deterministic keyword map; a free deterministic audit with severity findings; competitor evidence kept apart as "supported" vs "consider adding if true"; section revision (own text free, model rewrite one unit) with re-audit. No publishing, no bulk, no score, no new CI path.
+
+**Dependencies.** M1 (facts), M2 (candidates), M3 (title strategy and hard failures), M5 (question states, readiness), the CEO plan-card/approval machinery, the CI broker (`cmo_ci_inputs.py`); no dependency on M7-M10 or on any CI change. Config: the two keys of §6.18.11 (data, not a migration).
+
+**Reuse (do not rebuild).** `generate_listing_copy` and `service/generate.py` (atomic validation), standalone backend terms and hashtags, claim/forbidden/safety gates, M1 facts, M2 `cmo_keyword_analysis`, M3 per-option strategy and hard failures, M5 question states and readiness, `cmo_ci_inputs.broker/load_inputs`, `CiInputs`, `check_output`, `run_billable`, the CEO plan-card and approval machinery, `ceo_eval/catalog.py` patterns.
+
+**Build order (each step end to end, tests with it).**
+1. Pure rules in `slim_cmo` (no I/O): keyword map, the 15 audit checks A01-A15 with thresholds W1-W7 (`audit/limits.py`, `method_version`), claim-gated CI evidence rows, contradiction check, section-edit parser (§6.18.7a), rules-basis resolution (verified row > unverified basis > blocked) and its two config readers. Unit tests first.
+2. Generation input: M2 candidates as the only keyword source, "do not claim" list from M5, `SUPPORTED`-only CI themes in the prompt; retry trigger on non-traceable keywords. Fake-provider tests.
+3. Service + persistence: `cmo_listing_audit` (slim-cmo tree, `20261030_0007`), orchestration of pack → backend terms → hashtags → audit with per-artefact idempotency keys, partial-outcome handling, revision (`revision_of` in `output_structured`).
+4. Backend wiring: closed action `cmo.generate_full_listing` and the revision actions in `registry.py`, `effects.py`, `plans.py`, `input_session.py`, `intent_router.py`, `cmo_delegation.py`, `evidence.py`, `ceo_eval/catalog.py` (thin registrations; logic in new `backend/services/cmo_listing.py`); backend migrations `20261030_0027` (`LISTING` card kind) and `20261030_0028` (`APPROVED` usage event kind); update the guard-count tests in the same change.
+5. Frontend: `LISTING` card in the CEO chat (sections with copy buttons, keyword map, audit by severity, CI evidence, three labelled measures, the unverified-rules banner, the "Approve for use" button; the six states shown separately). Dashboard unchanged and read-only.
+6. Run §F and the regression set on the scratch DB; report.
+
+**Shared-file risk.** CEO-A/B, CI, PI and CFO plans edit the same CEO files: keep additions to one action family and one card kind, no reformatting, rebase often. CI 4.0 may change the CI→CMO hand-off: M6 consumes only today's `competitor_listing_insight` columns and adds none.
+
+**Completion criteria.** Every §F test passes or is explicitly deferred in writing; R-15…R-19 green; M0-M5 suites unchanged (backend unit 5575, slim-cmo unit suite, frontend); migrations upgrade and downgrade on the scratch DB; no change to the dev database; blocker list updated honestly. With the rules-unavailable basis, real drafts are possible without verified rules (labelled, nothing claimed as compliant); M6 is "done" for development when the section F tests pass, and "release-ready" for any compliance or readiness claim only after B1, B2, B6, B7 are cleared.
+
+- **Acceptance:** N-05a-x, N-14a-j, N-15a-g, N-16a-c, N-08a-f, R-07, R-08, R-15…R-20 (50 tests in section F).
 
 ### M7 — Listing History & Optimization (6) — Complexity L — depends on M0.2, M6 (CMO 3.1)
 Product-linked snapshots, version compare with a deterministic diff and an explanation of changes, revision lineage. **No improvement claim without performance data**; store a slot for future comparable-period feedback.
@@ -211,7 +230,7 @@ Order inside: 14.1 relevance filter → 14.4 change tracking → 14.2 policy ale
 - **Schema drift test:** `tests/integration/test_schema_constraints.py` compares enums to DB CHECKs — every new artefact type must update both.
 - **Billing:** a new artefact type needs an entry in `billing.EVENT_KIND_BY_OUTPUT_TYPE`, `ACTION_OUTPUT_TYPE`, an entitlement meter decision, and idempotency semantics. Decide whether analyses are *free* (derived from an already-paid artefact) or metered **before** writing code (Open Q3).
 - **CEO guard-count tests** (`test_ceo_registry`, `test_ceo_effects`, `test_ceo_architecture`) count registered actions — update them in the same change.
-- **Migrations:** all additive, new tables with `FORCE` RLS and `tenant_id`; never alter `cmo_generation` constraints in place; run on scratch DB first, with downgrade tested. Migration head today is `20261021_0024_message_pick_kind.py` (backend) and `20261006_0003` (slim-cmo package); note two migration trees exist — decide which tree owns new CMO tables in the spec step **[U]**.
+- **Migrations:** all additive, new tables with `FORCE` RLS and `tenant_id`; never alter `cmo_generation` constraints in place; run on scratch DB first, with downgrade tested. Migration head today is `20261021_0024_message_pick_kind.py` (backend) and `20261006_0003` (slim-cmo package); two migration trees exist; ownership follows the convention recorded in spec §6.18.8 (resolved Q8).
 - **Frontend:** keep `?fixture=1` fixture out of production builds (`NODE_ENV` guard).
 - **Existing 2183 + 236 + 8 tests must stay green after every milestone.**
 
@@ -228,7 +247,7 @@ Order inside: 14.1 relevance filter → 14.4 change tracking → 14.2 policy ale
 | Q5 | Official policy domains for Amazon India / Flipkart / Meesho | M10 |
 | Q6 | Verified `format_constraint` rows and trend config values (spec Q15, Q21) | M0 / launch |
 | Q7 | Vision pass-bar and image-quality criteria (spec Q4); multiple images (Q7) | M9 |
-| Q8 | Which migration tree owns new CMO tables | M1 |
+| Q8 | ~~Which migration tree owns new CMO tables~~ **Resolved 2026-10-30 by repository convention:** tables written by the CMO package's rules and services go in `packages/slim-cmo/migrations` (M2-M5 precedent); CEO-conversation, quota and usage-event tables go in `backend/migrations` (`0020`, `0025`, `0026` precedent). See spec §6.18.8. | M1 |
 | Q9 | Where listing "performance feedback" will come from (Data foundation / analytics), since CMO has none | M7 |
 
 ---
@@ -266,3 +285,7 @@ Search Result & Mobile/Desktop Preview implemented end to end: pure truncation r
 ## 16. M5 result (2026-10-30)
 
 Buyer Questions and Listing Readiness implemented end to end: pure question and readiness rules, two append-only tables (`20261030_0006`), a free card builder reusing M1-M4, a `READINESS` card on the CEO answer (`20261030_0026`), the seller's own answers saved by one fixed sentence, and an interactive React card in the chat. Authority: `slim-cmo-agent.md` §6.17. READY cannot appear while no verified marketplace rule or category taxonomy exists (B1).
+
+## 17. M6 specification result (2026-10-30, final)
+
+M6 is specified and every decision is approved; it is not built. Authority: `slim-cmo-agent.md` §6.18 (rules, audit checks A01-A15, thresholds W1-W7, edit grammar, six-state model, CI evidence, data ownership, rules-unavailable basis), `ceo-cmo-delegation.md` §6.16 (chat), `CMO_ACCEPTANCE_TESTS.md` §F (50 tests), `CMO_RELEASE_BLOCKERS.md` (B1 exception). Decisions recorded: Q8 (migrations `20261030_0007` slim-cmo; `0027` and `0028` backend), Q26-Q33 including `listing_unverified_rules_enabled = false` by default and `rules_unavailable_bullet_target = 5`. Inspection findings that shaped it: the copy pack, backend terms, hashtags, CI broker and originality check already exist; CI supplies only derived single words (no new contract); the title strategy is already stored by M3; `cmo_generation.output_type` needs no new value; keyword-field atomicity forces `NEEDS_FACTS` when M2 has no recommended candidate. The handoff's test IDs already existed here with other meanings, so the new tests use N-05a…, N-14…, N-15…, N-16…, N-08a… (mapping at the top of §F).

@@ -33,7 +33,7 @@
 | C10 | **Trends come from a shared market-signal retrieval service, not from PI.** CMO interprets; the shared service retrieves. No CMO→PI call; no duplication of PI's source clients (§6.8). | 2026-10-03 decision 5; OP9 |
 | C11 | **CI input is optional and never blocking** (§6.7). | 2026-10-03 decision 6 |
 | C12 | **Hashtags are a separate optional artefact in V1.** No marketplace's hashtag support is established, so none is generated into a listing field (§6.6). | 2026-10-03 decision 7 |
-| C13 | **Production generation is blocked unless a VERIFIED, non-stale `format_constraint` row exists for the marketplace** (§6.3). `TEST_FIXTURE` rows exist for automated tests only and are never read by the production path. | round 3 item 1 |
+| C13 | **Production generation is blocked unless a VERIFIED, non-stale `format_constraint` row exists for the marketplace** (§6.3). `TEST_FIXTURE` rows exist for automated tests only and are never read by the production path. **Amended 2026-10-30 (owner decision), for the CMO 3.0 M6 full-listing action only:** a missing, stale or count-rule-unverified row no longer blocks that action when the operator flag is on; the output is then a labelled draft and every marketplace check is `NOT_ASSESSED` (§6.18.11). Every other artefact action keeps C13 unchanged. | round 3 item 1; owner 2026-10-30 |
 | C14 | **Evidence is computed, not asserted.** Source counts, independence, recency and corroboration strength in trend reports are computed in deterministic code from configured thresholds; the LLM never assigns them. Several mentions from one source are one source. Corroboration of attention is never evidence of demand, sales or profitability. | round 3 item 2 |
 | C15 | **Only seller-confirmed niche terms may leave Metrion for research.** Suggestions derived from the seller's own catalog data are shown for confirmation first; raw reports, customer data and financial data never reach a research provider (§6.8.3). | round 3 item 3 |
 | C16 | **No silent configuration defaults.** Every trend budget, window and threshold is configuration (§6.8.5). A missing required key blocks the affected action with `CONFIG_MISSING`; it is never replaced by a code default. Provider capabilities are verified, not assumed (§6.8.8). | round 3 item 4 |
@@ -349,6 +349,197 @@ When the CEO runs a CMO writing action from chat it supplies `sku` = a determini
 
 **Storage and security.** Both results are saved once, as shown, per (tenant, request key derived from the confirmed facts, titles, choices, copy and photo state): `FORCE` RLS, `SELECT, INSERT` only for the application role, no column for search volume, demand, marketplace approval or sales. Free: no entitlement check, no reservation, no metered event, no model, no network. Tenant comes only from the session; another tenant's facts, titles and assessments are never read. The card rides on a CEO `ANSWER` as `choices.kind = "READINESS"` (data only; rendered as text). **Open decisions (not invented):** the point weights above are internal and may be tuned after real seller use; whether unanswered questions should ever block rather than reduce the score; a verified category taxonomy; a source for what buyers actually ask.
 
+### 6.18 Advanced listing generation and CI evidence (CMO 3.0 M6, amendment 2026-10-30)
+
+**Status: specified, not implemented. Every owner decision is approved (2026-10-30): Q8 and Q26-Q33; B1 is relaxed for M6 only by §6.18.11.** No code, migration or test exists for anything new in this section. Chat behaviour: `ceo-cmo-delegation.md` §6.16. Acceptance: `docs/CMO-3.0/CMO_ACCEPTANCE_TESTS.md` §F. Nothing here weakens §0 (recommend-only), §6.5 (claim eligibility), §6.7 (CI use rules) or §8 (approval, units, idempotency).
+
+**What M6 is.** One coordinated, audited listing for one product and one marketplace, built from the title the seller approved, instead of separate artefacts the seller must reconcile. It adds (1) a *coordinated input* to the existing copy-pack generator, (2) an optional Amazon backend-terms and hashtag step under the same approval, (3) a deterministic *keyword map*, (4) a deterministic, free, post-generation *listing audit*, (5) section-level revision with re-audit, and (6) a structured, claim-gated presentation of CI evidence. It does **not** add publishing, bulk listing, language adaptation, a score, or any new CI path.
+
+#### 6.18.1 Reuse, new, unchanged
+
+| Reuse as is | New in M6 | Must not change |
+|---|---|---|
+| `cmo_title_approval` (approved title, `approved_by/at`); `generate_listing_copy` and its atomic validation (§6.4); standalone `BACKEND_TERMS` (Amazon only) and `HASHTAGS` (§6.4.2 item 8); claim eligibility, forbidden-content and safety scans (`claims.py`, `forbidden.py`, `generation/safety.py`); M1 profile and `seller_fact`; M2 `cmo_keyword_analysis` candidates; M3 `cmo_title_analysis` (per-option `strategy`, hard failures); M5 buyer-question states and `cmo_readiness_assessment`; `cmo_ci_inputs.broker/load_inputs`, `CiInputs`, `check_output`, `ci_inputs_snapshot`; `run_billable`, idempotency keys, `agent_run`; CEO plan card, approval bound to plan id + hash | action `cmo.generate_full_listing` (one plan card); keyword map; listing audit (`cmo_listing_audit`); `LISTING` card on the CEO answer; section revision actions; claim-gated CI evidence rows | Title approval consumes no unit and stays a separate step; a pack is immutable once saved; one delivered artefact = one unit; failed = 0 units; typed text never approves; the dashboard stays read-only; titles generated in `INDEPENDENT` mode behave as before; M3 score and M5 readiness score are not recomputed or altered by M6; no marketplace write path; **C13 and every artefact action outside an M6 full-listing workflow behave exactly as before** (§6.18.11) |
+
+#### 6.18.2 Preconditions and what the seller sees first
+
+The CEO resolves the product as in §6.3a/§6.12 (several saved names that fit → ask, never guess). Then, in order, each failing precondition is a plain question or refusal and **no plan card, model call or charge**:
+1. **An approved title for that marketplace** (a row in `cmo_title_approval`, or the seller's own typed title validated by §6.4 item 3). None → the CEO says so and runs the title steps (title set, selection, approval) **inside this listing request**, marked as part of the full-listing workflow; that marker is the only way the rules-unavailable basis reaches a title step (§6.18.11). A seller-typed title has no M3 `strategy`; it is shown as "custom title: strategy not assessed" and generation proceeds.
+2. **Claim-eligible facts sufficient for the pack.** Missing facts → `NEEDS_FACTS` as in §6.4.2 item 3, naming the facts to supply, before the plan card.
+3. **No contradictory confirmed facts.** Two *current* values for the same single-valued attribute (size, capacity, material, colour, brand) that disagree after normalisation (for example capacity 500 ml and 1 L for one product name) → the CEO asks which is right and saves nothing (M1 keeps history; "current" is the latest per attribute). Generation is refused until resolved.
+4. **At least one `RECOMMENDED` M2 candidate.** If the product has no saved analysis for its current facts, the CEO runs the free deterministic M2 analysis first (0 units). Zero recommended candidates ⇒ `NEEDS_FACTS` (the candidates come only from confirmed facts, so none means too few facts). A candidate is never invented, and a `WEAK` or `NOT_ASSESSED` candidate is never *placed* (it is listed under "not used" with the reason).
+5. **Marketplace rules are not a precondition.** With a `VERIFIED`, non-stale row the pack is generated and its limits enforced as §6.4. Without one (blocker B1) and with the operator flag on, generation proceeds on the *rules-unavailable basis* of §6.18.11: confirmed seller facts and M2 candidates only, no marketplace limit enforced or guessed, every marketplace check `NOT_ASSESSED`, a visible banner, and no claim of compliance or verified readiness. The flag defaults to `false` (absent or any value other than `true` means off): generation is then blocked with the reason "unverified drafts are not enabled", as before.
+
+**The plan card (separate from title approval).** It lists, before any charge: the approved title (verbatim, with its M3 strategy when there is one), the marketplace, the artefacts that will be written and their units (copy pack 1; Amazon backend terms 1, Amazon only; hashtags 1, **off unless the seller ticks it** and `hashtag_set_size` is configured), the **total**, the M2 candidates that will be offered, the buyer-question state counts, whether competitor themes will be used and from which saved insights (the existing `CI_USED_LINE`), the exact "what leaves Metrion" line (facts and derived words go to the local model; no competitor text, no price), and "nothing is sent to a marketplace". Approval is the click bound to plan id + hash; a typed "yes" never approves. Declining generates nothing, charges nothing and records the decline in the conversation only.
+
+#### 6.18.3 Generation (one approval, separate artefacts)
+
+On approval the action runs, in order, each as its own immutable `cmo_generation` row with its own units and an idempotency key derived from the plan's request key and the artefact type (so a repeated click, retry or double delivery returns the same rows and never charges twice):
+1. **Listing copy pack** (description + bullets + keywords, §6.4). The title is passed verbatim and is never rewritten. Inputs added by M6, and only these: the M2 `RECOMMENDED` candidates with their placement hints (as the *only* source for the pack's keywords field); the seller's confirmed M5 answers (already `seller_fact`s) and the topics the seller marked `SELLER_UNKNOWN` as an explicit *do not claim* list; the claim-gated CI evidence of 6.18.6. If the pack is `FAILED` nothing else in this run is generated or charged.
+2. **Amazon backend terms** (Amazon only; the existing database rule stays). Terms come from `RECOMMENDED` candidates whose M2 placement includes backend terms and that do not already repeat the title; byte cap from the verified row when there is one; without one the byte length is measured and shown, no cap is enforced or guessed (§6.18.11). For Flipkart and Meesho this step does not exist and the card says so.
+3. **Hashtags** (only if ticked): the existing artefact and label, "marketing suggestions, not a listing field on any marketplace".
+4. **Listing audit** (6.18.5), free, runs on the saved rows.
+
+**Partial outcome.** The pack is `COMPLETE` and billed even if a later step fails; the failed step is shown with its plain reason and 0 units, and the overall result reads "pack ready, backend terms not generated". A failed pack means a failed run with 0 units. Provider error, timeout or output beyond the safety ceilings follow §6.4.2 (no partial text delivered, `OUTPUT_TOO_LARGE` etc.).
+
+#### 6.18.4 Keyword placement map (deterministic, derived from the saved text)
+
+The map is computed by code from the final text and the M2 analysis; the model never reports where it put a keyword. For every M2 `RECOMMENDED` candidate: where it appears (`TITLE`, `BULLET n`, `DESCRIPTION`, `BACKEND_TERMS`, or `NOT_PLACED`), how many times, and for `NOT_PLACED` one reason code from a closed list (`ALREADY_IN_TITLE`, `NO_ROOM_UNDER_VERIFIED_LIMIT`, `PLACEMENT_HINT_NOT_THIS_FIELD`, `WOULD_REPEAT_WITHOUT_BENEFIT`, `NOT_NEEDED`). Candidates M2 excluded keep their M2 exclusion reason. A word or phrase in the keywords field or backend terms that is **not** a recommended M2 candidate is a `KEYWORD_NOT_TRACEABLE` finding (FAIL, and a retry trigger at generation). The map states, always: relevance and placement describe fit with the seller's own facts, **not** search volume, ranking, demand or conversion (those are `NOT_ASSESSED`).
+
+#### 6.18.5 Listing audit
+
+`cmo_listing_audit`: one immutable row per (pack, content hash), written by code, **0 units, no model, no network**, `agent_run` linked. Re-audited after any revision (the new content hash is a new row). The audit checks the *saved text*, including seller-typed text, and therefore also protects revisions. It re-uses, and does not re-score, existing results.
+
+**Statuses.** Per check: `PASS`, `FAIL`, `NOT_ASSESSED` (the rule, evidence or verified marketplace data needed was unavailable; it is never a pass). Per finding: severity `BLOCKER` (must fix before the seller uses the text), `WARNING`, `NOTE`; the affected section (`TITLE`, `BULLET n`, `DESCRIPTION`, `KEYWORDS`, `BACKEND_TERMS`, `HASHTAGS`, `WHOLE_LISTING`), a plain explanation naming the evidence, and a suggested correction written from the finding only. **There is no numeric audit score** (so it cannot be confused with the 0-100 title score or the 0-100 readiness score). Verdict: `BLOCKED` (any BLOCKER finding); `NEEDS_ATTENTION` (no blocker, at least one warning); `CHECKED_NOT_VERIFIED` (everything assessable passed but something is `NOT_ASSESSED`, which today is always the case, see B1/B6). There is no "READY", "compliant" or "approved by the marketplace" verdict, and the answer says why.
+
+| Check | Rule (all in code) | On failure |
+|---|---|---|
+| A01 Title is the approved title | The pack's title text equals the approved text exactly (normalised). | BLOCKER |
+| A02 Title hard checks | Reuses the M3 hard-failure result for that title (no re-scoring); a seller-typed title is checked by the same gates. | BLOCKER |
+| A03 Sections present and shaped | Description, bullets, keywords present; bullet count and lengths against the **verified** row only; a limit the row does not state is `NOT_ASSESSED`, never assumed. | BLOCKER / NOT_ASSESSED |
+| A04 Unsupported claims | Every attribute or claim in any section is claim-eligible (§6.5); the red-team claim list; forbidden content (§6.4.1); any topic the seller marked `SELLER_UNKNOWN` or left `NOT_CONFIRMED` must not be asserted anywhere. | BLOCKER |
+| A05 Numbers and units | Every number-with-unit (capacity, weight, size, count, warranty) equals a confirmed fact; a figure no fact supports fails. | BLOCKER |
+| A06 Contradictions | A section states a value for size, capacity, material, colour or brand that differs from the current confirmed value or from another section. | BLOCKER |
+| A07 Keyword traceability | The 6.18.4 rule: every keyword/backend term maps to a `RECOMMENDED` candidate; no excluded candidate is used. | BLOCKER |
+| A08 Repetition and stuffing | The thresholds W1-W7 of §6.18.5a (a candidate repeated within one bullet, across bullets, in the description or in the whole listing; identical bullets or sentences; bare keyword lists in prose; duplicate backend terms). | WARNING |
+| A09 Cross-section consistency | A confirmed fact the title states (brand, size, material, colour) is not contradicted or omitted without cause in the bullets or description. | WARNING / NOTE |
+| A10 Buyer-question coverage (M5) | Each `ESSENTIAL` question answered `CONFIRMED` shows its fact in the bullets or description (NOTE if absent); each `NOT_CONFIRMED` or `SELLER_UNKNOWN` claim question is not asserted (that is A04). Unanswered questions are listed, not guessed. | NOTE |
+| A11 CI differentiation | Every competitor-derived theme used in the text has a claim-eligible supporting fact (6.18.6); `ci_inputs.check_output` originality check passes; "consider adding if true" themes do not appear in the text. | BLOCKER |
+| A12 Backend terms (Amazon) | Byte count within the **verified** cap (none ⇒ `NOT_ASSESSED`); only traceable candidates; no competitor brand words. | BLOCKER / NOT_ASSESSED |
+| A13 Marketplace rules | Each rule checked only if a `VERIFIED`, non-stale row exists; otherwise the check is `NOT_ASSESSED` and the card says "not checked against marketplace rules". | NOT_ASSESSED |
+| A14 Missing information | Confirmed facts the listing could use but does not state, and facts still unknown, listed as next actions. | NOTE |
+| A15 Style and grammar | **Not assessed.** No deterministic rule is defined and no model judges quality. Always `NOT_ASSESSED` with that sentence. | NOT_ASSESSED |
+
+**Relationship to M3 and M5.** The M3 title score and bands remain the title's quality measure and are shown unchanged next to the title. The M5 readiness assessment is computed by its own rules and its "listing content" items read the saved pack; M6 does not change those rules or weights. After M6 saves a pack the card shows the *current* M5 verdict for that marketplace (recomputed free, as today), labelled separately from the audit verdict, so a seller sees three distinct things: title quality, listing audit, readiness.
+
+#### 6.18.5a Repetition and stuffing thresholds (check A08; Q28, approved 2026-10-30: W1-W7 as written)
+
+These are readability checks on the seller's own listing text. They are **not** marketplace rules and **not** ranking rules, every finding is a `WARNING` (never a `BLOCKER`), and each message says so. **Counting.** Text is normalised (case, punctuation, spacing, Unicode, as §6.4.1); a *candidate* is an M2 `RECOMMENDED` phrase; a match is a whole-word occurrence; matches are non-overlapping and the **longest candidate is matched first**, so "stainless steel water bottle" counts once for that candidate and not again for "water bottle" or "steel". The title and the backend terms are counted as stated below, nowhere else.
+
+| Rule | Where | Triggers a WARNING when |
+|---|---|---|
+| W1 | one bullet | the same candidate appears **2 or more** times in that bullet |
+| W2 | the bullets together | the same candidate appears in **4 or more different bullets** |
+| W3 | the description | the same candidate appears **4 or more** times |
+| W4 | title + bullets + description | the same candidate appears **8 or more** times in total |
+| W5 | bullets / description | two bullets are identical after normalisation, or a bullet is identical to a description sentence (exact match only; there is no similarity threshold, §6.4.1) |
+| W6 | any bullet or description sentence | the sentence consists only of **4 or more** comma- or pipe-separated items that are all candidates (a bare keyword list) |
+| W7 | Amazon backend terms | the same term appears twice after normalisation |
+
+**Examples (AquaNest, candidates "stainless steel", "water bottle", "reusable", "1 litre", "silver").**
+- W1 triggers: "Stainless steel bottle with a stainless steel body and stainless steel lid" (3). Passes: "Stainless steel body that resists dents" (1).
+- W2 triggers: "reusable" in bullets 1, 2, 3 and 4. Passes: in bullets 1, 2 and 3.
+- W3 triggers: "water bottle" four times in the description. Passes: three times.
+- W4 triggers: "stainless steel" once in the title, four times across the bullets and three times in the description (8). Passes at 7.
+- W5 triggers: bullets 2 and 4 are both "Reusable and eco friendly."
+- W6 triggers: a bullet "Steel bottle, 1 litre, silver, reusable, water bottle." (five candidates). Passes: "Silver, 1 litre" (two items).
+- W7 triggers: backend terms "steel flask, steel flask".
+- Longest-first: in "Stainless steel water bottle" with candidates "stainless steel water bottle" and "water bottle", the first counts 1 and the second 0.
+
+The numbers live in one code module (`audit/limits.py`) and the audit row records its `method_version`; changing a number is a new method version and a documented spec change, never a per-request setting, and the thresholds are never described to the seller as a marketplace rule.
+
+#### 6.18.6 CI evidence (no new CI path)
+
+Evidence reaches CMO only through the existing path: the CEO's `broker` (requires `agent.ci` and a passing CI entitlement, not consumed) freezes insight ids in the plan card; `load_inputs` re-checks each id belongs to the tenant. CI-side data are `competitor_listing_insight` rows only (§6.7): derived single words (`keyword_themes`, `feature_categories`, `benefit_terms`, `differentiation_opportunities`). **M6 adds no CI column, query or contract.** The "structured evidence" is built in CMO from those fields:
+
+| Evidence row field | Source |
+|---|---|
+| theme (single derived word) | `keyword_themes` / `differentiation_opportunities` of the frozen insights |
+| shared by *n* of *m* supplied competitor captures | counted from the frozen insights; never labelled demand or popularity |
+| seller support: `SUPPORTED` or `CONSIDER_IF_TRUE` | **computed in code**: `SUPPORTED` only if the theme word is carried by a claim-eligible attribute (name or value) of the product; otherwise `CONSIDER_IF_TRUE` |
+| insight ids and `derived_at` | the frozen snapshot (provenance survives a CI purge) |
+| limitation | "derived words from your tracked competitors' saved listings; not search demand; a theme a competitor lacks is not proof it does not apply" |
+
+Only `SUPPORTED` themes enter the generation prompt (as market context, existing `prompt_block` wording: own words, no copying, no brand names, no demand or ranking claims). `CONSIDER_IF_TRUE` themes are never given to the model and never written; they appear only in the card under "Consider adding if true for your product" with the one question the seller would have to answer to confirm them (the confirmation path is the existing facts/answers path). A competitor feature never becomes a claim about the seller's product. No competitor title, description, bullet, image or **price** is read into output or storage (`references` are used for the originality comparison alone and are not stored). CI unavailable, unauthorised, not entitled, stale, `DEGRADED`, a foreign or unknown insight id (indistinguishable from not found), or any read error ⇒ independent mode, one plain line ("Competitor themes were not used: <reason>"), generation continues, and `ci_inputs_snapshot` stays empty (`input_mode` is `CEO_BROKERED_CI` only when themes were actually used, AC2).
+
+#### 6.18.7 Seller review, revision and statuses
+
+The CEO shows a `LISTING` card (data only, rendered as text): the listing sections each with a copy button, the keyword map, the audit findings grouped by severity with section, explanation and correction, the CI evidence rows, the limitations, and the three separate measures of 6.18.5. Revisions:
+- **The seller's own text for one section** (the fixed sentence of §6.18.7a): validated by the same deterministic gates, saved as a new immutable pack row with `output_structured.revision_of` set to the previous row and the section changed, **0 units, no model, no plan card**, then re-audited. Text that fails a BLOCKER check is refused and saves nothing.
+- **A model rewrite of one section** ("rewrite bullet 3 to mention the lid type"): a plan card for one new `LISTING_COPY` artefact, **1 unit** (consistent with §8.2 regeneration = new artefact), grounded in the same approved title and claim-eligible facts, only the named section may change, other sections are carried over unchanged, then audited. A section request that would change a confirmed fact is a question, not a rewrite.
+- **Changing the approved title** is the existing re-approval (a new `cmo_title_approval` row, 0 units). The earlier pack is not edited; it is shown as "built from a previous title" and a new full-listing plan is needed to rebuild. Approved facts are never changed by a revision; the seller changes them through the facts path, and the audit then flags any section that no longer matches (A06).
+- The previous version and its audit remain stored and readable (M7 adds comparison; M6 only guarantees nothing is overwritten).
+
+**The six states stay distinct and are never merged** (owner decision 2026-10-30). Each is its own record, none implies the next, and none is "live".
+
+| # | State | Meaning | Recorded as | Set by | Units | It does NOT mean |
+|---|---|---|---|---|---|---|
+| 1 | Generation approved | The seller clicked Approve on the plan card (the click bound to plan id + hash) | the existing plan approval and `agent_run` | the seller's click only | normal billing for delivered artefacts | that the text is acceptable or correct |
+| 2 | Generated | The artefact rows were saved | `cmo_generation` row + the server-written `GENERATED` usage event | the system | per delivered artefact (§8) | audited, approved or usable |
+| 3 | Audited | An audit exists for that exact saved text | a `cmo_listing_audit` row | the system | 0 | approved, compliant or ready |
+| 4 | Approved for use | The seller clicked "Approve for use" on that exact saved version | an append-only `APPROVED` usage event (tenant, actor, time, surface `CHAT`, the immutable `generation_id`) | the seller's click on the CEO card only; never typed text, never the dashboard | **0, no metered event, no reservation** | published, live, accepted or verified by any marketplace |
+| 5 | Copied | The seller used a copy button | the `COPIED` usage event | the seller | 0 | approved |
+| 6 | Marked used | The seller says they used it elsewhere | the `MARKED_USED` usage event | the seller | 0 | that Metrion can verify it, or that it is live |
+| - | Published / live | The listing is on a marketplace | **no field exists** | never CMO; outside Metrion | - | - |
+
+`APPROVED` rules: it is bound to one immutable pack row, so a later revision is a new row and **starts unapproved**; it is refused when the audit verdict for that row is `BLOCKED`; it is recorded with the pack's `rules_basis` readable from the row (a draft on the rules-unavailable basis may be approved by the seller, and the approval confirmation repeats the §6.18.11 banner); it consumes nothing and changes no score. Copying does not need approval and does not imply it. The CEO's wording is always "approved for use in Metrion; not published", never "approved" alone.
+
+#### 6.18.7a The seller's section-edit sentence (Q30, approved 2026-10-30: grammar, limits and examples as written)
+
+One fixed sentence, matched case-insensitively with spaces collapsed, one edit per message, handled by code with **no model, no plan card and no unit**:
+
+`[For my <product>, ]change <target> [on <marketplace> ]to: <text>`
+
+- `<target>` is exactly one of: `bullet <n>` · `description` · `keywords` · `backend terms`. The title is **not** editable here (changing it is the existing re-approval, §6.4 item 3).
+- `<product>` is optional when the latest listing card in the conversation names one product; required when saved listings exist for more than one product and none is in view. `<marketplace>` (Amazon, Flipkart, Meesho) is optional when exactly one pack exists for that product or one card is in view, otherwise required. Anything still ambiguous: the CEO asks which one and saves nothing.
+- `<text>` is everything after the first `to:`. Bullet: 1-500 characters. Description: 1-2,000. Keywords and backend terms: a comma-separated list of 1-20 terms, each 1-80 characters, and **each must be an M2 `RECOMMENDED` candidate**. These are technical parse ceilings, never presented as marketplace rules; `backend terms` exist for Amazon only.
+- The text passes the same gates as generation: claim eligibility, forbidden content (price figures, URLs, phone numbers, ranking claims), numbers and units against confirmed facts, contradictions, traceability and the "do not claim" topics (audit checks A04-A07, A11), plus, on a `VERIFIED` row only, the verified limits.
+- **Success:** a new immutable pack row with `revision_of`, a fresh audit, a new `LISTING` card, one `agent_run`, 0 units. **Refusal:** nothing is saved, the reason names the failed rule and the section, and no partial edit is applied.
+- A message without `to:` or with an unrecognised target is **not** an edit: it is routed normally, and the CEO asks whether the seller wants a model rewrite (a plan card, 1 unit, "rewrite <target> to mention <topic>", where the topic must match a confirmed fact) or wants to give the exact text. The edit sentence never approves a plan, never approves the listing, and never records a fact.
+
+Valid examples:
+1. `Change bullet 3 to: Wide mouth opening makes filling and cleaning easy.`
+2. `For my AquaNest bottle, change description to: AquaNest is a 1 litre stainless steel water bottle in silver, made to be reused every day.`
+3. `Change keywords on Flipkart to: stainless steel, water bottle, 1 litre, silver`
+4. `change backend terms to: steel flask, reusable bottle` (Amazon pack in view)
+
+Refused examples (nothing saved): `Change bullet 7 to: ...` when the pack has 5 bullets ("this pack has bullets 1-5"); `Change bullet 2 to:` (empty text); `Change bullet 2 to: Keeps drinks cold for 24 hours` (insulated is not confirmed: unsupported claim); `Change keywords to: leakproof, water bottle` ("leakproof" is not a recommended keyword for this product); `Change title to: ...` ("to change the title, approve a different title"); `Change backend terms on Flipkart to: ...` (Amazon only); `Change bullet 1 to: <501 characters>` (over the bullet ceiling).
+Not an edit: `make bullet 2 shorter` (no `to:`; the CEO offers a rewrite or asks for the exact text); `Change bullet 2` (same).
+
+#### 6.18.8 Data, authorization, billing
+
+- **Database ownership (Q8, resolved by the repository's own convention, 2026-10-30).** `packages/slim-cmo/migrations` (version table `alembic_version_slim_cmo`) owns every table the CMO package's pure rules and services write, and holds no cross-package foreign keys: M2 `cmo_keyword_analysis`, M3 `cmo_title_analysis`, M5 `cmo_buyer_question_set` and `cmo_readiness_assessment` are all there. `backend/migrations` (`alembic_version_backend`) owns the CEO conversation, quota and showcase tables: `investigation_message` card kinds (M4 `0025`, M5 `0026`) and `cmo_result_usage_event` (`0020`). Therefore: **`cmo_listing_audit` → slim-cmo tree, next revision `20261030_0007`** (its only foreign key is to `cmo_generation`, same package); **the `LISTING` card kind → backend tree, `20261030_0027`**; **the `APPROVED` usage event kind (a widened `cmo_usage_kind_check`) → backend tree, `20261030_0028`**, one concern per migration, hand-written SQL, upgrade/downgrade/re-upgrade tested on the scratch DB as CI does. No new ownership pattern is introduced. `cmo_listing_audit`: `tenant_id`, composite FK `(tenant_id, generation_id)` to the pack row, `content_hash`, `marketplace`, `verdict`, `findings` JSONB, `keyword_map` JSONB, `checks` JSONB (each check's status, including `NOT_ASSESSED`), `method_version`, `created_at`; unique `(tenant_id, generation_id, content_hash)`; `FORCE` RLS; `SELECT, INSERT` only for the application role; no score, demand, ranking or conversion column. No change to `cmo_generation.output_type` (revisions are `LISTING_COPY`); lineage lives in `output_structured` until M7 decides otherwise. If implementation shows a column is needed on `cmo_generation`, that is a new spec decision, not a silent migration.
+- **Authorization.** New closed action `cmo.generate_full_listing` (permission `agent.cmo`; units = the sum of the artefacts it delivers, shown on the card); registered once and routed by the CEO only. The existing per-artefact actions and their meters are unchanged. Tenant comes only from the session; another tenant's titles, facts, analyses, insights and audits are never read (a foreign id looks like not found). Model access stays the local `LlmProvider`; no numeric parameter, no model-written number: every figure in the audit and map is computed by code.
+- **Idempotency and errors.** Per-artefact keys derive from the plan request key; a second click or retry returns the existing rows; a partially complete run resumes without recharging a delivered artefact; a failure never leaves a half-saved pack (§6.4 atomicity) and always says why.
+
+#### 6.18.9 Edge cases (each has a test in the acceptance document)
+
+No approved title; seller declines the plan; double click or network retry; no recommended candidates; only weak candidates; thin or missing facts; contradictory facts; unanswered or `SELLER_UNKNOWN` buyer questions; Amazon vs Flipkart vs Meesho (backend terms Amazon only; Flipkart structured fields stay `NEEDS_SELLER_INPUT`); no verified marketplace rule; backend-terms failure after a good pack; provider failure; competitor theme not supported by facts; CI unavailable; competitor text or price present in the saved insight (never reused); revision introducing an unsupported claim; title changed after generation; cross-tenant ids; copied vs approved vs live; flag off or absent; a title step inside a full-listing request versus the same request made on its own; a `VERIFIED` row appearing after a title was approved on the unverified basis; bullet target missing or invalid while the flag is on.
+
+#### 6.18.10 Decisions (all approved by the owner, 2026-10-30)
+
+| # | Decision | Recorded in |
+|---|---|---|
+| Q8 | Database ownership: slim-cmo tree owns `cmo_listing_audit` (`20261030_0007`); backend tree owns the `LISTING` card kind (`20261030_0027`) and the `APPROVED` usage event kind (`20261030_0028`) | §6.18.8 |
+| Q26 | A seller-written revision is free; a model rewrite costs 1 unit per section | §6.18.7 |
+| Q27 | One itemised approval card; hashtags off by default | §6.18.2 |
+| Q28 | Repetition warnings W1-W7: readability warnings only, never blockers, never marketplace rules | §6.18.5a |
+| Q29 | Append-only `APPROVED` event: no billing, no publication meaning | §6.18.7 |
+| Q30 | The fixed section-edit sentence, its limits and examples | §6.18.7a |
+| Q31 | Revision lineage and previous content stay in `output_structured` for M6; M7 migrates them into version history | §6.18.7 |
+| Q32 | The rules-unavailable basis also covers title-set generation, selection and approval, **only** inside an M6 full-listing workflow | §6.18.11 |
+| Q33 | `rules_unavailable_bullet_target = 5`; `listing_unverified_rules_enabled = false` by default | §6.18.11 |
+
+Still blockers, not decisions: B2 (live model quality), B3, B5, B6 (display widths), B7 (signed-in click-through); B1 is relaxed for M6 but not cleared.
+
+#### 6.18.11 Rules-unavailable basis (owner decision 2026-10-30; amends C13 for M6 only)
+
+**Why.** With no `VERIFIED` marketplace row (blocker B1) the whole title-to-listing chain fails closed, so the seller can reach nothing. The owner decided that M6 may generate evidence-backed listings from confirmed seller facts and M2 candidates without verified marketplace data, **provided Metrion never claims the result complies with, is accepted by, or is ready for a marketplace.**
+
+**When it applies (all must hold).** (1) The step belongs to an M6 full-listing workflow: the action `cmo.generate_full_listing`, a revision of its output, or a **title step** (title-set generation, title selection, title approval, or validation of a seller-typed or edited title) that the CEO starts *inside* a full-listing request and marks with the declared field `workflow = FULL_LISTING` (stored in that artefact's `output_structured` and on the approval row's context). A title step requested on its own carries no marker and keeps C13 exactly as before. (2) The resolver finds no usable row for that marketplace/category: no `VERIFIED` row, the newest row is stale, or its `count_rule` is not verified. (3) The platform-config flag `listing_unverified_rules_enabled` is exactly `true`. **Its default is `false`**: absent, `false` or any other value means disabled, and the step is blocked with the reason "unverified drafts are not enabled" (a safe default, not a configuration fault). An operator turns it on deliberately. A `VERIFIED`, non-stale row always wins and the normal limits are enforced; this basis never overrides verified data. `TEST_FIXTURE` rows are still never read in production. A misconfigured required key (`CONFIG_MISSING` / `CONFIG_INVALID` of a key other than the flag, including `rules_unavailable_bullet_target`) still blocks: that is a configuration fault, not missing marketplace data.
+
+**Still enforced, unchanged.** Claim eligibility, forbidden content, grounding in confirmed facts, numbers and units, contradictions, M2 traceability, exact duplicates, phone/price rules, the "do not claim" topics, the parse-safety ceilings, the atomic outcome (complete only if every section passes) and idempotency.
+
+**Not enforced and not guessed.** Title, bullet, description, keyword and backend-term lengths, the number of bullets a marketplace allows, description type, structured fields and byte caps (the existing rule that an unstated limit is not enforced and not guessed, §6.4 item 4, applies to the whole row). The code **measures** each section's length (both counts, code points and UTF-16, labelled "measured, not checked against any marketplace rule") and shows it. The pack is written to the generation setting `rules_unavailable_bullet_target`, **approved value 5** (a positive integer; the plan card says "draft target: 5 bullets (not a marketplace requirement)"; it is never shown or described as a marketplace rule, and the number is not stored as a constraint). While the flag is on, a missing or invalid value is `CONFIG_MISSING` / `CONFIG_INVALID`: there is no hidden default in code. Both keys follow the repository's configuration convention (rows of `cmo_platform_config` read by `slim_cmo/config.py`, supplied as data through the existing configuration tooling, never seeded by a migration); the approved seed values are `listing_unverified_rules_enabled = false` and `rules_unavailable_bullet_target = 5`.
+
+**Labelling.** `output_structured.rules_basis` and the pack's `constraint_check` record `UNVERIFIED` (otherwise `VERIFIED`); no `source_url` or `verified_at` is shown. The card carries this banner, always visible: *"Marketplace rules are not verified for <marketplace>. Lengths and field limits were measured, not checked. Check them on the marketplace before you use this listing."*
+
+**Effect on the audit and the other measures.** Checks A03 (limits), A12 (cap) and A13 are `NOT_ASSESSED` with that reason; the verdict can never exceed `CHECKED_NOT_VERIFIED` (`BLOCKED` and `NEEDS_ATTENTION` remain possible from the checks that did run). The M3 marketplace-compliance column stays `NOT_ASSESSED`; the M5 readiness verdict is unchanged and `READY` stays impossible. No sentence anywhere says compliant, verified, meets requirements, will be accepted, or ready. Billing is unchanged (a delivered artefact is a delivered artefact).
+
+**Title steps (Q32, approved 2026-10-30).** Title sets and the validation of a seller-edited title are also gated by C13 (§6.4 item 5, §6.4.2 item 5), so without a verified row the seller could not obtain an approved title. The same basis therefore applies to title-set generation, title selection and title approval **only when the CEO runs them inside an M6 full-listing request** (the `workflow = FULL_LISTING` marker of condition (1)). On that path: the claim, forbidden-content and grounding gates and the exact-duplicate rules are enforced; no title length or option-count limit is enforced or guessed; lengths are measured and shown; the title set and the approval record `rules_basis = UNVERIFIED`; the M3 marketplace-compliance column is `NOT_ASSESSED`; the M4 preview stays `ILLUSTRATIVE`. M3, M4 and M5 read such a title set unchanged. **If a `VERIFIED` row later exists** and an approved title violates one of its limits, the next pack is refused with that reason and the seller approves a shorter title; the earlier approval, title set and packs are untouched.
+
+**What is not affected.** A title request made on its own, the standalone description, bullets, keywords, backend terms and hashtag actions, catalog Q&A, trend reports, image analysis and every M0-M5 behaviour keep C13 and their existing rules unchanged. The rules-unavailable basis is reachable only through the full-listing workflow and the title steps it starts.
+
 ### 6.4 Title sets, approval and marketplace-specific copy packs
 
 **Workflow, per marketplace the seller selected:** title set → seller approval → copy pack. Each marketplace runs this workflow independently with its own constraint row, its own approval and its own pack.
@@ -362,7 +553,7 @@ When the CEO runs a CMO writing action from chat it supplies `sku` = a determini
    - **Deterministic enforcement in code, never trusted to the LLM:** title consistency (the pack must not contradict the approved title or introduce a non-eligible attribute), bullet count and per-bullet length, description type and length, keyword count/length/duplication, UTF-8 byte caps, forbidden-content scan (price figures and unsupported price/discount/savings claims — the neutral word "price", as in "fair price", is allowed —, GST/tax statements, "trending/bestseller" family, unsupported claims, URLs/contact details where the constraint disallows them). Any limit the constraint row does not state is **not enforced and not guessed** — the pack notes which limits were unverified.
    - **Atomic outcome.** The pack is `COMPLETE` only if description, bullets and keywords all pass validation. Otherwise it is `FAILED` with 0 units and a plain reason (e.g. *"needs more confirmed product facts: material, capacity"*); no partial pack is delivered or billed. Where claim-eligible facts are too thin to write valid copy without non-eligible claims, the result is `FAILED / NEEDS_FACTS` listing exactly which facts to supply — never padded with guesses.
    - **Flipkart structured fields.** Fields in a category's attribute form are filled only from claim-eligible facts; the rest are returned as `NEEDS_SELLER_INPUT` with the caveat that the required-field list for a category is not verified (Q5) — CMO does not invent required fields.
-5. **Constraint blocking (C13).** If the marketplace has no `VERIFIED` row, or the newest row's `verified_at` is older than `format_constraint_max_age_days` (config, §6.3), or that config key is missing, **or the row does not state a verified `count_rule`** (how the marketplace counts characters; backend search terms are exempt because their cap is in UTF-8 bytes), production generation for **that marketplace** is blocked (E5) with the reason; other marketplaces in the same request proceed. `TEST_FIXTURE` rows are never read by the production path.
+5. **Constraint blocking (C13).** If the marketplace has no `VERIFIED` row, or the newest row's `verified_at` is older than `format_constraint_max_age_days` (config, §6.3), or that config key is missing, **or the row does not state a verified `count_rule`** (how the marketplace counts characters; backend search terms are exempt because their cap is in UTF-8 bytes), production generation for **that marketplace** is blocked (E5) with the reason; other marketplaces in the same request proceed. `TEST_FIXTURE` rows are never read by the production path. **Amended 2026-10-30:** for the M6 full-listing action only, see §6.18.11 (rules-unavailable basis); every other artefact action keeps this block unchanged.
 6. **Standalone artefacts remain separate products,** each with its own trigger, validation and billing (§8.1.1): `DESCRIPTION`, `BULLETS`, `KEYWORDS`, Amazon `BACKEND_TERMS`, `HASHTAGS`. A standalone artefact requested after a pack is a new artefact and a new unit (no dedupe); it never silently alters the pack row, which stays immutable.
 7. **No publishing, no write-back.** Output is displayed with copy buttons only; nothing is sent to a marketplace (§0).
 
@@ -848,6 +1039,14 @@ All paths enter the `auth.md` §7.1 six-step chain; permission and entitlement a
 | Q23 | **Language/region:** English + India only in V1; Hinglish/regional-language support is not claimed. | Quality |
 | Q24 | **Standalone-after-pack pricing:** a standalone component after a pack is a new unit with no dedupe — acceptable? | Entitlement |
 | Q25 | **Failed or degraded trend reports and the shared `research.market_trends` meter:** provider quota is spent even on a failed report; should the shared meter count it? | Entitlement |
+| Q26 | ~~M6 revision metering~~ **Approved 2026-10-30:** a seller-written revision is free; a model rewrite is 1 unit per section (§6.18.7). | Billing |
+| Q27 | ~~M6 approval structure~~ **Approved 2026-10-30:** one itemised approval card; hashtags off by default (§6.18.2). | CEO flow |
+| Q28 | ~~Repetition and stuffing thresholds~~ **Approved 2026-10-30:** W1-W7 of §6.18.5a, readability warnings only, never blockers or marketplace rules. | Audit sensitivity |
+| Q29 | ~~Seller approval of the final listing~~ **Approved 2026-10-30:** an auditable `APPROVED` usage event; no billing, no publication meaning; bound to one immutable pack row (§6.18.7). | Status model; backend migration `0028` |
+| Q30 | ~~Section-edit sentence~~ **Approved 2026-10-30:** the grammar, limits and examples of §6.18.7a. | CEO routing |
+| Q31 | ~~Revision lineage storage~~ **Approved 2026-10-30:** keep the previous content and `revision_of` lineage in `output_structured`; M7 migrates it into real version history. | Schema, M7 |
+| Q32 | ~~Extend the rules-unavailable basis to the title steps~~ **Approved 2026-10-30:** title-set generation, selection and approval, only inside an M6 full-listing workflow (§6.18.11); C13 unchanged everywhere else. | C13, M0/M3 |
+| Q33 | ~~Bullet target and opt-in flag~~ **Approved 2026-10-30:** `rules_unavailable_bullet_target = 5` (a generation setting, not a marketplace requirement); `listing_unverified_rules_enabled = false` by default (§6.18.11). | Config, M6 |
 
 ### Resolved — do not re-flag
 
