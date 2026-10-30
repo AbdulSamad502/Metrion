@@ -100,3 +100,22 @@ def test_refusals_are_plain_and_carry_a_machine_code():
     e = cmo_listing.ListingRefused("NEEDS_FACTS", "Tell me: Brand.", missing=["Brand"])
     assert (e.code, e.status, e.missing, str(e)) == ("NEEDS_FACTS", 422, ("Brand",), "Tell me: Brand.")
     assert cmo_listing.ListingRefused("AUDIT_BLOCKED", "x", status=409).status == 409
+
+
+# ---- N-15d: the CEO tells the seller a saved listing was built from a previous title (read-only; nothing is regenerated)
+def test_the_title_choice_answer_calls_out_a_listing_built_from_a_previous_title_and_offers_a_new_plan():
+    from uuid import uuid4
+
+    from backend.ceo.contract import LegResult, LegStatus
+    from backend.ceo.evidence import EvidenceCollector
+
+    note = {"generationId": "g1", "marketplace": "AMAZON", "product": "AquaNest bottle", "explanation": "This listing for AquaNest bottle on Amazon was built from a previous title.",
+            "nextStep": "Nothing was changed or regenerated. Ask me to write the complete listing again and I will plan it for your approval first."}
+    base = {"approvedText": "AquaNest Insulated Bottle", "editedBySeller": False}
+    with_note = EvidenceCollector(uuid4())
+    with_note.add_leg(LegResult(action_key="cmo.approve_title", status=LegStatus.COMPLETE, payload={**base, "listingsBuiltFromEarlierTitle": [note]}))
+    facts = {a: b for a, b, _ in with_note.table().facts}
+    assert "built from a previous title" in facts["Your saved listing"] and "plan it for your approval first" in facts["Your saved listing"]
+    plain = EvidenceCollector(uuid4())
+    plain.add_leg(LegResult(action_key="cmo.approve_title", status=LegStatus.COMPLETE, payload={**base, "listingsBuiltFromEarlierTitle": []}))
+    assert "Your saved listing" not in {a for a, _, _ in plain.table().facts}

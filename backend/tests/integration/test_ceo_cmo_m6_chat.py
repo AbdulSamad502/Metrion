@@ -12,6 +12,7 @@ from backend.ceo import cmo_chat
 from slim_cmo.service.models import NewFact
 from slim_cmo.types import SellerFactType as F
 from tests.integration.test_ceo_cmo_delegation import approve, chat, messages, new_investigation, say  # noqa: F401
+from tests.integration.test_ci_p3 import seed_competitor
 from tests.integration.test_cmo_api import _erase_cmo_rows, ctx_engine, env, fake_clerk  # noqa: F401
 from tests.integration.test_cmo_m6_integration import FLAG_ON, ListingProvider, NAME, TITLE, ru_env
 
@@ -68,6 +69,7 @@ def test_the_request_is_planned_on_a_card_nothing_runs_typed_yes_does_nothing_an
                  "Draft target: 3 bullets (not a marketplace requirement)", "Nothing is sent to a marketplace and nothing is published"):
         assert line in card, line
     assert any(l.startswith("Cost: up to 2 CMO units") for l in plan["plan"]["compact_lines"]) and any("not verified" in l for l in plan["plan"]["compact_lines"])
+    assert "Competitor listing themes were not used" in card  # the existing competitor line is on the card (N-05c)
     assert "Nothing has run yet" in card and plan["status"] == "AWAITING_APPROVAL" and "typing yes does not approve" in plan_messages(chat, inv)[0]["content"]
     before = counts(chat)
     assert before["gens"] == 0 and before["cmo_events"] == 0 and before["calls"] == 0  # a plan card charges and generates nothing
@@ -91,8 +93,41 @@ def test_a_missing_fact_set_is_refused_in_plain_words_before_any_plan_card(chat)
     inv = new_investigation(chat)
     r = converse(chat, inv)
     assert r["status"] != "PLANNED", r
-    assert "Tell me" in r["answer"] or "confirmed" in r["answer"]
+    assert "Tell me" in r["answer"] and all(name in r["answer"] for name in ("Brand", "Size or capacity", "Material"))  # the missing details are NAMED (N-05f, N-05h)
     assert counts(chat) == {"gens": 0, "cmo_events": 0, "audits": 0, "calls": 0} and r.get("plan") is None and plan_messages(chat, inv) == []
+
+
+def test_one_missing_required_detail_is_named_and_stops_the_request_before_any_plan_card(chat):
+    ru_env(chat.env, ListingProvider())
+    rows = [NewFact(F.ATTRIBUTE, SKU, "product_name", NAME), NewFact(F.BRAND, SKU, None, "AquaNest"), NewFact(F.ATTRIBUTE, SKU, "Size", "1 litre"), NewFact(F.ATTRIBUTE, SKU, "Color", "silver")]
+    chat.env.runtime.store.save_facts(chat.env.tenant, chat.env.user_id, rows)  # no material
+    inv = new_investigation(chat)
+    r = converse(chat, inv)
+    assert r.get("plan") is None and "Material" in r["answer"] and "Brand" not in r["answer"].split("Tell me:")[-1]
+    assert counts(chat) == {"gens": 0, "cmo_events": 0, "audits": 0, "calls": 0} and plan_messages(chat, inv) == []
+
+
+def test_saved_competitor_themes_are_named_on_the_plan_card_frozen_into_the_plan_and_used_only_after_approve(chat):
+    seed(chat, NewFact(F.ATTRIBUTE, SKU, "Feature", "reusable"))  # a confirmed fact that carries one of the competitor themes
+    insight = seed_competitor(chat.env, themes=["reusable", "insulated"])
+    inv = new_investigation(chat)
+    plan = converse(chat, inv)["plan"]
+    leg = plan["plan"]["legs"][0]
+    assert leg["slots"]["ci_insight_ids"] == [str(insight)]  # the seller approves exactly these insights; the ids reached CMO only through the CEO broker
+    assert "Informed by themes from 1 of your tracked competitors' saved listings" in plan["plan"]["summary_text"]
+    assert counts(chat)["gens"] == 0 and counts(chat)["calls"] == 0
+    assert approve(chat, inv, plan).status_code == 200
+    assert chat.env.q("SELECT input_mode FROM cmo_generation WHERE output_type = 'LISTING_COPY' AND status = 'COMPLETE'")[0][0] == "CEO_BROKERED_CI"
+
+
+def test_declining_the_plan_generates_nothing_and_the_old_card_can_never_be_approved_later(chat):
+    seed(chat)
+    inv = new_investigation(chat)
+    plan = converse(chat, inv)["plan"]
+    d = chat.client.post(f"/api/v1/ceo/investigations/{inv}/plans/{plan['id']}/decline", json={"reason": "not now"}, headers=chat.env.headers)
+    assert d.status_code == 200 and d.json()["status"] == "DECLINED"
+    late = approve(chat, inv, plan)
+    assert late.status_code in (409, 422) and counts(chat) == {"gens": 0, "cmo_events": 0, "audits": 0, "calls": 0}
 
 
 def test_contradictory_confirmed_facts_are_refused_before_any_plan_card(chat):

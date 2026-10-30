@@ -466,6 +466,7 @@ def post_title_approval(body: ApprovalBody, ctx: AuthContext = require_auth(perm
             "approvalId": str(res.approval_id), "generationId": str(res.generation_id),
             "optionId": str(res.option_id) if res.option_id else None, "approvedText": res.approved_text,
             "editedBySeller": res.edited_by_seller, "unitsBilled": 0, "agentRunId": str(run_id),
+            "listingsBuiltFromEarlierTitle": cmo_listing.earlier_title_notice(p.tenant_id, res.generation_id),  # N-15d: informational only; nothing is regenerated
         }
 
     return _guarded(go)

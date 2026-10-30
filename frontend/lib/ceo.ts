@@ -94,6 +94,7 @@ export const isReadinessCard = (c: unknown): c is ReadinessCard => !!c && typeof
 export type ListingAuditCheck = { id: string; name: string; status: "PASS" | "FAIL" | "NOT_ASSESSED" | "NOT_APPLICABLE"; detail: string };
 export type ListingAuditFinding = { check: string; severity: "BLOCKER" | "WARNING" | "NOTE"; section: string; code: string; explanation: string; correction: string | null };
 export type ListingCiRow = { theme: string; sharedBy: { count: number; of: number }; support: "SUPPORTED" | "CONSIDER_IF_TRUE"; insightIds: string[]; sources: string[]; limitation: string };
+export type ListingTitleStatus = { state: "CURRENT" | "OUTDATED" | "UNKNOWN"; reason: string | null; marketplace: string; product: string | null; builtFrom: string | null; currentApproved: string | null; explanation: string; nextStep: string | null };
 export type ListingCard = {
   version: number; kind: "LISTING"; notice: string; investigationId: string | null; generationId: string; marketplace: PreviewMarketplace; rulesBasis: "VERIFIED" | "UNVERIFIED";
   banner: string | null; strategy: string; revisionOf: string | null;
@@ -110,6 +111,7 @@ export type ListingCard = {
     copied: { count: number; at: string | null }; markedUsed: { count: number; at: string | null }; published: { known: false; note: string };
   };
   editHint: string; approveHint: string;
+  titleStatus?: ListingTitleStatus; // N-15d: present on cards from the current backend; absent on older saved cards
 };
 export const isListingCard = (c: unknown): c is ListingCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "LISTING" && !!(c as { audit?: unknown }).audit;
 

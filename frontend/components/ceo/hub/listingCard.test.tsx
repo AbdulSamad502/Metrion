@@ -49,6 +49,26 @@ describe("the complete listing card", () => {
     expect(screen.queryByTestId("listing-banner")).toBeNull();
   });
 
+  it("calls out a listing built from a previous title (N-15d) only when the backend says OUTDATED, and changes nothing else", () => {
+    const status = (state: "CURRENT" | "OUTDATED" | "UNKNOWN") => ({
+      state, reason: null, marketplace: "AMAZON", product: "AquaNest bottle", builtFrom: "Old title", currentApproved: state === "OUTDATED" ? "New title" : null,
+      explanation: "This listing for AquaNest bottle on Amazon was built from a previous title.", nextStep: state === "OUTDATED" ? "Nothing was changed or regenerated. Ask me to write the complete listing again." : null,
+    });
+    const { rerender } = render(<ListingCard card={card({ titleStatus: status("OUTDATED") })} onSend={() => {}} />);
+    const note = screen.getByTestId("listing-title-outdated");
+    expect(note).toHaveTextContent("Built from a previous title · AquaNest bottle on Amazon");
+    expect(note).toHaveTextContent("Old title");
+    expect(note).toHaveTextContent("New title");
+    expect(note).toHaveTextContent("Nothing was changed or regenerated");
+    expect(screen.getByTestId("listing-banner")).toBeInTheDocument(); // the rules banner is separate and still shown
+    for (const s of ["CURRENT", "UNKNOWN"] as const) {
+      rerender(<ListingCard card={card({ titleStatus: status(s) })} onSend={() => {}} />);
+      expect(screen.queryByTestId("listing-title-outdated")).toBeNull();
+    }
+    rerender(<ListingCard card={card()} onSend={() => {}} />); // an older card without the field
+    expect(screen.queryByTestId("listing-title-outdated")).toBeNull();
+  });
+
   it("keeps the states separate and never claims the listing is published, live or accepted", () => {
     render(<ListingCard card={card()} onSend={() => {}} />);
     const states = screen.getByTestId("listing-states");

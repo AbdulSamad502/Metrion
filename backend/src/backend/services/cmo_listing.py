@@ -29,7 +29,7 @@ from slim_cmo.constraints import FormatConstraint
 from slim_cmo.generation.facts import build_fact_context
 from slim_cmo.listing import audit as audit_rules
 from slim_cmo.listing import basis as rules_basis
-from slim_cmo.listing import ci_evidence, edit as edit_rules, keyword_map, preconditions, revise
+from slim_cmo.listing import ci_evidence, edit as edit_rules, keyword_map, preconditions, revise, title_currency
 from slim_cmo.listing.context import ListingContext
 from slim_cmo.listing.text import words
 from slim_cmo.service.errors import NotFound
@@ -119,6 +119,35 @@ def _approved_text(tenant: UUID, approval_id: UUID | None, structured: Mapping[s
     return str(t) if t else None
 
 
+def title_status(tenant: UUID, pack: Mapping[str, Any]) -> dict[str, Any]:
+    """N-15d: was this saved version written from the title the seller has approved NOW for this product and marketplace? Read-only and computed on demand, so nothing is stored, edited,
+    relabelled or regenerated and every historical version is judged by the same rule. A title change that was never approved changes nothing."""
+    sku, mp = pack["sku"], pack["marketplace"]
+    built_from = _approved_text(tenant, pack["approvalId"], pack["structured"])
+    built = cmo_chat_repo.approval_ref(tenant, pack["approvalId"]) if pack["approvalId"] is not None else None
+    cur = cmo_chat_repo.current_approval(tenant, sku, mp) if sku else None
+    ref = lambda r: title_currency.ApprovalRef(r["id"], r["text"], r["approvedAt"]) if r else None  # noqa: E731
+    return title_currency.assess(built_from=built_from, built_approval=ref(built), current=ref(cur), marketplace=mp, product=cmo_chat_repo.product_label(tenant, sku) if sku else None)
+
+
+def earlier_title_notice(tenant: UUID, title_set_id: UUID) -> list[dict[str, Any]]:
+    """After the seller approves a title: the seller's newest complete listing for that product and marketplace, when it was built from a previous title (else nothing). Best-effort: a
+    failed lookup adds nothing and never blocks the approval."""
+    try:
+        found = cmo_chat_repo.title_set_product(tenant, title_set_id)
+        if found is None:
+            return []
+        gid = cmo_chat_repo.latest_listing_pack(tenant, sku=found[0], marketplace=found[1])
+        pack = cmo_chat_repo.listing_pack(tenant, gid) if gid else None
+        status = title_status(tenant, pack) if pack else None
+    except Exception:  # noqa: BLE001
+        logger.exception("could not check the saved listing against the newly approved title")
+        return []
+    if not status or status["state"] != title_currency.OUTDATED:
+        return []
+    return [{"generationId": str(gid), "marketplace": status["marketplace"], "product": status["product"], "explanation": status["explanation"], "nextStep": status["nextStep"]}]
+
+
 def _gaps(attrs: Sequence[Attribute]) -> list[str]:
     out = preconditions.missing_facts(attrs)
     if not any(a.name.casefold() == "category" and a.value for a in attrs):
@@ -192,12 +221,13 @@ def build_card(tenant: UUID, user: UUID, rt: Any, copy_id: UUID, *, investigatio
     banner = rules_basis.BANNER.format(marketplace=mp.value.title()) if basis == rules_basis.UNVERIFIED else None
     return {
         "version": 1, "kind": "LISTING", "notice": NOTICE, "investigationId": str(investigation_id) if investigation_id else None, "generationId": str(copy_id),
-        "marketplace": mp.value, "rulesBasis": basis, "banner": banner, "strategy": built["strategy"] or "NOT_ASSESSED",
+        "marketplace": mp.value, "rulesBasis": basis, "banner": banner,
+        "strategy": (built["strategy"] if built["pack"]["approvalId"] is not None else None) or "NOT_ASSESSED",  # N-05t: a title the seller typed has no M3 strategy; none is invented for it
         "sections": secs.as_dict(), "revisionOf": built["pack"]["revisionOf"], "keywordMap": built["keywordMap"],
         "audit": {"auditId": saved["auditId"], "contentHash": saved["contentHash"], "verdict": res["verdict"], "counts": res["counts"], "checks": res["checks"], "findings": res["findings"],
                   "measured": res["measured"], "limits": res["limits"], "method": res["method"], "createdAt": saved["createdAt"]},
         "ci": {"rows": built["ciRows"], "considerIfTrue": ci_evidence.consider_if_true(built["ciRows"]), "used": bool(built["pack"]["ciSnapshot"])},
-        "states": states, "editHint": "Change bullet 3 to: your own text", "approveHint": APPROVED_TEXT,
+        "titleStatus": title_status(tenant, built["pack"]), "states": states, "editHint": "Change bullet 3 to: your own text", "approveHint": APPROVED_TEXT,
     }
 
 
@@ -373,7 +403,7 @@ def preflight(tenant: UUID, rt: Any, *, sku: str, mp: Marketplace, grounding: Gr
         raise ListingRefused("CONTRADICTORY_FACTS", f"Your confirmed details disagree about the {d['detail']}: {' vs '.join(map(str, d['values']))}. Tell me which is right before I write the listing.", status=409)
     missing = preconditions.missing_facts(attrs)
     vocab = [str(c["keyword"]) for c in keyword_map.placeable(kw.get("candidates") or [])]
-    if kw.get("status") == "NO_FACTS" or not vocab:
+    if kw.get("status") == "NO_FACTS" or not vocab or missing:  # spec 6.18.2 items 2 and 4: the details a listing needs, named, before any plan card (N-05f, N-05h)
         raise ListingRefused("NEEDS_FACTS", "I do not have enough confirmed details to research keywords yet. Tell me: " + (", ".join(missing) or "a few more details about the product") + ".", missing=missing)
     name = next((a.value for a in ctx.eligible if a.name.casefold() == "product_name" and a.value), None)
     qs = _questions(tenant, sku, name, ci)

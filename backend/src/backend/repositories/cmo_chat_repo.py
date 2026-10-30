@@ -258,3 +258,46 @@ def latest_listing_pack(tenant_id: UUID, *, sku: str | None = None, marketplace:
     with tenant_scope(tenant_id) as conn:
         row = conn.execute(_LATEST_PACK, {"t": tenant_id, "sku": sku, "mp": marketplace}).first()
     return row.id if row else None
+
+
+# ------------------------------------------------------------------------------------------------ CMO 3.0 M6: is a saved listing built from the title approved NOW (N-15d)?
+_APPROVAL_REF = text("SELECT id, approved_text, approved_at FROM cmo_title_approval WHERE tenant_id = :t AND id = :a")
+_CURRENT_APPROVAL = text(
+    """
+    SELECT a.id, a.approved_text, a.approved_at FROM cmo_title_approval a JOIN cmo_generation g ON g.tenant_id = a.tenant_id AND g.id = a.generation_id
+    WHERE a.tenant_id = :t AND g.sku = :sku AND g.marketplace = :mp ORDER BY a.approved_at DESC, a.id DESC LIMIT 1
+    """
+)
+_PRODUCT_LABEL = text(
+    "SELECT fact_value FROM seller_fact WHERE tenant_id = :t AND sku = :sku AND attribute_name = 'product_name' AND fact_value IS NOT NULL ORDER BY provided_at DESC LIMIT 1"
+)
+
+
+def approval_ref(tenant_id: UUID, approval_id: UUID) -> dict[str, Any] | None:
+    """One of the seller's title approvals (id, text, when), or None. A foreign or unknown id is None."""
+    with tenant_scope(tenant_id) as conn:
+        r = conn.execute(_APPROVAL_REF, {"t": tenant_id, "a": approval_id}).first()
+    return {"id": str(r.id), "text": str(r.approved_text), "approvedAt": r.approved_at} if r else None
+
+
+def current_approval(tenant_id: UUID, sku: str, marketplace: str) -> dict[str, Any] | None:
+    """The seller's NEWEST approved title for this product and marketplace, or None. Only an approval counts: a title option nobody chose is never "current"."""
+    with tenant_scope(tenant_id) as conn:
+        r = conn.execute(_CURRENT_APPROVAL, {"t": tenant_id, "sku": sku, "mp": marketplace}).first()
+    return {"id": str(r.id), "text": str(r.approved_text), "approvedAt": r.approved_at} if r else None
+
+
+def product_label(tenant_id: UUID, sku: str) -> str | None:
+    with tenant_scope(tenant_id) as conn:
+        r = conn.execute(_PRODUCT_LABEL, {"t": tenant_id, "sku": sku}).first()
+    return str(r.fact_value) if r else None
+
+
+_SET_PRODUCT = text("SELECT sku, marketplace FROM cmo_generation WHERE tenant_id = :t AND id = :g AND output_type = 'TITLE_SET'")
+
+
+def title_set_product(tenant_id: UUID, generation_id: UUID) -> tuple[str, str] | None:
+    """(sku, marketplace) of one of the seller's title sets, or None."""
+    with tenant_scope(tenant_id) as conn:
+        r = conn.execute(_SET_PRODUCT, {"t": tenant_id, "g": generation_id}).first()
+    return (str(r.sku), str(r.marketplace)) if r and r.sku else None

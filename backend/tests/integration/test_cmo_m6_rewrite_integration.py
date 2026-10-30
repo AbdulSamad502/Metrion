@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from slim_cmo.service.models import NewFact
 from slim_cmo.types import SellerFactType as F
-from tests.integration.test_cmo_api import AMAZON, FLIPKART, _login, ctx_engine, env, fake_clerk, seed_cap  # noqa: F401
+from tests.integration.test_cmo_api import AMAZON, FLIPKART, _erase_cmo_rows, _login, ctx_engine, env, fake_clerk, seed_cap  # noqa: F401
 from tests.integration.test_cmo_m6_integration import FLAG_ON, SKU, TITLE, ListingProvider, body, gens, ru_env
 
 pytestmark = pytest.mark.skipif(not os.environ.get("DATABASE_URL_APP") or not os.environ.get("DATABASE_URL"), reason="needs a live Postgres")

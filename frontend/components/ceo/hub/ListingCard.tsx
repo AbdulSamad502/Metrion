@@ -68,6 +68,16 @@ export function ListingCard({ card, disabled = false, onSend, onApprove, onCopie
       </div>
       {card.banner && <p role="note" data-testid="listing-banner" className="m-0 rounded-lg p-3 t-meta font-bold" style={{ border: "1px solid var(--warning)", color: "var(--warning)" }}>{card.banner}</p>}
 
+      {card.titleStatus?.state === "OUTDATED" && (
+        <div role="note" data-testid="listing-title-outdated" className="rounded-lg p-3" style={{ border: "1px solid var(--warning)" }}>
+          <p className="m-0 t-meta font-bold" style={{ color: "var(--warning)" }}>! Built from a previous title · {card.titleStatus.product ?? "this product"} on {card.titleStatus.marketplace.charAt(0) + card.titleStatus.marketplace.slice(1).toLowerCase()}</p>
+          <p className="m-0 mt-1 t-meta" style={{ color: "var(--text-3)" }}>{card.titleStatus.explanation}</p>
+          {card.titleStatus.builtFrom && <p className="m-0 mt-1 t-meta-sm" style={{ color: "var(--text-6)" }}>Written from: “{card.titleStatus.builtFrom}”</p>}
+          {card.titleStatus.currentApproved && <p className="m-0 t-meta-sm" style={{ color: "var(--text-6)" }}>Title you approved since: “{card.titleStatus.currentApproved}”</p>}
+          {card.titleStatus.nextStep && <p className="m-0 mt-1 t-meta-sm" style={{ color: "var(--text-6)" }}>{card.titleStatus.nextStep}</p>}
+        </div>
+      )}
+
       <ul aria-label="Where this version stands" data-testid="listing-states" className="m-0 flex list-none flex-col gap-1 p-0">
         <li className="t-meta" style={{ color: "var(--text-3)" }}>{card.states.generated.done ? "✓" : "○"} Generated{card.states.generated.at ? ` · ${at(card.states.generated.at)}` : ""}</li>
         <li className="t-meta" style={{ color: "var(--text-3)" }}>{card.states.audited.done ? "✓" : "○"} Audited{card.states.audited.verdict ? ` · ${VERDICT_WORD[card.states.audited.verdict as Card["audit"]["verdict"]] ?? card.states.audited.verdict}` : ""}</li>

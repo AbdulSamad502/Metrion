@@ -293,16 +293,17 @@ def append_message(
 
 
 def list_messages(tenant_id: UUID, investigation_id: UUID, *, after_message_id: UUID | None = None) -> list[dict[str, Any]]:
-    """Messages in order. `after_message_id` returns only messages created after that one (the rolling-summary
+    """Messages in order: `created_at`, then `seq` (the database's insertion order; a seller's message and the CEO's reply to it can share one timestamp, and the random id must never decide).
+    `after_message_id` returns only messages created after that one (the rolling-summary
     window: messages since `summary_covers_through`, spec AC9)."""
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(
             text(
                 "SELECT m.id, m.role, m.kind, m.content, m.turn_id, m.agent_run_id, m.created_by, m.created_at, m.choices "
                 "FROM investigation_message m WHERE m.investigation_id = :inv "
-                "AND (CAST(:after AS uuid) IS NULL OR (m.created_at, m.id) > "
-                "     (SELECT a.created_at, a.id FROM investigation_message a WHERE a.id = :after)) "
-                "ORDER BY m.created_at, m.id"
+                "AND (CAST(:after AS uuid) IS NULL OR (m.created_at, m.seq) > "
+                "     (SELECT a.created_at, a.seq FROM investigation_message a WHERE a.id = :after)) "
+                "ORDER BY m.created_at, m.seq"
             ),
             {"inv": str(investigation_id), "after": str(after_message_id) if after_message_id else None},
         )

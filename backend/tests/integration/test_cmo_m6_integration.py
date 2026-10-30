@@ -177,8 +177,10 @@ def test_approve_for_use_is_a_click_bound_to_one_version_zero_units_and_never_pu
 def test_the_dashboard_usage_route_cannot_record_an_approval(env):
     ru_env(env, ListingProvider())
     gid = listing(env)["generationId"]
-    r = env.client().post("/api/v1/cmo/showcase/usage-events", json={"generation_id": gid, "event_kind": "APPROVED", "surface": "DASHBOARD"}, headers=env.headers)
-    assert r.status_code in (404, 405, 422) and env.n("cmo_result_usage_event", "event_kind = 'APPROVED'") == 0
+    r = env.client().post("/api/v1/cmo/showcase/usage-events", json={"generationId": gid, "kind": "APPROVED", "surface": "DASHBOARD"}, headers=env.headers)
+    assert r.status_code == 422 and "APPROVED" in json.dumps(r.json()) and env.n("cmo_result_usage_event", "event_kind = 'APPROVED'") == 0  # refused for the kind, not for a malformed body
+    ok = env.client().post("/api/v1/cmo/showcase/usage-events", json={"generationId": gid, "kind": "COPIED", "surface": "DASHBOARD"}, headers=env.headers)
+    assert ok.status_code == 204  # the same body shape is accepted for a copy: the 422 above is really about the kind
 
 
 def test_a_seller_edit_is_free_creates_a_new_version_and_refusals_save_nothing(env):

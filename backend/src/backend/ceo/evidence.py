@@ -794,6 +794,8 @@ class EvidenceCollector:
             return
         self.add_fact("The title you chose", f"“{text}”" + (" (worded by you)" if payload.get("editedBySeller") else ""), "SELLER_PROVIDED")
         self.add_fact("What this means", "It is saved in Metrion as your choice. Nothing was published to any marketplace, and copying it later only records that you did.", "SOURCE_DERIVED")
+        for old in payload.get("listingsBuiltFromEarlierTitle") or []:  # N-15d: a saved complete listing written from a previous title is called out, never changed
+            self.add_fact("Your saved listing", f"{old.get('explanation')} {old.get('nextStep')}", "SOURCE_DERIVED")
         self.add_fact("Next step", "Ask me to write the listing copy (description, bullet points and keywords) and I will base it on this title. That is a separate plan you approve.", "SOURCE_DERIVED")
 
     def _cmo_artefacts(self, payload: Mapping[str, Any]) -> None:
