@@ -2,6 +2,8 @@
  * vision model). This module only types them and calls the routes. Nothing here measures, scores or judges an image, and no call uses an AI credit or publishes anything. */
 
 import { API_BASE, ApiError, apiFetch, apiFetchForm } from "@/lib/api";
+import { demoActive } from "@/lib/demo/mode";
+import { sampleImageUrl } from "@/lib/demo/sampleImage";
 
 type GetToken = () => Promise<string | null>;
 const BASE = "/api/v1/cmo/product-images";
@@ -73,6 +75,7 @@ export function createImagesApi(getToken: GetToken) {
     addFromChat: (b: { sku: string; marketplace: string; investigationId: string; attachmentId: string; role: Role; shotType: string }) => post<UploadResult>("/from-chat", b),
     /** The seller's own stored picture as a blob URL (the route needs the sign-in token, so an <img src> cannot fetch it directly). */
     file: async (fileUrl: string): Promise<string> => {
+      if (demoActive()) return sampleImageUrl(fileUrl); // sample data: a drawn placeholder, nothing is fetched
       const token = await getToken();
       const res = await fetch(`${API_BASE}${fileUrl}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new ApiError(res.status, "image not available");

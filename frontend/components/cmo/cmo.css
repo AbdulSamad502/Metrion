@@ -108,3 +108,35 @@
 .cmo-actions .ov-btn { border: 1px solid var(--ov-edge); padding: 0 16px; min-width: 96px; justify-content: center; margin: 0; }
 .cmo-actions .ov-btn:hover { border-color: var(--ov-field-edge); }
 .cmo-actions .ov-btn--ghost { color: var(--ov-ink-2); }
+
+/* ---------- workspace pages (market, images, performance, overview lanes): one item language on the Overview's tokens, so both themes keep their contrast ---------- */
+.cw-list { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.cw-item { display: flex; flex-direction: column; gap: 16px; padding: 24px; border-radius: 16px; border: 1px solid var(--ov-line); background: var(--ov-soft); min-width: 0; }
+.cw-item[data-focus="true"] { border-color: var(--ov-brand); }
+.cw-head { display: flex; flex-direction: column; gap: 8px; }
+.cw-title { margin: 0; font-size: var(--ov-s2); font-weight: 700; color: var(--ov-ink); line-height: 1.4; text-wrap: balance; }
+.cw-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.cw-meta { margin: 0; font-size: var(--ov-s1); font-weight: 600; color: var(--ov-ink-3); }
+.cw-block { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cw-label { margin: 0; font-size: var(--ov-s1); font-weight: 700; color: var(--ov-ink-3); }
+.cw-text { margin: 0; font-size: var(--ov-s2); font-weight: 500; color: var(--ov-ink-2); line-height: 1.5; max-width: 72ch; }
+.cw-note { margin: 0; font-size: var(--ov-s1); font-weight: 500; color: var(--ov-ink-3); max-width: 72ch; }
+.cw-quiet { border-top: 1px solid var(--ov-line); padding-top: 16px; }
+.cw-sources { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: var(--ov-s1); font-weight: 500; color: var(--ov-ink-3); }
+.cw-link { color: var(--ov-brand-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.cw-link:hover { color: var(--ov-ink); }
+.cw-steps { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cw-step { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--ov-s2); font-weight: 500; color: var(--ov-ink-2); }
+.cw-step .ov-pill { flex: none; }
+.cw-ask { min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--ov-edge); background: var(--ov-card); color: var(--ov-ink); font: inherit; font-size: var(--ov-s1); font-weight: 700; cursor: pointer; transition: border-color 160ms, transform 160ms var(--ov-ease); }
+.cw-ask:hover { border-color: var(--ov-brand); }
+.cw-ask:active { transform: scale(0.97); }
+.cw-ask:focus-visible, .cw-link:focus-visible { outline: 2px solid var(--ov-brand); outline-offset: 2px; }
+.cw-unavail { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 0; font-size: var(--ov-s1); font-weight: 600; color: var(--ov-ink-2); }
+.cw-caution { margin: 0; font-size: var(--ov-s1); font-weight: 700; color: var(--ov-warn); }
+@media (max-width: 479px) { .cw-item { padding: 16px; } }
+@media (prefers-reduced-motion: reduce) { .cw-ask { transition: none; } .cw-ask:active { transform: none; } }
+/* buttons and disclosure rows that carry no colour of their own take the page's ink, so they keep contrast in both themes */
+.cw-page button { color: var(--ov-ink); }
+.cw-page summary { color: var(--ov-ink-2); cursor: pointer; }
+.cw-page button:disabled { color: var(--ov-ink-3); }

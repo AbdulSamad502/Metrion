@@ -14,7 +14,7 @@ function Spark({ k, points }: { k: MetricKey; points: TrendPoint[] }) {
   const known = vals.filter((v): v is number => v !== null);
   if (known.length < 2) {
     return (
-      <p className="m-0 t-meta" style={{ color: "var(--text-4)" }} data-testid={`trend-${k}-none`}>
+      <p className="m-0 t-meta" style={{ color: "var(--ov-ink-3)" }} data-testid={`trend-${k}-none`}>
         {METRIC_LABEL[k]}: not enough days with a value to draw a trend ({known.length} of {points.length}).
       </p>
     );
@@ -36,11 +36,11 @@ function Spark({ k, points }: { k: MetricKey; points: TrendPoint[] }) {
   const last = points[points.length - 1].date;
   return (
     <figure className="m-0 flex flex-col gap-1" data-testid={`trend-${k}`}>
-      <figcaption className="t-meta font-bold" style={{ color: "var(--text-2)" }}>{METRIC_LABEL[k]}</figcaption>
+      <figcaption className="t-meta font-bold" style={{ color: "var(--ov-ink-2)" }}>{METRIC_LABEL[k]}</figcaption>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={`${METRIC_LABEL[k]} by day, ${first} to ${last}. Lowest ${formatMetric(k, lo)}, highest ${formatMetric(k, hi)}.`}>
-        {runs.map((r) => (r.includes(" ") ? <polyline key={r} points={r} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" /> : <circle key={r} cx={r.split(",")[0]} cy={r.split(",")[1]} r="2.5" fill="var(--accent)" />))}
+        {runs.map((r) => (r.includes(" ") ? <polyline key={r} points={r} fill="none" stroke="var(--ov-c4)" strokeWidth="2" strokeLinejoin="round" /> : <circle key={r} cx={r.split(",")[0]} cy={r.split(",")[1]} r="2.5" fill="var(--ov-c4)" />))}
       </svg>
-      <div className="flex justify-between t-meta" style={{ color: "var(--text-4)" }}>
+      <div className="flex justify-between t-meta" style={{ color: "var(--ov-ink-3)" }}>
         <span>{first}</span>
         <span>{formatMetric(k, lo)} – {formatMetric(k, hi)}</span>
         <span>{last}</span>
@@ -50,12 +50,12 @@ function Spark({ k, points }: { k: MetricKey; points: TrendPoint[] }) {
 }
 
 export function TrendCharts({ points, keys }: { points: TrendPoint[]; keys: MetricKey[] }) {
-  if (!points.length) return <p className="m-0 t-body-sm" style={{ color: "var(--text-3)" }} data-testid="trend-empty">No imported days fall in this period, so there is no trend to draw.</p>;
+  if (!points.length) return <p className="m-0 t-body-sm" style={{ color: "var(--ov-ink-2)" }} data-testid="trend-empty">No imported days fall in this period, so there is no trend to draw.</p>;
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>{keys.map((k) => <Spark key={k} k={k} points={points} />)}</div>
       <details>
-        <summary className="mt-focus t-meta font-bold" style={{ color: "var(--text-3)", cursor: "pointer" }}>Show the daily numbers as a table</summary>
+        <summary className="mt-focus t-meta font-bold" style={{ color: "var(--ov-ink-2)", cursor: "pointer" }}>Show the daily numbers as a table</summary>
         <div style={{ overflowX: "auto" }}>
           <table className="t-meta" style={{ borderCollapse: "collapse", minWidth: 480 }} data-testid="trend-table">
             <caption className="sr-only">Daily values from your imported reports. A dash means the report has no value for that day.</caption>

@@ -10,7 +10,7 @@ import { formatMetric, METRIC_LABEL, performanceError, type CorrectionRow, type 
 
 const KEYS = ["impressions", "clicks", "orders", "units", "sales"] as const;
 type Key = (typeof KEYS)[number];
-const box: React.CSSProperties = { border: "1px solid var(--border-subtle)" };
+const box: React.CSSProperties = { border: "1px solid var(--ov-line)" };
 const MP: Record<string, string> = { AMAZON: "Amazon", FLIPKART: "Flipkart", MEESHO: "Meesho" };
 const show = (k: Key, v: number | null) => (v === null ? "not reported" : formatMetric(k, v));
 const input = (k: Key, v: number | null) => (v === null ? "" : k === "sales" ? `${Math.floor(v / 100)}.${String(v % 100).padStart(2, "0")}` : String(v));
@@ -49,10 +49,10 @@ function Editor({ api, line, onSaved, onClose }: { api: PerformanceApi; line: Pe
       <label className="flex flex-col gap-1">Why are you correcting it? (required)
         <textarea aria-label="Reason" className="mt-focus rounded-md px-2 py-1" style={box} rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy} />
       </label>
-      <p className="m-0 t-meta-sm" style={{ color: "var(--text-6)" }}>The imported value is kept for good and shown beside the corrected one. A blank is saved as “not reported”, never as zero.</p>
-      {error && <p role="alert" className="m-0" style={{ color: "var(--negative, #E5484D)" }}>{error}</p>}
+      <p className="m-0 t-meta-sm" style={{ color: "var(--ov-ink-3)" }}>The imported value is kept for good and shown beside the corrected one. A blank is saved as “not reported”, never as zero.</p>
+      {error && <p role="alert" className="m-0" style={{ color: "var(--ov-bad)" }}>{error}</p>}
       <div className="flex gap-2">
-        <button type="submit" disabled={busy || nothing || reason.trim().length < 3} className="mt-focus rounded-md px-3 py-1.5 font-bold" style={{ border: "1px solid var(--accent)", color: "var(--accent)", background: "transparent" }}>{busy ? "Saving…" : "Save correction"}</button>
+        <button type="submit" disabled={busy || nothing || reason.trim().length < 3} className="mt-focus rounded-md px-3 py-1.5 font-bold" style={{ border: "1px solid var(--ov-brand-ink)", color: "var(--ov-brand-ink)", background: "transparent" }}>{busy ? "Saving…" : "Save correction"}</button>
         <button type="button" onClick={onClose} disabled={busy} className="mt-focus rounded-md px-3 py-1.5 font-bold" style={box}>Cancel</button>
       </div>
     </form>
@@ -64,8 +64,8 @@ function Line({ api, line, onChanged }: { api: PerformanceApi; line: PerfLine; o
   return (
     <li className="flex flex-col gap-1 rounded-lg p-3 t-meta" style={box} data-testid="perf-line" data-corrected={line.corrected ? "yes" : "no"}>
       <div className="flex flex-wrap items-center gap-2">
-        <strong style={{ color: "var(--text-1)" }}>{line.date} · {line.reportSku}</strong>
-        <span style={{ color: "var(--text-4)" }}>from {line.sourceName}</span>
+        <strong style={{ color: "var(--ov-ink)" }}>{line.date} · {line.reportSku}</strong>
+        <span style={{ color: "var(--ov-ink-3)" }}>from {line.sourceName}</span>
         {line.corrected && <span className="rounded-md px-1.5 py-0.5 font-bold" style={box} data-testid="corrected-badge">{line.voided ? "✗ VOIDED" : "✎ CORRECTED"}</span>}
       </div>
       <Values vals={line.original} label="Imported" />
@@ -77,9 +77,9 @@ function Line({ api, line, onChanged }: { api: PerformanceApi; line: PerfLine; o
 }
 
 function History({ rows }: { rows: CorrectionRow[] }) {
-  if (rows.length === 0) return <p className="m-0 t-meta" style={{ color: "var(--text-3)" }} data-testid="no-corrections">No corrections yet.</p>;
+  if (rows.length === 0) return <p className="m-0 t-meta" style={{ color: "var(--ov-ink-2)" }} data-testid="no-corrections">No corrections yet.</p>;
   return (
-    <ol className="m-0 flex list-none flex-col gap-1.5 p-0 t-meta" style={{ color: "var(--text-3)" }} aria-label="Correction history">
+    <ol className="m-0 flex list-none flex-col gap-1.5 p-0 t-meta" style={{ color: "var(--ov-ink-2)" }} aria-label="Correction history">
       {rows.map((c) => (
         <li key={c.id} data-testid="correction-row">
           <strong>{c.at.slice(0, 10)}</strong> · {MP[c.marketplace]} · {c.reportSku} · {c.date} · {c.voided ? "marked not reported" : `changed ${c.changed.map((k) => METRIC_LABEL[k as Key] ?? k).join(", ")}`}<br />
@@ -111,12 +111,12 @@ export function CorrectionsPanel({ api, version, onChanged }: { api: Performance
         </label>
         <button type="submit" className="mt-focus rounded-md px-3 py-1.5 font-bold" style={box}>Show records</button>
       </form>
-      {notice && <p role="status" className="m-0 mb-2 t-meta" style={{ color: "var(--positive)" }} data-testid="correction-saved">✓ {notice}</p>}
+      {notice && <p role="status" className="m-0 mb-2 t-meta" style={{ color: "var(--ov-good)" }} data-testid="correction-saved">✓ {notice}</p>}
       {error && <p role="alert" className="m-0 t-body-sm">{error}</p>}
       {data && (
         <>
-          <p className="m-0 mb-2 t-meta" style={{ color: "var(--text-3)" }}>{data.total} imported record(s) between {data.start} and {data.end} (newest first). {data.note}</p>
-          {data.lines.length === 0 ? <p className="m-0 t-meta" style={{ color: "var(--text-3)" }} data-testid="no-lines">No imported records for this selection.</p> : (
+          <p className="m-0 mb-2 t-meta" style={{ color: "var(--ov-ink-2)" }}>{data.total} imported record(s) between {data.start} and {data.end} (newest first). {data.note}</p>
+          {data.lines.length === 0 ? <p className="m-0 t-meta" style={{ color: "var(--ov-ink-2)" }} data-testid="no-lines">No imported records for this selection.</p> : (
             <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Imported records">{data.lines.map((l) => <Line key={l.lineId} api={api} line={l} onChanged={(m) => { setNotice(m); setTick((n) => n + 1); onChanged(); }} />)}</ul>
           )}
           <div className="mt-2 flex gap-2 t-meta">
@@ -125,8 +125,8 @@ export function CorrectionsPanel({ api, version, onChanged }: { api: Performance
           </div>
         </>
       )}
-      <h3 className="m-0 mb-1 mt-4 t-body-sm font-bold" style={{ color: "var(--text-2)" }}>Corrections you made</h3>
-      {hist ? <History rows={hist.corrections} /> : <p className="m-0 t-meta" style={{ color: "var(--text-4)" }}>Loading…</p>}
+      <h3 className="m-0 mb-1 mt-4 t-body-sm font-bold" style={{ color: "var(--ov-ink-2)" }}>Corrections you made</h3>
+      {hist ? <History rows={hist.corrections} /> : <p className="m-0 t-meta" style={{ color: "var(--ov-ink-3)" }}>Loading…</p>}
     </SectionCard>
   );
 }

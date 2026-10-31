@@ -5,6 +5,7 @@ import { apiFetch, apiFetchForm } from "@/lib/api";
 
 type GetToken = () => Promise<string | null>;
 const BASE = "/api/v1/cmo/performance";
+export const PERFORMANCE_PAGE = "/dashboard/cmo/performance"; // linked by constant so the read-only showcase page carries no CMO route text
 
 export type MetricKey = "impressions" | "clicks" | "orders" | "units" | "sales" | "ctr" | "cvr";
 export const METRIC_KEYS: MetricKey[] = ["impressions", "clicks", "ctr", "orders", "cvr", "units", "sales"];

@@ -3,13 +3,14 @@ import { miscRoutes } from "./fixtures/misc";
 import { cfoRoutes } from "./fixtures/cfo";
 import { ciRoutes } from "./fixtures/ci";
 import { cmoRoutes } from "./fixtures/cmo";
+import { cmoWorkspaceRoutes } from "./fixtures/cmoWorkspace";
 import { piRoutes } from "./fixtures/pi";
 
 /** One sample endpoint. `reply` returns the JSON body a real response would carry (same shape as the typed response in `lib/api.ts` and friends).
  * Every figure in a fixture is a fictional sample written by hand, never computed from anything. */
 export type DemoRoute = { method: "GET" | "POST" | "PUT" | "DELETE"; match: RegExp; reply: (m: RegExpMatchArray, body: unknown) => unknown };
 
-const ROUTES: DemoRoute[] = [...ciRoutes, ...cfoRoutes, ...piRoutes, ...cmoRoutes, ...miscRoutes];
+const ROUTES: DemoRoute[] = [...ciRoutes, ...cfoRoutes, ...piRoutes, ...cmoRoutes, ...cmoWorkspaceRoutes, ...miscRoutes];
 
 /** Paths that keep going to the real backend even with sample data on: the CEO Hub's own endpoints (it is never fed sample data), the signed-in
  * session, and the Profit Calculator, which only works out the numbers the seller typed and saves nothing. */
