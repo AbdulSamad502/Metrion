@@ -3,7 +3,7 @@
  * no orchestration of its own: tests script what the "server" persisted and when, exactly as the real turn endpoint would. */
 
 import { ApiError } from "@/lib/api";
-import type { MemoryItem, NeedRow, SharedFinding, SharedFindingsList } from "@/lib/ceo";
+import type { HistoryCompare, HistoryList, HistoryRecommendations, HistoryVersionDetail, MemoryItem, NeedRow, SharedFinding, SharedFindingsList } from "@/lib/ceo";
 import type {
   AgentAvailability, AgentCode, CeoClient, UploadedAttachment, UploadedTable, NewProductFormSupport, PriceImpactFormSupport, SaveInputBody, CeoMessage, CeoRoute, ClarificationCard, ClarificationReply, ExplicitPeriod, FindingRow, HealthEntry, InvestigationDetail, InvestigationStatus,
   InvestigationSummary, TurnEvent, TurnFlow, TurnResponse, TurnRow, UiAction,
@@ -133,6 +133,20 @@ export class FakeCeo {
     p.reject(error);
   }
 
+  /** CMO 3.0 M7: what the listing-history routes return in a test; `error` makes every one of them fail the way the server would. */
+  history: { list?: HistoryList; versions?: Record<string, HistoryVersionDetail>; compare?: HistoryCompare; recommendations?: HistoryRecommendations; error?: unknown } = {};
+
+  private failHistory(): never {
+    throw this.history.error ?? new ApiError(404, "Not found");
+  }
+
+  private historyFor(q: { sku?: string | null; marketplace?: string | null; offset?: number }): HistoryList {
+    if (this.history.error || !this.history.list) return this.failHistory();
+    const all = this.history.list;
+    const versions = all.versions.filter((v) => (!q.sku || v.sku === q.sku) && (!q.marketplace || v.marketplace === q.marketplace));
+    return { ...all, filters: { sku: q.sku ?? null, marketplace: q.marketplace ?? null }, versions, total: versions.length, offset: q.offset ?? 0, hasMore: false, empty: versions.length === 0 };
+  }
+
   client(): CeoClient {
     const rec = <T>(method: string, args: unknown[], fn: () => T | Promise<T>): Promise<T> => {
       this.calls.push({ method, args });
@@ -237,6 +251,12 @@ export class FakeCeo {
           return { agent, attached };
         }),
       getAttachmentImage: (id: string, attachmentId: string) => rec("getAttachmentImage", [id, attachmentId], () => `blob:fake-${attachmentId}`),
+      historyApi: {
+        history: (q) => rec("history", [q], () => this.historyFor(q)),
+        version: (id: string) => rec("version", [id], () => this.history.versions?.[id] ?? this.failHistory()),
+        compare: (a: string, b: string) => rec("compare", [a, b], () => this.history.compare ?? this.failHistory()),
+        recommendations: (id: string) => rec("recommendations", [id], () => this.history.recommendations ?? this.failHistory()),
+      },
       approveListing: (generationId: string) => rec("approveListing", [generationId], () => ({ approved: true, message: "Approved for use in Metrion; not published.", banner: null })),
       recordListingCopy: (generationId: string) => rec("recordListingCopy", [generationId], () => true),
       uploadAttachment: (id: string, file: File) =>

@@ -33,7 +33,7 @@ from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, AGENT_CMO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
 from backend.ceo.approval_gate import evaluate_playbook, plan_required
-from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_chat, cmo_delegation, cmo_profile, compound, conversational, deadlines, expense_chat, import_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, periods, profile_context, references
+from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_chat, cmo_delegation, cmo_history_chat, cmo_profile, compound, conversational, deadlines, expense_chat, import_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, periods, profile_context, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.billing import UnitDecision, unit_decision
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
@@ -560,6 +560,9 @@ def _run_admitted(
         listing = cmo_chat.listing_reply(ctx, text)  # CMO 3.0 M6: the seller's own section edit ("Change bullet 3 to: ...") or "show my listing" (free; no model; typed text never approves)
         if listing is not None:
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, listing[0], now, marker={"cmoListing": True}, choices=({**listing[1], "investigationId": str(inv_id)} if listing[1] else None))
+        history = cmo_history_chat.reply(ctx, text, inv_id)  # CMO 3.0 M7: listing history, version comparison and optimisation advice (free; no model; nothing generated or changed)
+        if history is not None:
+            return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, history[0], now, marker={"cmoListingHistory": True}, choices=history[1])
         cmo_reply = cmo_profile.direct_reply(ctx, text) or cmo_chat.direct_reply(ctx, text)  # CMO 3.0 M1: "remember my AquaNest bottle?" shows the saved profile; M0: "is my bottle dishwasher safe?" is answered from what the seller confirmed, else "not confirmed"; no model, nothing run
         if cmo_reply is not None:
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, cmo_reply, now, marker={"cmoDirect": True})

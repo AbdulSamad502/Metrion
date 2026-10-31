@@ -209,3 +209,86 @@
 | R-18 | LLM eval for the new generation prompt: no number outside the cited facts, no unsupported claim, no competitor sentence, "do not claim" topics not asserted (R-14 extended). |
 | R-19 | `LISTING` card: AA contrast, status never colour-only, reduced motion respected, no pulsing or count-up, copy buttons keyboard-reachable (R-13 extended); frontend typecheck and tests green. |
 | R-20 | Migration ownership follows the repository convention: `cmo_listing_audit` only in `packages/slim-cmo/migrations` (`20261030_0007`), the `LISTING` card kind (`0027`) and the `APPROVED` event kind (`0028`) only in `backend/migrations`; each upgrades, downgrades and re-upgrades on the scratch DB; no cross-package foreign key is added to the slim-cmo tree. |
+
+
+---
+
+## G. M7 detailed acceptance tests (Listing History, Version Intelligence and Optimisation)
+
+> **Status:** designed and implemented 2026-10-31; **automated coverage traced row by row below; not yet signed off in a real signed-in browser except where the status line says so.** Authority: `docs/specs/slim-cmo-agent.md` §6.19 and `docs/specs/ceo-cmo-delegation.md` §6.17. 70 tests numbered **M7-01 … M7-70**, in the order of the M7 handoff brief (A history 1-10, B lineage 11-18, C comparison 19-29, D keywords 30-36, E content and audit 37-43, F recommendations 44-49, G performance 50-53, H CEO and frontend 54-65, I security and regression 66-70). The IDs are new and do not collide with N-/R- IDs. Standard fixture: the M6 "F6" product on the rules-unavailable basis (`ru_env`), with a real Postgres (scratch DB, never the dev DB) and a deterministic fake provider; every test is read-only and asserts no unit, no metered event, no model call and no new row was created by looking.
+> **Test files.** Pure engine: `packages/slim-cmo/tests/unit/history/test_history_engine.py` (U). API + Postgres: `backend/tests/integration/test_cmo_m7_history.py` (A). CEO chat: `backend/tests/integration/test_ceo_cmo_m7_history_chat.py` (C). Migration: `backend/tests/integration/test_cmo_m7_migration.py` (M). Frontend: `frontend/components/ceo/hub/listingHistoryCard.test.tsx` (F). **COVERED** = a test asserts the behaviour; **PARTIAL** = only part, or only at unit level, with the gap named.
+
+| ID | Behaviour | Status | Where |
+|---|---|---|---|
+| M7-01 | Initial version is the original, no parent | COVERED | A `m7_01_to_05`; U `lineage_example_four_versions` |
+| M7-02 | Multiple revisions are all kept, numbered 1..N | COVERED | A `m7_01_to_05`, `m7_11_13_17` |
+| M7-03 | All versions retrievable, newest first | COVERED | A `m7_01_to_05`; C `m7_54`; F timeline |
+| M7-04 | Latest version retrieved; not assumed approved | COVERED | A `m7_01_to_05`, `approval_state_belongs_to_one_version_only`; C `m7_55`; F |
+| M7-05 | Previous version retrieved | COVERED | C `m7_55` (previous, original, version N) |
+| M7-06 | Product-specific history | PARTIAL | A `m7_06_07` (sku filter and an unknown sku); a second real product's listings are not created in the fixture |
+| M7-07 | Marketplace-specific history, numbering per marketplace | COVERED | A `m7_06_07` |
+| M7-08 | Empty history | COVERED | A `m7_08`; C `one_version_and_no_version`; F empty |
+| M7-09 | Missing / foreign version | COVERED | A `m7_09`, `m7_66`; F missing version |
+| M7-10 | Pagination | COVERED | A `m7_10` (limit, offset, hasMore, caps); the "Show more" button is not exercised in F |
+| M7-11 | Seller-written revision source | COVERED | A `m7_11_13_17`; U `source_of_reads_what_was_stored` |
+| M7-12 | AI-assisted rewrite source (billed once; viewing free) | COVERED | A `m7_12` |
+| M7-13 | Parent-child relationship from stored `revision_of` | COVERED | A `m7_11_13_17` (checks the stored rows) |
+| M7-14 | Invalid relationship handled | PARTIAL | U `lineage_rejects_missing_cross_product_cross_marketplace_and_cycles`; A cross-marketplace compare refused. A corrupted stored parent cannot be created through the application, so it is not exercised in Postgres |
+| M7-15 | Circular relationship prevented | PARTIAL | U (self-loop, backwards link); not exercised in Postgres (same reason) |
+| M7-16 | Duplicate version request is idempotent | COVERED | A `m7_16` |
+| M7-17 | Historical content preserved | COVERED | A `m7_11_13_17`, `m7_19_to_27` (older text still readable) |
+| M7-18 | Cross-product / cross-marketplace comparison refused | PARTIAL | U `validate_pair`; A cross-marketplace (422). Cross-product is not built in Postgres |
+| M7-19 | Compare two versions | COVERED | A `m7_19_to_27`; C `m7_56` |
+| M7-20 | Added content | COVERED | U `list_diff`, `sentence_diff`, `compare_two_versions`; F |
+| M7-21 | Removed content | COVERED | U `list_diff`, `term_diff` |
+| M7-22 | Modified content (word-level diff) | COVERED | A `m7_19_to_27`; U `text_diff`; F |
+| M7-23 | Unchanged content | COVERED | A `m7_19_to_27` (2 unchanged bullets); U |
+| M7-24 | Reordered bullets | COVERED | U `list_diff_classifies_*`; the card shows "Moved" (F renders it only through the shared item list) |
+| M7-25 | Title length change | COVERED | U `text_diff`; A (unchanged title = 0); F shows the length line |
+| M7-26 | Description length change | COVERED | A `m7_19_to_27` |
+| M7-27 | Non-consecutive versions | COVERED | A `m7_19_to_27` (1 vs 3); F |
+| M7-28 | Identical versions; order asked for | COVERED | A `m7_28`; U; F |
+| M7-29 | Missing section handling | COVERED | A `m7_29`; U `missing_sections_*`, `term_diff` |
+| M7-30 | Added keywords | COVERED | U `keyword_movement_*` |
+| M7-31 | Removed keywords (only if in no section) | COVERED | U; A `m7_30_to_36` invariant |
+| M7-32 | Retained keywords | COVERED | U |
+| M7-33 | Keywords moved between sections (not "removed") | COVERED | U; A invariant; C `follow_ups` |
+| M7-34 | Traceable to the saved M2 candidate | COVERED | A `m7_34`; U `keyword_trace_*` |
+| M7-35 | Historical keyword no longer a candidate | PARTIAL | U `NOT_IN_CURRENT_CANDIDATES`; not exercised through the API |
+| M7-36 | Missing evidence shown as unavailable | COVERED | U; A `m7_30_to_36`; F "(no saved evidence)" |
+| M7-37 | Newly introduced unsupported claim (section, claim, why, fact reference, audit) | COVERED | A `m7_37_40`; U; F |
+| M7-38 | Removed confirmed attribute | PARTIAL | U `removed_and_introduced_confirmed_attributes`; A checks the report shape only |
+| M7-39 | Repeated content | COVERED | A `m7_38_39` (duplicate bullet); U |
+| M7-40 | New audit issue | COVERED | A `m7_37_40`; U |
+| M7-41 | Resolved audit issue | PARTIAL | U `audit_changes_*`; not constructed through the API |
+| M7-42 | Unresolved audit issue | PARTIAL | U; not constructed through the API |
+| M7-43 | Historical audit preserved, never replaced | COVERED | A `m7_41_42_43` (audit rows unchanged by looking again) |
+| M7-44 | Missing supported keyword | COVERED | U `recommendations_cover_*` |
+| M7-45 | Missing confirmed attribute | COVERED | U |
+| M7-46 | Unanswered buyer question | PARTIAL | U (question supplied); the live M5 source is not asserted end to end |
+| M7-47 | Evidence-based audit recommendation | COVERED | A `m7_44_to_49`; U |
+| M7-48 | Unsupported recommendation prevented (weak candidate, no promise) | COVERED | U `never_use_weak_candidates_or_promise_results`; A |
+| M7-49 | No evidence available | COVERED | U `no_evidence_is_said_plainly`; A `m7_49`; F |
+| M7-50 | Performance unavailable = NOT_ASSESSED with what is missing | COVERED | U; A `m7_50_53`; F |
+| M7-51 | Comparable performance data available | PARTIAL | U (rule only). No sales/traffic report is wired to versions (B8), so it never occurs in the product |
+| M7-52 | Incomparable periods refused | PARTIAL | U (rule only; same reason) |
+| M7-53 | No sales, ranking or conversion claim | COVERED | A `m7_50_53` (phrase scan), U, F |
+| M7-54 | CEO history retrieval | COVERED | C `m7_54` |
+| M7-55 | CEO latest version retrieval | COVERED | C `m7_55` |
+| M7-56 | CEO version comparison (and what changed) | COVERED | C `m7_56` x2, `follow_ups` |
+| M7-57 | Ambiguous / unknown product | PARTIAL | C `m7_57` (a product that is not saved); two saved products with listings are not built |
+| M7-58 | Ambiguous marketplace, answer continues the request | COVERED | C `m7_58` |
+| M7-59 | Ambiguous / missing version | COVERED | C `m7_59` x2 |
+| M7-60 | CEO optimisation request | COVERED | C `m7_60` |
+| M7-61 | Frontend history timeline | COVERED | F `multi-version timeline`, `one-version`, `keyboard reachable` |
+| M7-62 | Frontend version details | COVERED | F `opens an older version in full` |
+| M7-63 | Frontend comparison | COVERED | F `compares any two ticked versions`, `identical`, `no new claims` |
+| M7-64 | Frontend recommendations | COVERED | F `shows recommendations` |
+| M7-65 | Loading, empty, error, retry, unauthorised, missing | COVERED | F `loading… retry`, `missing version and unauthorised`, `refused comparison`, `empty` |
+| M7-66 | Cross-tenant denial | COVERED | A `m7_66`; C `m7_66` |
+| M7-67 | Unauthorised access | COVERED | A `m7_67` |
+| M7-68 | Duplicate requests / no write route | COVERED | A `m7_16`, `m7_68` |
+| M7-69 | Migration compatibility (up, down, re-up, M6 untouched) | COVERED | M both tests |
+| M7-70 | M0-M6 regression | COVERED | see the implementation map §19 for the run |
+
+**Browser verification** is recorded separately in `CMO_IMPLEMENTATION_MAP.md` §19; none of the rows above is claimed browser-verified by the automated tests.

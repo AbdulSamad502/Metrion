@@ -41,8 +41,10 @@ EXPECTED_ROUTES = {
     "/api/v1/cmo/images", "/api/v1/cmo/image-analyses",  # P6: explicit zero-unit image actions
     "/api/v1/cmo/niche-terms/suggest", "/api/v1/cmo/niche-terms/confirm", "/api/v1/cmo/niche-terms",  # P7d: zero-unit niche flow
     "/api/v1/cmo/market-trends/preview", "/api/v1/cmo/market-trends", "/api/v1/cmo/market-trends/{generation_id}",  # P7f
+    "/api/v1/cmo/listing-history", "/api/v1/cmo/listing-history/compare", "/api/v1/cmo/listing-history/{generation_id}", "/api/v1/cmo/listing-history/{generation_id}/recommendations",  # CMO 3.0 M7: read-only history, comparison and advice
 }
-READ_ONLY_ROUTES = {"/api/v1/cmo/niche-terms", "/api/v1/cmo/market-trends/{generation_id}", "/api/v1/cmo/listing/{generation_id}"}  # GET-only; /market-trends is POST + GET
+READ_ONLY_ROUTES = {"/api/v1/cmo/niche-terms", "/api/v1/cmo/market-trends/{generation_id}", "/api/v1/cmo/listing/{generation_id}",
+                    "/api/v1/cmo/listing-history", "/api/v1/cmo/listing-history/compare", "/api/v1/cmo/listing-history/{generation_id}", "/api/v1/cmo/listing-history/{generation_id}/recommendations"}  # GET-only; /market-trends is POST + GET
 
 
 class TestRouteSurface:

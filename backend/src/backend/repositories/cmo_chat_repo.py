@@ -301,3 +301,52 @@ def title_set_product(tenant_id: UUID, generation_id: UUID) -> tuple[str, str] |
     with tenant_scope(tenant_id) as conn:
         r = conn.execute(_SET_PRODUCT, {"t": tenant_id, "g": generation_id}).first()
     return (str(r.sku), str(r.marketplace)) if r and r.sku else None
+
+
+# ------------------------------------------------------------------------------------------------ CMO 3.0 M7: listing history (read-only; nothing here writes)
+_HISTORY = text(
+    """
+    SELECT g.id, g.sku, g.marketplace, g.created_at, g.grounding_approval_id,
+           g.output_structured ->> 'revision_of' AS parent, g.output_structured -> 'revision' AS revision,
+           COALESCE(ta.approved_text, g.output_structured -> 'provenance' ->> 'grounding_title') AS title,
+           a.verdict, a.created_at AS audited_at, ev.approved_at, ev.copied, ev.used, ev.generated_at
+    FROM cmo_generation g
+    LEFT JOIN cmo_title_approval ta ON ta.tenant_id = g.tenant_id AND ta.id = g.grounding_approval_id
+    LEFT JOIN LATERAL (SELECT verdict, created_at FROM cmo_listing_audit x WHERE x.tenant_id = g.tenant_id AND x.generation_id = g.id ORDER BY created_at DESC, id LIMIT 1) a ON true
+    LEFT JOIN LATERAL (SELECT max(occurred_at) FILTER (WHERE event_kind = 'APPROVED') AS approved_at, count(*) FILTER (WHERE event_kind = 'COPIED') AS copied,
+                              count(*) FILTER (WHERE event_kind = 'MARKED_USED') AS used, max(occurred_at) FILTER (WHERE event_kind = 'GENERATED') AS generated_at
+                       FROM cmo_result_usage_event e WHERE e.tenant_id = g.tenant_id AND e.generation_id = g.id) ev ON true
+    WHERE g.tenant_id = :t AND g.output_type = 'LISTING_COPY' AND g.status = 'COMPLETE' AND g.sku IS NOT NULL
+      AND (CAST(:sku AS text) IS NULL OR g.sku = :sku) AND (CAST(:mp AS text) IS NULL OR g.marketplace = :mp)
+    ORDER BY g.sku, g.marketplace, g.created_at, g.id
+    LIMIT 5000
+    """
+)
+_AUDIT_COUNT = text("SELECT generation_id, count(*) AS n FROM cmo_listing_audit WHERE tenant_id = :t AND generation_id = ANY(:ids) GROUP BY generation_id")
+_KW_ANALYSIS = text(
+    """
+    SELECT id, marketplace, created_at, result FROM cmo_keyword_analysis
+    WHERE tenant_id = :t AND sku = :sku AND status = 'COMPLETE' AND (marketplace IS NULL OR marketplace = :mp)
+    ORDER BY (marketplace = :mp) DESC NULLS LAST, created_at DESC, id LIMIT 1
+    """
+)
+
+
+def history_rows(tenant_id: UUID, *, sku: str | None = None, marketplace: str | None = None) -> list[dict[str, Any]]:
+    """Every complete listing pack (each is one immutable version) with how it was made, its latest saved audit verdict and the separate recorded states. Oldest first within a product + marketplace."""
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(_HISTORY, {"t": tenant_id, "sku": sku, "mp": marketplace}).fetchall()
+        counts = {r.generation_id: int(r.n) for r in conn.execute(_AUDIT_COUNT, {"t": tenant_id, "ids": [r.id for r in rows]})} if rows else {}
+    return [{"id": str(r.id), "sku": str(r.sku), "marketplace": str(r.marketplace), "createdAt": r.created_at, "parentId": r.parent, "revision": r.revision if isinstance(r.revision, dict) else None,
+             "title": r.title, "approvalId": r.grounding_approval_id, "verdict": r.verdict, "auditedAt": r.audited_at, "approvedAt": r.approved_at, "copied": int(r.copied or 0),
+             "used": int(r.used or 0), "auditRecords": counts.get(r.id, 0)} for r in rows]
+
+
+def latest_keyword_analysis(tenant_id: UUID, sku: str, marketplace: str) -> dict[str, Any] | None:
+    """The newest SAVED M2 keyword analysis for this product (this marketplace's, else the marketplace-free one): its id, date and candidates exactly as the seller was shown them."""
+    with tenant_scope(tenant_id) as conn:
+        r = conn.execute(_KW_ANALYSIS, {"t": tenant_id, "sku": sku, "mp": marketplace}).first()
+    if r is None:
+        return None
+    res = r.result if isinstance(r.result, dict) else {}
+    return {"id": str(r.id), "createdAt": r.created_at, "candidates": [c for c in res.get("candidates") or [] if isinstance(c, dict)]}

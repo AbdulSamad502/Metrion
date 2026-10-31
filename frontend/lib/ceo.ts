@@ -113,6 +113,59 @@ export type ListingCard = {
   editHint: string; approveHint: string;
   titleStatus?: ListingTitleStatus; // N-15d: present on cards from the current backend; absent on older saved cards
 };
+/** Listing history, version comparison and optimisation advice (CMO 3.0 M7; backend: services/cmo_history, ceo/cmo_history_chat). Data only. Nothing here is a score or a claim about sales, ranking,
+ * demand or conversion, and nothing says a version is published or live: "approved for use" only records the seller's decision in Metrion. */
+export type HistorySource = "ORIGINAL" | "SELLER_EDIT" | "AI_REWRITE" | "REVISION_UNKNOWN";
+export type HistoryVersion = {
+  id: string; number: number; sku: string; product?: string | null; marketplace: PreviewMarketplace; title: string | null; createdAt: string; source: HistorySource; sourceText: string;
+  changedSection: string | null; parentId: string | null; parentNumber: number | null; originalNumber: number; lineageIssue: string | null; isLatest: boolean;
+  states: { approvedForUse: { done: boolean; at: string | null }; audited: { done: boolean; verdict: string | null; at: string | null; records: number }; copied: number; markedUsed: number; published: { known: false } };
+};
+export type HistoryList = {
+  kind: "LISTING_HISTORY"; view: "HISTORY"; investigationId?: string; filters: { sku: string | null; marketplace: string | null }; total: number; limit: number; offset: number; hasMore: boolean;
+  versions: HistoryVersion[]; groups: { sku: string; product: string | null; marketplace: PreviewMarketplace; versionCount: number; latestNumber: number; latestId: string }[]; empty: boolean; notice: string;
+  published: string; focus?: string;
+};
+export type HistorySections = { title: string; bullets: string[]; description: string; keywords: string[]; backend_terms: string[] | null; hashtags: string[] | null };
+export type HistoryAudit = { verdict: string; rulesBasis: string; createdAt: string; checks: ListingAuditCheck[]; findings: ListingAuditFinding[] } | null;
+export type HistoryVersionDetail = {
+  kind: "LISTING_HISTORY"; view: "VERSION"; investigationId?: string; version: HistoryVersion; sections: HistorySections; audit: HistoryAudit; parent: { id: string; number: number; createdAt: string } | null;
+  versionCount: number; original: { id: string; number: number } | null; whyRevised: { recorded: string; section: string | null; reasonRecorded: boolean; note: string }; notice: string; published: string;
+};
+export type DiffOp = { op: "equal" | "insert" | "delete" | "replace"; old: string; new: string };
+export type TextLen = { characters: number; words: number };
+export type TextDiff = { changed: boolean; ops: DiffOp[]; addedWords: string[]; removedWords: string[]; old: string; new: string; oldLength: TextLen; newLength: TextLen; characterDelta: number };
+export type ListItemDiff = { status: "unchanged" | "reordered" | "modified" | "added" | "removed"; old: string | null; new: string | null; oldPosition: number | null; newPosition: number | null; diff?: TextDiff };
+export type ListDiff = { items: ListItemDiff[]; counts: Record<string, number>; changed: boolean; characterDelta?: number; oldLength?: TextLen; newLength?: TextLen };
+export type TermDiff = { available: boolean; reason: string | null; added: string[]; removed: string[]; retained: string[]; changed: boolean };
+export type KeywordMove = { keyword: string; before: string[]; after: string[]; result: "ADDED" | "REMOVED" | "RETAINED" | "MOVED"; crossSection: boolean; trace: { state: string; candidateId: string | null; confidence: string | null; evidence: "AVAILABLE" | "UNAVAILABLE" } };
+export type HistoryPerformance = { state: "NOT_ASSESSED" | "OBSERVED_COMPARABLE" | "INCOMPARABLE"; never: string; missing: string | null; note: string };
+export type HistoryCompare = {
+  kind: "LISTING_HISTORY"; view: "COMPARE"; investigationId?: string; focus?: string; sku: string; marketplace: PreviewMarketplace; product: string | null; swapped: boolean; identical: boolean;
+  older: { id: string; number: number; createdAt: string; sourceText: string; approved: boolean }; newer: { id: string; number: number; createdAt: string; sourceText: string; approved: boolean };
+  sectionsChanged: Record<string, boolean>; title: TextDiff & { attributes: { removed: { attribute: string; value: string }[]; introduced: { attribute: string; value: string }[] } };
+  bullets: ListDiff; description: ListDiff; keywords: TermDiff; backendTerms: TermDiff; hashtags: TermDiff;
+  keywordMovement: { rows: KeywordMove[]; counts: Record<string, number>; limits: string };
+  audit: { available: boolean; reason: string | null; olderVerdict?: string; newerVerdict?: string; new: ListingAuditFinding[]; resolved: ListingAuditFinding[]; unresolved: ListingAuditFinding[] };
+  claims: { available: boolean; reason: string | null; new: { section: string; claim: string | null; why: string; reference: string; nextStep: string | null; auditCheck: string; auditCode: string }[] };
+  attributes: { available: boolean; removed: { attribute: string; value: string }[]; introduced: { attribute: string; value: string }[] };
+  performance: HistoryPerformance; notice: string; published: string;
+};
+export type HistoryRecommendation = { code: string; priority: "HIGH" | "MEDIUM" | "LOW"; recommendation: string; section: string; evidence: string[]; reason: string; nextAction: string; limitations: string; versionNumber: number };
+export type HistoryRecommendations = {
+  kind: "LISTING_HISTORY"; view: "RECOMMEND"; investigationId?: string; state: "RECOMMENDATIONS" | "NOTHING_TO_RECOMMEND" | "NO_EVIDENCE"; recommendations: HistoryRecommendation[]; message: string | null;
+  versionNumber: number; versionId: string; product: string | null; marketplace: PreviewMarketplace; limitations: string; notice?: string; performance: HistoryPerformance;
+};
+export type HistoryClarify = { kind: "LISTING_HISTORY"; view: "CLARIFY"; investigationId?: string; question: string; options: { label: string; sku?: string; marketplace?: string; number?: number }[] };
+export type ListingHistoryCard = HistoryList | HistoryVersionDetail | HistoryCompare | HistoryRecommendations | HistoryClarify;
+export const isHistoryCard = (c: unknown): c is ListingHistoryCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "LISTING_HISTORY" && typeof (c as { view?: unknown }).view === "string";
+export type HistoryApi = {
+  history: (q: { sku?: string | null; marketplace?: string | null; offset?: number; limit?: number }) => Promise<HistoryList>;
+  version: (id: string) => Promise<HistoryVersionDetail>;
+  compare: (olderId: string, newerId: string) => Promise<HistoryCompare>;
+  recommendations: (id: string) => Promise<HistoryRecommendations>;
+};
+
 export const isListingCard = (c: unknown): c is ListingCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "LISTING" && !!(c as { audit?: unknown }).audit;
 
 export const isPickCard = (c: unknown): c is PickCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "PICK" && Array.isArray((c as { items?: unknown }).items);
@@ -125,7 +178,7 @@ export type CeoMessage = {
   turn_id: string | null;
   created_at: string;
   /** Only a CEO CLARIFICATION message that has real candidates to offer. */
-  choices?: ClarificationCard | PickCard | PreviewCard | ReadinessCard | ListingCard | null;
+  choices?: ClarificationCard | PickCard | PreviewCard | ReadinessCard | ListingCard | ListingHistoryCard | null;
   /** Client-only: a message the seller just sent that the server has not echoed back yet. */
   pending?: boolean;
   /** The send failed and the thread could not be refreshed, so the server's copy is unknown: shown as not sent, never as still sending. */
@@ -338,6 +391,21 @@ export function createCeoClient(getToken: GetToken) {
       if (!res.ok) throw new ApiError(res.status, "image not available");
       return URL.createObjectURL(await res.blob());
     },
+    /** Listing history, version comparison and advice (CMO 3.0 M7): read-only, free, nothing generated. */
+    historyApi: {
+      history: async (q: { sku?: string | null; marketplace?: string | null; offset?: number; limit?: number }): Promise<HistoryList> => {
+        const p = new URLSearchParams();
+        if (q.sku) p.set("sku", q.sku);
+        if (q.marketplace) p.set("marketplace", q.marketplace);
+        p.set("offset", String(q.offset ?? 0));
+        p.set("limit", String(q.limit ?? 20));
+        return apiFetch(`/api/v1/cmo/listing-history?${p.toString()}`, await getToken());
+      },
+      version: async (id: string): Promise<HistoryVersionDetail> => apiFetch(`/api/v1/cmo/listing-history/${encodeURIComponent(id)}`, await getToken()),
+      compare: async (olderId: string, newerId: string): Promise<HistoryCompare> =>
+        apiFetch(`/api/v1/cmo/listing-history/compare?older=${encodeURIComponent(olderId)}&newer=${encodeURIComponent(newerId)}`, await getToken()),
+      recommendations: async (id: string): Promise<HistoryRecommendations> => apiFetch(`/api/v1/cmo/listing-history/${encodeURIComponent(id)}/recommendations`, await getToken()),
+    } satisfies HistoryApi,
     /** "Approve for use": a click bound to one saved listing version. Records the seller's decision in Metrion; costs nothing; publishes nothing. */
     approveListing: async (generationId: string): Promise<{ approved: boolean; message: string; banner: string | null }> =>
       apiFetch(`/api/v1/cmo/listing/${encodeURIComponent(generationId)}/approve`, await getToken(), { method: "POST" }),

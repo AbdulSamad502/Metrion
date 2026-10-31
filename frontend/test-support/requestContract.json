@@ -468,6 +468,33 @@
    ],
    "requiredQuery": []
   },
+  "GET /api/v1/cmo/listing-history": {
+   "query": [
+    "limit",
+    "marketplace",
+    "offset",
+    "sku"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/listing-history/compare": {
+   "query": [
+    "newer",
+    "older"
+   ],
+   "requiredQuery": [
+    "newer",
+    "older"
+   ]
+  },
+  "GET /api/v1/cmo/listing-history/{generation_id}": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/listing-history/{generation_id}/recommendations": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/cmo/listing/{generation_id}": {
    "query": [],
    "requiredQuery": []

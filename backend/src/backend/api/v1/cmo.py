@@ -47,7 +47,7 @@ from slim_cmo.types import Marketplace, OutputType, TrendSection
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CMO, CATALOG_VIEW, FILES_UPLOAD, RESEARCH_MARKET_TRENDS, has_permission
-from backend.services import cmo_actions, cmo_ci_inputs, cmo_images, cmo_listing, cmo_runtime, cmo_trends
+from backend.services import cmo_actions, cmo_ci_inputs, cmo_history, cmo_images, cmo_listing, cmo_runtime, cmo_trends
 from backend.services.cmo_actions import Principal, QuotaDenied, RequestInProgress
 from backend.services.cmo_runtime import CmoNotConfigured
 from backend.uploads import read_upload_capped
@@ -217,6 +217,8 @@ def _guarded(fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail={"code": "INVALID_CONFIRMATION", "detail": str(exc)}) from None
     except cmo_listing.ListingRefused as exc:
         raise HTTPException(status_code=exc.status, detail={"code": exc.code, "detail": exc.detail, "missing": list(exc.missing)}) from None
+    except cmo_history.HistoryRefused as exc:
+        raise HTTPException(status_code=exc.status, detail={"code": exc.code, "detail": exc.detail}) from None
     except NotFound:
         raise HTTPException(status_code=404, detail="Not found") from None  # unknown and cross-tenant look identical
     except QuotaDenied as exc:
@@ -364,6 +366,48 @@ def post_listing_rewrite(body: ListingRewriteBody, ctx: AuthContext = require_au
     def go() -> dict[str, Any]:
         _principal(ctx)
         return cmo_listing.rewrite_section(ctx, body)
+
+    return _guarded(go)
+
+
+# ------------------------------------------------------------------------------------------------ CMO 3.0 M7: listing history, version comparison and advice (read-only, free, no model)
+@router.get("/listing-history")
+def get_listing_history(sku: Annotated[str | None, Field(max_length=_NAME)] = None, marketplace: Marketplace | None = None, limit: int = 20, offset: int = 0,
+                        ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Every saved version of the seller's listings, newest first; filter by product (`sku`) and marketplace; paged. Nothing is generated or changed."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_history.history(ctx.tenant_id, sku=sku, marketplace=marketplace.value if marketplace else None, limit=limit, offset=offset)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.get("/listing-history/compare")
+def get_listing_compare(older: UUID, newer: UUID, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The exact differences between any two saved versions of one product + marketplace (deterministic; free)."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_history.compare(ctx.tenant_id, ctx.app_user_id, cmo_runtime.build_runtime(), older, newer)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.get("/listing-history/{generation_id}")
+def get_listing_version(generation_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """One saved version in full with its own saved audit, its parent and its states."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_history.version_detail(ctx.tenant_id, ctx.app_user_id, cmo_runtime.build_runtime(), generation_id)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.get("/listing-history/{generation_id}/recommendations")
+def get_listing_recommendations(generation_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Evidence-based suggestions for one saved version (deterministic; free; never a prediction of sales or ranking)."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_history.recommendations(ctx.tenant_id, ctx.app_user_id, cmo_runtime.build_runtime(), generation_id)  # type: ignore[arg-type]
 
     return _guarded(go)
 
