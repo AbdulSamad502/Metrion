@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-10-31",
+  "policy": "A rule is VERIFIED only when an OFFICIAL marketplace page states it, the page is named by https URL, and the date it was read is recorded. A value from a blog, a forum answer or a service provider is a hint, never a rule: it carries value null here. Nothing in this file is copied into format_constraint unless every field a constraint row needs is OFFICIAL_VERIFIED for one marketplace and scope (see slim_cmo.marketplace_rules.promotable_row).",
+  "statuses": {
+    "OFFICIAL_VERIFIED": "stated on an official marketplace page that was read on checked_on; complete and current for the scope",
+    "OFFICIAL_PARTIAL": "stated on an official page, but for part of the scope only (for example 'most categories') or possibly superseded; never promoted",
+    "THIRD_PARTY_ONLY": "only secondary sources were found; the figure is kept as a hint in `hint`, `value` is null",
+    "NOT_FOUND": "no source could be read (official help is behind the seller login, or nothing was found)"
+  },
+  "rules": [
+    {
+      "marketplace": "AMAZON", "scope": "amazon.in, most product categories", "field": "title.max_chars", "value": 200, "status": "OFFICIAL_PARTIAL",
+      "source": {"url": "https://sellercentral.amazon.in/seller-forums/discussions/t/6cae8579-d09f-484d-98ca-a2b057c175a2", "kind": "AMAZON_SELLER_FORUM_ANNOUNCEMENT", "title": "New product title requirements effective from January 21, 2025", "published": "2025-01"},
+      "checked_on": "2026-10-31",
+      "note": "The announcement says titles may not exceed 200 characters including spaces for MOST categories and sends readers to the 'Product title requirements' help page for category and store limits, which is behind the seller login and could not be read. A third-party blog reports a later, lower limit (75 characters from July 2026); no Amazon page I could read confirms or denies it. Not promoted."
+    },
+    {
+      "marketplace": "AMAZON", "scope": "amazon.in, all categories", "field": "title.disallowed_characters", "value": ["!", "$", "?", "_", "{", "}", "^", "¬", "¦"], "status": "OFFICIAL_PARTIAL",
+      "source": {"url": "https://sellercentral.amazon.in/seller-forums/discussions/t/6cae8579-d09f-484d-98ca-a2b057c175a2", "kind": "AMAZON_SELLER_FORUM_ANNOUNCEMENT", "title": "New product title requirements effective from January 21, 2025", "published": "2025-01"},
+      "checked_on": "2026-10-31",
+      "note": "Not allowed unless part of the brand name. Not currently enforced by the audit."
+    },
+    {
+      "marketplace": "AMAZON", "scope": "amazon.in, all categories", "field": "title.max_repeated_word", "value": 2, "status": "OFFICIAL_PARTIAL",
+      "source": {"url": "https://sellercentral.amazon.in/seller-forums/discussions/t/6cae8579-d09f-484d-98ca-a2b057c175a2", "kind": "AMAZON_SELLER_FORUM_ANNOUNCEMENT", "title": "New product title requirements effective from January 21, 2025", "published": "2025-01"},
+      "checked_on": "2026-10-31",
+      "note": "A word may appear at most twice; prepositions, articles and conjunctions are exempt. Not currently enforced by the audit."
+    },
+    {"marketplace": "AMAZON", "scope": "amazon.in", "field": "title.recommended_chars", "value": null, "status": "NOT_FOUND", "source": null, "checked_on": "2026-10-31", "hint": "Amazon's US help page recommends 80 or fewer characters for mobile; no India page was readable.", "note": "A recommendation is not a limit and is not used."},
+    {"marketplace": "AMAZON", "scope": "amazon.in", "field": "bullet_count", "value": null, "status": "NOT_FOUND", "source": null, "checked_on": "2026-10-31", "note": "Style guides are category-specific and behind the seller login."},
+    {"marketplace": "AMAZON", "scope": "amazon.in", "field": "bullet.max_chars", "value": null, "status": "THIRD_PARTY_ONLY", "source": null, "checked_on": "2026-10-31", "hint": "A third-party guide says 500 characters per bullet; not from Amazon.", "note": "Not used."},
+    {"marketplace": "AMAZON", "scope": "amazon.in", "field": "description.max_chars", "value": null, "status": "THIRD_PARTY_ONLY", "source": null, "checked_on": "2026-10-31", "hint": "A third-party guide says 2,000 characters; not from Amazon.", "note": "Not used."},
+    {"marketplace": "AMAZON", "scope": "amazon.in", "field": "backend_terms.max_bytes", "value": null, "status": "NOT_FOUND", "source": null, "checked_on": "2026-10-31", "note": "Not readable without the seller login."},
+    {"marketplace": "AMAZON", "scope": "amazon.in", "field": "attributes_and_category_rules", "value": null, "status": "NOT_FOUND", "source": null, "checked_on": "2026-10-31", "note": "Required attributes are per category (inside Seller Central); CMO does not invent required fields (spec 6.18)."},
+
+    {"marketplace": "FLIPKART", "scope": "flipkart.com", "field": "title.max_chars", "value": null, "status": "NOT_FOUND", "source": null, "checked_on": "2026-10-31", "hint": "Third parties say Flipkart builds the title from the attributes you enter per category; no official limit was readable.", "note": "Not used."},
+    {"marketplace": "FLIPKART", "scope": "flipkart.com", "field": "description.max_chars", "value": null, "status": "THIRD_PARTY_ONLY", "source": null, "checked_on": "2026-10-31", "hint": "A 2023 third-party guide says 10,000 characters including spaces, no hyperlinks or promotional text; not from Flipkart.", "note": "Not used."},
+    {"marketplace": "FLIPKART", "scope": "flipkart.com", "field": "bullet_count / bullet.max_chars / attributes_and_category_rules", "value": null, "status": "NOT_FOUND", "source": null, "checked_on": "2026-10-31", "note": "Per-category templates inside Seller Hub; the attribute form stays NEEDS_SELLER_INPUT."},
+
+    {"marketplace": "MEESHO", "scope": "supplier.meesho.com", "field": "title.max_chars / description.max_chars / bullets / attributes", "value": null, "status": "NOT_FOUND", "source": null, "checked_on": "2026-10-31", "hint": "Meesho's public learning hub says the product's generic name should match the wording on the packaging, plus the brand; no character limit was published.", "note": "A naming principle, not a length rule. Limits are in the supplier panel's catalog templates and policies, behind the login."}
+  ],
+  "required_for_constraint_row": ["title.max_chars", "bullet_count", "bullet.max_chars", "description.max_chars", "backend_terms.max_bytes"],
+  "official_hosts": ["sellercentral.amazon.in", "sell.amazon.in", "sellercentral.amazon.com", "seller.flipkart.com", "sellerhub.flipkart.com", "supplier.meesho.com"]
+}

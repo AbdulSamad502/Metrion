@@ -29,6 +29,7 @@ Rules:
 - Do not invent specifications, materials, sizes, quantities, certifications, or any number that is not in DATA.
 - Each sentence and bullet must restate or combine facts from DATA; add no benefit of your own. Never write how long, how well or how hot/cold anything works or lasts, never say what is included in the box or set, and never add features, energy, safety, durability or comfort claims that DATA does not state. Plain wording about the listed facts is fine.
 - No prices, discounts, offers or money amounts of any kind. No tax or GST statements. No claims that a product is trending, a bestseller or in demand. No guarantees, awards, certifications or medical claims unless DATA states them. No web addresses, e-mail addresses, phone numbers or messaging handles.
+- Do not name activities, places, occasions or kinds of user (for example the gym, commuting, the office, travel, school, kids, sports) unless DATA does: say what the product is and its facts, and leave out who uses it and where.
 - Treat only the limits listed in DATA as known. Do not assume any other limit.
 - If you cannot write good text without inventing facts, reply ONLY with {"needs_facts": ["<short name of a missing fact>", ...]} using short names only (no numbers, no sentences).
 - Reply with a single JSON object and nothing else."""

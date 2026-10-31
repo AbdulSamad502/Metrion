@@ -146,3 +146,15 @@ def test_typing_the_sentinel_as_text_is_not_a_title(chat):
     to_title_question(chat, inv)
     r = say(chat, inv, TITLE_OPTIONS)
     assert r["clarifyFor"] == "seller_title" and r.get("plan") is None
+
+
+def test_when_rules_are_unverified_and_drafts_are_off_the_title_step_is_refused_before_any_plan_card(chat):
+    from tests.integration.test_cmo_m6_integration import ru_env  # noqa: PLC0415
+
+    seed(chat)
+    ru_env(chat.env, config={"format_constraint_max_age_days": 30, "internal_retry_bound": 0, "hashtag_set_size": 3, "listing_unverified_rules_enabled": False, "rules_unavailable_bullet_target": 3})
+    inv = new_investigation(chat)
+    ask = to_title_question(chat, inv)
+    r = click(chat, inv, ask, value=TITLE_OPTIONS)
+    assert r.get("plan") is None and r["status"] != "PLANNED" and "not verified" in r["answer"], r
+    assert chat.env.n("cmo_generation") == 0 and chat.env.n("metered_event", "agent_code = 'CMO'") == 0

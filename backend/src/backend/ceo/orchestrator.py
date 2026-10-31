@@ -785,6 +785,7 @@ def _run_admitted(
         elif route == "ACTION":
             if key == "cmo.generate_title_sets" and run_inputs.get("listing_workflow") is True:
                 listing_titles = {"workflow": "FULL_LISTING", "product_name": str(run_inputs.get("product_name")), "marketplace": str((run_inputs.get("marketplaces") or [""])[0])}
+                invalid_form = cmo_chat.title_step_blocked(tenant, listing_titles["marketplace"])  # no plan card for a title step that can only be refused
             direct = {k: v for k, v in run_inputs.items() if k not in input_session.CEO_ONLY_INPUTS}
             if key == "cmo.analyze_titles":  # CMO 3.0 M3: the saved title set to compare is resolved by code from the seller's own sets (the marketplace they chose, or their only set)
                 chosen_set = cmo_chat.choose_set(cmo_chat.title_sets(tenant), direct.pop("title_marketplace", None))

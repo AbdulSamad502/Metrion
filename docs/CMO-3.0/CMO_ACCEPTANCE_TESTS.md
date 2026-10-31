@@ -292,3 +292,6 @@
 | M7-70 | M0-M6 regression | COVERED | see the implementation map §19 for the run |
 
 **Browser verification** is recorded separately in `CMO_IMPLEMENTATION_MAP.md` §19; none of the rows above is claimed browser-verified by the automated tests.
+
+### Production-readiness phase (2026-10-31)
+Counts unchanged: **M6 50/50, M7 68/70** (M7-51 and M7-52 still need the B8 data). New automated evidence: `test_marketplace_rules.py` (5; the rules register and its promotion gate), `test_ceo_cmo_m6_title_chain.py::test_when_rules_are_unverified_and_drafts_are_off_the_title_step_is_refused_before_any_plan_card`. Real-model evaluation (B2) is recorded in `CMO_RELEASE_BLOCKERS.md`; it is an opt-in harness, not an acceptance test. Browser-dependent checks remain `BLOCKED — real-data browser verification not requested`.

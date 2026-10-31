@@ -451,3 +451,17 @@ def title_step_scope(plan: Mapping[str, Any]) -> Iterator[None]:
             yield
     else:
         yield
+
+
+def title_step_blocked(tenant_id: UUID, marketplace: str) -> str | None:
+    """The plain reason the title step of a complete-listing request cannot run (no verified marketplace rule and unverified drafts are off), told BEFORE any plan card exists so the seller is
+    never asked to approve a plan that can only be refused. None when it can run, or when the lookup failed (the run then refuses safely on its own)."""
+    try:
+        from backend.services import cmo_listing, cmo_runtime  # noqa: PLC0415
+        from slim_cmo.types import Marketplace  # noqa: PLC0415
+
+        state, sentence = cmo_listing.rules_state(tenant_id, cmo_runtime.build_runtime(), Marketplace(marketplace))
+        return sentence if state == "BLOCKED" else None
+    except Exception:  # noqa: BLE001
+        logger.exception("could not check the marketplace rules for the title step")
+        return None
