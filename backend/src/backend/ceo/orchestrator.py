@@ -367,6 +367,10 @@ def _run_turn_locked(
                     save_sku=str(input_outcome.inputs.get("sku", "")), save_ref=f"ceo-{clarification.card_id}",
                 )
                 input_outcome = None
+            elif isinstance(input_outcome, input_session.Done) and input_outcome.inputs.get("title_options"):  # N-05b: "write title options for me first" inside a complete-listing request
+                title_inputs = cmo_chat.title_step_inputs(input_outcome.inputs, str(clarification.card_id))
+                ui_action = UiAction("ACTION", "cmo.generate_title_sets", {}, {}, title_inputs) if title_inputs else None
+                input_outcome = None
             elif isinstance(input_outcome, input_session.Done):  # every field collected: the same validated inputs as the form, and the playbook / action runs
                 ui_action = UiAction(input_session.route_of(input_outcome.playbook), input_outcome.playbook, {}, {}, _with_request_key(input_outcome, str(clarification.card_id)),
                                      addons=input_outcome.addons)
@@ -683,6 +687,7 @@ def _run_admitted(
     # this tenant and conversation by `get_attachments` above - no bytes, text or model output cross), on its own small 0-unit card. The seller's request is frozen with that plan and
     # continues, after the reading, as questions that ask the seller to confirm the facts; only confirmed facts reach the writing plan. Nothing here asks a model anything.
     image_followup: dict[str, Any] | None = None
+    listing_titles: dict[str, Any] | None = None  # N-05b / N-16a: set by the server only, for the title step of the seller's own complete-listing request
     if cmo_delegated and ui_action is None and attachments and key in cmo_delegation.IMAGE_FOLLOWUPS:
         photo = next((a for a in attachments if a.get("detected_type") in cmo_delegation.IMAGE_TYPES), None)
         if photo is not None:
@@ -778,6 +783,8 @@ def _run_admitted(
                     logger.exception("could not save PI memory")
                 notes = [f"Researching: {run_inputs['category_text']} on " + ", ".join(str(m).title() for m in run_inputs["marketplaces"]) + "."]
         elif route == "ACTION":
+            if key == "cmo.generate_title_sets" and run_inputs.get("listing_workflow") is True:
+                listing_titles = {"workflow": "FULL_LISTING", "product_name": str(run_inputs.get("product_name")), "marketplace": str((run_inputs.get("marketplaces") or [""])[0])}
             direct = {k: v for k, v in run_inputs.items() if k not in input_session.CEO_ONLY_INPUTS}
             if key == "cmo.analyze_titles":  # CMO 3.0 M3: the saved title set to compare is resolved by code from the seller's own sets (the marketplace they chose, or their only set)
                 chosen_set = cmo_chat.choose_set(cmo_chat.title_sets(tenant), direct.pop("title_marketplace", None))
@@ -949,7 +956,7 @@ def _run_admitted(
                            anchor_status="FAILED", error_reason="CONFIG_MISSING: max legs", classifier_flags=flags)
         planned_leg_keys, planned_required_keys = list(leg_keys), set(required_keys)
         if approval_on and plan_required(leg_keys):  # ceo-approval-workflow.md 6.1: NO leg is dispatched; the turn ends PLANNED with a stored plan the seller must approve
-            return _plan_turn(ctx, runtime, turn, inv_id, route, key, leg_keys, resolved, attached, flags, clock, log, now, preview=trend_preview, image_followup=image_followup)
+            return _plan_turn(ctx, runtime, turn, inv_id, route, key, leg_keys, resolved, attached, flags, clock, log, now, preview=trend_preview, image_followup=image_followup, listing_titles=listing_titles)
         legs, entries, refused_required = _execute(ctx, runtime, turn, resolved, leg_keys, required_keys, reads, attached, now, clock, log)
         need_gaps: list[str] = []
         if addons and route == "ACTION" and not refused_required:  # spec agent-needs 5: the CEO fetches what the request also asked for from the agent that provides it
@@ -1015,6 +1022,18 @@ def _run_admitted(
         if comp.completion is not None:
             clock.note("synthesisModelMs", comp.completion.wall_ms)  # the model-only part of the synthesis span (the rest is the gate and rendering)
     answer = comp.text + ("\n\n" + "\n".join(notes) if notes else "")
+    if key == "cmo.approve_title" and run_inputs and run_inputs.get("generation_id"):  # N-05b: the title was approved from a set written inside a complete-listing request: that request continues
+        try:
+            carry = cmo_chat.listing_continuation(tenant, UUID(str(run_inputs["generation_id"])))
+            nxt = input_session.start("cmo.generate_full_listing", input_session.Ctx(tenant, now.date(), runtime.max_candidate_prices), carry=carry) if carry else None
+        except Exception:  # noqa: BLE001
+            logger.exception("could not continue the complete-listing request")
+            nxt = None
+        if isinstance(nxt, input_session.Ask):
+            nxt = cmo_delegation.begin(nxt, action_key="cmo.generate_full_listing", now=now)
+            return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route=route, route_key=key, kind="CLARIFICATION", composition=comp, anchor_status=turn.derive_status(),
+                           clarify_for=nxt.card["slot"], classifier_flags=flags, notes=notes, choices=nxt.card,
+                           answer=answer + "\n\nYour title is saved. Now the rest of your complete-listing request. " + nxt.text)
     follow_up = _missing_figure_question(ctx, runtime, tenant, now, turn, route, key, decision.slots, ui_refs, ask_sku, ask_inputs)
     if follow_up is not None:  # a CFO leg said what it is missing and the CEO can collect it: the answer ends with that one question (spec 6.37)
         return _finish(ctx, runtime, turn, clock, log, status="DELIVERED", route=route, route_key=key, answer=answer + "\n\n" + follow_up.text, kind="CLARIFICATION", composition=comp,
@@ -1038,7 +1057,7 @@ PLAN_NOT_AVAILABLE_TEXT = (
 
 def _plan_turn(
     ctx: AuthContext, runtime: CeoRuntime, turn: CeoTurn, inv_id: UUID, route: str, key: str, leg_keys: Sequence[str], resolved: ResolvedSlots, attached: frozenset[str],
-    flags: Sequence[str], clock: StageClock, log: EventLog, now: datetime, preview: Mapping[str, Any] | None = None, image_followup: Mapping[str, Any] | None = None,
+    flags: Sequence[str], clock: StageClock, log: EventLog, now: datetime, preview: Mapping[str, Any] | None = None, image_followup: Mapping[str, Any] | None = None, listing_titles: Mapping[str, Any] | None = None,
 ) -> TurnResult:
     """Ends a turn that WOULD run an approval-required action: no leg is dispatched, nothing is metered or sent. Code freezes the legs and their validated slots into a
     stored plan (one plan row + its CREATED event + the PLAN message, in one transaction); the turn ends PLANNED. The seller approves it only with the explicit approve
@@ -1054,6 +1073,10 @@ def _plan_turn(
     units: dict[str, int] = {}
     followup: dict[str, Any] | None = None
     compact: list[str] = []
+    if listing_titles is not None and key == "cmo.generate_title_sets":  # N-16a: frozen into the plan (and its hash) so the run, not the seller's text, carries the marker
+        followup = dict(listing_titles)
+        rules_sentence = cmo_chat.title_step_rules_sentence(ctx.tenant_id, str(listing_titles.get("marketplace") or ""))
+        details.append("These title options are the first step of your complete-listing request. You choose one afterwards, and the listing is written only from the title you approve." + (f" {rules_sentence}" if rules_sentence else ""))
     title: str | None = None
     for k, slots in legs:  # what the card says beyond the frozen slots (CMO: what runs, the model, the quota effect, the exact searches); written by code
         if k == cmo_delegation.IMAGE_ACTION and image_followup is not None:

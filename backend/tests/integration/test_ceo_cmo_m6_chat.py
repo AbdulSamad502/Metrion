@@ -36,7 +36,7 @@ def converse(c, inv, first=ASK, hashtags=False):
         if r["status"] != "CLARIFIED":
             return r
         slot = str(r.get("clarifyFor", ""))
-        answer = NAME if slot in ("product_name", "product") else "Amazon" if "marketplace" in slot else TITLE if "title" in slot else ("yes" if hashtags else "skip") if slot == "include_hashtags" else "skip"
+        answer = NAME if slot in ("product_name", "product") else "Amazon" if "marketplace" in slot else "yes" if slot == "_typed_title_ok" else TITLE if "title" in slot else ("yes" if hashtags else "skip") if slot == "include_hashtags" else "skip"
         r = say(c, inv, answer)
     raise AssertionError(f"still asking: {r}")
 

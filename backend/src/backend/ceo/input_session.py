@@ -457,6 +457,9 @@ def _fact_field(attr: str) -> Field:
 
 
 IMAGE_FACT_FIELDS: tuple[Field, ...] = tuple(_fact_field(a) for a in IMAGE_FACT_ATTRS)
+TITLE_OPTIONS = "__title_options__"  # the value of the "write title options for me first" choice; only ever arrives from that option (a typed copy of it is refused)
+
+
 def _seller_title_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
     """The title the seller already approved for this product and marketplace comes first (the copy is then grounded on that approval); their product name is the fallback."""
     from backend.ceo import cmo_chat  # noqa: PLC0415
@@ -467,6 +470,8 @@ def _seller_title_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
         out.append(Option(f"Use the title you approved: “{approved[:90]}{'…' if len(approved) > 90 else ''}”", approved, "You chose this title earlier"))
     if got.get("product_name"):
         out.append(Option(f"Use “{got['product_name']}”", str(got["product_name"]), "Your product name, as you gave it"))
+    if not approved and got.get("product_name"):  # N-05b: no approved title yet, so the title steps can run inside this listing request
+        out.append(Option("Write title options for me first (1 CMO unit)", TITLE_OPTIONS, "I write options, you choose one, then the listing is written from it"))
     return out
 
 
@@ -482,6 +487,35 @@ def _seller_title_question(ctx: Ctx, got: Mapping[str, Any]) -> str:
 
 
 _SELLER_TITLE = Field("seller_title", _seller_title_question, _text(500), _seller_title_options)
+
+
+def _typed_title_applies(ctx: Ctx, got: Mapping[str, Any]) -> bool:
+    """N-05t: a title that is not the seller's approved one (one they typed, or their product name) is used only after they confirm it as it stands. An approved title needs no second step."""
+    from backend.ceo import cmo_chat  # noqa: PLC0415
+
+    t = got.get("seller_title")
+    if not isinstance(t, str) or t == TITLE_OPTIONS:
+        return False
+    return t != cmo_chat.approved_title_text(ctx.tenant_id, got.get("product_name"), got.get("marketplace"))
+
+
+def _confirm_typed_title(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
+    t = " ".join(raw.casefold().split())
+    if t in ("yes", "y", "yes, use this exact title", "use it", "use this title"):
+        return "yes"
+    if t in ("change", "no", "no, let me change it", "change it", "no, change it"):
+        return "change"
+    return Reject("Say yes to use exactly this title, or no to type a different one.")
+
+
+_TYPED_TITLE_OK = Field(
+    "_typed_title_ok",
+    lambda c, g: (f"You gave this title: “{str(g.get('seller_title'))[:200]}”. It is not an approved title option, so I will not treat it as one. Do you confirm the listing should be written from exactly this title? "
+                  "This only confirms the title; nothing is written or charged until you approve the plan."),
+    _confirm_typed_title,
+    lambda c, g: (Option("Yes, use exactly this title", "yes", "I will write from it as typed"), Option("No, let me change it", "change", "Type a different title")),
+    applies=_typed_title_applies,
+)
 
 def _fit(words: Sequence[str], limit: int = 100) -> str:
     out: list[str] = []
@@ -569,7 +603,7 @@ def _hashtags_yes(raw: str, ctx: Ctx, got: Mapping[str, Any]) -> Any:
 
 
 CMO_FULL_LISTING = (
-    *_grounded("the complete listing"),  # CMO 3.0 M6
+    *(x for f in _grounded("the complete listing") for x in ((f, _TYPED_TITLE_OK) if f is _SELLER_TITLE else (f,))),  # CMO 3.0 M6; a title that is not approved is confirmed by the seller first (N-05t)
     Field("include_hashtags", lambda c, g: "Do you also want marketing hashtag suggestions? They cost 1 extra CMO unit and are not a listing field on any marketplace. Say yes, or skip.",
           _hashtags_yes, lambda c, g: (Option("Yes, add hashtags (1 extra unit)", "yes", "Hashtag suggestions are added"), Option("Skip", "skip", "No hashtags")), optional=True),
 )
@@ -974,7 +1008,7 @@ CMO_TRENDS: tuple[Field, ...] = (
                                 "I will save them as your confirmed niche terms, and only those terms are sent to the search providers.", _niche_terms, _niche_options,
           applies=lambda c, g: g.get("news_kind") in ("NICHE", "BOTH") and not _has_confirmed_niche(c)),
 )
-CEO_ONLY_INPUTS = frozenset({"niche", "news_kind", "image_hints", "hint_analysis_id"})  # collected by the CEO, never a slot of the CMO action
+CEO_ONLY_INPUTS = frozenset({"niche", "news_kind", "image_hints", "hint_analysis_id", "listing_workflow"})  # collected by the CEO, never a slot of the CMO action
 DR_TREND_RUN: tuple[Field, ...] = (
     Field("preview", lambda c, g: "", _text(4000)),
     Field("confirm", lambda c, g: str(g.get("preview", "")), _yes, lambda c, g: (Option("Yes, run the research", "yes", "Sends exactly these searches"),)),
@@ -1352,6 +1386,8 @@ def _numbered_title(f: Field, card: Mapping[str, Any], raw: str, option_key: str
     if option_key is not None:
         return None if raw in current else stale
     n = raw.strip()
+    if n == TITLE_OPTIONS:
+        return Reject("That is not a title.")
     if not (n.isascii() and n.isdigit()):
         return None
     shown = [o for o in card.get("options", []) if o.get("kind") in ("RECOMMENDED", "ALTERNATIVE") and o.get("value") is not None]
@@ -1400,6 +1436,11 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
         if card.get("addons"):
             again["addons"] = list(card["addons"])
         return Ask(f"{parsed.why} {f.question(ctx, collected)} (Say “cancel” to leave this question.)", again)
+    if f.name == "seller_title" and parsed == TITLE_OPTIONS:  # N-05b: not a title, a request to write title options first (ends this session; the CEO plans the title step)
+        return Done(playbook, {"title_options": True, "product_name": collected.get("product_name"), "marketplace": collected.get("marketplace")}, card.get("resume"), tuple(card.get("addons") or ()))
+    if f.name == "_typed_title_ok" and parsed == "change":  # N-05t: not confirmed; the title is asked again
+        collected.pop("seller_title", None)
+        return _ask(playbook, fields, ctx, collected, prefix="")
     collected[f.name] = parsed
     resume = card.get("resume")
     addons = tuple(card.get("addons") or ())

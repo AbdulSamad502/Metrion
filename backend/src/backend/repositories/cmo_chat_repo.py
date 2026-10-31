@@ -374,3 +374,10 @@ def listing_targets(tenant_id: UUID, *, sku: str | None = None, marketplace: str
     """The distinct (product, marketplace) pairs that have a complete saved listing, narrowed by what the seller named. More than one means an edit sentence that names neither is ambiguous."""
     with tenant_scope(tenant_id) as conn:
         return [(str(r.sku), str(r.marketplace)) for r in conn.execute(_LISTING_TARGETS, {"t": tenant_id, "sku": sku, "mp": marketplace})]
+
+
+def title_set_workflow(tenant_id: UUID, generation_id: UUID) -> str | None:
+    """The workflow marker the SERVER stored on a title set it generated inside a full-listing request (None for every other set)."""
+    with tenant_scope(tenant_id) as conn:
+        r = conn.execute(text("SELECT output_structured ->> 'workflow' AS wf FROM cmo_generation WHERE tenant_id = :t AND id = :g AND output_type = 'TITLE_SET'"), {"t": tenant_id, "g": generation_id}).first()
+    return str(r.wf) if r and r.wf else None

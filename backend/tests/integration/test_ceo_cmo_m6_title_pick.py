@@ -31,7 +31,7 @@ def finish(c, inv, r):
     for _ in range(10):
         if r["status"] != "CLARIFIED":
             return r
-        r = say(c, inv, "skip")
+        r = say(c, inv, "yes" if r.get("clarifyFor") == "_typed_title_ok" else "skip")
     raise AssertionError(r)
 
 

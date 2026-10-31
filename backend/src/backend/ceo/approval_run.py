@@ -29,7 +29,7 @@ from typing import Any
 from uuid import UUID
 
 from backend import config
-from backend.ceo import approval, cmo_delegation, expense_chat, import_chat, input_session, orchestrator, pi_research
+from backend.ceo import approval, cmo_chat, cmo_delegation, expense_chat, import_chat, input_session, orchestrator, pi_research
 from backend.ceo.approval import ApprovalRefused
 from backend.ceo.billing import unit_decision
 from backend.ceo.composer import template_only
@@ -216,7 +216,8 @@ def _run_frozen(ctx: AuthContext, runtime: CeoRuntime, plan_id: UUID, plan: dict
         longer = config.ceo_pi_research_timeout_seconds()
         if longer is not None and runtime.leg_timeout_seconds is not None and longer > runtime.leg_timeout_seconds:
             wait_runtime = dataclasses.replace(runtime, leg_timeout_seconds=longer)
-    legs, entries, refused_required = orchestrator._execute(ctx, wait_runtime, turn, ResolvedSlots(tenant_id=tenant, today=now.date()), leg_keys, required, (), attached, now, clock, log, frozen, grant)
+    with cmo_chat.title_step_scope(plan):  # N-16a: a title step of a complete-listing request carries the server-side marker (copied into each leg thread)
+        legs, entries, refused_required = orchestrator._execute(ctx, wait_runtime, turn, ResolvedSlots(tenant_id=tenant, today=now.date()), leg_keys, required, (), attached, now, clock, log, frozen, grant)
     if key == cmo_delegation.IMAGE_ACTION:  # the photo reading: its result is NOT a deliverable but the start of the confirmation questions
         return _photo_reading_result(ctx, runtime, plan, legs, refused_required, turn, clock, log)
     chain_gaps: list[str] = []

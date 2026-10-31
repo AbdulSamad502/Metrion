@@ -13,6 +13,8 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+from collections.abc import Iterator
+from contextlib import contextmanager
 from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import UUID
@@ -380,3 +382,52 @@ def rewrite_prefill(text: str) -> dict[str, str]:
     from backend.services import cmo_listing  # noqa: PLC0415
 
     return cmo_listing.rewrite_prefill(text)
+
+
+def title_step_inputs(done_inputs: Mapping[str, Any], anchor: str) -> dict[str, Any] | None:
+    """N-05b: the seller chose "write title options for me first" at the title question of a complete-listing request. The title set is planned for THIS product and marketplace, and carries the
+    server-side listing marker (`listing_workflow`, CEO-only: never a slot of the CMO action and never read from text). None when the product or marketplace is not known."""
+    name, mp = done_inputs.get("product_name"), done_inputs.get("marketplace")
+    sku = product_sku(name)
+    if not (name and mp and sku):
+        return None
+    return {"product_name": str(name), "sku": sku, "marketplaces": [str(mp)], "request_key": f"ceo-{anchor}-titles", "listing_workflow": True}
+
+
+def listing_continuation(tenant_id: UUID, generation_id: UUID) -> dict[str, str] | None:
+    """After the seller approved a title from a set that was written inside a complete-listing request, the facts that request already has (product, marketplace, the approved title), so the
+    request continues with its remaining questions. None for any other title set."""
+    if cmo_chat_repo.title_set_workflow(tenant_id, generation_id) != "FULL_LISTING":
+        return None
+    pm = cmo_chat_repo.title_set_product(tenant_id, generation_id)
+    if pm is None:
+        return None
+    sku, mp = pm
+    label = cmo_chat_repo.product_label(tenant_id, sku)
+    approved = approved_title_text(tenant_id, label, mp) if label else None
+    return {"product_name": label, "marketplace": mp, "seller_title": approved} if label and approved else None
+
+
+def title_step_rules_sentence(tenant_id: UUID, marketplace: str) -> str:
+    """The plain sentence about marketplace rules for the title step's plan card (best-effort: a failed lookup adds nothing and never invents a rule statement)."""
+    try:
+        from backend.services import cmo_listing, cmo_runtime  # noqa: PLC0415
+        from slim_cmo.types import Marketplace  # noqa: PLC0415
+
+        return cmo_listing.rules_state(tenant_id, cmo_runtime.build_runtime(), Marketplace(marketplace))[1]
+    except Exception:  # noqa: BLE001
+        logger.exception("could not describe the marketplace rules for the title step")
+        return ""
+
+
+@contextmanager
+def title_step_scope(plan: Mapping[str, Any]) -> Iterator[None]:
+    """N-16a: runs the frozen title-set leg of a complete-listing request with the server-side workflow marker. The marker comes from the stored plan (frozen, hash-bound), never from a request."""
+    follow = plan.get("followup") or {}
+    if plan.get("route_key") == "cmo.generate_title_sets" and follow.get("workflow") == "FULL_LISTING":
+        from backend.services import cmo_listing  # noqa: PLC0415
+
+        with cmo_listing.full_listing_workflow():
+            yield
+    else:
+        yield
