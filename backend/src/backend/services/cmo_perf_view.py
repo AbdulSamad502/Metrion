@@ -28,12 +28,11 @@ def _today() -> date:
 
 def _products(tenant: UUID) -> dict[tuple[str, str], dict[str, Any]]:
     """(sku, marketplace) -> {product name, versions oldest first}: the saved listings the seller can attach performance to. The account-wide history list is paged (newest first), so the product groups
-    come from its summary (never truncated) and each product's versions are read on their own: a seller with many versions of other products still sees every version of this one (up to one page, 100)."""
+    come from its summary (never truncated) and each product's versions are read on their own, ALL of them (no page limit): a seller with many versions of other products, or of this one, loses none."""
     top = cmo_history.history(tenant, limit=1)
     out: dict[tuple[str, str], dict[str, Any]] = {}
     for g in top["groups"]:
-        one = cmo_history.history(tenant, sku=g["sku"], marketplace=g["marketplace"], limit=cmo_history.MAX_PAGE)
-        out[(g["sku"], g["marketplace"])] = {"name": g["product"] or g["sku"], "versions": sorted(one["versions"], key=lambda x: x["number"])}
+        out[(g["sku"], g["marketplace"])] = {"name": g["product"] or g["sku"], "versions": cmo_history.product_versions(tenant, g["sku"], g["marketplace"])}
     return out
 
 
@@ -105,6 +104,9 @@ def dashboard(tenant: UUID, *, marketplace: str | None, sku: str | None, start: 
         limits.append(f"Imported reports cover {cur['coveredDays']} of {cur['days']} days of the chosen period.")
     if not prev["complete"]:
         limits.append(f"Imported reports cover {prev['coveredDays']} of {prev['days']} days of the previous period, so previous-period differences are not shown where they would mislead.")
+    corrected = repo.corrected_count(tenant, a, b, mp, pairs)
+    if corrected:
+        limits.append(f"{corrected} imported record(s) in this period were corrected by you. The corrected values are used in these numbers; the imported values are kept.")
     name_of = {k[0]: v["name"] for k, v in prods.items()}
     hand_mp = mp or (next(iter({k[1] for k in prods if k[0] == sku}), None) if sku and len({k[1] for k in prods if k[0] == sku}) == 1 else None)
     ins = mx.with_handoff(mx.insights(comparison, _json(prev), _json(cur), limits), name_of.get(sku or ""), hand_mp)
@@ -117,13 +119,17 @@ def dashboard(tenant: UUID, *, marketplace: str | None, sku: str | None, start: 
             "source": IMPORT_SOURCE, "current": _json(cur), "previous": _json(prev), "comparison": comparison, "trend": mx.trend(cur["_daily"], a, b),
             "insights": ins, "needs": needs, "limits": limits, "imports": [{**i, "periodStart": i["periodStart"].isoformat(), "periodEnd": i["periodEnd"].isoformat(), "importedAt": i["importedAt"].isoformat()}
                                                                                 for i in repo.imports(tenant, mp, 5)],
-            "never": mx.NEVER_CAUSE}
+            "correctedRecords": corrected, "never": mx.NEVER_CAUSE}
 
 
 # ------------------------------------------------------------------------------------------------ one saved listing, version by version
-def versions(tenant: UUID, sku: str, marketplace: str) -> dict[str, Any]:
+MAX_VERSION_PAGE = 100
+
+
+def versions(tenant: UUID, sku: str, marketplace: str, *, limit: int | None = None, offset: int = 0, order: str = "asc") -> dict[str, Any]:
     """For each version of this product on this marketplace that has a seller-confirmed go-live date: the N days before and the N days from that date, side by side. Equal length by construction and
-    re-checked by the same comparability rules as the sales-order observation (`performance.assess`). Observational only."""
+    re-checked by the same comparability rules as the sales-order observation (`performance.assess`). Observational only. Every version of the product is known (its go-live dates decide which periods overlap);
+    `limit`/`offset`/`order` choose which versions are ANALYSED and returned (limit None = all). Oldest first by default, newest first with order=\"desc\"; the order is stable."""
     mp = marketplace.upper()
     prods = _products(tenant)
     prod = prods.get((sku, mp))
@@ -144,7 +150,13 @@ def versions(tenant: UUID, sku: str, marketplace: str) -> dict[str, Any]:
         if v["id"] not in live:
             row["needs"].append(f"the date you put version {v['number']} live (nothing is assumed from when it was created or approved)")
         out.append(row)
-    for row in out:
+    if order not in ("asc", "desc"):
+        raise PerformanceRefused("BAD_ORDER", "Order must be asc (oldest first) or desc (newest first).")
+    offset = max(0, int(offset))
+    ordered = out if order == "asc" else list(reversed(out))
+    page = ordered if limit is None else ordered[offset:offset + max(1, min(int(limit), MAX_VERSION_PAGE))]
+    has_more = limit is not None and offset + len(page) < len(ordered)
+    for row in page:
         if row["wentLiveOn"] is None or n is None or link is None:
             continue
         g = date.fromisoformat(row["wentLiveOn"])
@@ -169,7 +181,7 @@ def versions(tenant: UUID, sku: str, marketplace: str) -> dict[str, Any]:
         facts = [mx.sentence(m, comp[m], f"in the {n} days after version {row['number']} went live than in the {n} days before") for m in (*mx.COUNTS, *mx.RATES) if comp[m]["state"] == mx.AVAILABLE]
         row.update(state="OBSERVED_COMPARABLE", comparison=comp, observations=facts, insights=mx.with_handoff(mx.insights(comp, _json(before), _json(after), [f"Go-live date is the date you stated ({row['wentLiveOn']}); Metrion cannot verify it."]), prod["name"], mp),
                    attribution="NOT_ATTRIBUTED", note=performance.CAUSE)
-    return {"sku": sku, "marketplace": mp, "product": prod["name"], "source": IMPORT_SOURCE, "windowDays": n, "windowSetBy": who, "linked": link["reportSku"] if link else None, "versions": out, "needs": needs, "aiCredits": 0}
+    return {"sku": sku, "marketplace": mp, "product": prod["name"], "source": IMPORT_SOURCE, "windowDays": n, "windowSetBy": who, "linked": link["reportSku"] if link else None, "versions": page, "total": len(out), "limit": limit, "offset": offset, "hasMore": has_more, "order": order, "needs": needs, "aiCredits": 0}
 
 
 # ------------------------------------------------------------------------------------------------ what the seller still has to confirm (dashboard + chat)

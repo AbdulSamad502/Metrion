@@ -53,7 +53,7 @@ def test_cmo_code_does_arithmetic_on_money_nowhere():
 def test_the_long_running_cmo_routes_are_sync_handlers_so_they_run_in_the_threadpool_and_never_block_the_event_loop():
     tree = ast.parse(code(BE / "api/v1/cmo.py"))
     asyncs = {n.name for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef)}
-    assert asyncs == {"post_image", "_perf_file", "post_performance_import_preview", "post_performance_import"}  # the uploads (photo, M8 report) read the body asynchronously and immediately hand the heavy work to run_in_threadpool
+    assert asyncs == {"post_image", "_perf_file", "post_performance_import_preview", "post_performance_import", "post_product_images"}  # the uploads (photo, M8 report, M9 product images) read the body asynchronously and immediately hand the heavy work to run_in_threadpool
     assert "run_in_threadpool" in code(BE / "api/v1/cmo.py")
 
 

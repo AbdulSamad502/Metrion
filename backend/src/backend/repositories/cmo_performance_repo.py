@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from backend.tenant_context import tenant_scope
 
@@ -133,7 +134,7 @@ _DAILY = text(
     SELECT report_date AS d, count(*) AS rows,
            sum(impressions) AS impressions, count(impressions) AS n_impressions, sum(clicks) AS clicks, count(clicks) AS n_clicks,
            sum(orders) AS orders, count(orders) AS n_orders, sum(units) AS units, count(units) AS n_units, sum(sales_paise) AS sales, count(sales_paise) AS n_sales
-    FROM cmo_perf_line
+    FROM cmo_perf_line_effective
     WHERE tenant_id = :t AND report_date BETWEEN :a AND :b AND (CAST(:mp AS text) IS NULL OR marketplace = :mp)
       AND (CAST(:pairs AS text[]) IS NULL OR marketplace || '|' || report_sku = ANY(CAST(:pairs AS text[])))
     GROUP BY report_date ORDER BY report_date
@@ -246,3 +247,108 @@ def golive_history(tenant_id: UUID) -> list[dict[str, Any]]:
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(_GOLIVE_HISTORY, {"t": tenant_id}).all()
     return [{"generationId": str(r.generation_id), "sku": str(r.sku), "marketplace": r.marketplace, "wentLiveOn": r.went_live_on, "confirmedBy": str(r.confirmed_by), "confirmedAt": r.confirmed_at} for r in rows]
+
+
+# ------------------------------------------------------------------------------------------------ corrections to imported records (append-only; the imported rows are never changed)
+_METRICS = ("impressions", "clicks", "orders", "units", "sales")
+_LINES = text(
+    """
+    SELECT l.id, l.import_id, l.marketplace, l.report_sku, l.report_date,
+           l.impressions AS o_impressions, l.clicks AS o_clicks, l.orders AS o_orders, l.units AS o_units, l.sales_paise AS o_sales,
+           e.impressions, e.clicks, e.orders, e.units, e.sales_paise, e.corrected, e.correction_id, e.voided, i.source_name, i.imported_at
+    FROM cmo_perf_line l
+    JOIN cmo_perf_line_effective e ON e.tenant_id = l.tenant_id AND e.id = l.id
+    JOIN cmo_perf_import i ON i.tenant_id = l.tenant_id AND i.id = l.import_id
+    WHERE l.tenant_id = :t AND l.marketplace = :mp AND (CAST(:sku AS text) IS NULL OR l.report_sku = :sku) AND l.report_date BETWEEN :a AND :b
+    ORDER BY l.report_date DESC, l.report_sku, l.id LIMIT :limit OFFSET :offset
+    """
+)
+_LINES_COUNT = text(
+    "SELECT count(*) FROM cmo_perf_line l WHERE l.tenant_id = :t AND l.marketplace = :mp AND (CAST(:sku AS text) IS NULL OR l.report_sku = :sku) AND l.report_date BETWEEN :a AND :b"
+)
+_LINE = text(
+    """
+    SELECT l.id, l.import_id, l.marketplace, l.report_sku, l.report_date, l.impressions AS o_impressions, l.clicks AS o_clicks, l.orders AS o_orders, l.units AS o_units, l.sales_paise AS o_sales,
+           e.impressions, e.clicks, e.orders, e.units, e.sales_paise, e.corrected, e.correction_id, e.voided
+    FROM cmo_perf_line l JOIN cmo_perf_line_effective e ON e.tenant_id = l.tenant_id AND e.id = l.id WHERE l.tenant_id = :t AND l.id = :id
+    """
+)
+_INSERT_CORRECTION = text(
+    """
+    INSERT INTO cmo_perf_correction (tenant_id, line_id, import_id, marketplace, report_sku, report_date,
+      prev_impressions, prev_clicks, prev_orders, prev_units, prev_sales_paise, new_impressions, new_clicks, new_orders, new_units, new_sales_paise,
+      voided, changed, reason, supersedes_id, created_by)
+    VALUES (:t, :line, :imp, :mp, :sku, :d, :p_impressions, :p_clicks, :p_orders, :p_units, :p_sales, :n_impressions, :n_clicks, :n_orders, :n_units, :n_sales,
+      :voided, :changed, :reason, :sup, :u) RETURNING id, created_at
+    """
+)
+_CORRECTIONS = text(
+    """
+    SELECT c.id, c.line_id, c.import_id, c.marketplace, c.report_sku, c.report_date, c.prev_impressions, c.prev_clicks, c.prev_orders, c.prev_units, c.prev_sales_paise,
+           c.new_impressions, c.new_clicks, c.new_orders, c.new_units, c.new_sales_paise, c.voided, c.changed, c.reason, c.supersedes_id, c.created_by, c.created_at, i.source_name
+    FROM cmo_perf_correction c JOIN cmo_perf_import i ON i.tenant_id = c.tenant_id AND i.id = c.import_id
+    WHERE c.tenant_id = :t AND (CAST(:mp AS text) IS NULL OR c.marketplace = :mp) AND (CAST(:sku AS text) IS NULL OR c.report_sku = :sku)
+    ORDER BY c.created_at DESC, c.id DESC LIMIT :limit OFFSET :offset
+    """
+)
+_CORRECTED_IN_RANGE = text(
+    """
+    SELECT count(*) FROM cmo_perf_line_effective e
+    WHERE e.tenant_id = :t AND e.corrected AND e.report_date BETWEEN :a AND :b AND (CAST(:mp AS text) IS NULL OR e.marketplace = :mp)
+      AND (CAST(:pairs AS text[]) IS NULL OR e.marketplace || '|' || e.report_sku = ANY(CAST(:pairs AS text[])))
+    """
+)
+
+
+class CorrectionConflict(Exception):
+    """Another correction of the same record was saved first (the chain of corrections is a single line)."""
+
+
+def _vals(r: Any, prefix: str) -> dict[str, int | None]:
+    return {m: (getattr(r, f"{prefix}{m}") if m != "sales" else getattr(r, f"{prefix}sales" if prefix == "o_" else "sales_paise")) for m in _METRICS}
+
+
+def _line_row(r: Any) -> dict[str, Any]:
+    return {"lineId": str(r.id), "importId": str(r.import_id), "marketplace": r.marketplace, "reportSku": r.report_sku, "date": r.report_date,
+            "original": _vals(r, "o_"), "effective": {"impressions": r.impressions, "clicks": r.clicks, "orders": r.orders, "units": r.units, "sales": r.sales_paise},
+            "corrected": bool(r.corrected), "correctionId": str(r.correction_id) if r.correction_id else None, "voided": bool(r.voided)}
+
+
+def lines(tenant_id: UUID, marketplace: str, report_sku: str | None, start: date, end: date, limit: int, offset: int) -> tuple[list[dict[str, Any]], int]:
+    args = {"t": tenant_id, "mp": marketplace, "sku": report_sku, "a": start, "b": end}
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(_LINES, {**args, "limit": limit, "offset": offset}).all()
+        total = int(conn.execute(_LINES_COUNT, args).scalar_one())
+    return [{**_line_row(r), "sourceName": r.source_name, "importedAt": r.imported_at} for r in rows], total
+
+
+def line(tenant_id: UUID, line_id: UUID) -> dict[str, Any] | None:
+    with tenant_scope(tenant_id) as conn:
+        r = conn.execute(_LINE, {"t": tenant_id, "id": line_id}).first()
+    return _line_row(r) if r else None
+
+
+def add_correction(tenant_id: UUID, user_id: UUID, *, current: dict[str, Any], new: dict[str, int | None], voided: bool, changed: list[str], reason: str) -> dict[str, Any]:
+    prev = current["effective"]
+    args = {"t": tenant_id, "line": UUID(current["lineId"]), "imp": UUID(current["importId"]), "mp": current["marketplace"], "sku": current["reportSku"], "d": current["date"],
+            **{f"p_{m}": prev[m] for m in _METRICS}, **{f"n_{m}": new[m] for m in _METRICS}, "voided": voided, "changed": changed, "reason": reason,
+            "sup": UUID(current["correctionId"]) if current["correctionId"] else None, "u": user_id}
+    try:
+        with tenant_scope(tenant_id) as conn:
+            r = conn.execute(_INSERT_CORRECTION, args).one()
+    except IntegrityError:
+        raise CorrectionConflict from None
+    return {"id": str(r.id), "createdAt": r.created_at}
+
+
+def corrections(tenant_id: UUID, marketplace: str | None, report_sku: str | None, limit: int, offset: int) -> list[dict[str, Any]]:
+    with tenant_scope(tenant_id) as conn:
+        rows = conn.execute(_CORRECTIONS, {"t": tenant_id, "mp": marketplace, "sku": report_sku, "limit": limit, "offset": offset}).all()
+    return [{"id": str(r.id), "lineId": str(r.line_id), "importId": str(r.import_id), "sourceName": r.source_name, "marketplace": r.marketplace, "reportSku": r.report_sku, "date": r.report_date,
+             "previous": {m: getattr(r, f"prev_{m}" if m != "sales" else "prev_sales_paise") for m in _METRICS}, "corrected": {m: getattr(r, f"new_{m}" if m != "sales" else "new_sales_paise") for m in _METRICS},
+             "voided": bool(r.voided), "changed": list(r.changed), "reason": r.reason, "supersedes": str(r.supersedes_id) if r.supersedes_id else None, "by": str(r.created_by), "at": r.created_at} for r in rows]
+
+
+def corrected_count(tenant_id: UUID, start: date, end: date, marketplace: str | None = None, pairs: list[str] | None = None) -> int:
+    with tenant_scope(tenant_id) as conn:
+        return int(conn.execute(_CORRECTED_IN_RANGE, {"t": tenant_id, "a": start, "b": end, "mp": marketplace, "pairs": pairs}).scalar_one())

@@ -18,3 +18,12 @@ For each marketplace, export the report that shows **per-day, per-SKU** impressi
 
 ## B7
 See `CMO_B7_BROWSER_WALKTHROUGH.md` (test tenant and permission).
+
+## B1 / M9 - marketplace image requirements
+
+From each seller account (no passwords): the official image requirements page or listing-template instructions for each category sold (minimum and maximum pixel sizes, number of images, main-image background and content rules, file-type and size limits, text or watermark rules), with the page URL and the date read. Until then M9 reports every marketplace image requirement as NOT_ASSESSED. Real seller product pictures are used only with the owner's explicit authorization; development uses synthetic pictures.
+
+## M10 - what makes news and opportunities useful
+1. A saved market-trend report (the existing paid, approved step) so there is something to read; without one M10 shows nothing.
+2. The operator-configured official policy domains for Amazon India, Flipkart and Meesho (open question Q5), so official sources can be recognised.
+3. Real seller reports and listings stay out of development: synthetic data only; real data only with the owner's explicit authorization.

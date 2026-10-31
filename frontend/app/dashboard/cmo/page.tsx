@@ -7,6 +7,8 @@ import Link from "next/link";
 import { PAGE_COPY } from "@/lib/navigation";
 import { ShowcaseDashboard } from "@/components/cmo/ShowcaseDashboard";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { IMAGES_PAGE } from "@/lib/cmoImages";
+import { MARKET_PAGE } from "@/lib/cmoMarket";
 import { createShowcaseClient, FIXTURE_ALLOWED, type ShowcaseClient } from "@/lib/cmoShowcase";
 
 function Showcase() {
@@ -28,6 +30,14 @@ export default function CmoPage() {
       <p className="m-0 mb-3 t-meta" style={{ color: "var(--text-3)" }}>
         <Link href="/dashboard/cmo/performance" className="mt-focus font-bold" style={{ color: "var(--accent)" }}>Listing performance →</Link>{" "}
         Import your marketplace reports, see impressions, clicks, orders and conversion, and compare listing versions.
+      </p>
+      <p className="m-0 mb-3 t-meta" style={{ color: "var(--text-3)" }}>
+        <Link href={IMAGES_PAGE} className="mt-focus font-bold" style={{ color: "var(--accent)" }}>Product images →</Link>{" "}
+        Upload your product pictures and see how clear, well lit and well framed they are, and what to improve.
+      </p>
+      <p className="m-0 mb-3 t-meta" style={{ color: "var(--text-3)" }}>
+        <Link href={MARKET_PAGE} className="mt-focus font-bold" style={{ color: "var(--accent)" }}>Market opportunities and news →</Link>{" "}
+        Opportunities and marketplace news from the market reports you saved, related to your products.
       </p>
       <Suspense fallback={null}>
         <Showcase />

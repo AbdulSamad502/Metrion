@@ -117,6 +117,10 @@ class ImageService:
     def max_upload_bytes(self) -> int:
         return self._limits.max_bytes
 
+    def read_stored(self, storage_uri: str) -> bytes:
+        """The bytes of a stored (already normalised) image, read through the same file port the upload wrote to. For the M9 image review, which only measures them."""
+        return self._files.get(storage_uri)
+
     # ---- POST /cmo/images ---------------------------------------------------------------------
 
     def upload(self, actor: Actor, data: bytes, declared_type: str) -> UploadResult:

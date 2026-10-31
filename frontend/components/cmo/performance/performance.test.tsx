@@ -35,6 +35,8 @@ const mappings = (over: Partial<Mappings> = {}): Mappings => ({
   windowDays: null, windowSetBy: null, windowBounds: [7, 90], missing: ["the comparison period length in days (set it on the performance page or tell me in chat)", "your confirmation of which SKU in your reports is this product", "a go-live date for version 1"], hasImports: true, aiCredits: 0, ...over,
 });
 const fake = (over: Partial<Record<keyof PerformanceApi, unknown>> = {}): PerformanceApi => ({
+  lines: vi.fn(async () => ({ marketplace: "AMAZON", reportSku: null, start: "2026-10-02", end: "2026-10-31", total: 0, limit: 25, offset: 0, hasMore: false, lines: [], note: "", aiCredits: 0 as const })),
+  correctionHistory: vi.fn(async () => ({ corrections: [], limit: 25, offset: 0, hasMore: false, aiCredits: 0 as const, note: "" })), correct: vi.fn(),
   dashboard: vi.fn(async () => dashboard()), mappings: vi.fn(async () => mappings()), versions: vi.fn(), candidates: vi.fn(async () => ({ candidates: [{ reportSku: "AQ-1", reportTitle: null, rows: 31, firstOrder: null, lastOrder: null }], note: "" })),
   previewImport: vi.fn(), importReport: vi.fn(), linkSku: vi.fn(async () => ({ linked: true as const, previous: null, message: "Saved as your statement." })),
   confirmGoLive: vi.fn(async () => ({ recorded: true as const, previous: null, message: "Saved as your statement. Metrion cannot see the marketplace." })), setWindow: vi.fn(async (days: number) => ({ days, message: `Saved. ${days}-day periods.` })), ...over,

@@ -100,6 +100,8 @@ def test_only_the_psl_dependency_is_third_party():
     for path in P2_FILES:
         for module in _imports(ast.parse(path.read_text(encoding="utf-8"))):
             root = module.split(".")[0]
+            if root == "PIL" and "imagequality" in path.parts:
+                continue  # M9's pure image measurements use Pillow only; its own boundary test below pins that
             if root not in stdlib:
                 third_party.add(root)
     assert third_party == {"publicsuffixlist"}
@@ -123,6 +125,16 @@ def _layer_imports(layer: str) -> set[str]:
 
 def test_imaging_touches_no_network_database_or_model_and_only_pillow_is_third_party():
     imported = _layer_imports("imaging")
+    assert not imported & {m.split(".")[0] for m in NETWORK_AND_MODEL_MODULES}
+    import sys
+
+    third_party = {m for m in imported if m not in set(sys.stdlib_module_names) | {"slim_cmo", "__future__"}}
+    assert third_party == {"PIL"}
+
+
+def test_imagequality_stays_pure_pillow_only_with_no_network_database_model_or_clock():
+    """CMO 3.0 M9: the image measurements and score are deterministic Pillow code. Still subject to the float and clock rules above (it is not an I/O package)."""
+    imported = _layer_imports("imagequality")
     assert not imported & {m.split(".")[0] for m in NETWORK_AND_MODEL_MODULES}
     import sys
 

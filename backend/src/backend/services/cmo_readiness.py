@@ -28,7 +28,7 @@ from slim_cmo.service.title_analysis import TitleAnalysisService
 from slim_cmo.types import SellerFactType
 
 from backend.repositories import cmo_chat_repo
-from backend.services import cmo_actions, cmo_ci_inputs, cmo_runtime
+from backend.services import cmo_actions, cmo_ci_inputs, cmo_image_review, cmo_runtime
 
 logger = logging.getLogger(__name__)
 MARKETPLACES = ("AMAZON", "FLIPKART", "MEESHO")
@@ -86,12 +86,18 @@ def build_card(ctx: Any, investigation_id: UUID, sku: str, name: str, view: str)
         approvals.extend(a["approvalId"] for a in approved)
         rule_verified = bool(analysis and any(((o.get("dimensions") or {}).get("marketplaceRules") or {}).get("ruleKind") == "VERIFIED" for o in analysis.get("options", [])))
         markets.append(MarketplaceInputs(mp, analysis, approved[0]["text"] if approved else None, mp in copy_packs, rule_verified))
-    readiness = assess_all(ProductInputs(profile, questions, kw, has_photo), markets)
+    images: dict[str, Any] = {}
+    for mp in MARKETPLACES:
+        try:
+            images[mp] = cmo_image_review.image_summary(tenant, sku, mp)
+        except Exception:  # noqa: BLE001 - the image summary is information only; a failed lookup is 'no images shown', never a pass
+            logger.exception("could not read the product image summary")
+    readiness = assess_all(ProductInputs(profile, questions, kw, has_photo, images), markets)
 
     q_started, q_run = rt.clock(), uuid4()
     qid, q_reused = save_result(actor, "questions", sku, Q_METHOD, questions, f"questions-{sku}-{_digest(fact_key, stems)}"[:128], q_run)
     r_started, r_run = rt.clock(), uuid4()
-    rid, r_reused = save_result(actor, "readiness", sku, R_METHOD, readiness, f"readiness-{sku}-{_digest(fact_key, sorted(s['generationId'] for s in sets.values()), sorted(approvals), sorted(copy_packs), has_photo, stems)}"[:128], r_run)
+    rid, r_reused = save_result(actor, "readiness", sku, R_METHOD, readiness, f"readiness-{sku}-{_digest(fact_key, sorted(s['generationId'] for s in sets.values()), sorted(approvals), sorted(copy_packs), has_photo, json.dumps(images, sort_keys=True, default=str), stems)}"[:128], r_run)
     if not q_reused:
         cmo_actions.record_free_run(principal, rt, "cmo.buyer_questions", q_run, q_started)
     if not r_reused:

@@ -56,6 +56,7 @@ class ProductInputs:
     questions: Mapping[str, Any]  # M5 buyer questions analysis
     keyword_result: Mapping[str, Any] | None  # M2 keyword analysis
     has_photo: bool  # the seller's own photo was attached for Slim CMO to read (presence only; quality is not assessed)
+    images: Mapping[str, Mapping[str, Any]] | None = None  # M9: per marketplace {images, hasPrimary, review: {score, scoreState, isCurrent, highFindings} | None} for the seller's own uploaded images
 
 
 def _share(max_points: int, num: int, den: int) -> int:
@@ -153,10 +154,30 @@ def _content_items(m: MarketplaceInputs) -> list[dict[str, Any]]:
     return items
 
 
-def _photo_items(p: ProductInputs) -> list[dict[str, Any]]:
-    return [_item("photo_present", "Product photo", DONE if p.has_photo else MISSING, 10, 10 if p.has_photo else 0,
-                  "You attached a photo for Slim CMO to read. Photo quality is not assessed." if p.has_photo else "No product photo was attached for this product.",
-                  None if p.has_photo else "Attach a clear product photo in this conversation and ask me to read it.")]
+def _photo_items(p: ProductInputs, marketplace: str) -> list[dict[str, Any]]:
+    uploaded = bool(((p.images or {}).get(marketplace) or {}).get("hasPrimary"))  # a main image on the images page counts as presence only; its quality is reported separately
+    has = p.has_photo or uploaded
+    detail = ("You attached a photo for Slim CMO to read. Photo quality is not assessed." if p.has_photo
+              else "A main product image is uploaded on the images page. Its quality is shown separately under Image quality." if uploaded else "No product photo was attached for this product.")
+    return [_item("photo_present", "Product photo", DONE if has else MISSING, 10, 10 if has else 0, detail,
+                  None if has else "Attach a clear product photo in this conversation and ask me to read it, or upload a main image on the images page.")]
+
+
+def _image_quality(p: ProductInputs, marketplace: str) -> dict[str, Any]:
+    """Information only: it never changes the readiness score, the verdict or any item. Missing images are reported as not assessed, never as a pass."""
+    s = (p.images or {}).get(marketplace)
+    base = {"separateFromReadiness": True, "note": "Image quality is advice shown beside readiness; it does not change the readiness score or verdict and is not marketplace compliance."}
+    if not s or not s.get("images"):
+        return {**base, "state": NOT_ASSESSED, "message": f"No product images are uploaded for {marketplace.title()}, so image quality is not assessed. This is not a pass."}
+    r = s.get("review")
+    if not r:
+        return {**base, "state": "NOT_REVIEWED", "images": s["images"], "message": "Images are uploaded but not reviewed yet."}
+    if not r.get("isCurrent"):
+        return {**base, "state": "STALE", "images": s["images"], "message": "The images changed since the last review; review them again."}
+    if r.get("scoreState") != "COMPLETE":
+        return {**base, "state": "PARTIAL", "images": s["images"], "highFindings": r.get("highFindings", 0), "message": "The image review could not give a full score; see the images page for what was and was not assessed."}
+    return {**base, "state": "REVIEWED", "images": s["images"], "score": r.get("score"), "highFindings": r.get("highFindings", 0),
+            "message": f"Image quality {r.get('score')}/100; {r.get('highFindings', 0)} high-priority issue(s)."}
 
 
 def _market_items(m: MarketplaceInputs) -> list[dict[str, Any]]:
@@ -178,7 +199,7 @@ def _market_items(m: MarketplaceInputs) -> list[dict[str, Any]]:
 
 def assess(p: ProductInputs, m: MarketplaceInputs) -> dict[str, Any]:
     builders = {"facts": lambda: _facts_items(p.profile), "title": lambda: _title_items(m), "keywords": lambda: _keyword_items(p, m), "buyer": lambda: _buyer_items(p),
-                "content": lambda: _content_items(m), "photo": lambda: _photo_items(p), "marketplace": lambda: _market_items(m)}
+                "content": lambda: _content_items(m), "photo": lambda: _photo_items(p, m.marketplace), "marketplace": lambda: _market_items(m)}
     cats: list[dict[str, Any]] = []
     for cid, label, mx in CATEGORIES:
         items = builders[cid]()
@@ -199,7 +220,7 @@ def assess(p: ProductInputs, m: MarketplaceInputs) -> dict[str, Any]:
     unassessed = [i for i in all_items if i["status"] == NOT_ASSESSED]
     verdict = "BLOCKED" if blocked else "NOT_READY" if missing else "DRAFT_READY_NOT_VERIFIED" if unassessed else "READY"
     actions = [{"id": i["id"], "label": i["label"], "action": i["action"], "status": i["status"], "points": i["max"]} for i in sorted(blocked + missing, key=lambda x: (x["status"] != BLOCKED, -x["max"], x["id"])) if i["action"]][:6]
-    return {"method": METHOD, "marketplace": m.marketplace, "verdict": verdict, "verdictText": VERDICT_TEXT[verdict], "score": score, "categories": cats, "nextActions": actions,
+    return {"method": METHOD, "marketplace": m.marketplace, "verdict": verdict, "verdictText": VERDICT_TEXT[verdict], "score": score, "imageQuality": _image_quality(p, m.marketplace), "categories": cats, "nextActions": actions,
             "counts": {"done": sum(i["status"] == DONE for i in all_items), "missing": len(missing), "blocked": len(blocked), "notAssessed": len(unassessed)}}
 
 
@@ -207,4 +228,4 @@ def assess_all(p: ProductInputs, markets: Sequence[MarketplaceInputs]) -> dict[s
     return {"method": METHOD, "marketplaces": [assess(p, m) for m in markets],
             "limits": ["The readiness score is an internal assessment of what is done and what is missing for your own listing. It is not a marketplace approval, ranking, conversion or sales prediction.",
                        "A requirement that could not be assessed (above all the marketplace's own requirements, because no verified rule exists) is shown as NOT ASSESSED. It is never counted as passed.",
-                       "Photo quality, category-specific required fields and search demand are not assessed."]}
+                       "Category-specific required fields and search demand are not assessed. Product image quality is reviewed separately and does not change this score."]}

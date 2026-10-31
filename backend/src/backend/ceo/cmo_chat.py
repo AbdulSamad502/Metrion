@@ -180,6 +180,11 @@ def record_typed_title_approval(tenant_id: UUID, user_id: UUID, direct: Mapping[
         return existing, None
     res = cmo_runtime.build_runtime().approvals.approve_typed_title(Actor(tenant_id, user_id), sku=sku, marketplace=Marketplace(str(direct["marketplace"]).upper()), text=title)
     if isinstance(res, ApprovalRefused):
+        over = next((m for v in res.violations if "TOO_LONG" in v for m in [re.search(r"\((\d+)>(\d+)\)", v)] if m), None)  # N-16c: a verified length limit is named with the limit and the title's own length
+        if over:
+            n, limit = over.group(1), over.group(2)
+            return None, (f"This title exceeds the verified {str(direct['marketplace']).title()} limit of at most {limit} characters, and the title for this listing is {n} characters. "
+                          f"Give me a shorter title (at most {limit} characters) and ask again. I have not approved, saved or cut your title, and nothing was charged.")
         return None, f"I could not use that title: {res.detail}. Give me a different title, or ask me for title options first."
     return str(res.approval_id), None
 

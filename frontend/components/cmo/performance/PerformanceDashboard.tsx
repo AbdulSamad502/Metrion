@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SectionCard } from "@/components/cmo/showcaseUi";
 import { ConfirmationsPanel } from "@/components/cmo/performance/ConfirmationsPanel";
+import { CorrectionsPanel } from "@/components/cmo/performance/CorrectionsPanel";
 import { ImportPanel } from "@/components/cmo/performance/ImportPanel";
 import { TrendCharts } from "@/components/cmo/performance/TrendChart";
 import { VersionPanel } from "@/components/cmo/performance/VersionPanel";
@@ -110,6 +111,7 @@ export function PerformanceDashboard({ api }: { api: PerformanceApi }) {
       <ImportPanel api={api} imports={d?.imports ?? []} onImported={refresh} />
       <ConfirmationsPanel api={api} onChanged={refresh} />
       <VersionPanel api={api} version={tick} />
+      <CorrectionsPanel api={api} version={tick} onChanged={refresh} />
     </div>
   );
 }

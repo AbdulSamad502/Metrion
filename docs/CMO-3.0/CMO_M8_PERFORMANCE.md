@@ -131,3 +131,8 @@ The failing tests (`ceoDecide` price-impact, `ceoAttach` first upload, `ceoInput
 
 ## 11. Closure-pass verification
 Backend (scratch DB, port 5545): test_cmo_m8_performance.py, test_cmo_b8_performance.py, test_ceo_cmo_m8_performance_chat.py (13, including the hand-off and typing-yes tests), test_ceo_cmo_m7_history_chat.py, test_cmo_m7_history.py, test_cmo_p5_unit.py, test_ceo_architecture.py, test_request_contract_snapshot.py = 432 passed in 2m45s. slim-cmo history + purity + no-float = 314 passed. Frontend: components/ceo + components/cmo + lib = 62 files, 570 tests passed in 106 s (before the vitest worker change the same group failed 4 first-render tests at 5 s, and failed ceoDecide on 8ab58ea too); tsc --noEmit clean; eslint clean on changed files. Schema: no migration in this pass. Not run: the full backend, frontend and slim-cmo suites and the earlier six-file regression set (no code they cover changed); browser verification NOT DONE; no real data.
+
+## 12. Later additions (2026-11-01)
+* Section 6c (correcting a wrong import) is now **IMPLEMENTED** as designed with refinements: see `CMO_PERF_CORRECTIONS.md`. Tests written, NOT RUN; migration `20261101_0012` not applied.
+* The "one page (100) of versions per product" limit is removed: see `CMO_VERSION_PAGINATION.md`. Tests written, NOT RUN.
+* Naming: the original M8 of the CMO plan is **Product Variant Intelligence** (not built). This document describes the additional capability "Listing Performance Intelligence", which the code and tests label M8.

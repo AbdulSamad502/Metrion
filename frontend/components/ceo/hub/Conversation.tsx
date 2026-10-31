@@ -11,6 +11,10 @@ import { ReadinessCard } from "@/components/ceo/hub/ReadinessCard";
 import { ListingCard } from "@/components/ceo/hub/ListingCard";
 import { ListingHistoryCard } from "@/components/ceo/hub/ListingHistoryCard";
 import { PerformanceCard } from "@/components/ceo/hub/PerformanceCard";
+import { ImageQualityCard } from "@/components/ceo/hub/ImageQualityCard";
+import { MarketIntelligenceCard } from "@/components/ceo/hub/MarketIntelligenceCard";
+import { isMarketCard } from "@/lib/cmoMarket";
+import { isImageCard, type ImagesApi } from "@/lib/cmoImages";
 import { isPerformanceCard, type PerformanceApi } from "@/lib/cmoPerformance";
 import { PlanCard } from "@/components/ceo/hub/PlanCard";
 import { RichText } from "@/components/ceo/hub/RichText";
@@ -52,6 +56,7 @@ export function Conversation({
   approveListing,
   historyApi,
   performanceApi,
+  imagesApi,
   recordListingCopy,
 }: {
   /** loads the seller's own picture for the listing preview (authenticated, images only); absent = the preview shows its neutral placeholder */
@@ -59,6 +64,7 @@ export function Conversation({
   approveListing?: (generationId: string) => Promise<{ approved: boolean; message: string; banner: string | null }>;
   historyApi?: HistoryApi;
   performanceApi?: PerformanceApi;
+  imagesApi?: ImagesApi;
   recordListingCopy?: (generationId: string) => Promise<boolean>;
   /** the Approve / Decline buttons of a plan card (the only approval there is); absent = the cards are read-only */
   onApprovePlan?: (planId: string, planHash: string) => void;
@@ -141,6 +147,7 @@ export function Conversation({
         onApproveListing={approveListing}
         historyApi={historyApi}
         performanceApi={performanceApi}
+        imagesApi={imagesApi}
         onListingCopied={(id) => void recordListingCopy?.(id)}
       />
 
@@ -207,12 +214,13 @@ function lastCardId(messages: CeoMessage[]): string | null {
 }
 
 function Thread({
-  messages, findings, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs, plans, closed, planBusy, onApprovePlan, onDeclinePlan, loadImage, onApproveListing, historyApi, performanceApi, onListingCopied,
+  messages, findings, turnById, answerableCardId, cardDisabled, onAnswer, onOpenForm, onSuggest, onAsk, agents, needs, plans, closed, planBusy, onApprovePlan, onDeclinePlan, loadImage, onApproveListing, historyApi, performanceApi, imagesApi, onListingCopied,
 }: {
   loadImage?: (investigationId: string, attachmentId: string) => Promise<string>;
   onApproveListing?: (generationId: string) => Promise<{ approved: boolean; message: string; banner: string | null }>;
   historyApi?: HistoryApi;
   performanceApi?: PerformanceApi;
+  imagesApi?: ImagesApi;
   onListingCopied?: (generationId: string) => void;
   plans: PlanView[];
   closed: boolean;
@@ -255,7 +263,9 @@ function Thread({
           {m.role === "CEO" && m.kind === "ANSWER" && isListingCard(m.choices) && <ListingCard card={m.choices} disabled={cardDisabled} onSend={onAsk} onApprove={onApproveListing} onCopied={onListingCopied} />}
           {m.role === "CEO" && m.kind === "ANSWER" && isHistoryCard(m.choices) && <ListingHistoryCard card={m.choices} api={historyApi} disabled={cardDisabled} onSend={onAsk} />}
           {m.role === "CEO" && m.kind === "ANSWER" && isPerformanceCard(m.choices) && <PerformanceCard card={m.choices} api={performanceApi} disabled={cardDisabled} onSend={onAsk} />}
-          {m.id === answerableCardId && m.choices && !isPickCard(m.choices) && !isPreviewCard(m.choices) && !isReadinessCard(m.choices) && !isListingCard(m.choices) && !isHistoryCard(m.choices) && !isPerformanceCard(m.choices) && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
+          {m.role === "CEO" && m.kind === "ANSWER" && isMarketCard(m.choices) && <MarketIntelligenceCard card={m.choices} disabled={cardDisabled} onSend={onAsk} />}
+          {m.role === "CEO" && m.kind === "ANSWER" && isImageCard(m.choices) && <ImageQualityCard card={m.choices} api={imagesApi} disabled={cardDisabled} onSend={onAsk} />}
+          {m.id === answerableCardId && m.choices && !isPickCard(m.choices) && !isPreviewCard(m.choices) && !isReadinessCard(m.choices) && !isListingCard(m.choices) && !isHistoryCard(m.choices) && !isPerformanceCard(m.choices) && !isImageCard(m.choices) && !isMarketCard(m.choices) && <DecisionCard messageId={m.id} question={m.content} card={m.choices} disabled={cardDisabled} onAnswer={onAnswer} onOpenForm={onOpenForm} />}
         </li>
       ))}
       {placed.unplaced.length > 0 && <li><NeedSteps needs={placed.unplaced} /></li>}

@@ -25,7 +25,7 @@ from datetime import date
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
@@ -48,7 +48,7 @@ from slim_cmo.types import Marketplace, OutputType, TrendSection
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CMO, CATALOG_VIEW, FILES_UPLOAD, RESEARCH_MARKET_TRENDS, has_permission
-from backend.services import cmo_actions, cmo_ci_inputs, cmo_history, cmo_images, cmo_listing, cmo_perf_import, cmo_perf_view, cmo_performance, cmo_runtime, cmo_trends
+from backend.services import cmo_actions, cmo_ci_inputs, cmo_history, cmo_market, cmo_perf_correction, cmo_image_review, cmo_images, cmo_listing, cmo_perf_import, cmo_perf_view, cmo_performance, cmo_runtime, cmo_trends
 from backend.services.cmo_actions import Principal, QuotaDenied, RequestInProgress
 from backend.services.cmo_runtime import CmoNotConfigured
 from backend.uploads import read_upload_capped
@@ -241,6 +241,10 @@ def _guarded(fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
     except cmo_history.HistoryRefused as exc:
         raise HTTPException(status_code=exc.status, detail={"code": exc.code, "detail": exc.detail}) from None
     except cmo_performance.PerformanceRefused as exc:
+        raise HTTPException(status_code=exc.status, detail={"code": exc.code, "detail": exc.detail}) from None
+    except cmo_market.MarketRefused as exc:
+        raise HTTPException(status_code=exc.status, detail={"code": exc.code, "detail": exc.detail}) from None
+    except cmo_image_review.ImageReviewRefused as exc:
         raise HTTPException(status_code=exc.status, detail={"code": exc.code, "detail": exc.detail}) from None
     except NotFound:
         raise HTTPException(status_code=404, detail="Not found") from None  # unknown and cross-tenant look identical
@@ -456,11 +460,12 @@ def get_performance_imports(ctx: AuthContext = require_auth(permission=AGENT_CMO
 
 
 @router.get("/performance/versions")
-def get_performance_versions(sku: Annotated[str, Field(min_length=1, max_length=_NAME)], marketplace: Marketplace, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
-    """Per saved version: the equal-length periods before and after its seller-confirmed go-live date, observed side by side. Never a claim of cause."""
+def get_performance_versions(sku: Annotated[str, Field(min_length=1, max_length=_NAME)], marketplace: Marketplace, limit: Annotated[int, Field(ge=1, le=100)] = 25, offset: Annotated[int, Field(ge=0)] = 0,
+                             order: Literal["asc", "desc"] = "asc", ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Per saved version (a page of them, oldest first by default): the equal-length periods before and after its seller-confirmed go-live date, observed side by side. Never a claim of cause. `total` and `hasMore` tell the page position; every version is known, only the analysed page is returned."""
     def go() -> dict[str, Any]:
         _principal(ctx)
-        return cmo_perf_view.versions(ctx.tenant_id, sku, marketplace.value)  # type: ignore[arg-type]
+        return cmo_perf_view.versions(ctx.tenant_id, sku, marketplace.value, limit=limit, offset=offset, order=order)  # type: ignore[arg-type]
 
     return _guarded(go)
 
@@ -884,5 +889,193 @@ def get_market_trend(generation_id: UUID, ctx: AuthContext = require_auth(permis
     def go() -> dict[str, Any]:
         rt = cmo_runtime.build_trend_runtime()
         return cmo_trends.report_json(rt.service.get(_actor(p), generation_id), reused=False, units=0, run_id=None)
+
+    return _guarded(go)
+
+
+# ------------------------------------------------------------------------------------------------ CMO 3.0 M9: Product Image Quality Advisor (free, deterministic, no model, nothing edited or published)
+class ImageSetBody(_Body):
+    sku: str = Field(min_length=1, max_length=_NAME)
+    marketplace: Marketplace
+
+
+class ImageAssignment(_Body):
+    assetId: UUID  # noqa: N815 - wire name
+    role: Literal["PRIMARY", "SECONDARY", "REMOVED"]
+    shotType: str = Field(min_length=1, max_length=20)  # noqa: N815
+    position: int | None = Field(default=None, ge=1, le=20)
+
+
+class ImageAssignBody(ImageSetBody):
+    items: list[ImageAssignment] = Field(min_length=1, max_length=20)
+
+
+class ImageFromChatBody(ImageSetBody):
+    investigationId: UUID  # noqa: N815
+    attachmentId: UUID  # noqa: N815
+    role: Literal["PRIMARY", "SECONDARY"] = "SECONDARY"
+    shotType: str = Field(default="OTHER", max_length=20)  # noqa: N815
+
+
+@router.get("/product-images/products")
+def get_image_products(ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The seller's products, the marketplaces, the shot types and the limits for the images page."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_image_review.products_view(ctx.tenant_id)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.get("/product-images")
+def get_product_images(sku: Annotated[str, Field(min_length=1, max_length=_NAME)], marketplace: Marketplace, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """One product's images, latest review, marketplace-rule status, review history and assignment history. Reads only."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_image_review.dashboard(ctx.tenant_id, sku, marketplace.value)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.post("/product-images/upload")
+async def post_product_images(files: list[UploadFile], sku: Annotated[str, Form(min_length=1, max_length=_NAME)], marketplace: Annotated[Marketplace, Form()],
+                              labels: Annotated[str, Form(max_length=4000)] = "[]", ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Upload up to 8 pictures and attach them to one product and marketplace. `labels` is a JSON list, one `{role, shotType}` per file in order (role PRIMARY or SECONDARY). Each file goes through the
+    existing validated, metadata-stripping upload. 0 credits; nothing is published."""
+    import json  # noqa: PLC0415
+
+    p = _principal(ctx)
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FILES_UPLOAD):
+        raise HTTPException(status_code=403, detail="Missing permission: files.upload")
+    try:
+        parsed = json.loads(labels)
+        if not isinstance(parsed, list) or len(parsed) > len(files):
+            raise ValueError
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "BAD_LABELS", "detail": "The image labels were not understood."}) from None
+    if len(files) > cmo_image_review.MAX_FILES:
+        raise HTTPException(status_code=422, detail={"code": "TOO_MANY_FILES", "detail": f"Upload at most {cmo_image_review.MAX_FILES} images at a time."})
+    rt = await run_in_threadpool(_guarded_value, lambda: cmo_runtime.build_image_runtime(need_vision=False))
+    items: list[dict[str, Any]] = []
+    for i, f in enumerate(files):
+        lab = parsed[i] if i < len(parsed) and isinstance(parsed[i], dict) else {}
+        data = await read_upload_capped(f, max_bytes=rt.images.max_upload_bytes, env_var="CMO_IMAGE_MAX_BYTES")
+        items.append({"name": f.filename or f"image {i + 1}", "data": data, "declared": f.content_type or "", "role": lab.get("role", "SECONDARY"), "shotType": lab.get("shotType", "OTHER")})
+    return await run_in_threadpool(_guarded, lambda: cmo_image_review.upload(p, rt, sku, marketplace.value, items))
+
+
+@router.post("/product-images/assign")
+def post_product_image_assign(body: ImageAssignBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Change an image's role (main / additional / removed from this product), kind of shot or position. The stored picture is never deleted. 0 credits."""
+    def go() -> dict[str, Any]:
+        return cmo_image_review.assign(_principal(ctx), body.sku, body.marketplace.value, [i.model_dump() for i in body.items])
+
+    return _guarded(go)
+
+
+@router.post("/product-images/from-chat")
+def post_product_image_from_chat(body: ImageFromChatBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The seller pressed 'add to this product' on a photo attached in the CEO chat. Nothing is added without this call. 0 credits."""
+    def go() -> dict[str, Any]:
+        if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FILES_UPLOAD):
+            raise HTTPException(status_code=403, detail="Missing permission: files.upload")
+        return cmo_image_review.attach_from_chat(_principal(ctx), body.investigationId, body.attachmentId, body.sku, body.marketplace.value, body.role, body.shotType)
+
+    return _guarded(go)
+
+
+@router.post("/product-images/review")
+def post_product_image_review(body: ImageSetBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Review the product's current image set (deterministic measurements; no AI model). The same set returns the stored review. 0 credits."""
+    def go() -> dict[str, Any]:
+        return cmo_image_review.review(_principal(ctx), body.sku, body.marketplace.value)
+
+    return _guarded(go)
+
+
+@router.get("/product-images/{asset_id}/file")
+def get_product_image_file(asset_id: UUID, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> Response:
+    """The seller's own stored (metadata-stripped) picture of an image attached to a product, for their images page. Another tenant's or an unattached image is a 404."""
+    _principal(ctx)
+    got = cmo_image_review.file_bytes(ctx.tenant_id, asset_id)  # type: ignore[arg-type]
+    if got is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    data, ctype = got
+    return Response(content=data, media_type=ctype, headers={"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"})
+
+
+
+# ------------------------------------------------------------------------------------------------ corrections to wrongly imported performance records (free; the imported rows are never changed)
+class CorrectionBody(_Body):
+    line_id: UUID
+    changes: dict[str, str | int | None] = Field(default_factory=dict, max_length=5)
+    void: bool = False
+    reason: str = Field(min_length=1, max_length=300)
+    expected_correction_id: UUID | None = None
+
+
+@router.get("/performance/lines")
+def get_performance_lines(marketplace: Marketplace, report_sku: Annotated[str | None, Field(max_length=_NAME)] = None, start: date | None = None, end: date | None = None,
+                          limit: Annotated[int, Field(ge=1, le=100)] = 25, offset: Annotated[int, Field(ge=0)] = 0, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The imported records of one marketplace (newest first, paged): the imported values, the effective values after any correction, and whether each was corrected."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_perf_correction.list_lines(ctx.tenant_id, marketplace.value, report_sku=report_sku, start=start, end=end, limit=limit, offset=offset, today=cmo_runtime.build_runtime().clock().date())  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.get("/performance/correction-history")
+def get_performance_correction_history(marketplace: Marketplace | None = None, report_sku: Annotated[str | None, Field(max_length=_NAME)] = None, limit: Annotated[int, Field(ge=1, le=100)] = 25,
+                                       offset: Annotated[int, Field(ge=0)] = 0, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Every correction (newest first, paged) with the previous and corrected values, the reason, who and when."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_perf_correction.history(ctx.tenant_id, marketplace=marketplace.value if marketplace else None, report_sku=report_sku, limit=limit, offset=offset)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.post("/performance/corrections")
+def post_performance_correction(body: CorrectionBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Correct (or void) one imported record. Append-only: the imported value is kept and shown beside the corrected one; the corrected value is used in the numbers. Needs a reason and the correction the
+    seller last saw for this record (a stale or competing correction is refused with 409). Needs `files.upload`, like the import. 0 credits."""
+    def go() -> dict[str, Any]:
+        p = _principal(ctx)
+        if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FILES_UPLOAD):
+            raise HTTPException(status_code=403, detail="Missing permission: files.upload")
+        return cmo_perf_correction.correct(p.tenant_id, p.user_id, line_id=body.line_id, changes=body.changes, void=body.void, reason=body.reason, expected_correction_id=body.expected_correction_id)
+
+    return _guarded(go)
+
+
+
+# ------------------------------------------------------------------------------------------------ CMO 3.0 M10: market opportunities and marketplace news (free, read-only, from the seller's saved reports)
+@router.get("/market-intelligence")
+def get_market_intelligence(sku: Annotated[str | None, Field(max_length=_NAME)] = None, marketplace: Marketplace | None = None, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Marketplace news and opportunities read from the seller's saved market-trend reports and own products, with sources, dates, freshness and relevance. Nothing is searched or invented."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_market.overview(ctx.tenant_id, sku=sku, marketplace=marketplace.value if marketplace else None)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.get("/market-intelligence/news")
+def get_market_intelligence_news(sku: Annotated[str | None, Field(max_length=_NAME)] = None, marketplace: Marketplace | None = None, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Only the news items of the overview."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_market.news_only(ctx.tenant_id, sku=sku, marketplace=marketplace.value if marketplace else None)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.get("/market-intelligence/opportunities")
+def get_market_intelligence_opportunities(sku: Annotated[str | None, Field(max_length=_NAME)] = None, marketplace: Marketplace | None = None, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Only the opportunities of the overview."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_market.opportunities_only(ctx.tenant_id, sku=sku, marketplace=marketplace.value if marketplace else None)  # type: ignore[arg-type]
 
     return _guarded(go)

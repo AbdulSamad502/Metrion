@@ -499,6 +499,27 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cmo/market-intelligence": {
+   "query": [
+    "marketplace",
+    "sku"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/market-intelligence/news": {
+   "query": [
+    "marketplace",
+    "sku"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/market-intelligence/opportunities": {
+   "query": [
+    "marketplace",
+    "sku"
+   ],
+   "requiredQuery": []
+  },
   "GET /api/v1/cmo/market-trends": {
    "query": [],
    "requiredQuery": []
@@ -509,6 +530,15 @@
   },
   "GET /api/v1/cmo/niche-terms": {
    "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/performance/correction-history": {
+   "query": [
+    "limit",
+    "marketplace",
+    "offset",
+    "report_sku"
+   ],
    "requiredQuery": []
   },
   "GET /api/v1/cmo/performance/dashboard": {
@@ -524,6 +554,19 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cmo/performance/lines": {
+   "query": [
+    "end",
+    "limit",
+    "marketplace",
+    "offset",
+    "report_sku",
+    "start"
+   ],
+   "requiredQuery": [
+    "marketplace"
+   ]
+  },
   "GET /api/v1/cmo/performance/mappings": {
    "query": [],
    "requiredQuery": []
@@ -538,6 +581,19 @@
   },
   "GET /api/v1/cmo/performance/versions": {
    "query": [
+    "limit",
+    "marketplace",
+    "offset",
+    "order",
+    "sku"
+   ],
+   "requiredQuery": [
+    "marketplace",
+    "sku"
+   ]
+  },
+  "GET /api/v1/cmo/product-images": {
+   "query": [
     "marketplace",
     "sku"
    ],
@@ -545,6 +601,14 @@
     "marketplace",
     "sku"
    ]
+  },
+  "GET /api/v1/cmo/product-images/products": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/product-images/{asset_id}/file": {
+   "query": [],
+   "requiredQuery": []
   },
   "GET /api/v1/cmo/showcase/compliance": {
    "query": [
@@ -1300,6 +1364,13 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cmo/performance/corrections": {
+   "body": {
+    "$ref": "#/components/schemas/CorrectionBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cmo/performance/golive": {
    "body": {
     "$ref": "#/components/schemas/GoLiveBody"
@@ -1328,6 +1399,32 @@
    "body": {
     "$ref": "#/components/schemas/WindowBody"
    },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/product-images/assign": {
+   "body": {
+    "$ref": "#/components/schemas/ImageAssignBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/product-images/from-chat": {
+   "body": {
+    "$ref": "#/components/schemas/ImageFromChatBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/product-images/review": {
+   "body": {
+    "$ref": "#/components/schemas/ImageSetBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/product-images/upload": {
+   "multipart": true,
    "query": [],
    "requiredQuery": []
   },
@@ -2426,6 +2523,63 @@
     "amount_paise"
    ],
    "title": "CorrectRequest",
+   "type": "object"
+  },
+  "CorrectionBody": {
+   "additionalProperties": false,
+   "properties": {
+    "changes": {
+     "additionalProperties": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "maxProperties": 5,
+     "title": "Changes",
+     "type": "object"
+    },
+    "expected_correction_id": {
+     "anyOf": [
+      {
+       "format": "uuid",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Expected Correction Id"
+    },
+    "line_id": {
+     "format": "uuid",
+     "title": "Line Id",
+     "type": "string"
+    },
+    "reason": {
+     "maxLength": 300,
+     "minLength": 1,
+     "title": "Reason",
+     "type": "string"
+    },
+    "void": {
+     "default": false,
+     "title": "Void",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "line_id",
+    "reason"
+   ],
+   "title": "CorrectionBody",
    "type": "object"
   },
   "CostEntryHttpRequest": {
@@ -4012,6 +4166,148 @@
     "action"
    ],
    "title": "HeldResolveBody",
+   "type": "object"
+  },
+  "ImageAssignBody": {
+   "additionalProperties": false,
+   "properties": {
+    "items": {
+     "items": {
+      "$ref": "#/components/schemas/ImageAssignment"
+     },
+     "maxItems": 20,
+     "minItems": 1,
+     "title": "Items",
+     "type": "array"
+    },
+    "marketplace": {
+     "$ref": "#/components/schemas/Marketplace"
+    },
+    "sku": {
+     "maxLength": 200,
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sku",
+    "marketplace",
+    "items"
+   ],
+   "title": "ImageAssignBody",
+   "type": "object"
+  },
+  "ImageAssignment": {
+   "additionalProperties": false,
+   "properties": {
+    "assetId": {
+     "format": "uuid",
+     "title": "Assetid",
+     "type": "string"
+    },
+    "position": {
+     "anyOf": [
+      {
+       "maximum": 20.0,
+       "minimum": 1.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Position"
+    },
+    "role": {
+     "enum": [
+      "PRIMARY",
+      "SECONDARY",
+      "REMOVED"
+     ],
+     "title": "Role",
+     "type": "string"
+    },
+    "shotType": {
+     "maxLength": 20,
+     "minLength": 1,
+     "title": "Shottype",
+     "type": "string"
+    }
+   },
+   "required": [
+    "assetId",
+    "role",
+    "shotType"
+   ],
+   "title": "ImageAssignment",
+   "type": "object"
+  },
+  "ImageFromChatBody": {
+   "additionalProperties": false,
+   "properties": {
+    "attachmentId": {
+     "format": "uuid",
+     "title": "Attachmentid",
+     "type": "string"
+    },
+    "investigationId": {
+     "format": "uuid",
+     "title": "Investigationid",
+     "type": "string"
+    },
+    "marketplace": {
+     "$ref": "#/components/schemas/Marketplace"
+    },
+    "role": {
+     "default": "SECONDARY",
+     "enum": [
+      "PRIMARY",
+      "SECONDARY"
+     ],
+     "title": "Role",
+     "type": "string"
+    },
+    "shotType": {
+     "default": "OTHER",
+     "maxLength": 20,
+     "title": "Shottype",
+     "type": "string"
+    },
+    "sku": {
+     "maxLength": 200,
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sku",
+    "marketplace",
+    "investigationId",
+    "attachmentId"
+   ],
+   "title": "ImageFromChatBody",
+   "type": "object"
+  },
+  "ImageSetBody": {
+   "additionalProperties": false,
+   "properties": {
+    "marketplace": {
+     "$ref": "#/components/schemas/Marketplace"
+    },
+    "sku": {
+     "maxLength": 200,
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sku",
+    "marketplace"
+   ],
+   "title": "ImageSetBody",
    "type": "object"
   },
   "KeywordIntelBody": {

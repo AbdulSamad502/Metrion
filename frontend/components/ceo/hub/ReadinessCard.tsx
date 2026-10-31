@@ -57,6 +57,13 @@ function Market({ m }: { m: MarketReadiness }) {
         <p data-testid="readiness-verdict" className="m-0 mt-1 t-meta" style={{ color: m.verdict === "BLOCKED" ? "var(--negative, #E5484D)" : "var(--text-3)" }}><strong>{VERDICT_WORD[m.verdict]}.</strong> {m.verdictText}</p>
         <p className="m-0 mt-0.5 t-meta-sm" style={{ color: "var(--text-6)" }}>{m.counts.done} done · {m.counts.missing} missing · {m.counts.blocked} blocked · {m.counts.notAssessed} not assessed</p>
       </div>
+      {m.imageQuality && (
+        <div data-testid="readiness-image-quality" data-state={m.imageQuality.state} className="rounded-lg p-3" style={{ border: "1px solid var(--border-subtle)" }}>
+          <div className="t-meta font-bold" style={{ color: "var(--text-2)" }}>Image quality (shown beside readiness)</div>
+          <p className="m-0 mt-1 t-meta" style={{ color: m.imageQuality.state === "REVIEWED" ? "var(--text-3)" : "var(--warning)" }}>{m.imageQuality.state === "NOT_ASSESSED" ? "? NOT ASSESSED. " : ""}{m.imageQuality.message}</p>
+          <p className="m-0 mt-0.5 t-meta-sm" style={{ color: "var(--text-6)" }}>{m.imageQuality.note}</p>
+        </div>
+      )}
       {m.nextActions.length > 0 && (
         <div data-testid="readiness-actions" className="rounded-lg p-3" style={{ border: "1px solid var(--border-subtle)" }}>
           <div className="t-meta font-bold" style={{ color: "var(--text-2)" }}>What to do next</div>

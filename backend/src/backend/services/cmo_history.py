@@ -81,6 +81,12 @@ def _find(tenant: UUID, generation_id: UUID) -> tuple[list[dict[str, Any]], dict
     return group, me
 
 
+def product_versions(tenant: UUID, sku: str, marketplace: str) -> list[dict[str, Any]]:
+    """EVERY saved version of one product on one marketplace, oldest first (stable: lineage number, which follows creation time, then id). One tenant-scoped query for that product only, however many versions
+    it has; pagination is applied by the callers that show them, never by cutting the data they compute from."""
+    return sorted(_groups(tenant, sku, marketplace).get((sku, marketplace), []), key=lambda v: (v["number"], v["id"]))
+
+
 def history(tenant: UUID, *, sku: str | None = None, marketplace: str | None = None, limit: int = 20, offset: int = 0) -> dict[str, Any]:
     """Every saved version, newest first, with product, marketplace, date, source, parent and the separate states. Filter by product (`sku`) and marketplace; paged."""
     limit, offset = max(1, min(int(limit), MAX_PAGE)), max(0, int(offset))

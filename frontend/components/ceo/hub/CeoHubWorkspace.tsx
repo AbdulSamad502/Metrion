@@ -25,6 +25,7 @@ import { createCeoClient, type AgentCode, type CeoClient, type UiAction } from "
 import { canvasNodes, QUICK_ACTIONS, quickActionState } from "@/lib/ceoModel";
 import type { FeedFactory } from "@/lib/ceoPolling";
 import { draftFromParams } from "@/lib/ciWorkspace";
+import { marketDraftFromParams } from "@/lib/cmoMarket";
 import { cmoDraftFromParams } from "@/lib/cmoPerformance";
 import { useCeoHub } from "@/lib/useCeoHub";
 import { useModalFocus } from "@/lib/useModalFocus";
@@ -37,7 +38,7 @@ export function CeoHub() {
   const params = useSearchParams();
   const initialForm = FORM_LINKS[params.get("form") ?? ""] ?? null;
   // The Competitors page's shortcuts open the hub with a draft message (`?ask=research&about=<product>`); the seller sends it, nothing runs on arrival (CI spec D14).
-  const initialDraft = draftFromParams(params.get("ask"), params.get("about")) ?? cmoDraftFromParams(params.get("ask"), params.get("kind"), params.get("about"), params.get("mp")); // M8: an insight's hand-off
+  const initialDraft = draftFromParams(params.get("ask"), params.get("about")) ?? cmoDraftFromParams(params.get("ask"), params.get("kind"), params.get("about"), params.get("mp")) ?? marketDraftFromParams(params.get("ask"), params.get("kind"), params.get("mp")); // M8: an insight's hand-off
   const rawFinding = params.get("finding");
   const initialFindingId = params.get("ask") === "finding" && rawFinding && /^[0-9a-f-]{36}$/i.test(rawFinding) ? rawFinding : null; // an id only; the server validates it for this tenant
   return <CeoHubWorkspace client={client} initialForm={initialForm} initialDraft={initialDraft} initialFindingId={initialFindingId} />;
@@ -223,7 +224,7 @@ export function CeoHubWorkspace({ client, feedFactory, pollMs, initialForm = nul
             ) : (
               <Conversation
                 onOpenForm={(f) => setForm(f as DecideKind)} state={hub.state} detail={data} turn={hub.turn} needs={hub.needs} notice={hub.notice} onDismissNotice={hub.dismissNotice}
-                onSend={hub.sendTurn} loadAttachmentImage={(inv, att) => client.getAttachmentImage(inv, att)} approveListing={(id) => client.approveListing(id)} historyApi={client.historyApi} performanceApi={client.performanceApi} recordListingCopy={(id) => client.recordListingCopy(id)} awaiting={hub.awaitingAnswer} onApprovePlan={(id, h) => void hub.approvePlan(id, h)} onDeclinePlan={(id) => void hub.declinePlan(id)} planBusy={hub.planBusy} onResolve={hub.resolve} onReopen={hub.reopen} onArchive={hub.archive} onRetry={() => void hub.retryDetail()}
+                onSend={hub.sendTurn} loadAttachmentImage={(inv, att) => client.getAttachmentImage(inv, att)} approveListing={(id) => client.approveListing(id)} historyApi={client.historyApi} performanceApi={client.performanceApi} imagesApi={client.imagesApi} recordListingCopy={(id) => client.recordListingCopy(id)} awaiting={hub.awaitingAnswer} onApprovePlan={(id, h) => void hub.approvePlan(id, h)} onDeclinePlan={(id) => void hub.declinePlan(id)} planBusy={hub.planBusy} onResolve={hub.resolve} onReopen={hub.reopen} onArchive={hub.archive} onRetry={() => void hub.retryDetail()}
               />
             )}
             </div>

@@ -33,7 +33,7 @@ from backend import config
 from backend.auth.context import AuthContext
 from backend.auth.permissions import AGENT_CEO, AGENT_CMO, INVESTIGATION_CREATE, INVESTIGATION_VIEW, has_permission
 from backend.ceo.approval_gate import evaluate_playbook, plan_required
-from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_chat, cmo_delegation, cmo_history_chat, cmo_performance_chat, cmo_profile, compound, conversational, deadlines, expense_chat, import_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, periods, profile_context, references
+from backend.ceo import approval, business_state, ci_conversation, classifier, clarification, cmo_chat, cmo_delegation, cmo_history_chat, cmo_image_chat, cmo_market_chat, cmo_performance_chat, cmo_profile, compound, conversational, deadlines, expense_chat, import_chat, recovery, data_requests, findings, input_session, intent_router, memory, needs, periods, profile_context, references
 from backend.ceo.capabilities import NOT_ATTACHED, NOT_ENTITLED, NOT_PERMITTED, PRESENT, Capabilities, compute_capabilities
 from backend.ceo.billing import UnitDecision, unit_decision
 from backend.ceo.composer import WEB_ARTEFACT_TITLE, Composition, compose, template_only
@@ -567,12 +567,23 @@ def _run_admitted(
         performance = cmo_performance_chat.reply(ctx, text, inv_id)  # CMO 3.0 M8: how listings perform, version before/after, SKU and go-live statements (free; no model; saving happens only on the card's Save button)
         if performance is not None:
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, performance[0], now, marker={"cmoPerformance": True}, choices={**performance[1], "investigationId": str(inv_id)})
+        images = cmo_image_chat.reply(ctx, text, inv_id)  # CMO 3.0 M9: product image quality - analyse, main image, lowest, image N, missing photos, suitability (free; no model; nothing edited or published)
+        if images is not None:
+            return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, images[0], now, marker={"cmoImages": True}, choices={**images[1], "investigationId": str(inv_id)})
+        market = cmo_market_chat.reply(ctx, text, inv_id)  # CMO 3.0 M10: opportunities and marketplace news from the seller's saved reports (free; no model; no new search)
+        if market is not None:
+            return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, market[0], now, marker={"cmoMarket": True}, choices={**market[1], "investigationId": str(inv_id)})
         history = cmo_history_chat.reply(ctx, text, inv_id)  # CMO 3.0 M7: listing history, version comparison and optimisation advice (free; no model; nothing generated or changed)
         if history is not None:
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, history[0], now, marker={"cmoListingHistory": True}, choices=history[1])
         cmo_reply = cmo_profile.direct_reply(ctx, text) or cmo_chat.direct_reply(ctx, text)  # CMO 3.0 M1: "remember my AquaNest bottle?" shows the saved profile; M0: "is my bottle dishwasher safe?" is answered from what the seller confirmed, else "not confirmed"; no model, nothing run
         if cmo_reply is not None:
             return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, cmo_reply, now, marker={"cmoDirect": True})
+    if ui_action is None and attachments and "CMO" in attached and has_permission(role=ctx.role, permissions=ctx.permissions, key=AGENT_CMO) and cmo_image_chat.is_attach_request(text):
+        photo = next((a for a in attachments if a.get("detected_type") in cmo_image_chat.IMAGE_TYPES), None)  # CMO 3.0 M9: "add this photo to my product images": a card with a button; nothing is added by itself
+        if photo is not None:
+            attach = cmo_image_chat.attach_proposal(ctx, text, inv_id, photo)
+            return _answer_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, attach[0], now, marker={"cmoImageAttach": True}, choices={**attach[1], "investigationId": str(inv_id)})
     if ui_action is None:  # a competitor screenshot, a confirmation answer, "track this link", "approve 1 and 3", or the dashboard's Ask CEO on one finding (CI spec 6.21)
         ci_turn = _ci_direct(ctx, runtime, inv_id, user_msg, turn, clock, log, attached, attachments, text, now, cat)
         if ci_turn is not None:

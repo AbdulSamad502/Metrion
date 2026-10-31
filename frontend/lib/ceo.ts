@@ -3,6 +3,8 @@
  * inside `TurnResponse.answer` / stored message content, which the backend has already put through its provenance + numeral gate. */
 
 import { API_BASE, ApiError, apiFetch, apiFetchForm } from "@/lib/api";
+import { createImagesApi, type ImageCard } from "@/lib/cmoImages";
+import type { MarketCard } from "@/lib/cmoMarket";
 import { createPerformanceApi, type PerformanceCard } from "@/lib/cmoPerformance";
 
 export type GetToken = () => Promise<string | null>;
@@ -82,6 +84,8 @@ export type MarketReadiness = {
   marketplace: PreviewMarketplace; verdict: "BLOCKED" | "NOT_READY" | "DRAFT_READY_NOT_VERIFIED" | "READY"; verdictText: string;
   score: { status: "ASSESSED" | "NOT_ASSESSED"; score?: number; earnedPoints?: number; assessablePoints: number; note: string };
   categories: ReadinessCategory[]; nextActions: { id: string; label: string; action: string; status: string; points: number }[]; counts: { done: number; missing: number; blocked: number; notAssessed: number };
+  /** CMO 3.0 M9: information only, shown beside the checklist; it never changes the score, the verdict or an item. */
+  imageQuality?: { state: "NOT_ASSESSED" | "NOT_REVIEWED" | "STALE" | "PARTIAL" | "REVIEWED"; message: string; note: string; images?: number; score?: number; highFindings?: number; separateFromReadiness: true };
 };
 export type ReadinessCard = {
   version: number; kind: "READINESS"; view: "questions" | "readiness"; notice: string; investigationId: string; product: { name: string; sku: string }; defaultMarketplace: PreviewMarketplace;
@@ -186,7 +190,7 @@ export type CeoMessage = {
   turn_id: string | null;
   created_at: string;
   /** Only a CEO CLARIFICATION message that has real candidates to offer. */
-  choices?: ClarificationCard | PickCard | PreviewCard | ReadinessCard | ListingCard | ListingHistoryCard | PerformanceCard | null;
+  choices?: ClarificationCard | PickCard | PreviewCard | ReadinessCard | ListingCard | ListingHistoryCard | PerformanceCard | ImageCard | MarketCard | null;
   /** Client-only: a message the seller just sent that the server has not echoed back yet. */
   pending?: boolean;
   /** The send failed and the thread could not be refreshed, so the server's copy is unknown: shown as not sent, never as still sending. */
@@ -402,6 +406,8 @@ export function createCeoClient(getToken: GetToken) {
     /** Listing history, version comparison and advice (CMO 3.0 M7): read-only, free, nothing generated. */
     /** Listing performance from the seller's imported reports, and the three statements the card's Save button records (CMO 3.0 M8): free, nothing generated. */
     performanceApi: createPerformanceApi(getToken),
+    /** Product image quality (CMO 3.0 M9): the chat card's only call is the explicit 'Add to my product images' button on a photo attached in the chat. */
+    imagesApi: createImagesApi(getToken),
     historyApi: {
       history: async (q: { sku?: string | null; marketplace?: string | null; offset?: number; limit?: number }): Promise<HistoryList> => {
         const p = new URLSearchParams();

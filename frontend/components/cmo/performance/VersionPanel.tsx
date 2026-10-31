@@ -4,7 +4,7 @@ import { useState } from "react";
 import { SectionCard } from "@/components/cmo/showcaseUi";
 import { useLoad } from "@/components/cmo/performance/useLoad";
 import Link from "next/link";
-import { METRIC_KEYS, METRIC_LABEL, describeChange, formatMetric, handoffHref, type PerformanceApi, type VersionRow } from "@/lib/cmoPerformance";
+import { METRIC_KEYS, METRIC_LABEL, describeChange, formatMetric, handoffHref, performanceError, type PerformanceApi, type VersionRow } from "@/lib/cmoPerformance";
 
 /** What was observed in the same number of days before and after each saved version went live, using the go-live dates the seller confirmed. Observation only: a difference between two periods is never
  * presented as the effect of a listing change, and a version without a confirmed date, a SKU link, or full report coverage is NOT ASSESSED with the reason. */
@@ -45,12 +45,32 @@ function Row({ v, days }: { v: VersionRow; days: number | null }) {
   );
 }
 
+const PAGE = 25;
+
 export function VersionPanel({ api, version }: { api: PerformanceApi; version: number }) {
   const [chosen, setChosen] = useState("");
+  const [order, setOrder] = useState<"asc" | "desc">("asc");
+  const [more, setMore] = useState<{ key: string; rows: VersionRow[]; hasMore: boolean } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
   const { data: maps, error: mapsErr } = useLoad(() => api.mappings(), `maps#${version}`);
   const pick = chosen || (maps?.items[0] ? `${maps.items[0].sku}|${maps.items[0].marketplace}` : "");
-  const { data, error: verErr } = useLoad(async () => { if (!pick) return null; const [sku, mp] = pick.split("|"); return api.versions(sku, mp); }, `${pick}#${version}`);
+  const { data, error: verErr } = useLoad(async () => { if (!pick) return null; const [sku, mp] = pick.split("|"); return api.versions(sku, mp, { limit: PAGE, order }); }, `${pick}|${order}#${version}`);
   const err = mapsErr ?? verErr;
+  const key = `${pick}|${order}#${version}`;
+  const extra = more && more.key === key ? more : null;
+  const rows = data ? [...data.versions, ...(extra?.rows ?? [])] : [];
+  const hasMore = data ? (extra ? extra.hasMore : !!data.hasMore) : false;
+  const loadMore = () => {
+    if (!pick) return;
+    const [sku, mp] = pick.split("|");
+    setLoadingMore(true);
+    setMoreError(null);
+    api.versions(sku, mp, { limit: PAGE, offset: rows.length, order }).then(
+      (r) => { setMore({ key, rows: [...(extra?.rows ?? []), ...r.versions], hasMore: !!r.hasMore }); setLoadingMore(false); },
+      (e) => { setMoreError(performanceError(e).message); setLoadingMore(false); },
+    );
+  };
   return (
     <SectionCard title="Before and after each listing version" hint="The same number of days before and after the date you confirmed a version went live. This shows what was observed, not what caused it.">
       {err && <p role="alert" className="m-0 t-body-sm">{err}</p>}
@@ -63,7 +83,11 @@ export function VersionPanel({ api, version }: { api: PerformanceApi; version: n
       {data && (
         <>
           {data.needs.length > 0 && <ul className="m-0 mb-2 list-none p-0 t-meta" style={{ color: "var(--text-2)" }} data-testid="version-needs">{data.needs.map((n) => <li key={n}>✗ I need {n}.</li>)}</ul>}
-          <ol className="m-0 flex list-none flex-col gap-3 p-0" aria-label="Versions, oldest first">{data.versions.map((v) => <Row key={v.versionId} v={v} days={data.windowDays} />)}</ol>
+          <label className="mb-2 flex items-center gap-2 t-meta"><input type="checkbox" checked={order === "desc"} onChange={(e) => setOrder(e.target.checked ? "desc" : "asc")} /> Newest first</label>
+          <ol className="m-0 flex list-none flex-col gap-3 p-0" aria-label={order === "asc" ? "Versions, oldest first" : "Versions, newest first"}>{rows.map((v) => <Row key={v.versionId} v={v} days={data.windowDays} />)}</ol>
+          {typeof data.total === "number" && <p className="m-0 mt-2 t-meta" style={{ color: "var(--text-3)" }} data-testid="version-count">Showing {rows.length} of {data.total} versions.</p>}
+          {hasMore && <button type="button" onClick={loadMore} disabled={loadingMore} className="mt-focus mt-2 self-start rounded-md px-3 py-1.5 t-meta font-bold" style={box} data-testid="load-more-versions">{loadingMore ? "Loading…" : "Load more versions"}</button>}
+          {moreError && <p role="alert" className="m-0 mt-1 t-meta">{moreError}</p>}
         </>
       )}
     </SectionCard>

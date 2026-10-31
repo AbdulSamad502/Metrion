@@ -50,6 +50,22 @@ READ_ONLY_ROUTES = {"/api/v1/cmo/performance/sku-candidates", "/api/v1/cmo/perfo
                     "/api/v1/cmo/listing-history", "/api/v1/cmo/listing-history/compare", "/api/v1/cmo/listing-history/{generation_id}", "/api/v1/cmo/listing-history/{generation_id}/recommendations"}  # GET-only; /market-trends is POST + GET
 
 
+# CMO 3.0 M9: the Product Image Quality Advisor. Free and deterministic; nothing is edited, replaced or published. Reads are GET; the four writes are POSTs that only record the seller's own
+# assignments and reviews (and, on the card's button, add a photo they attached in the chat).
+M9_READ_ONLY = {"/api/v1/cmo/product-images", "/api/v1/cmo/product-images/products", "/api/v1/cmo/product-images/{asset_id}/file"}
+EXPECTED_ROUTES |= M9_READ_ONLY | {"/api/v1/cmo/product-images/upload", "/api/v1/cmo/product-images/assign", "/api/v1/cmo/product-images/from-chat", "/api/v1/cmo/product-images/review"}
+READ_ONLY_ROUTES |= M9_READ_ONLY
+
+# Imported-record corrections (additional capability, CMO_M8_PERFORMANCE.md 6c): two reads and one POST that only appends a correction.
+CORRECTION_READ_ONLY = {"/api/v1/cmo/performance/lines", "/api/v1/cmo/performance/correction-history"}
+EXPECTED_ROUTES |= CORRECTION_READ_ONLY | {"/api/v1/cmo/performance/corrections"}
+READ_ONLY_ROUTES |= CORRECTION_READ_ONLY
+
+# CMO 3.0 M10: market opportunities and news: three reads over the seller's saved reports; nothing is searched, generated or written.
+M10_READ_ONLY = {"/api/v1/cmo/market-intelligence", "/api/v1/cmo/market-intelligence/news", "/api/v1/cmo/market-intelligence/opportunities"}
+EXPECTED_ROUTES |= M10_READ_ONLY
+READ_ONLY_ROUTES |= M10_READ_ONLY
+
 class TestRouteSurface:
     def test_exactly_the_registered_actions_exist_all_post_and_nothing_else(self):
         routes: dict[str, set[str]] = {}

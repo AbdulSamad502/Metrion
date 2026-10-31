@@ -28,9 +28,10 @@ NO_DATA = ("You have not imported a performance report yet, so I have no impress
            f" ({PAGE}); it needs a Date column, a SKU column and at least one of Impressions, Clicks, Orders, Units Sold or Sales. Nothing is estimated in its place.")
 _FOLD = lambda t: " ".join(re.sub(r"[?!.,;\"“”']", " ", t.casefold()).split())  # noqa: E731
 
-OVERVIEW, RANK, IMPROVE, VERSIONS, MISSING, GOLIVE, LINK, WINDOW, IMPORT = "OVERVIEW", "RANK", "IMPROVE", "VERSIONS", "MISSING", "GOLIVE", "LINK", "WINDOW", "IMPORT"
+OVERVIEW, RANK, IMPROVE, VERSIONS, MISSING, GOLIVE, LINK, WINDOW, IMPORT, CORRECT = "OVERVIEW", "RANK", "IMPROVE", "VERSIONS", "MISSING", "GOLIVE", "LINK", "WINDOW", "IMPORT", "CORRECT"
 _PERF = r"(?:perform\w*|ctr|click[- ]?through|conversion\w*|impressions?|clicks?|orders?|sales|revenue|traffic)"
 _RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (CORRECT, re.compile(r"\b(?:correct|fix|change|edit|undo|redo)\b.{0,30}\b(?:imported|uploaded)\b.{0,25}\b(?:record|records|row|rows|number|numbers|data|value|values|figures?)\b|\bi (?:imported|uploaded)\b.{0,30}\b(?:wrong|incorrect|bad|mistake)\b|\b(?:show|list|see)\b.{0,15}\b(?:my )?corrections\b|\bwhat corrections\b")),
     (GOLIVE, re.compile(r"\bgo(?:es|ne)?[- ]live\b|\bwent live\b|\b(?:is|was|been) live (?:on|since|from)\b|\bconfirm\b.*\b(?:live|published)\b|\b(?:i )?(?:put|made|set)\b.*\blive\b|\bpublished (?:it |this |the |my )?(?:listing|version|title)?\s*on\b")),
     (LINK, re.compile(r"\b(?:connect|link|map|match|attach|confirm)\b.{0,40}\bsku\b|\bsku\b.{0,40}\b(?:to|is|means|for)\b.{0,30}\b(?:product|listing|bottle|item)\b|\bwhich sku\b")),
     (WINDOW, re.compile(r"\b(?:compare|comparison|compar\w+|window|period)\b.{0,40}\b(\d{1,3})\s*days?\b|\b(\d{1,3})[- ]days? (?:window|period|comparison)\b")),
@@ -158,6 +159,14 @@ def _answer(ctx: Any, tenant: UUID, kind: str, text: str, prior: Mapping[str, An
     maps = view.mappings(tenant)
     names = _products(maps)
     scope_sku = (pending or {}).get("sku") or (prior or {}).get("sku")
+    if kind == CORRECT:
+        from backend.services import cmo_perf_correction  # noqa: PLC0415
+
+        recent = cmo_perf_correction.history(tenant, marketplace=None, report_sku=None, limit=3)["corrections"]
+        tail = (" Your latest corrections: " + " | ".join(f"{c['at'].date().isoformat()} {MP_NAME.get(c['marketplace'], c['marketplace'])} {c['reportSku']} {c['date']} ({', '.join(c['changed'])}; reason: {c['reason']})" for c in recent) + ".") if recent else " You have not made any corrections yet."
+        return ("I do not change imported numbers from chat. On the performance page, open “Correct an imported record”, find the record, enter the right value and your reason, and press Save. "
+                "The imported value is kept for good and shown beside the corrected one, and your numbers then use the corrected value. A blank stays “not reported”, never zero." + tail), \
+            _card("CORRECTION_HELP", message="Corrections are made on the performance page with a reason and an explicit Save. Nothing is changed from chat." + tail)
     if kind == IMPORT:
         return ("To import a performance report: open the performance page, choose the marketplace, and pick your CSV or Excel file. You will see exactly what would be saved before anything is. "
                 "Rows are only added; the same file or an existing record is never imported twice, and a blank cell stays blank."), _card("IMPORT_HELP")

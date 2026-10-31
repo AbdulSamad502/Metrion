@@ -137,3 +137,13 @@ Full report: `CMO_PRODUCTION_READINESS.md`. **Decision: NOT PRODUCTION READY.** 
 
 ### Closure pass for B1/B6/B7/B8 (B2 excluded)
 B1 OPEN, B6 OPEN (measurement register added; previews unchanged), B7 BLOCKED (walkthrough prepared, not run), B8 PARTIAL (no gap found; real exports needed). See `CMO_PRODUCTION_READINESS.md` §5, `CMO_EVIDENCE_REQUESTS.md`, `CMO_B7_BROWSER_WALKTHROUGH.md`. B2 is tracked separately and unchanged.
+
+### M9 (2026-11-01)
+New dependency, not a new blocker class: official marketplace image rules (extends B1) and a browser walkthrough on a test tenant (extends B7). Engineering open item: run the M6/M7/M8 backend regression batch and the resized-copy duplicate integration test; neither has been run since the duplicate-detection change.
+
+### M9 completion, M10, corrections, pagination (2026-11-01)
+Open engineering items, all "run the tests": the new tests (M10 slim-cmo and backend unit, correction integration, frontend market/corrections/pagination) and the M6/M7/M8 backend regression batch; apply and verify migrations `20261101_0012` and `20261101_0033` on a scratch database (including the downgrade refusal with data); regenerate nothing else. External: browser walkthrough (B7), official marketplace image rules and official policy domains (B1 / Q5), real saved market reports and real seller exports. B2 unchanged and separate.
+
+**Update 2026-11-01:** the new tests and both migrations were run on the scratch database (see the feature documents). Remaining engineering items: the M5/M6/M7 regression batch, a full-suite run, and the downgrade-with-data check for `0012`.
+
+**Update 2026-11-01 (later):** M10 integration tests (20 passed) and the migration 0012 downgrade-safety test (refused with corrections, safe downgrade and re-upgrade work, imported rows unchanged; 1 passed) were added and run on the scratch database. The M5/M6/M7 batch ran once (260 passed, 1 failed); the one failure, the M6 typed-title over-limit wording, is fixed and its six focused files pass (57 passed). The full 18-file batch has not been rerun since the fix. Still open: full-suite runs, browser verification, official marketplace image rules.

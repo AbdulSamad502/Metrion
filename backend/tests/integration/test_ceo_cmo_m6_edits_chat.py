@@ -67,3 +67,6 @@ def test_n16c_in_chat_a_title_over_the_verified_limit_is_refused_before_any_plan
     assert r["status"] != "PLANNED" and r.get("plan") is None and plan_messages(chat, inv) == [], r
     assert "at most 20 characters" in r["answer"] and f"is {len(TITLE)} characters" in r["answer"] and "shorter title" in r["answer"], r["answer"]
     assert chat.env.n("cmo_generation") == 0 and chat.env.n("metered_event", "agent_code = 'CMO'") == 0
+    assert chat.env.n("cmo_title_approval") == 0 and chat.env.n("cmo_title_approval", "title_source = 'SELLER_TYPED'") == 0  # no typed-title approval row was saved for the refused title
+    assert chat.env.n("cmo_listing_audit") == 0 and chat.env.n("cmo_quota_reservation") == 0  # no listing was generated or audited and no unit was reserved
+    assert "I have not approved, saved or cut your title, and nothing was charged" in r["answer"] and "could not use that title" not in r["answer"]  # the specific verified-limit wording, not the generic refusal

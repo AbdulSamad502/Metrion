@@ -22,9 +22,13 @@ class StubHistory:
         groups = [{"sku": k, "product": k.title(), "marketplace": "AMAZON"} for k in sorted({r["sku"] for r in rows})]
         return {"versions": rows[offset:offset + limit], "groups": groups}
 
+    def product_versions(self, tenant, sku, marketplace):
+        """Every version of ONE product, oldest first: no page limit (the real function reads that product in one query)."""
+        return sorted((r for r in self.rows if r["sku"] == sku and r["marketplace"] == marketplace), key=lambda r: (r["number"], r["id"]))
+
 
 def test_every_product_keeps_its_own_versions_even_when_another_product_fills_the_page(monkeypatch):
     monkeypatch.setattr(cmo_perf_view, "cmo_history", StubHistory())
     got = cmo_perf_view._products(uuid.uuid4())
     assert [v["number"] for v in got[("quiet", "AMAZON")]["versions"]] == [1, 2]  # the old single read returned only the newest 3 rows, all of them "busy"
-    assert [v["number"] for v in got[("busy", "AMAZON")]["versions"]] == [3, 4, 5]  # newest page of the busy product (documented one-page cap)
+    assert [v["number"] for v in got[("busy", "AMAZON")]["versions"]] == [1, 2, 3, 4, 5]  # all five, although the account-wide page holds only three: the one-page cap is gone

@@ -35,7 +35,13 @@ export type VersionRow = {
   versionId: string; number: number; createdAt: string; source: string; changedSection: string | null; wentLiveOn: string | null; state: "NOT_ASSESSED" | "INCOMPARABLE" | "OBSERVED_COMPARABLE"; needs: string[]; reasons: string[];
   note?: string; previous?: Summary; following?: Summary; comparison?: Comparison; observations?: string[]; insights?: Insight[]; attribution?: "NOT_ATTRIBUTED";
 };
-export type VersionAnalysis = { sku: string; marketplace: string; product: string; source: string; windowDays: number | null; windowSetBy: string | null; linked: string | null; versions: VersionRow[]; needs: string[]; aiCredits: 0 };
+export type MetricVals = Record<"impressions" | "clicks" | "orders" | "units" | "sales", number | null>;
+export type PerfLine = { lineId: string; importId: string; marketplace: string; reportSku: string; date: string; original: MetricVals; effective: MetricVals; corrected: boolean; correctionId: string | null; voided: boolean; sourceName: string; importedAt: string };
+export type LinesPage = { marketplace: string; reportSku: string | null; start: string; end: string; total: number; limit: number; offset: number; hasMore: boolean; lines: PerfLine[]; note: string; aiCredits: 0 };
+export type CorrectionRow = { id: string; lineId: string; importId: string; sourceName: string; marketplace: string; reportSku: string; date: string; previous: MetricVals; corrected: MetricVals; voided: boolean; changed: string[]; reason: string; supersedes: string | null; by: string; at: string };
+export type CorrectionHistory = { corrections: CorrectionRow[]; limit: number; offset: number; hasMore: boolean; aiCredits: 0; note: string };
+export type CorrectionResult = { corrected: true; correctionId: string; at: string; lineId: string; voided: boolean; changed: string[]; previous: MetricVals; now: MetricVals; original: MetricVals; message: string; aiCredits: 0 };
+export type VersionAnalysis = { total?: number; limit?: number | null; offset?: number; hasMore?: boolean; order?: "asc" | "desc"; sku: string; marketplace: string; product: string; source: string; windowDays: number | null; windowSetBy: string | null; linked: string | null; versions: VersionRow[]; needs: string[]; aiCredits: 0 };
 export type ImportIssue = { row: number; message: string };
 export type ImportPreview = {
   sha256: string; fileName: string; marketplace: string; ok: boolean; errors: ImportIssue[]; errorCount: number; warnings: string[]; metrics: string[]; ignoredColumns: string[]; rowCount: number;
@@ -99,21 +105,27 @@ export function createPerformanceApi(getToken: GetToken) {
   const q = (o: Record<string, string | null | undefined>) => {
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries(o)) if (v) p.set(k, v);
-    const s = p.toString();
-    return s ? `?${s}` : "";
+    return p.toString();
   };
-  const post = async <T>(path: string, body: unknown): Promise<T> => apiFetch<T>(`${BASE}${path}`, await getToken(), { method: "POST", body: JSON.stringify(body) });
+  const post = async <T>(path: string, body: unknown): Promise<T> => apiFetch<T>(BASE + path, await getToken(), { method: "POST", body: JSON.stringify(body) });
   const upload = async <T>(path: string, file: File, fields: Record<string, string>): Promise<T> => {
     const form = new FormData();
     form.append("file", file);
     for (const [k, v] of Object.entries(fields)) form.append(k, v);
-    return apiFetchForm<T>(`${BASE}${path}`, await getToken(), form);
+    return apiFetchForm<T>(BASE + path, await getToken(), form);
   };
   return {
-    dashboard: async (f: { marketplace?: string | null; sku?: string | null; start?: string | null; end?: string | null }): Promise<Dashboard> => apiFetch(`${BASE}/dashboard${q(f)}`, await getToken()),
+    dashboard: async (f: { marketplace?: string | null; sku?: string | null; start?: string | null; end?: string | null }): Promise<Dashboard> => apiFetch(`${BASE}/dashboard?${q(f)}`, await getToken()),
     mappings: async (): Promise<Mappings> => apiFetch(`${BASE}/mappings`, await getToken()),
-    versions: async (sku: string, marketplace: string): Promise<VersionAnalysis> => apiFetch(`${BASE}/versions${q({ sku, marketplace })}`, await getToken()),
-    candidates: async (marketplace: string): Promise<{ candidates: SkuCandidate[]; note: string }> => apiFetch(`${BASE}/sku-candidates${q({ marketplace })}`, await getToken()),
+    versions: async (sku: string, marketplace: string, page?: { limit?: number; offset?: number; order?: "asc" | "desc" }): Promise<VersionAnalysis> =>
+      apiFetch(`${BASE}/versions?${q({ sku, marketplace, limit: page?.limit ? String(page.limit) : undefined, offset: page?.offset ? String(page.offset) : undefined, order: page?.order })}`, await getToken()),
+    lines: async (f: { marketplace: string; reportSku?: string | null; start?: string | null; end?: string | null; limit?: number; offset?: number }): Promise<LinesPage> =>
+      apiFetch(`${BASE}/lines?${q({ marketplace: f.marketplace, report_sku: f.reportSku, start: f.start, end: f.end, limit: f.limit ? String(f.limit) : undefined, offset: f.offset ? String(f.offset) : undefined })}`, await getToken()),
+    correctionHistory: async (f: { marketplace?: string | null; reportSku?: string | null; limit?: number; offset?: number }): Promise<CorrectionHistory> =>
+      apiFetch(`${BASE}/correction-history?${q({ marketplace: f.marketplace, report_sku: f.reportSku, limit: f.limit ? String(f.limit) : undefined, offset: f.offset ? String(f.offset) : undefined })}`, await getToken()),
+    correct: (b: { lineId: string; changes: Record<string, string | null>; void: boolean; reason: string; expectedCorrectionId: string | null }) =>
+      post<CorrectionResult>("/corrections", { line_id: b.lineId, changes: b.changes, void: b.void, reason: b.reason, expected_correction_id: b.expectedCorrectionId }),
+    candidates: async (marketplace: string): Promise<{ candidates: SkuCandidate[]; note: string }> => apiFetch(`${BASE}/sku-candidates?${q({ marketplace })}`, await getToken()),
     previewImport: (file: File, marketplace: string): Promise<ImportPreview> => upload("/import/preview", file, { marketplace }),
     importReport: (file: File, marketplace: string, sha256: string): Promise<ImportResult> => upload("/import", file, { marketplace, expected_sha256: sha256 }),
     linkSku: (b: { sku: string; marketplace: string; reportSku: string; replace?: boolean }) => post<{ linked: true; previous: string | null; message: string }>("/sku-link", { sku: b.sku, marketplace: b.marketplace, report_sku: b.reportSku, replace: !!b.replace }),
