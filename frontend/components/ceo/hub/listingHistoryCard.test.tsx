@@ -232,3 +232,36 @@ describe("ListingHistoryCard (CMO 3.0 M7)", () => {
     expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
   });
 });
+
+describe("performance observed alongside versions (B8)", () => {
+  async function open(over: Partial<HistoryCompare>) {
+    const a = api({ compare: vi.fn(async () => compare(over)) });
+    render(<ListingHistoryCard card={list()} api={a} onSend={() => {}} />);
+    await userEvent.click(screen.getByLabelText("Select version 3 to compare"));
+    await userEvent.click(screen.getByLabelText("Select version 1 to compare"));
+    await userEvent.click(screen.getByTestId("compare-selected"));
+    return screen.findByTestId("history-compare");
+  }
+
+  it("lists what is still needed when performance is not assessed", async () => {
+    const base = compare();
+    const view = await open({ performance: { ...base.performance, needs: ["your confirmation of which SKU in your sales reports is this product"] } });
+    expect(within(view).getByTestId("performance-needs")).toHaveTextContent("Needs: your confirmation of which SKU");
+    expect(within(view).queryByTestId("performance-periods")).toBeNull();
+  });
+
+  it("shows observed periods per version, worded as seen alongside a version with the seller's own go-live date, never as an effect", async () => {
+    const base = compare();
+    const view = await open({
+      performance: { ...base.performance, state: "OBSERVED_COMPARABLE", missing: null, attribution: "NOT_ATTRIBUTED", needs: [], periods: [
+        { source: "your uploaded sales reports", metric: "orders (distinct order references)", periodStart: "2026-09-01", periodEnd: "2026-09-07", days: 7, value: 5, versionId: base.older.id },
+        { source: "your uploaded sales reports", metric: "orders (distinct order references)", periodStart: "2026-10-01", periodEnd: "2026-10-07", days: 7, value: 3, versionId: base.newer.id }] },
+    });
+    const list_ = within(view).getByTestId("performance-periods");
+    expect(list_).toHaveTextContent(`Seen alongside version ${base.older.number}: 5 orders`);
+    expect(list_).toHaveTextContent("Go-live date as you stated it");
+    expect(within(view).getByTestId("performance-state")).toHaveTextContent("Observed.");
+    expect(within(view).queryByTestId("performance-needs")).toBeNull();
+    expect(view).not.toHaveTextContent(/improved|caused by|uplift|boost|more sales/i);
+  });
+});

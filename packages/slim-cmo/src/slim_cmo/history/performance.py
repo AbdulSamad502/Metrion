@@ -12,7 +12,7 @@ NOT_ASSESSED, COMPARABLE, INCOMPARABLE = "NOT_ASSESSED", "OBSERVED_COMPARABLE", 
 NEVER = "Sales, revenue, conversion, search ranking, visibility and demand are not assessed for a listing revision."
 MISSING = ("No comparable marketplace performance data is available. To assess a change you would need your uploaded sales or traffic reports for the same product and marketplace, for two periods of "
            "the same length, from the same source and measure.")
-CAUSE = "This shows what was observed in each period. It does not show that the listing change caused it, and Metrion cannot see when a listing change went live on the marketplace."
+CAUSE = ("This shows what was observed in each period. It does not show that the listing change caused it. Go-live dates are the dates you stated; Metrion cannot see the marketplace and cannot verify them.")
 
 
 def _d(v: Any) -> date | None:
@@ -36,7 +36,7 @@ def assess(observations: Sequence[Mapping[str, Any]] | None) -> dict[str, Any]:
         s, e = _d(o.get("periodStart")), _d(o.get("periodEnd"))
         if s is None or e is None or e < s or o.get("value") is None or not o.get("source") or not o.get("metric"):
             return base
-        rows.append({"source": str(o["source"]), "metric": str(o["metric"]), "start": s, "end": e, "value": o["value"], "days": (e - s).days + 1})
+        rows.append({"source": str(o["source"]), "metric": str(o["metric"]), "start": s, "end": e, "value": o["value"], "days": (e - s).days + 1, **({"versionId": str(o["versionId"])} if o.get("versionId") else {})})
     rows.sort(key=lambda r: r["start"])
     reasons = []
     if len({r["source"] for r in rows}) > 1:
@@ -47,7 +47,8 @@ def assess(observations: Sequence[Mapping[str, Any]] | None) -> dict[str, Any]:
         reasons.append("DIFFERENT_PERIOD_LENGTH")
     if any(a["end"] >= b["start"] for a, b in zip(rows, rows[1:])):
         reasons.append("OVERLAPPING_PERIODS")
-    periods = [{"source": r["source"], "metric": r["metric"], "periodStart": r["start"].isoformat(), "periodEnd": r["end"].isoformat(), "days": r["days"], "value": r["value"]} for r in rows]
+    periods = [{"source": r["source"], "metric": r["metric"], "periodStart": r["start"].isoformat(), "periodEnd": r["end"].isoformat(), "days": r["days"], "value": r["value"],
+                **({"versionId": r["versionId"]} if "versionId" in r else {})} for r in rows]
     if reasons:
         return {**base, "state": INCOMPARABLE, "reasons": reasons, "periods": periods, "missing": "These periods cannot be compared: " + ", ".join(r.lower().replace("_", " ") for r in reasons) + "."}
     return {**base, "state": COMPARABLE, "periods": periods, "missing": None}

@@ -114,3 +114,21 @@ def test_the_preview_contains_no_invented_commercial_number():
     text = json.dumps(set_preview(analysis, None, {}, ILLUSTRATIVE)).lower()
     for banned in ("price", "rating", "review", "sales", "ranking", "conversion", "stars", "₹"):
         assert banned not in text
+
+
+# ---------------------------------------------------------------- the source policy (B6): official host and all-categories scope, only when the caller supplies a policy
+def test_a_policy_requires_an_official_host_and_all_categories_scope_before_a_rule_is_verified():
+    from datetime import date as _d
+
+    from slim_cmo.preview.simulator import SourcePolicy, display_rules
+
+    policy = SourcePolicy(frozenset({"sellercentral.amazon.in"}))
+    base = {"visible_chars": 70, "source_url": "https://sellercentral.amazon.in/help/x", "verified_at": "2026-10-01", "scope": "ALL_CATEGORIES"}
+
+    def basis(rule):
+        return display_rules({"AMAZON": {"mobile": rule}}, "AMAZON", today=_d(2026, 10, 20), max_age_days=30, policy=policy)["mobile"]
+
+    assert basis(base).basis == "VERIFIED"
+    assert basis({**base, "source_url": "https://blog.example/x"}).basis == "ILLUSTRATIVE" and "official marketplace host" in basis({**base, "source_url": "https://blog.example/x"}).note
+    assert basis({k: v for k, v in base.items() if k != "scope"}).basis == "ILLUSTRATIVE"
+    assert basis({**base, "scope": "Kitchen"}).basis == "ILLUSTRATIVE" and "all categories" in basis({**base, "scope": "Kitchen"}).note

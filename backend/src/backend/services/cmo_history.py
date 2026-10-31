@@ -15,11 +15,12 @@ from typing import Any
 from uuid import UUID
 
 from slim_cmo.history import compare as compare_rules
-from slim_cmo.history import lineage, performance, recommend
+from slim_cmo.history import lineage, performance, recommend  # noqa: F401 - `performance` stays for the observation stub below
 from slim_cmo.listing import revise
 from slim_cmo.listing.text import norm
 from slim_cmo.service.errors import NotFound
 from slim_cmo.service.listing_audit import ListingAuditStore
+from backend.services import cmo_performance
 from slim_cmo.service.readiness import keyword_analysis
 
 from backend.repositories import cmo_chat_repo
@@ -201,7 +202,7 @@ def compare(tenant: UUID, user: UUID, rt: Any, older_id: UUID, newer_id: UUID) -
     ctx = _context(tenant, rt, pa["sku"], pa["marketplace"])
     out = compare_rules.compare(va, vb, facts=ctx["facts"], candidates=ctx["candidates"])
     out.update({"kind": "LISTING_HISTORY", "view": "COMPARE", "sku": pa["sku"], "marketplace": pa["marketplace"], "product": cmo_chat_repo.product_label(tenant, pa["sku"]),
-                "evidence": {"candidates": ctx["candidateSource"], "confirmedFacts": len(ctx["facts"])}, "performance": performance.assess(performance_observations(tenant, pa["sku"], pa["marketplace"])),
+                "evidence": {"candidates": ctx["candidateSource"], "confirmedFacts": len(ctx["facts"])}, "performance": cmo_performance.assess_for(tenant, pa["sku"], pa["marketplace"]),
                 "published": NOT_PUBLISHED, "notice": out["notice"] + " " + CLAIMS})
     return out
 
@@ -217,11 +218,11 @@ def recommendations(tenant: UUID, user: UUID, rt: Any, generation_id: UUID) -> d
     out = recommend.recommend(latest, previous=prev, comparison=comp, facts=ctx["facts"], candidates=ctx["candidates"], unanswered_questions=ctx["questions"])
     out.update({"kind": "LISTING_HISTORY", "view": "RECOMMEND", "sku": me["sku"], "marketplace": me["marketplace"], "product": cmo_chat_repo.product_label(tenant, me["sku"]),
                 "comparedWith": prev_meta["number"] if prev_meta else None, "evidence": {"candidates": ctx["candidateSource"], "confirmedFacts": len(ctx["facts"])},
-                "performance": performance.assess(performance_observations(tenant, me["sku"], me["marketplace"])), "published": NOT_PUBLISHED})
+                "performance": cmo_performance.assess_for(tenant, me["sku"], me["marketplace"]), "published": NOT_PUBLISHED})
     return out
 
 
 def performance_observations(tenant: UUID, sku: str, marketplace: str) -> list[dict[str, Any]]:
     """Real, comparable marketplace performance observations for this product. None are read here yet: the uploaded sales and traffic reports are not wired to listing versions, and Metrion cannot
     see when a listing change went live. Until they are, every performance question is NOT_ASSESSED (see `slim_cmo.history.performance`)."""
-    return []
+    return []  # superseded by `cmo_performance.assess_for` (seller-confirmed SKU link and go-live dates); kept so older callers still get "none"

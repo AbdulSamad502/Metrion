@@ -152,6 +152,20 @@ export function CompareView({ c }: { c: HistoryCompare }) {
       <section aria-label="Business performance" className="flex flex-col gap-1">
         <h4 className="m-0 mt-eyebrow">Business performance</h4>
         <p className="m-0 t-meta" style={{ color: "var(--text-3)" }} data-testid="performance-state">{c.performance.state === "NOT_ASSESSED" ? "Not assessed. " : c.performance.state === "INCOMPARABLE" ? "Cannot be compared. " : "Observed. "}{c.performance.missing ?? c.performance.note}</p>
+        {c.performance.state === "NOT_ASSESSED" && (c.performance.needs?.length ?? 0) > 0 && (
+          <ul aria-label="What is still needed" data-testid="performance-needs" className="m-0 flex list-none flex-col gap-0.5 p-0">
+            {c.performance.needs!.map((n) => <li key={n} className="t-meta-sm" style={{ color: "var(--text-5)" }}>Needs: {n}</li>)}
+          </ul>
+        )}
+        {(c.performance.periods?.length ?? 0) > 0 && (
+          <ul aria-label="Observed periods" data-testid="performance-periods" className="m-0 flex list-none flex-col gap-0.5 p-0">
+            {c.performance.periods!.map((p) => (
+              <li key={`${p.periodStart}-${p.versionId ?? ""}`} className="t-meta-sm" style={{ color: "var(--text-3)" }}>
+                Seen alongside {p.versionId === c.newer.id ? `version ${c.newer.number}` : p.versionId === c.older.id ? `version ${c.older.number}` : "a version"}: {p.value} {p.metric}, {p.periodStart} to {p.periodEnd} ({p.days} days, {p.source}). Go-live date as you stated it.
+              </li>
+            ))}
+          </ul>
+        )}
         <p className="m-0 t-meta" style={{ color: "var(--text-5)" }}>{c.performance.never}</p>
       </section>
       <p className="m-0 t-meta" style={{ color: "var(--text-5)" }}>{c.notice}</p>

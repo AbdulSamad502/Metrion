@@ -48,6 +48,28 @@ def problems(data: dict[str, Any]) -> list[str]:
             date.fromisoformat(str(r.get("checked_on")))
         except ValueError:
             out.append(f"{tag}: checked_on must be an ISO date")
+    for a in data.get("access_attempts", []):
+        if not (str(a.get("url", "")).startswith("https://") and a.get("result") and a.get("marketplace")):
+            out.append(f"access attempt without an https URL, marketplace and result: {a}")
+    for m in ("AMAZON", "FLIPKART", "MEESHO"):
+        if not data.get("evidence_needed_from_a_seller_account", {}).get(m):
+            out.append(f"{m}: the exact evidence needed from a seller account is not listed")
+    return out
+
+
+def official_hosts(data: dict[str, Any]) -> frozenset[str]:
+    return frozenset(str(h) for h in data.get("official_hosts", []))
+
+
+def display_rules_config(data: dict[str, Any]) -> dict[str, dict[str, dict[str, Any]]]:
+    """The `title_display_rules` shape the preview reads ({marketplace: {screen: {visible_chars, source_url, verified_at}}}), built ONLY from OFFICIAL_VERIFIED entries whose scope is
+    ALL_CATEGORIES (a preview has no category, so a category-limited number cannot apply). Today it is empty: no marketplace publishes one."""
+    out: dict[str, dict[str, dict[str, Any]]] = {}
+    for r in data.get("rules", []):
+        field = str(r.get("field", ""))
+        if r.get("status") != OFFICIAL_VERIFIED or not field.startswith("title.display_chars.") or "ALL_CATEGORIES" not in str(r.get("scope", "")):
+            continue
+        out.setdefault(str(r["marketplace"]), {})[field.rsplit(".", 1)[1]] = {"visible_chars": r["value"], "source_url": (r.get("source") or {}).get("url"), "verified_at": r["checked_on"]}
     return out
 
 

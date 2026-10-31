@@ -511,6 +511,14 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cmo/performance/sku-candidates": {
+   "query": [
+    "marketplace"
+   ],
+   "requiredQuery": [
+    "marketplace"
+   ]
+  },
   "GET /api/v1/cmo/showcase/compliance": {
    "query": [
     "marketplace",
@@ -1262,6 +1270,20 @@
    "requiredQuery": []
   },
   "POST /api/v1/cmo/niche-terms/suggest": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/performance/golive": {
+   "body": {
+    "$ref": "#/components/schemas/GoLiveBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/performance/sku-link": {
+   "body": {
+    "$ref": "#/components/schemas/SkuLinkBody"
+   },
    "query": [],
    "requiredQuery": []
   },
@@ -3400,6 +3422,28 @@
     "as_of_date"
    ],
    "title": "FundingReadinessHttpRequest",
+   "type": "object"
+  },
+  "GoLiveBody": {
+   "additionalProperties": false,
+   "description": "The seller's statement that a saved listing version went live on a date (B8). Metrion cannot see the marketplace.",
+   "properties": {
+    "generation_id": {
+     "format": "uuid",
+     "title": "Generation Id",
+     "type": "string"
+    },
+    "went_live_on": {
+     "format": "date",
+     "title": "Went Live On",
+     "type": "string"
+    }
+   },
+   "required": [
+    "generation_id",
+    "went_live_on"
+   ],
+   "title": "GoLiveBody",
    "type": "object"
   },
   "GroundedBody": {
@@ -5919,6 +5963,34 @@
     "value"
    ],
    "title": "SellerProductAttribute",
+   "type": "object"
+  },
+  "SkuLinkBody": {
+   "additionalProperties": false,
+   "description": "The seller's statement that a CMO product on a marketplace is a SKU in their uploaded sales reports (B8). Declared fields only.",
+   "properties": {
+    "marketplace": {
+     "$ref": "#/components/schemas/Marketplace"
+    },
+    "report_sku": {
+     "maxLength": 200,
+     "minLength": 1,
+     "title": "Report Sku",
+     "type": "string"
+    },
+    "sku": {
+     "maxLength": 200,
+     "minLength": 1,
+     "title": "Sku",
+     "type": "string"
+    }
+   },
+   "required": [
+    "sku",
+    "marketplace",
+    "report_sku"
+   ],
+   "title": "SkuLinkBody",
    "type": "object"
   },
   "SkuShare": {

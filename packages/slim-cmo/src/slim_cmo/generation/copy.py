@@ -95,7 +95,7 @@ def generate_listing_copy(
         bad_bullets = [i for i in range(len(check.bullets)) if f"bullets[{i}]" in by_field]
         kw = [h for field, hints in by_field.items() if field.startswith("keywords[") for h in hints]
         repair.update(
-            pack=check, bad_bullets=bad_bullets, description=sorted(set(by_field.get("description", []))), keywords=sorted(set(kw)),
+            pack=check, bad_bullets=bad_bullets, description=sorted(set(by_field.get("description", []))), keywords=sorted(set(kw)), feedback=feedback_lines((), prose),
             bullets={i: sorted(set(by_field[f"bullets[{i}]"])) for i in bad_bullets},
         )
 
@@ -105,16 +105,27 @@ def generate_listing_copy(
         if repair:  # attempt 2: splice the replacements into the kept units, then judge the WHOLE assembled pack
             base = repair["pack"]
             new_bullets = p["bullets"]
-            # A small model often ignores "only the new ones": extra units are DISCARDED (never used); too few is a failed repair.
+
+            def shape_failed() -> Evaluation:
+                """A repair reply in the wrong shape is not salvaged by guessing. The targeted repair is dropped, so the NEXT attempt (if one is allowed) is a full regeneration that carries the same rule feedback.
+                A real-model run (qwen3:8b, 2026-10-31) lost both of its failed packs to this step."""
+                fb = tuple(repair.get("feedback", ()))
+                repair.clear()
+                return Evaluation(done=False, feedback=fb, violation_ids=("REPAIR_SHAPE",))
+
+            # A small model often ignores "only the new ones": it may return the WHOLE bullet list. Then the positions that were asked for are taken from it; any other unit is DISCARDED (never used).
+            # The assembled pack is still judged in full below, so nothing is accepted that would not have been accepted before.
+            if isinstance(new_bullets, list) and len(new_bullets) == len(base.bullets) and len(new_bullets) != len(repair["bad_bullets"]):
+                new_bullets = [new_bullets[i] for i in repair["bad_bullets"]]
             if not isinstance(new_bullets, list) or len(new_bullets) < len(repair["bad_bullets"]):
-                return Evaluation(done=False, violation_ids=("REPAIR_SHAPE",))
+                return shape_failed()
             bullets = list(base.bullets)
             for idx, text in zip(repair["bad_bullets"], new_bullets, strict=False):
                 bullets[idx] = text
             description = p["description"] if repair["description"] else base.description
             keywords = p["keywords"] if repair["keywords"] else list(base.keywords)
             if (repair["description"] and not description) or (repair["keywords"] and not keywords):
-                return Evaluation(done=False, violation_ids=("REPAIR_SHAPE",))
+                return shape_failed()
             check, prose = judge(description, bullets, keywords)
             return verdict(check, prose)
         check, prose = judge(p["description"], p["bullets"], p["keywords"])

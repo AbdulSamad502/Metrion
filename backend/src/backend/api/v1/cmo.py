@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import date
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
@@ -47,7 +48,7 @@ from slim_cmo.types import Marketplace, OutputType, TrendSection
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CMO, CATALOG_VIEW, FILES_UPLOAD, RESEARCH_MARKET_TRENDS, has_permission
-from backend.services import cmo_actions, cmo_ci_inputs, cmo_history, cmo_images, cmo_listing, cmo_runtime, cmo_trends
+from backend.services import cmo_actions, cmo_ci_inputs, cmo_history, cmo_images, cmo_listing, cmo_performance, cmo_runtime, cmo_trends
 from backend.services.cmo_actions import Principal, QuotaDenied, RequestInProgress
 from backend.services.cmo_runtime import CmoNotConfigured
 from backend.uploads import read_upload_capped
@@ -102,6 +103,19 @@ class FullListingBody(GroundedBody):
     """CMO 3.0 M6 (spec 6.18): one approved title -> the pack, Amazon backend terms, optional hashtags (off unless asked), then the audit. Nothing here can switch the unverified-rules basis on."""
 
     include_hashtags: bool = False
+
+
+class SkuLinkBody(_Body):
+    """The seller's statement that a CMO product on a marketplace is a SKU in their uploaded sales reports (B8). Declared fields only."""
+    sku: str = Field(min_length=1, max_length=_NAME)
+    marketplace: Marketplace
+    report_sku: str = Field(min_length=1, max_length=_NAME)
+
+
+class GoLiveBody(_Body):
+    """The seller's statement that a saved listing version went live on a date (B8). Metrion cannot see the marketplace."""
+    generation_id: UUID
+    went_live_on: date
 
 
 class ListingEditBody(_Body):
@@ -218,6 +232,8 @@ def _guarded(fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
     except cmo_listing.ListingRefused as exc:
         raise HTTPException(status_code=exc.status, detail={"code": exc.code, "detail": exc.detail, "missing": list(exc.missing)}) from None
     except cmo_history.HistoryRefused as exc:
+        raise HTTPException(status_code=exc.status, detail={"code": exc.code, "detail": exc.detail}) from None
+    except cmo_performance.PerformanceRefused as exc:
         raise HTTPException(status_code=exc.status, detail={"code": exc.code, "detail": exc.detail}) from None
     except NotFound:
         raise HTTPException(status_code=404, detail="Not found") from None  # unknown and cross-tenant look identical
@@ -366,6 +382,37 @@ def post_listing_rewrite(body: ListingRewriteBody, ctx: AuthContext = require_au
     def go() -> dict[str, Any]:
         _principal(ctx)
         return cmo_listing.rewrite_section(ctx, body)
+
+    return _guarded(go)
+
+
+# ------------------------------------------------------------------------------------------------ CMO 3.0 B8: the seller's own confirmations behind a performance observation (free, no model)
+@router.get("/performance/sku-candidates")
+def get_performance_sku_candidates(marketplace: Marketplace, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The SKUs that appear in the seller's OWN uploaded reports for a marketplace, to choose from. Nothing is matched for them."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_performance.sku_candidates(ctx.tenant_id, marketplace.value)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.post("/performance/sku-link")
+def post_performance_sku_link(body: SkuLinkBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Record the seller's statement of which report SKU is this product. Append-only; zero units; changes nothing on a marketplace."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_performance.confirm_link(ctx.tenant_id, ctx.app_user_id, sku=body.sku, marketplace=body.marketplace.value, report_sku=body.report_sku)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.post("/performance/golive")
+def post_performance_golive(body: GoLiveBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Record the date the seller says a saved version went live. Append-only (a correction is a new statement); zero units; nothing is published."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_performance.confirm_golive(ctx.tenant_id, ctx.app_user_id, generation_id=body.generation_id, went_live_on=body.went_live_on, today=cmo_runtime.build_runtime().clock().date())  # type: ignore[arg-type]
 
     return _guarded(go)
 

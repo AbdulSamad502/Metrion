@@ -25,3 +25,33 @@ a constraint row needs is verified for one marketplace and scope. **Today none i
 1. Read the current rule on the official page inside Seller Central / Seller Hub / the supplier panel for each category you sell in.
 2. Add an entry to `marketplace_rules.json` with the exact value, the page's https URL, the date read and the scope; run `pytest packages/slim-cmo/tests/unit/test_marketplace_rules.py`.
 3. When all required fields (`title.max_chars`, `bullet_count`, `bullet.max_chars`, `description.max_chars`, `backend_terms.max_bytes`) are `OFFICIAL_VERIFIED` for one marketplace, `promotable_row` returns the values; insert them as a `VERIFIED` `format_constraint` row (the existing review path), and re-run `verify_cmo_readiness.py`.
+
+## Access attempts (final production-readiness pass, 2026-10-31)
+
+Recorded in the register as `access_attempts` so the next reader does not repeat them:
+
+| Marketplace | Page | Result |
+|---|---|---|
+| Amazon India | [Seller-forum announcement of the title requirements](https://sellercentral.amazon.in/seller-forums/discussions/t/6cae8579-d09f-484d-98ca-a2b057c175a2) | Read. The only official rule text reachable (200 characters for most categories; disallowed characters; repeated words). |
+| Amazon India | `sellercentral.amazon.in/help/hub/reference/external/GYTR6SYGFA5E3EQC` (Product title requirements) | Read; navigation only, no article text without a seller session. |
+| Flipkart | `seller.flipkart.com/sell-online/listing-guidelines` | Read; only the page title, no rules in the public body. |
+| Meesho | `supplier.meesho.com/learning-hub` | HTTP 403 for an automated reader. |
+
+## Exactly what an authorized seller account must supply (per marketplace)
+
+The register carries this as `evidence_needed_from_a_seller_account`; the validator fails if a marketplace has no list.
+
+* **Amazon India (Seller Central):** the *Product title requirements* article (limit per category and store, with the date shown); the style guide or flat-file template of each category sold in (bullet count, characters per bullet, description limit, search-terms byte limit, required attributes); the URL as seen signed in and the date read, for each.
+* **Flipkart (Seller Hub):** the category listing template (sample catalogue file) of each category sold in (mandatory attributes and any length stated in its instruction row); the listing-quality / guidelines page (title if typed, description, highlights); the URL or template name and the date read, for each.
+* **Meesho (supplier panel):** the catalog upload template of each category (product name and description limits, mandatory fields as printed); the Legal and Policies / catalog quality guide; the page or template name and the date read, for each.
+
+## How a verified rule reaches the product (maintenance procedure)
+
+1. Add or change the entry in `packages/slim-cmo/rules/marketplace_rules.json` (value, https URL on an official host, `checked_on`, scope; status `OFFICIAL_VERIFIED` only if the page states it completely for that scope). `test_marketplace_rules.py` fails the build if an official rule lacks an https URL on an official host, a value or a date, or if a third-party figure carries a value.
+2. **Listing rules:** when every field in `required_for_constraint_row` is verified for one marketplace and scope, `promotable_row` returns the values; a person inserts them as a `VERIFIED` `format_constraint` row through the existing review path. Nothing is copied automatically.
+3. **Title display rules (B6):** an `OFFICIAL_VERIFIED` `title.display_chars.mobile|desktop` entry with scope containing `ALL_CATEGORIES` is turned into the preview's `title_display_rules` shape by `display_rules_config`; a platform-config row of the same name overrides it. Either way the preview simulator re-checks, on every request, that the source is https **on an official host**, that the rule is declared for all categories, that the date is valid and not stale, and the character count is a positive integer. Anything else is shown as `ILLUSTRATIVE` with the reason. Today no entry is verified, so every preview is illustrative.
+4. **Staleness:** a verified listing rule or display rule older than the configured window (`format_constraint_max_age_days`) is ignored and the product falls back to the unverified-draft restriction or the illustrative preview.
+
+## Status (unchanged conclusion)
+
+Nothing is promotable for any marketplace. Complete listings remain labelled unverified drafts with every marketplace check `NOT_ASSESSED`, and no draft can be shown as marketplace-compliant: the verdict vocabulary has no "compliant" or "ready" value, the banner states the rules are not verified, and the audit marks each marketplace check not assessed.

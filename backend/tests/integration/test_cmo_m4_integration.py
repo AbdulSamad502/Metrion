@@ -99,12 +99,25 @@ def test_another_tenant_never_sees_this_tenants_titles(env):
 
 def test_a_verified_sourced_fresh_display_rule_makes_the_cut_off_verified_and_nothing_else_does(env):
     seed_titles(env)
-    rule = {AMAZON: {"mobile": {"visible_chars": 20, "source_url": "https://example.test/rule", "verified_at": "2026-10-29"}}}
+    url = "https://sellercentral.amazon.in/help/example"  # an official marketplace host (the rules register's list), stated for all categories
+    rule = {AMAZON: {"mobile": {"visible_chars": 20, "source_url": url, "verified_at": "2026-10-29", "scope": "ALL_CATEGORIES"}}}
     with env.engine.begin() as conn:
         conn.execute(text("INSERT INTO cmo_platform_config (tenant_id, key, value, effective_from) VALUES (:t, 'title_display_rules', CAST(:v AS jsonb), '2026-01-01')"), {"t": str(env.tenant), "v": json.dumps(rule)})
     o = card_for(env)["sets"][0]["options"][0]
-    assert o["modes"]["mobile"]["limitBasis"] == "VERIFIED" and o["modes"]["mobile"]["limit"] == 20 and o["modes"]["mobile"]["limitSourceUrl"] == "https://example.test/rule"
+    assert o["modes"]["mobile"]["limitBasis"] == "VERIFIED" and o["modes"]["mobile"]["limit"] == 20 and o["modes"]["mobile"]["limitSourceUrl"] == url
     assert o["modes"]["desktop"]["limitBasis"] == "ILLUSTRATIVE"  # only the screen the rule states is verified
+
+
+def test_a_display_rule_from_a_non_official_host_or_without_all_categories_scope_stays_illustrative(env):
+    seed_titles(env)
+    for i, rule_mobile in enumerate(({"visible_chars": 20, "source_url": "https://some-blog.example/rule", "verified_at": "2026-10-29", "scope": "ALL_CATEGORIES"},
+                                     {"visible_chars": 20, "source_url": "https://sellercentral.amazon.in/help/example", "verified_at": "2026-10-29"},
+                                     {"visible_chars": 20, "source_url": "https://sellercentral.amazon.in/help/example", "verified_at": "2026-10-29", "scope": "Kitchen only"})):
+        with env.engine.begin() as conn:
+            conn.execute(text("DELETE FROM cmo_platform_config WHERE tenant_id = :t AND key = 'title_display_rules'"), {"t": str(env.tenant)})
+            conn.execute(text("INSERT INTO cmo_platform_config (tenant_id, key, value, effective_from) VALUES (:t, 'title_display_rules', CAST(:v AS jsonb), '2026-01-01')"), {"t": str(env.tenant), "v": json.dumps({AMAZON: {"mobile": rule_mobile}})})
+        m = card_for(env)["sets"][0]["options"][0]["modes"]["mobile"]
+        assert m["limitBasis"] == "ILLUSTRATIVE", (i, m)
 
 
 # ---------------------------------------------------------------- through the real CEO chat

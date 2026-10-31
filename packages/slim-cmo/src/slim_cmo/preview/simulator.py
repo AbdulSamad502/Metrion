@@ -22,6 +22,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
+from urllib.parse import urlparse
 
 METHOD = "listing-preview-v1"
 MODES = ("mobile", "desktop")
@@ -50,7 +51,15 @@ def _words(text: str) -> list[str]:
     return [w.casefold() for w in _WORDS.findall(text or "")]
 
 
-def display_rules(raw: Any, marketplace: str, *, today: date, max_age_days: int | None) -> dict[str, DisplayRule]:
+@dataclass(frozen=True, slots=True)
+class SourcePolicy:
+    """What a display rule's source must satisfy to be called VERIFIED when the caller supplies a policy: the page's host must be an official marketplace host, and the rule must declare it
+    applies to ALL_CATEGORIES (a preview has no category, so a rule limited to some categories cannot apply)."""
+
+    official_hosts: frozenset[str]
+
+
+def display_rules(raw: Any, marketplace: str, *, today: date, max_age_days: int | None, policy: SourcePolicy | None = None) -> dict[str, DisplayRule]:
     """The cut-off for each screen. A configured value is used only when it is complete and fresh; anything else falls back to the labelled illustrative cut-off, with the reason."""
     out: dict[str, DisplayRule] = {}
     entry = raw.get(marketplace) if isinstance(raw, Mapping) else None
@@ -67,6 +76,10 @@ def display_rules(raw: Any, marketplace: str, *, today: date, max_age_days: int 
                 why = "the configured display rule has no usable character count"
             elif not (isinstance(url, str) and url.startswith("https://")):
                 why = "the configured display rule has no source page"
+            elif policy is not None and urlparse(url).hostname not in policy.official_hosts:
+                why = "the configured display rule's source page is not on an official marketplace host"
+            elif policy is not None and rule.get("scope") != "ALL_CATEGORIES":
+                why = "the configured display rule is not stated for all categories"
             elif checked is None or checked > today:
                 why = "the configured display rule has no valid check date"
             elif max_age_days is None or (today - checked).days > max_age_days:

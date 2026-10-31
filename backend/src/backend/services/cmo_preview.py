@@ -18,7 +18,9 @@ from datetime import date
 from typing import Any
 from uuid import UUID, uuid4
 
-from slim_cmo.preview.simulator import METHOD, SIMULATION_NOTICE, TITLE_DISPLAY_RULES_KEY, display_rules, set_preview
+from slim_cmo.preview.simulator import METHOD, SIMULATION_NOTICE, TITLE_DISPLAY_RULES_KEY, SourcePolicy, display_rules, set_preview
+from slim_cmo.service import marketplace_rules
+from slim_cmo.service.marketplace_rules import official_hosts
 from slim_cmo.service.models import Actor
 from slim_cmo.service.title_analysis import TitleAnalysisService
 
@@ -29,6 +31,17 @@ logger = logging.getLogger(__name__)
 MAX_SETS = 3  # one per marketplace
 _DETAIL_LABELS = (("brand", "Brand"), ("size", "Size"), ("capacity", "Size"), ("material", "Material"), ("color", "Color"), ("colour", "Color"))
 _CONFIG_KEYS = (TITLE_DISPLAY_RULES_KEY, "format_constraint_max_age_days")
+
+
+def _register_policy() -> SourcePolicy:
+    """A display rule is VERIFIED only from an official marketplace host (the hosts named in the rules register) and only for all categories."""
+    return SourcePolicy(official_hosts(marketplace_rules.load()))
+
+
+def configured_display_rules(platform_config: Any) -> Any:
+    """The platform configuration row if there is one, else what the reviewed rules register holds (today nothing: no marketplace publishes a title display rule). Either way the simulator re-checks
+    source host, scope, date and age; nothing here makes a preview verified by itself."""
+    return platform_config if platform_config else (marketplace_rules.display_rules_config(marketplace_rules.load()) or None)
 
 
 def details_of(ctx: Any) -> dict[str, str]:
@@ -67,7 +80,7 @@ def build_card(tenant_id: UUID, user_id: UUID, investigation_id: UUID) -> dict[s
         analysis = svc.run(actor, gid, f"preview-{gid}-{_fact_key(ctx)}")
         if not analysis["reused"]:
             cmo_actions.record_free_run(principal, rt, "cmo.listing_preview", run_id, started)
-        rules = display_rules(values.get(TITLE_DISPLAY_RULES_KEY), s["marketplace"], today=today, max_age_days=age if isinstance(age, int) else None)
+        rules = display_rules(configured_display_rules(values.get(TITLE_DISPLAY_RULES_KEY)), s["marketplace"], today=today, max_age_days=age if isinstance(age, int) else None, policy=_register_policy())
         if not product["name"]:
             product = {"name": name, "brand": brand}
         out_sets.append({"marketplace": s["marketplace"], "generationId": s["generationId"], "analysisId": analysis["analysisId"], "recommendedOptionId": analysis["recommendation"].get("optionId"),

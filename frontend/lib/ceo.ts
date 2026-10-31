@@ -144,7 +144,9 @@ export type ListItemDiff = { status: "unchanged" | "reordered" | "modified" | "a
 export type ListDiff = { items: ListItemDiff[]; counts: Record<string, number>; changed: boolean; characterDelta?: number; oldLength?: TextLen; newLength?: TextLen };
 export type TermDiff = { available: boolean; reason: string | null; added: string[]; removed: string[]; retained: string[]; changed: boolean };
 export type KeywordMove = { keyword: string; before: string[]; after: string[]; result: "ADDED" | "REMOVED" | "RETAINED" | "MOVED"; crossSection: boolean; trace: { state: string; candidateId: string | null; confidence: string | null; evidence: "AVAILABLE" | "UNAVAILABLE" } };
-export type HistoryPerformance = { state: "NOT_ASSESSED" | "OBSERVED_COMPARABLE" | "INCOMPARABLE"; never: string; missing: string | null; note: string };
+export type HistoryPerformancePeriod = { source: string; metric: string; periodStart: string; periodEnd: string; days: number; value: number; versionId?: string };
+/** `needs` names what is still missing (B8); `periods` are observations alongside a version, never an effect of it (`attribution` is always NOT_ATTRIBUTED). */
+export type HistoryPerformance = { state: "NOT_ASSESSED" | "OBSERVED_COMPARABLE" | "INCOMPARABLE"; never: string; missing: string | null; note: string; needs?: string[]; periods?: HistoryPerformancePeriod[]; attribution?: string };
 export type HistoryCompare = {
   kind: "LISTING_HISTORY"; view: "COMPARE"; investigationId?: string; focus?: string; sku: string; marketplace: PreviewMarketplace; product: string | null; swapped: boolean; identical: boolean;
   older: { id: string; number: number; createdAt: string; sourceText: string; approved: boolean }; newer: { id: string; number: number; createdAt: string; sourceText: string; approved: boolean };

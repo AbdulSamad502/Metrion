@@ -39,3 +39,20 @@ def test_promotion_requires_every_needed_field_verified():
     assert mr.problems(data) == [] and mr.promotable_row(data, "AMAZON") is not None
     data["rules"] = [r for r in data["rules"] if r["field"] != "backend_terms.max_bytes" or r["status"] != mr.OFFICIAL_VERIFIED]
     assert mr.promotable_row(data, "AMAZON") is None  # one missing field and nothing is promoted
+
+
+def test_the_register_lists_the_evidence_a_seller_account_must_supply_and_its_failed_access_attempts():
+    data = mr.load()
+    for m in ("AMAZON", "FLIPKART", "MEESHO"):
+        assert data["evidence_needed_from_a_seller_account"][m]
+    assert data["access_attempts"] and all(a["url"].startswith("https://") for a in data["access_attempts"])
+
+
+def test_display_rules_come_from_the_register_only_when_official_verified_for_all_categories():
+    data = mr.load()
+    assert mr.display_rules_config(data) == {}  # nothing is verified today
+    data["rules"].append({"marketplace": "AMAZON", "scope": "amazon.in ALL_CATEGORIES", "field": "title.display_chars.mobile", "value": 70, "status": "OFFICIAL_VERIFIED",
+                          "source": {"url": "https://sellercentral.amazon.in/help/example"}, "checked_on": "2026-10-31"})
+    data["rules"].append({"marketplace": "AMAZON", "scope": "amazon.in Kitchen", "field": "title.display_chars.desktop", "value": 120, "status": "OFFICIAL_VERIFIED",
+                          "source": {"url": "https://sellercentral.amazon.in/help/example"}, "checked_on": "2026-10-31"})
+    assert mr.display_rules_config(data) == {"AMAZON": {"mobile": {"visible_chars": 70, "source_url": "https://sellercentral.amazon.in/help/example", "verified_at": "2026-10-31"}}}
