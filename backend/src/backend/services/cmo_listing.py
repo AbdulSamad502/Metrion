@@ -184,7 +184,8 @@ def audit_pack(tenant: UUID, user: UUID, rt: Any, copy_id: UUID, *, ci: CiInputs
     rows = ci_evidence.evidence_rows(ci or snap_ci, attrs)
     basis = str(s.get("rules_basis") or rules_basis.VERIFIED)
     row = _constraint_row(rt, tenant, mp, pack["constraintRef"]) if basis == rules_basis.VERIFIED else None
-    hard = list((_title_analysis(approved, ctx, kw, name, brand, mp).get("hardFailures")) or [])
+    m3 = _title_analysis(approved, ctx, kw, name, brand, mp)
+    hard = list(m3.get("hardFailures") or [])
     inputs = audit_rules.AuditInputs(
         marketplace=mp.value, rules_basis=basis, constraint=row, approved_title=approved, title=secs.title, bullets=secs.bullets, description=secs.description, keywords=secs.keywords,
         backend_terms=secs.backend_terms, attributes=attrs, candidates=tuple(kw.get("candidates") or ()), excluded=tuple(kw.get("excluded") or ()), questions=questions,
@@ -192,7 +193,7 @@ def audit_pack(tenant: UUID, user: UUID, rt: Any, copy_id: UUID, *, ci: CiInputs
     )
     result = audit_rules.run(inputs)
     kmap = keyword_map.build(inputs.candidates, title=secs.title, bullets=secs.bullets, description=secs.description, keywords=secs.keywords, backend_terms=secs.backend_terms, excluded=inputs.excluded)
-    return {"result": result, "keywordMap": kmap, "ciRows": rows, "sections": secs, "basis": basis, "mp": mp, "strategy": (_title_analysis(approved, ctx, kw, name, brand, mp).get("strategy")),
+    return {"result": result, "keywordMap": kmap, "ciRows": rows, "sections": secs, "basis": basis, "mp": mp, "strategy": m3.get("strategy"), "m3": ((m3.get("scores") or {}).get("overall") or {}),
             "base": inputs, "pack": pack}
 
 
@@ -206,6 +207,33 @@ def save_audit(tenant: UUID, user: UUID, copy_id: UUID, built: Mapping[str, Any]
 
 
 # ------------------------------------------------------------------------------------------------ the card
+def _measures(tenant: UUID, built: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """N-14g: three SEPARATE measures side by side, each from its own source and unchanged (no new, merged or averaged score): the M3 title check of the approved title, this audit's verdict,
+    and the newest saved M5 readiness for the product on this marketplace. A measure that does not exist for this listing says so; it is never shown as zero."""
+    pack, res = built["pack"], built["result"]
+    m3 = built.get("m3") or {}
+    typed = pack["approvalId"] is None
+    if typed or m3.get("status") != "ASSESSED":
+        title = {"status": "NOT_ASSESSED", "value": None, "note": "A title you typed yourself has no earlier title check." if typed else "The title check could not be completed for this title (not enough confirmed detail)."}
+    else:
+        title = {"status": "ASSESSED", "value": f"{m3.get('score')} / 100 ({str(m3.get('band') or '').replace('_', ' ').lower()})", "note": str(m3.get("note") or "") + " A descriptive check, not a marketplace ranking."}
+    rd = cmo_chat_repo.latest_readiness(tenant, pack["sku"], pack["marketplace"]) if pack["sku"] else None
+    ready = ({"status": "NOT_ASSESSED", "value": None, "note": "No listing-readiness check has been saved for this product on this marketplace."} if rd is None
+             else {"status": "ASSESSED", "value": f"{rd['verdictText'] or rd['verdict']} ({rd['score']})" if rd.get("score") is not None else str(rd["verdictText"] or rd["verdict"]),
+                   "note": "The newest saved readiness check; it is not recalculated here.", "asOf": rd["createdAt"].isoformat() if hasattr(rd["createdAt"], "isoformat") else None})
+    return [{"id": "TITLE_CHECK", "label": "Title check", **title},
+            {"id": "LISTING_AUDIT", "label": "Listing audit", "status": "ASSESSED", "value": str(res["verdict"]).replace("_", " ").title(), "note": "This audit of this exact version."},
+            {"id": "READINESS", "label": "Listing readiness", **ready}]
+
+
+def _structured_fields(structured: Mapping[str, Any], mp: Marketplace) -> dict[str, Any] | None:
+    """N-05l: a Flipkart or Meesho pack carries its marketplace attribute form as NEEDS_SELLER_INPUT (the required-field list is not verified, so none is filled or enforced). Amazon has none."""
+    sf = structured.get("structured_fields")
+    if mp is Marketplace.AMAZON or not isinstance(sf, Mapping):
+        return None
+    return {"state": sf.get("state"), "reason": sf.get("reason"), "fields": [str(x) for x in sf.get("fields") or []]}
+
+
 def build_card(tenant: UUID, user: UUID, rt: Any, copy_id: UUID, *, investigation_id: UUID | None = None, ci: CiInputs | None = None) -> dict[str, Any]:
     """Audit (saved once per version) and assemble ONE `LISTING` card for a saved pack. The card is data only: text, statuses, findings; no image, no demand, ranking or sales figure."""
     built = audit_pack(tenant, user, rt, copy_id, ci=ci)
@@ -227,6 +255,7 @@ def build_card(tenant: UUID, user: UUID, rt: Any, copy_id: UUID, *, investigatio
         "audit": {"auditId": saved["auditId"], "contentHash": saved["contentHash"], "verdict": res["verdict"], "counts": res["counts"], "checks": res["checks"], "findings": res["findings"],
                   "measured": res["measured"], "limits": res["limits"], "method": res["method"], "createdAt": saved["createdAt"]},
         "ci": {"rows": built["ciRows"], "considerIfTrue": ci_evidence.consider_if_true(built["ciRows"]), "used": bool(built["pack"]["ciSnapshot"])},
+        "measures": _measures(tenant, built), "structuredFields": _structured_fields(built["pack"]["structured"], mp),
         "titleStatus": title_status(tenant, built["pack"]), "states": states, "editHint": "Change bullet 3 to: your own text", "approveHint": APPROVED_TEXT,
     }
 
@@ -386,6 +415,28 @@ def _artefact(run: Mapping[str, Any], output_type: OutputType) -> Mapping[str, A
     return next((a for a in run.get("artefacts", []) if a.get("outputType") == output_type.value), None)
 
 
+def _check_title_limit(tenant: UUID, rt: Any, mp: Marketplace, grounding: GroundingRequest) -> None:
+    """N-16c: once a VERIFIED row exists for this marketplace it wins, and a title longer than its limit is refused in plain words (the limit and the title's length), asking for a shorter title.
+    The earlier approval is left alone and nothing is truncated. With no usable verified row (or no title limit) this checks nothing: the unverified draft basis has no limit to apply."""
+    from slim_cmo.config import FORMAT_CONSTRAINT_MAX_AGE_DAYS  # noqa: PLC0415
+    from slim_cmo.constraints import ConstraintUnavailable, resolve_constraint  # noqa: PLC0415
+    from slim_cmo.textnorm import count_chars  # noqa: PLC0415
+    from slim_cmo.types import ConstraintRowKind  # noqa: PLC0415
+
+    kinds = getattr(rt.generation, "accepted_row_kinds", None) or frozenset({ConstraintRowKind.VERIFIED})
+    age = rt.store.load_config(tenant, (FORMAT_CONSTRAINT_MAX_AGE_DAYS,), rt.clock().date()).get(FORMAT_CONSTRAINT_MAX_AGE_DAYS)
+    res = resolve_constraint(rt.store.load_constraints(tenant, mp, kinds), marketplace=mp, category=None, output_type=OutputType.LISTING_COPY, now=rt.clock(),
+                             max_age_days=age if isinstance(age, int) else None, accepted_row_kinds=kinds)
+    limit = None if isinstance(res, ConstraintUnavailable) else getattr(res.row, "title_max_chars", None)
+    if not limit:
+        return
+    title = cmo_chat_repo.approval_text(tenant, grounding.approval_id) if grounding.approval_id is not None else grounding.seller_title
+    n = count_chars(title or "")
+    if n > limit:
+        raise ListingRefused("TITLE_OVER_LIMIT", f"The verified {mp.value.title()} rule allows a title of at most {limit} characters, and the title for this listing is {n} characters. "
+                             f"Approve a shorter title (at most {limit} characters) and ask again. I have not changed or cut your title.", status=409)
+
+
 def preflight(tenant: UUID, rt: Any, *, sku: str, mp: Marketplace, grounding: GroundingRequest, ci: CiInputs | None) -> dict[str, Any]:
     """Everything that must be true before the plan card (spec 6.18.2): a title, enough non-contradictory confirmed facts, at least one researched keyword. Raises ListingRefused with the
     plain reason otherwise; nothing is charged and nothing is saved. Returns the researched keywords, the topics not to claim and the facts' context."""
@@ -395,6 +446,7 @@ def preflight(tenant: UUID, rt: Any, *, sku: str, mp: Marketplace, grounding: Gr
         a = rt.store.load_approval(tenant, grounding.approval_id)
         if a is None or a.marketplace is not mp or (a.sku is not None and a.sku != sku):
             raise ListingRefused("NO_TITLE", "I cannot find that approved title for this product and marketplace.", status=404)
+    _check_title_limit(tenant, rt, mp, grounding)
     kw, ctx = keyword_analysis(rt.store, tenant, sku, mp, ci)
     attrs = tuple(a for a in [*ctx.eligible, *(x for x, _ in ctx.ineligible)] if a.name.casefold() != "product_name")
     clash = preconditions.contradictions(attrs)
@@ -466,11 +518,23 @@ def chat_refusal(tenant: UUID, direct: Mapping[str, Any]) -> str | None:
 _SHOW = re.compile(r"^\s*show\s+(?:me\s+)?(?:my|the|our)\s+(?:latest\s+|current\s+)?(?:complete\s+|full\s+)?listing\s*[.?!]*\s*$", re.IGNORECASE)
 
 
+_LOOSE_EDIT = re.compile(
+    r"^\s*(?:please\s+)?(?:make|change|edit|shorten|update|fix|improve)\s+(?:the\s+|my\s+)?(?P<target>bullet(?:\s*point)?\s*#?\s*\d{1,2}|description)\s*(?:to\s+be\s+|a\s+bit\s+)?"
+    r"(?:shorter|longer|better|clearer|simpler|stronger)?\s*[.?!]*\s*$",
+    re.IGNORECASE,
+)
+
+
 def chat_reply(ctx: Any, text: str) -> tuple[str, dict[str, Any] | None] | None:
     """CMO 3.0 M6 in the CEO chat (free: no unit, no model): the seller's own edit sentence, or "show my listing". None when the message is neither, so it is routed as usual.
     A refused edit says why in plain words and saves nothing. Typed text never approves a listing: approval is a click on the card."""
     tenant, user = ctx.tenant_id, ctx.app_user_id
     req = edit_rules.parse(text)
+    loose = _LOOSE_EDIT.match(text) if req.kind == edit_rules.NOT_AN_EDIT else None
+    if loose and cmo_chat_repo.latest_listing_pack(tenant) is not None:  # N-15g: "make bullet 2 shorter" / "Change bullet 2" is not an edit sentence; never guessed, free, and the seller is told exactly what works
+        target = " ".join(loose.group("target").lower().split())
+        return (f"I change a section only from your exact words, so I have not changed anything. Say: “Change {target} to: your text”. If you would rather I write it, say “Rewrite {target} to mention …” "
+                "with what it should mention; I will show you a plan to approve first, and that costs 1 CMO unit."), None
     if req.kind == edit_rules.NOT_AN_EDIT and not _SHOW.match(text):
         return None
     if req.kind == edit_rules.REFUSED:
@@ -485,6 +549,12 @@ def chat_reply(ctx: Any, text: str) -> tuple[str, dict[str, Any] | None] | None:
             return f"I do not have a saved product called “{req.product}”. Tell me which product you mean.", None
         sku = found[0]
     mp = req.marketplace
+    if req.kind == edit_rules.EDIT:  # N-15g: when more than one product / marketplace has a listing and the sentence names neither, ask which; nothing is changed
+        targets = cmo_chat_repo.listing_targets(tenant, sku=sku, marketplace=mp)
+        if len(targets) > 1:
+            names = "; ".join(f"{cmo_chat_repo.product_label(tenant, s) or s} on {m.title()}" for s, m in targets)
+            return (f"You have more than one listing ({names}), so I have not changed anything. Tell me which one: “For my <product>, change {('bullet ' + str(req.bullet_number)) if req.target == 'bullet' else (req.target or 'section').replace('_', ' ')} "
+                    f"on <marketplace> to: your text”."), None
     pack = cmo_chat_repo.latest_listing_pack(tenant, sku=sku, marketplace=mp)
     if pack is None:
         return "You do not have a complete listing saved yet. Ask me to “write my complete listing” and I will plan it for your approval first.", None

@@ -18,7 +18,8 @@ from sqlalchemy.pool import NullPool
 @contextmanager
 def owner_tenant_scope(tenant_id: UUID | None) -> Iterator[Connection]:
     url = os.environ["DATABASE_URL"]
-    assert make_url(url).port == 5544, "owner-role test setup runs against the scratch database only"
+    port = make_url(url).port
+    assert port is not None and port != 5432, "owner-role test setup runs against the scratch database only (the configured scratch port, never the development database on 5432)"
     engine = create_engine(url, poolclass=NullPool)
     try:
         with engine.begin() as conn:

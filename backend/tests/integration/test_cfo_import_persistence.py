@@ -11,7 +11,7 @@ import os
 import uuid
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, make_url, text
 
 from tests.integration.test_cfo_imports import _csv, _register_owner, _upload, app_client, fake_clerk  # noqa: F401  (fixtures and helpers)
 
@@ -61,4 +61,5 @@ def test_the_server_is_not_pointed_at_a_different_database_than_the_one_tests_us
     from data_foundation.repositories import tenant_context as df_tc
 
     assert backend_tc.get_engine().url == df_tc.get_engine().url  # same host, port, database, role
-    assert backend_tc.get_engine().url.port == 5544  # and, in this suite, the scratch instance
+    configured = make_url(os.environ["DATABASE_URL_APP"]).port
+    assert backend_tc.get_engine().url.port == configured and configured not in (None, 5432)  # and, in this suite, the configured scratch instance (never the development database)

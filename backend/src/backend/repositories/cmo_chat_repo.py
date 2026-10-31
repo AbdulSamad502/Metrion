@@ -350,3 +350,27 @@ def latest_keyword_analysis(tenant_id: UUID, sku: str, marketplace: str) -> dict
         return None
     res = r.result if isinstance(r.result, dict) else {}
     return {"id": str(r.id), "createdAt": r.created_at, "candidates": [c for c in res.get("candidates") or [] if isinstance(c, dict)]}
+
+
+def latest_readiness(tenant_id: UUID, sku: str, marketplace: str) -> dict[str, Any] | None:
+    """The newest SAVED M5 readiness assessment for this product on this marketplace, exactly as it was saved (read-only: nothing is recomputed or rescored)."""
+    with tenant_scope(tenant_id) as conn:
+        r = conn.execute(text("SELECT id, created_at, result FROM cmo_readiness_assessment WHERE tenant_id = :t AND sku = :sku AND result->>'marketplace' = :mp ORDER BY created_at DESC, id DESC LIMIT 1"),
+                         {"t": tenant_id, "sku": sku, "mp": marketplace}).first()
+    if r is None or not isinstance(r.result, dict):
+        return None
+    return {"id": str(r.id), "createdAt": r.created_at, "verdict": r.result.get("verdict"), "verdictText": r.result.get("verdictText"), "score": r.result.get("score")}
+
+
+_LISTING_TARGETS = text(
+    """
+    SELECT DISTINCT sku, marketplace FROM cmo_generation WHERE tenant_id = :t AND output_type = 'LISTING_COPY' AND status = 'COMPLETE' AND sku IS NOT NULL
+      AND (CAST(:sku AS text) IS NULL OR sku = :sku) AND (CAST(:mp AS text) IS NULL OR marketplace = :mp) ORDER BY sku, marketplace
+    """
+)
+
+
+def listing_targets(tenant_id: UUID, *, sku: str | None = None, marketplace: str | None = None) -> list[tuple[str, str]]:
+    """The distinct (product, marketplace) pairs that have a complete saved listing, narrowed by what the seller named. More than one means an edit sentence that names neither is ambiguous."""
+    with tenant_scope(tenant_id) as conn:
+        return [(str(r.sku), str(r.marketplace)) for r in conn.execute(_LISTING_TARGETS, {"t": tenant_id, "sku": sku, "mp": marketplace})]

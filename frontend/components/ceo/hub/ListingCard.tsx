@@ -78,6 +78,29 @@ export function ListingCard({ card, disabled = false, onSend, onApprove, onCopie
         </div>
       )}
 
+      {card.measures && card.measures.length > 0 && (
+        <section aria-label="Three separate measures" data-testid="listing-measures" className="rounded-lg p-3" style={{ border: "1px solid var(--border)" }}>
+          <p className="m-0 t-meta font-bold" style={{ color: "var(--text-3)" }}>Three separate measures (not combined into one score)</p>
+          <dl className="m-0 mt-2 grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))" }}>
+            {card.measures.map((m) => (
+              <div key={m.id} data-testid={`measure-${m.id}`}>
+                <dt className="t-meta-sm" style={{ color: "var(--text-6)" }}>{m.label}</dt>
+                <dd className="m-0 t-meta font-bold" style={{ color: "var(--text-3)" }}>{m.status === "ASSESSED" ? m.value : "Not assessed"}</dd>
+                <dd className="m-0 t-meta-sm" style={{ color: "var(--text-6)" }}>{m.note}{m.asOf ? ` (saved ${at(m.asOf)})` : ""}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+
+      {card.structuredFields && (
+        <div role="note" data-testid="listing-structured-fields" className="rounded-lg p-3" style={{ border: "1px solid var(--warning)" }}>
+          <p className="m-0 t-meta font-bold" style={{ color: "var(--warning)" }}>! Marketplace attribute fields: needs your input</p>
+          <p className="m-0 mt-1 t-meta" style={{ color: "var(--text-3)" }}>{card.structuredFields.reason}</p>
+          {card.structuredFields.fields.length === 0 && <p className="m-0 mt-1 t-meta-sm" style={{ color: "var(--text-6)" }}>No attribute field was filled for you. Fill them in on the marketplace.</p>}
+        </div>
+      )}
+
       <ul aria-label="Where this version stands" data-testid="listing-states" className="m-0 flex list-none flex-col gap-1 p-0">
         <li className="t-meta" style={{ color: "var(--text-3)" }}>{card.states.generated.done ? "✓" : "○"} Generated{card.states.generated.at ? ` · ${at(card.states.generated.at)}` : ""}</li>
         <li className="t-meta" style={{ color: "var(--text-3)" }}>{card.states.audited.done ? "✓" : "○"} Audited{card.states.audited.verdict ? ` · ${VERDICT_WORD[card.states.audited.verdict as Card["audit"]["verdict"]] ?? card.states.audited.verdict}` : ""}</li>

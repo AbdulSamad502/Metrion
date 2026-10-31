@@ -470,8 +470,18 @@ def _seller_title_options(ctx: Ctx, got: Mapping[str, Any]) -> Sequence[Option]:
     return out
 
 
-_SELLER_TITLE = Field("seller_title", lambda c, g: "What title do you use for it today (or want to use)? I will write from it, so what you give me is what the copy is based on.", _text(500),
-                      _seller_title_options)
+def _seller_title_question(ctx: Ctx, got: Mapping[str, Any]) -> str:
+    """N-05b: with no approved title for this product and marketplace the question says so plainly, and says how to get title options first. A number picks a listed choice; a title typed here is used as typed."""
+    from backend.ceo import cmo_chat  # noqa: PLC0415
+
+    base = "What title do you use for it today (or want to use)? I will write from it, so what you give me is what the copy is based on."
+    if cmo_chat.approved_title_text(ctx.tenant_id, got.get("product_name"), got.get("marketplace")):
+        return base
+    return ("You have not approved a title for this product on this marketplace yet. " + base +
+            " If you would rather choose from options, say “cancel” and ask me for titles for this product first; once you approve one, ask for the complete listing again.")
+
+
+_SELLER_TITLE = Field("seller_title", _seller_title_question, _text(500), _seller_title_options)
 
 def _fit(words: Sequence[str], limit: int = 100) -> str:
     out: list[str] = []
@@ -1332,6 +1342,28 @@ def _ask(playbook: str, fields: Sequence[Field], ctx: Ctx, collected: Mapping[st
     return Ask(f"{prefix}{_progress(fields, collected, ctx)}{f.question(ctx, collected)}", _card(playbook, f, ctx, collected))
 
 
+def _numbered_title(f: Field, card: Mapping[str, Any], raw: str, option_key: str | None, ctx: Ctx, collected: Mapping[str, Any]) -> Reject | str | None:
+    """The title question lists numbered choices. A bare number typed there means that choice (its real text), never the title "1"; a number with no such choice is refused,
+    and a choice whose text is no longer offered (the approved title changed since the card was shown) is refused and re-asked. None = not a numbered/stale case: parse normally."""
+    if f.name != "seller_title":
+        return None
+    stale = Reject("That choice is no longer current (the approved title has changed), so I have not used it.")
+    current = [o.text for o in list(f.options(ctx, collected))[:MAX_OPTIONS] if not o.unknown and o.text != "skip"]
+    if option_key is not None:
+        return None if raw in current else stale
+    n = raw.strip()
+    if not (n.isascii() and n.isdigit()):
+        return None
+    shown = [o for o in card.get("options", []) if o.get("kind") in ("RECOMMENDED", "ALTERNATIVE") and o.get("value") is not None]
+    i = int(n)
+    if not 1 <= i <= len(shown):
+        return Reject(f"There is no option {n}; a number on its own is not a title.")
+    picked = str(shown[i - 1]["value"])
+    if picked not in current:
+        return stale
+    return f.parse(picked, ctx, collected)
+
+
 def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: Ctx) -> Ask | Done | Cancelled | Blocked:
     """One answer to the card's question. `option_key` is the option the seller chose (its text is parsed exactly as if typed); None means the typed `text`."""
     playbook = str(card.get("playbook") or (card.get("pending") or {}).get("key") or "")
@@ -1358,7 +1390,9 @@ def advance(card: Mapping[str, Any], *, option_key: str | None, text: str, ctx: 
         raw = str(opt["value"])
     if raw.strip().casefold() in CANCEL_WORDS:
         return Cancelled()
-    parsed = f.parse(raw, ctx, collected)
+    parsed = _numbered_title(f, card, raw, option_key, ctx, collected)
+    if parsed is None:
+        parsed = f.parse(raw, ctx, collected)
     if isinstance(parsed, Reject):
         again = _card(playbook, f, ctx, collected)
         if card.get("resume"):

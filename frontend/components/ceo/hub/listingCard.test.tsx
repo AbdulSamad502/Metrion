@@ -33,6 +33,35 @@ const card = (over: Partial<Card> = {}): Card => ({
   editHint: "Change bullet 3 to: your own text", approveHint: "Approved for use in Metrion; not published.", ...over,
 });
 
+describe("the three measures and the Flipkart attribute fields (N-14g, N-05l)", () => {
+  const measures: Card["measures"] = [
+    { id: "TITLE_CHECK", label: "Title check", status: "ASSESSED", value: "72 / 100 (good)", note: "A descriptive check." },
+    { id: "LISTING_AUDIT", label: "Listing audit", status: "ASSESSED", value: "Checked Not Verified", note: "This audit of this exact version." },
+    { id: "READINESS", label: "Listing readiness", status: "NOT_ASSESSED", value: null, note: "No listing-readiness check has been saved." },
+  ];
+  it("shows the three measures side by side, labelled apart, with a missing one as not assessed and never zero", () => {
+    render(<ListingCard card={card({ measures })} onSend={() => {}} />);
+    const box = screen.getByTestId("listing-measures");
+    expect(box).toHaveTextContent("not combined into one score");
+    expect(within(screen.getByTestId("measure-TITLE_CHECK")).getByText("72 / 100 (good)")).toBeInTheDocument();
+    expect(within(screen.getByTestId("measure-LISTING_AUDIT")).getByText("Checked Not Verified")).toBeInTheDocument();
+    const ready = screen.getByTestId("measure-READINESS");
+    expect(within(ready).getByText("Not assessed")).toBeInTheDocument();
+    expect(ready).not.toHaveTextContent(/\b0\b/);
+  });
+  it("shows nothing for measures an older saved card does not carry", () => {
+    render(<ListingCard card={card()} onSend={() => {}} />);
+    expect(screen.queryByTestId("listing-measures")).toBeNull();
+    expect(screen.queryByTestId("listing-structured-fields")).toBeNull();
+  });
+  it("says a Flipkart pack needs seller input for its attribute fields and claims none are filled", () => {
+    render(<ListingCard card={card({ marketplace: "FLIPKART", structuredFields: { state: "NEEDS_SELLER_INPUT", reason: "the marketplace's required attribute-field list for this category is not verified, so no structured fields were filled or enforced", fields: [] } })} onSend={() => {}} />);
+    const note = screen.getByTestId("listing-structured-fields");
+    expect(note).toHaveTextContent("needs your input");
+    expect(note).toHaveTextContent("No attribute field was filled for you");
+  });
+});
+
 describe("the complete listing card", () => {
   it("is recognised only when it is a LISTING card with an audit", () => {
     expect(isListingCard(card())).toBe(true);

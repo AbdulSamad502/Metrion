@@ -112,7 +112,12 @@ export type ListingCard = {
   };
   editHint: string; approveHint: string;
   titleStatus?: ListingTitleStatus; // N-15d: present on cards from the current backend; absent on older saved cards
+  /** N-14g: three SEPARATE measures, each from its own source and unchanged (never merged into one score). NOT_ASSESSED carries no value. */
+  measures?: ListingMeasure[];
+  /** N-05l: Flipkart's attribute form. `NEEDS_SELLER_INPUT` = nothing was filled or enforced (the required-field list is not verified). Null for Amazon. */
+  structuredFields?: { state: string; reason: string; fields: string[] } | null;
 };
+export type ListingMeasure = { id: "TITLE_CHECK" | "LISTING_AUDIT" | "READINESS"; label: string; status: "ASSESSED" | "NOT_ASSESSED"; value: string | null; note: string; asOf?: string };
 /** Listing history, version comparison and optimisation advice (CMO 3.0 M7; backend: services/cmo_history, ceo/cmo_history_chat). Data only. Nothing here is a score or a claim about sales, ranking,
  * demand or conversion, and nothing says a version is published or live: "approved for use" only records the seller's decision in Metrion. */
 export type HistorySource = "ORIGINAL" | "SELLER_EDIT" | "AI_REWRITE" | "REVISION_UNKNOWN";
