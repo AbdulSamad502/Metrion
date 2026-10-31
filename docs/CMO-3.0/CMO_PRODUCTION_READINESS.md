@@ -51,3 +51,24 @@ Separate lists:
 * **Engineering defects:** one fixed in this review (§2 row 8); two low-severity M6 gaps and one M7 display gap (rows 6, 7); imported-record correction deferred.
 * **External dependencies:** B1, B6 (official evidence); B7 (test tenant); B8 (real reports); B2 (production model definition).
 * **Real-world verification gaps:** browser run, real classifier on CMO phrasing, real billing/entitlement, real data.
+
+## 4. Final programme pass (B1–B8), 2026-10-31
+
+Scope decision recorded: no further model benchmarking was run in this pass (owner chose to skip it), so no new model evidence exists beyond §3 (B2). No marketplace research was repeated (the register and checklist in `CMO_MARKETPLACE_RULES.md` stand). No code, migration or test changed in this pass.
+
+### B2 inspection facts (no benchmark)
+Host: 15.7 GB RAM, 12 cores, no GPU/VRAM identified, so inference is CPU-only. Installed Ollama models: `qwen3:8b` (5.2 GB, the dev model), `qwen3:4b`, `qwen3.5:4b`, `llava`, `nomic-embed-text`. The product provider passes no temperature or context size (Ollama defaults) and uses `think=false` for qwen3. A tuned variant (`cmo-qwen3-8b-t02`: temperature 0.2, top_p 0.9, num_ctx 8192) was created locally but **never evaluated**; other families (`qwen2.5:7b-instruct`, `llama3.1:8b`) were **not downloaded or tested**. No model is recommended on evidence. B2 stays OPEN.
+
+Provisional (unevidenced) allocation to test next: one shared 7–8B instruction model for CMO generation; the same model for CEO/PI/CI/CFO narration (single resident model on a 16 GB CPU host); `nomic-embed-text` for embeddings; all numbers, claim checks and keyword placement stay in code.
+
+### External dependencies
+| Blocker | Missing evidence | Resource / document | Who provides | Engineering can continue? |
+|---|---|---|---|---|
+| B1 | Official title/bullet/description/search-term/attribute rules per category for Flipkart and Meesho; per-category Amazon India templates | Seller Hub / Supplier panel / Seller Central listing templates and style guides (checklist in `CMO_MARKETPLACE_RULES.md`); exports or screenshots with URL and date; no passwords | Seller / owner | Yes (rules register and gates already built; drafts carry the unverified banner) |
+| B2 | Intended production model and configuration; larger multi-product evaluation on it | Decision on hardware (GPU or CPU) and model; an owner-approved download of candidate models | Owner | Yes (harness exists: `eval_cmo_real_model.py`) |
+| B6 | Official or measured title display/truncation per marketplace, device and category | Official docs, or dated measurements, listing URL and device from an authorized live test listing | Owner / seller | Yes (previews stay illustrative) |
+| B7 | Browser walkthrough of the 15 workflows | A dedicated signed-in test tenant (Clerk org) with synthetic data, plus permission to run it | Owner | Yes, but cannot be marked verified without it |
+| B8 | Real report layouts and real confirmations | Authorised Amazon India / Flipkart / Meesho performance exports; real SKU-to-product and go-live confirmations; each marketplace's statement on whether a missing row means zero | Seller / owner | Yes (importer built for synthetic layouts; native support not claimed) |
+
+### Final blocker status
+B1 OPEN (externally blocked); B2 OPEN (poor evidence: 12/23 pooled, 6/15 latest; no new run); B6 OPEN (externally blocked); B7 BLOCKED; B8 PARTIAL. **Decision: NOT PRODUCTION READY.**
