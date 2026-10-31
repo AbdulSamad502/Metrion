@@ -2,6 +2,7 @@
  * entitlement refusal on attach, SYSTEM_NOTEs, append-only findings). It exists so UI behaviour can be tested deterministically; it does
  * no orchestration of its own: tests script what the "server" persisted and when, exactly as the real turn endpoint would. */
 
+import { createPerformanceApi } from "@/lib/cmoPerformance";
 import { ApiError } from "@/lib/api";
 import type { HistoryCompare, HistoryList, HistoryRecommendations, HistoryVersionDetail, MemoryItem, NeedRow, SharedFinding, SharedFindingsList } from "@/lib/ceo";
 import type {
@@ -251,6 +252,7 @@ export class FakeCeo {
           return { agent, attached };
         }),
       getAttachmentImage: (id: string, attachmentId: string) => rec("getAttachmentImage", [id, attachmentId], () => `blob:fake-${attachmentId}`),
+      performanceApi: createPerformanceApi(async () => null), // a card's Save is exercised in the performance tests with their own fake; the chat fakes never reach it
       historyApi: {
         history: (q) => rec("history", [q], () => this.historyFor(q)),
         version: (id: string) => rec("version", [id], () => this.history.versions?.[id] ?? this.failHistory()),

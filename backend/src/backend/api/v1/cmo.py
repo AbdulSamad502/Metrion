@@ -25,7 +25,7 @@ from datetime import date
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
@@ -48,7 +48,7 @@ from slim_cmo.types import Marketplace, OutputType, TrendSection
 
 from backend.auth.context import AuthContext, require_auth
 from backend.auth.permissions import AGENT_CMO, CATALOG_VIEW, FILES_UPLOAD, RESEARCH_MARKET_TRENDS, has_permission
-from backend.services import cmo_actions, cmo_ci_inputs, cmo_history, cmo_images, cmo_listing, cmo_performance, cmo_runtime, cmo_trends
+from backend.services import cmo_actions, cmo_ci_inputs, cmo_history, cmo_images, cmo_listing, cmo_perf_import, cmo_perf_view, cmo_performance, cmo_runtime, cmo_trends
 from backend.services.cmo_actions import Principal, QuotaDenied, RequestInProgress
 from backend.services.cmo_runtime import CmoNotConfigured
 from backend.uploads import read_upload_capped
@@ -110,12 +110,19 @@ class SkuLinkBody(_Body):
     sku: str = Field(min_length=1, max_length=_NAME)
     marketplace: Marketplace
     report_sku: str = Field(min_length=1, max_length=_NAME)
+    replace: bool = False  # True = "I am deliberately changing an earlier statement" (the earlier one stays in the history)
 
 
 class GoLiveBody(_Body):
     """The seller's statement that a saved listing version went live on a date (B8). Metrion cannot see the marketplace."""
     generation_id: UUID
     went_live_on: date
+    replace: bool = False
+
+
+class WindowBody(_Body):
+    """The seller's chosen comparison-period length in days (validated 7 to 90 by the service)."""
+    days: int = Field(strict=True)
 
 
 class ListingEditBody(_Body):
@@ -402,7 +409,7 @@ def post_performance_sku_link(body: SkuLinkBody, ctx: AuthContext = require_auth
     """Record the seller's statement of which report SKU is this product. Append-only; zero units; changes nothing on a marketplace."""
     def go() -> dict[str, Any]:
         _principal(ctx)
-        return cmo_performance.confirm_link(ctx.tenant_id, ctx.app_user_id, sku=body.sku, marketplace=body.marketplace.value, report_sku=body.report_sku)  # type: ignore[arg-type]
+        return cmo_performance.confirm_link(ctx.tenant_id, ctx.app_user_id, sku=body.sku, marketplace=body.marketplace.value, report_sku=body.report_sku, replace=body.replace)  # type: ignore[arg-type]
 
     return _guarded(go)
 
@@ -412,9 +419,85 @@ def post_performance_golive(body: GoLiveBody, ctx: AuthContext = require_auth(pe
     """Record the date the seller says a saved version went live. Append-only (a correction is a new statement); zero units; nothing is published."""
     def go() -> dict[str, Any]:
         _principal(ctx)
-        return cmo_performance.confirm_golive(ctx.tenant_id, ctx.app_user_id, generation_id=body.generation_id, went_live_on=body.went_live_on, today=cmo_runtime.build_runtime().clock().date())  # type: ignore[arg-type]
+        return cmo_performance.confirm_golive(ctx.tenant_id, ctx.app_user_id, generation_id=body.generation_id, went_live_on=body.went_live_on, today=cmo_runtime.build_runtime().clock().date(), replace=body.replace)  # type: ignore[arg-type]
 
     return _guarded(go)
+
+
+# ------------------------------------------------------------------------------------------------ CMO 3.0 M8: imported performance reports, the dashboard and version analysis (free, no model, no AI credits)
+@router.get("/performance/dashboard")
+def get_performance_dashboard(marketplace: Marketplace | None = None, sku: Annotated[str | None, Field(max_length=_NAME)] = None, start: date | None = None, end: date | None = None,
+                              ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Metric cards, trend and previous-period comparison from the seller's OWN imported reports, with coverage and grounded observations. Deterministic; no model; 0 credits."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_perf_view.dashboard(ctx.tenant_id, marketplace=marketplace.value if marketplace else None, sku=sku, start=start, end=end)
+
+    return _guarded(go)
+
+
+@router.get("/performance/mappings")
+def get_performance_mappings(ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Every saved listing with its confirmed SKU link, each version's confirmed go-live date, the history of those statements, and what is still missing."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_perf_view.mappings(ctx.tenant_id)
+
+    return _guarded(go)
+
+
+@router.get("/performance/imports")
+def get_performance_imports(ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_perf_view.imports(ctx.tenant_id)
+
+    return _guarded(go)
+
+
+@router.get("/performance/versions")
+def get_performance_versions(sku: Annotated[str, Field(min_length=1, max_length=_NAME)], marketplace: Marketplace, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Per saved version: the equal-length periods before and after its seller-confirmed go-live date, observed side by side. Never a claim of cause."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_perf_view.versions(ctx.tenant_id, sku, marketplace.value)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+@router.post("/performance/window")
+def post_performance_window(body: WindowBody, ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """The seller's own comparison-period length (7 to 90 days). Append-only; 0 credits."""
+    def go() -> dict[str, Any]:
+        _principal(ctx)
+        return cmo_performance.set_window(ctx.tenant_id, ctx.app_user_id, body.days)  # type: ignore[arg-type]
+
+    return _guarded(go)
+
+
+async def _perf_file(file: UploadFile, ctx: AuthContext) -> bytes:
+    if ctx.role is None or not has_permission(role=ctx.role, permissions=ctx.permissions, key=FILES_UPLOAD):
+        raise HTTPException(status_code=403, detail="Missing permission: files.upload")
+    return await read_upload_capped(file, max_bytes=cmo_perf_import.MAX_BYTES, env_var="(fixed 10 MB limit)")
+
+
+@router.post("/performance/import/preview")
+async def post_performance_import_preview(file: UploadFile, marketplace: Annotated[Marketplace, Form()], ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Checks a CSV/XLSX performance report and shows exactly what would be saved. Saves nothing; 0 credits."""
+    _principal(ctx)
+    data = await _perf_file(file, ctx)
+    today = cmo_runtime.build_runtime().clock().date()
+    return await run_in_threadpool(_guarded, lambda: cmo_perf_import.preview(ctx.tenant_id, marketplace.value, file.filename or "report", data, today))  # type: ignore[arg-type]
+
+
+@router.post("/performance/import")
+async def post_performance_import(file: UploadFile, marketplace: Annotated[Marketplace, Form()], expected_sha256: Annotated[str, Form(pattern=r"^[0-9a-f]{64}$")],
+                                  ctx: AuthContext = require_auth(permission=AGENT_CMO)) -> dict[str, Any]:
+    """Saves the previewed file (the SHA-256 must match). Rows are only added; the same file or an existing record is never imported twice; a blank cell stays blank. 0 credits."""
+    _principal(ctx)
+    data = await _perf_file(file, ctx)
+    today = cmo_runtime.build_runtime().clock().date()
+    return await run_in_threadpool(_guarded, lambda: cmo_perf_import.commit(ctx.tenant_id, ctx.app_user_id, marketplace.value, file.filename or "report", data, expected_sha256, today))  # type: ignore[arg-type]
 
 
 # ------------------------------------------------------------------------------------------------ CMO 3.0 M7: listing history, version comparison and advice (read-only, free, no model)

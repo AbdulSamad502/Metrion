@@ -68,7 +68,7 @@ def test_with_nothing_confirmed_the_answer_is_not_assessed_and_names_every_missi
     p = cmo_performance.assess_for(env.tenant, SKU, "AMAZON")
     assert p["state"] == "NOT_ASSESSED" and p["attribution"] == "NOT_ATTRIBUTED"
     joined = " ".join(p["needs"])
-    assert "comparison window length" in joined and "which SKU" in joined and "at least two saved versions" in joined
+    assert "comparison period length" in joined and "which SKU" in joined and "at least two saved versions" in joined
 
 
 def test_the_seller_chooses_only_from_skus_that_really_are_in_their_own_reports(env):
@@ -154,7 +154,7 @@ def test_uncovered_data_or_unreferenced_rows_or_no_window_keep_it_not_assessed(e
     put_golive(env, second, days_ago(30))
     put_golive(env, first, days_ago(12))
     seed_sales(env, [("o1", REPORT_SKU, days_ago(30))])
-    assert "window length" in " ".join(cmo_performance.assess_for(env.tenant, SKU, "AMAZON")["needs"])  # no operator window: NOT_ASSESSED
+    assert "period length" in " ".join(cmo_performance.assess_for(env.tenant, SKU, "AMAZON")["needs"])  # no operator window: NOT_ASSESSED
     set_window(env, 7)
     p = cmo_performance.assess_for(env.tenant, SKU, "AMAZON")
     assert p["state"] == "NOT_ASSESSED" and any("uploaded sales data covering" in n for n in p["needs"])  # the uploaded data ends before the windows do

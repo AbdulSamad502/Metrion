@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { PAGE_COPY } from "@/lib/navigation";
 import { ShowcaseDashboard } from "@/components/cmo/ShowcaseDashboard";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
@@ -24,6 +25,10 @@ function Showcase() {
 export default function CmoPage() {
   return (
     <DashboardShell {...PAGE_COPY["cmo"]}>
+      <p className="m-0 mb-3 t-meta" style={{ color: "var(--text-3)" }}>
+        <Link href="/dashboard/cmo/performance" className="mt-focus font-bold" style={{ color: "var(--accent)" }}>Listing performance →</Link>{" "}
+        Import your marketplace reports, see impressions, clicks, orders and conversion, and compare listing versions.
+      </p>
       <Suspense fallback={null}>
         <Showcase />
       </Suspense>

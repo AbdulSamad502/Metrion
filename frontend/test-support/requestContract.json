@@ -511,12 +511,39 @@
    "query": [],
    "requiredQuery": []
   },
+  "GET /api/v1/cmo/performance/dashboard": {
+   "query": [
+    "end",
+    "marketplace",
+    "sku",
+    "start"
+   ],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/performance/imports": {
+   "query": [],
+   "requiredQuery": []
+  },
+  "GET /api/v1/cmo/performance/mappings": {
+   "query": [],
+   "requiredQuery": []
+  },
   "GET /api/v1/cmo/performance/sku-candidates": {
    "query": [
     "marketplace"
    ],
    "requiredQuery": [
     "marketplace"
+   ]
+  },
+  "GET /api/v1/cmo/performance/versions": {
+   "query": [
+    "marketplace",
+    "sku"
+   ],
+   "requiredQuery": [
+    "marketplace",
+    "sku"
    ]
   },
   "GET /api/v1/cmo/showcase/compliance": {
@@ -1280,9 +1307,26 @@
    "query": [],
    "requiredQuery": []
   },
+  "POST /api/v1/cmo/performance/import": {
+   "multipart": true,
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/performance/import/preview": {
+   "multipart": true,
+   "query": [],
+   "requiredQuery": []
+  },
   "POST /api/v1/cmo/performance/sku-link": {
    "body": {
     "$ref": "#/components/schemas/SkuLinkBody"
+   },
+   "query": [],
+   "requiredQuery": []
+  },
+  "POST /api/v1/cmo/performance/window": {
+   "body": {
+    "$ref": "#/components/schemas/WindowBody"
    },
    "query": [],
    "requiredQuery": []
@@ -3432,6 +3476,11 @@
      "format": "uuid",
      "title": "Generation Id",
      "type": "string"
+    },
+    "replace": {
+     "default": false,
+     "title": "Replace",
+     "type": "boolean"
     },
     "went_live_on": {
      "format": "date",
@@ -5972,6 +6021,11 @@
     "marketplace": {
      "$ref": "#/components/schemas/Marketplace"
     },
+    "replace": {
+     "default": false,
+     "title": "Replace",
+     "type": "boolean"
+    },
     "report_sku": {
      "maxLength": 200,
      "minLength": 1,
@@ -7156,6 +7210,21 @@
     "reason"
    ],
    "title": "VoidRequest",
+   "type": "object"
+  },
+  "WindowBody": {
+   "additionalProperties": false,
+   "description": "The seller's chosen comparison-period length in days (validated 7 to 90 by the service).",
+   "properties": {
+    "days": {
+     "title": "Days",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "days"
+   ],
+   "title": "WindowBody",
    "type": "object"
   }
  }

@@ -3,6 +3,7 @@
  * inside `TurnResponse.answer` / stored message content, which the backend has already put through its provenance + numeral gate. */
 
 import { API_BASE, ApiError, apiFetch, apiFetchForm } from "@/lib/api";
+import { createPerformanceApi, type PerformanceCard } from "@/lib/cmoPerformance";
 
 export type GetToken = () => Promise<string | null>;
 
@@ -185,7 +186,7 @@ export type CeoMessage = {
   turn_id: string | null;
   created_at: string;
   /** Only a CEO CLARIFICATION message that has real candidates to offer. */
-  choices?: ClarificationCard | PickCard | PreviewCard | ReadinessCard | ListingCard | ListingHistoryCard | null;
+  choices?: ClarificationCard | PickCard | PreviewCard | ReadinessCard | ListingCard | ListingHistoryCard | PerformanceCard | null;
   /** Client-only: a message the seller just sent that the server has not echoed back yet. */
   pending?: boolean;
   /** The send failed and the thread could not be refreshed, so the server's copy is unknown: shown as not sent, never as still sending. */
@@ -399,6 +400,8 @@ export function createCeoClient(getToken: GetToken) {
       return URL.createObjectURL(await res.blob());
     },
     /** Listing history, version comparison and advice (CMO 3.0 M7): read-only, free, nothing generated. */
+    /** Listing performance from the seller's imported reports, and the three statements the card's Save button records (CMO 3.0 M8): free, nothing generated. */
+    performanceApi: createPerformanceApi(getToken),
     historyApi: {
       history: async (q: { sku?: string | null; marketplace?: string | null; offset?: number; limit?: number }): Promise<HistoryList> => {
         const p = new URLSearchParams();

@@ -114,3 +114,17 @@ Reviewed by reading the code and by the executed suites named above; no real-dat
 
 ### Final production-readiness decision
 **CMO is not production-ready.** Critical blockers remain that need external access or decisions: B1 (verified marketplace rules; seller logins), B6 (no published display rule), B7 (real-data browser verification not requested), B8 (seller-facing capture, operator window, real data) and B2 (quality unproven on a small sample). B3 and B5 (live search providers, real competitor data) and B4 (cross-agent regression, pre-existing failures) are unchanged.
+
+## M8 — Listing Performance Intelligence (2026-10-31)
+
+Full description, rules and the 16-row acceptance table: `CMO_M8_PERFORMANCE.md`. **CMO is not production-ready.**
+
+| Blocker | Status after M8 | What changed | Still needed |
+|---|---|---|---|
+| B8 | **Partly fixed (open)** | The seller-facing capture B8 lacked now exists: performance page and CEO chat cards for the SKU link, go-live date and comparison length (7-90 days, seller-set; operator config remains a fallback; no default); replacing an earlier statement needs an explicit second step and keeps the history; manual CSV/XLSX report import with preview, duplicate/conflict refusal and NULL-not-zero storage; deterministic dashboard; before/after view per version with coverage, equal-length and overlap checks. | Real reports and real confirmations (everything was verified on synthetic rows); browser verification; native Amazon/Flipkart/Meesho report layouts (headers must match the documented names). |
+| B1, B6 | Unchanged, open | M8 reads no marketplace rule. | Official marketplace evidence. |
+| B2 | Unchanged, open | M8 adds **no model call**; no new real-model exposure. Insights are fixed templates over measured figures. | Owner decision: add a model-written explanation layer (needs its own eval per CLAUDE.md) or keep deterministic text. |
+| B7 | Open | M8 screens and cards are tested with fakes and component tests only. | Real-data browser verification when requested. |
+| New decisions | Open | (a) model-written insight wording (above); (b) a correction path for a wrongly imported record (today an operator action; the application never updates or deletes); (c) whether a day inside an import's period with no row for a SKU should count as zero activity (today: no data, never zero). | Owner. |
+
+**Exact verification run (M8):** Backend (scratch database, port 5545): the six listed regression files + test_cmo_b8_performance.py + test_cmo_m8_performance.py (20) + test_ceo_cmo_m8_performance_chat.py (10) + test_ceo_cmo_m7_history_chat.py + test_cmo_p5_unit.py + test_ceo_architecture.py = 509 passed in 4m29s (run once; the M8 chat file was re-run after the last card change: 10 passed); request-contract snapshot 2 passed. slim-cmo history + marketplace rules + purity + no-float = 280 passed. Frontend: tsc --noEmit clean; eslint clean on the new files; components/cmo/performance 27 passed; lib/noClientMath and the history card tests passed; components/ceo + lib together 516 passed and 2 timed out at the 5 s limit only under full parallel load (ceoDecide price-impact, ceoAttach chips) and pass alone (25/25). Migrations 20261031_0010 and 20261031_0031 verified by hand on a fresh scratch database (up; app-role RLS, check, unique, foreign-key and no-UPDATE/DELETE rejections; downgrade refused while rows exist; down/up with FORCE RLS true). Not run: full backend, frontend, slim-cmo or integration suites; no browser verification; no real data.

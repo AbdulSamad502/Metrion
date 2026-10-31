@@ -36,23 +36,29 @@ def _mp(marketplace: str) -> str:
 def sku_candidates(tenant: UUID, marketplace: str) -> dict[str, Any]:
     """What the seller can choose from: the SKUs in their own uploaded reports for this marketplace. Nothing is matched for them."""
     mp = _mp(marketplace)
-    return {"marketplace": mp, "candidates": repo.report_sku_candidates(tenant, mp),
+    seen: dict[str, dict[str, Any]] = {c["reportSku"]: c for c in repo.report_sku_candidates(tenant, mp)}
+    for c in repo.import_skus(tenant, mp):
+        seen.setdefault(c["reportSku"], c)
+    return {"marketplace": mp, "candidates": list(seen.values()),
             "note": "These are the SKUs in the reports you uploaded. Metrion does not guess which one is your product; you choose."}
 
 
-def confirm_link(tenant: UUID, user: UUID, *, sku: str, marketplace: str, report_sku: str) -> dict[str, Any]:
+def confirm_link(tenant: UUID, user: UUID, *, sku: str, marketplace: str, report_sku: str, replace: bool = False) -> dict[str, Any]:
     """The seller's statement: this CMO product on this marketplace is that SKU in their reports. The SKU must really appear in THEIR uploaded rows; the product must have a saved listing."""
     mp = _mp(marketplace)
     if not cmo_chat_repo.listing_targets(tenant, sku=sku, marketplace=mp):
         raise PerformanceRefused("NO_LISTING", "That product has no saved listing on this marketplace yet.", 404)
-    if not repo.report_sku_exists(tenant, mp, report_sku):
-        raise PerformanceRefused("SKU_NOT_IN_REPORTS", "That SKU does not appear in the sales reports you uploaded for this marketplace, so it cannot be linked.")
+    if not (repo.report_sku_exists(tenant, mp, report_sku) or repo.sku_in_imports(tenant, mp, report_sku)):
+        raise PerformanceRefused("SKU_NOT_IN_REPORTS", "That SKU does not appear in the sales or performance reports you uploaded for this marketplace, so it cannot be linked.")
+    before = repo.current_link(tenant, sku, mp)
+    if before is not None and before["reportSku"] != report_sku and not replace:  # a different earlier statement is never silently replaced
+        raise PerformanceRefused("LINK_EXISTS", f"You already confirmed that this product is “{before['reportSku']}” in your reports. Confirm the change explicitly to replace it; the earlier statement stays in the history.", 409)
     saved = repo.add_link(tenant, user, sku=sku, marketplace=mp, report_sku=report_sku)
-    return {"linked": True, **saved, "sku": sku, "marketplace": mp, "reportSku": report_sku,
+    return {"linked": True, **saved, "sku": sku, "marketplace": mp, "reportSku": report_sku, "previous": before["reportSku"] if before and before["reportSku"] != report_sku else None,
             "message": "Saved as your statement. It lets Metrion read your sales for this product; it does not publish or change anything."}
 
 
-def confirm_golive(tenant: UUID, user: UUID, *, generation_id: UUID, went_live_on: date, today: date) -> dict[str, Any]:
+def confirm_golive(tenant: UUID, user: UUID, *, generation_id: UUID, went_live_on: date, today: date, replace: bool = False) -> dict[str, Any]:
     """The seller's statement that this saved version went live on a date. Not in the future and not before the version was created; a correction is a new statement."""
     pack = cmo_chat_repo.listing_pack(tenant, generation_id)
     if pack is None:
@@ -62,9 +68,30 @@ def confirm_golive(tenant: UUID, user: UUID, *, generation_id: UUID, went_live_o
     created = pack["createdAt"].date() if hasattr(pack["createdAt"], "date") else pack["createdAt"]
     if went_live_on < created:
         raise PerformanceRefused("BEFORE_CREATED", f"This version was created on {created.isoformat()}; it cannot have gone live before that.")
+    earlier = next((h for h in repo.golive_history(tenant) if h["generationId"] == str(generation_id)), None)  # newest first
+    if earlier is not None and earlier["wentLiveOn"] != went_live_on and not replace:  # a different earlier date is never silently replaced
+        raise PerformanceRefused("GOLIVE_EXISTS", f"You already confirmed {earlier['wentLiveOn'].isoformat()} as the go-live date of this version. Confirm the change explicitly to replace it; the earlier statement stays in the history.", 409)
     saved = repo.add_golive(tenant, user, generation_id=generation_id, marketplace=pack["marketplace"], went_live_on=went_live_on)
-    return {"recorded": True, **saved, "generationId": str(generation_id), "wentLiveOn": went_live_on.isoformat(),
+    return {"recorded": True, **saved, "previous": earlier["wentLiveOn"].isoformat() if earlier and earlier["wentLiveOn"] != went_live_on else None, "generationId": str(generation_id), "wentLiveOn": went_live_on.isoformat(),
             "message": "Saved as your statement. Metrion cannot see the marketplace, so it uses your date as given."}
+
+
+MIN_WINDOW, MAX_WINDOW = 7, 90
+
+
+def window_days(tenant: UUID) -> tuple[int | None, str | None]:
+    """(days, who set it): the seller's own setting wins; otherwise the operator's platform config; otherwise unset. There is no default."""
+    own = repo.window_setting(tenant)
+    if own is not None:
+        return own["days"], "YOU"
+    n = _window_days(tenant)
+    return (n, "OPERATOR") if n is not None else (None, None)
+
+
+def set_window(tenant: UUID, user: UUID, days: Any) -> dict[str, Any]:
+    if type(days) is not int or not MIN_WINDOW <= days <= MAX_WINDOW:
+        raise PerformanceRefused("BAD_WINDOW", f"Choose a whole number of days from {MIN_WINDOW} to {MAX_WINDOW}.")
+    return {**repo.set_window(tenant, user, days), "message": f"Saved. Listing versions are now compared over {days}-day periods."}
 
 
 def _window_days(tenant: UUID) -> int | None:
@@ -77,9 +104,9 @@ def observations(tenant: UUID, sku: str, marketplace: str) -> tuple[list[dict[st
     """(observations, what is still needed). One observation per version that has a seller-stated go-live date: distinct orders in the N days starting that date, for the linked report SKU."""
     needs: list[str] = []
     mp = marketplace.upper()
-    n = _window_days(tenant)
+    n = window_days(tenant)[0]
     if n is None:
-        needs.append("the comparison window length (an operator setting, performance_window_days) is not set")
+        needs.append("the comparison period length in days (you can set it on the performance page or tell me in chat)")
     link = repo.current_link(tenant, sku, mp)
     if link is None:
         needs.append("your confirmation of which SKU in your sales reports is this product")
@@ -115,4 +142,10 @@ def assess_for(tenant: UUID, sku: str, marketplace: str) -> dict[str, Any]:
         obs, needs = [], ["the sales data could not be read just now"]
     result = performance.assess(obs)
     result["needs"] = needs
+    try:  # M8: the same product's imported-report view (before/after each confirmed go-live date); a failure leaves it out and never invents it
+        from backend.services import cmo_perf_view  # noqa: PLC0415 - cmo_perf_view imports this module
+
+        result["versionAnalysis"] = cmo_perf_view.versions(tenant, sku, marketplace.upper())
+    except Exception:  # noqa: BLE001
+        result["versionAnalysis"] = None
     return result
