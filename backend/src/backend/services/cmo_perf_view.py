@@ -106,8 +106,9 @@ def dashboard(tenant: UUID, *, marketplace: str | None, sku: str | None, start: 
         limits.append(f"Imported reports cover {cur['coveredDays']} of {cur['days']} days of the chosen period.")
     if not prev["complete"]:
         limits.append(f"Imported reports cover {prev['coveredDays']} of {prev['days']} days of the previous period, so previous-period differences are not shown where they would mislead.")
-    ins = mx.insights(comparison, _json(prev), _json(cur), limits)
     name_of = {k[0]: v["name"] for k, v in prods.items()}
+    hand_mp = mp or (next(iter({k[1] for k in prods if k[0] == sku}), None) if sku and len({k[1] for k in prods if k[0] == sku}) == 1 else None)
+    ins = mx.with_handoff(mx.insights(comparison, _json(prev), _json(cur), limits), name_of.get(sku or ""), hand_mp)
     options = sorted({k[0] for k in prods})
     return {"filters": {"marketplace": mp, "sku": sku, "start": a.isoformat(), "end": b.isoformat()}, "aiCredits": 0,
             "products": [{"sku": s, "name": name_of[s], "marketplaces": sorted(k[1] for k in prods if k[0] == s), "linked": sorted(k[1] for k in links if k[0] == s)} for s in options],
@@ -167,7 +168,7 @@ def versions(tenant: UUID, sku: str, marketplace: str) -> dict[str, Any]:
             row.update(state="INCOMPARABLE", reasons=["PERIODS_NOT_COMPARABLE"], note="These periods failed the comparability check.")
             continue
         facts = [mx.sentence(m, comp[m], f"in the {n} days after version {row['number']} went live than in the {n} days before") for m in (*mx.COUNTS, *mx.RATES) if comp[m]["state"] == mx.AVAILABLE]
-        row.update(state="OBSERVED_COMPARABLE", comparison=comp, observations=facts, insights=mx.insights(comp, _json(before), _json(after), [f"Go-live date is the date you stated ({row['wentLiveOn']}); Metrion cannot verify it."]),
+        row.update(state="OBSERVED_COMPARABLE", comparison=comp, observations=facts, insights=mx.with_handoff(mx.insights(comp, _json(before), _json(after), [f"Go-live date is the date you stated ({row['wentLiveOn']}); Metrion cannot verify it."]), prod["name"], mp),
                    attribution="NOT_ATTRIBUTED", note=performance.CAUSE)
     return {"sku": sku, "marketplace": mp, "product": prod["name"], "source": IMPORT_SOURCE, "windowDays": n, "windowSetBy": who, "linked": link["reportSku"] if link else None, "versions": out, "needs": needs, "aiCredits": 0}
 

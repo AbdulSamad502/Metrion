@@ -160,3 +160,55 @@ def test_another_tenants_chat_sees_none_of_this(chat):
 
     last = [m for m in repo.list_messages(other, uuid.UUID(inv)) if m["role"] == "CEO"]
     assert not last or "(from your imported reports)" not in last[-1]["content"]  # none of the first tenant's figures
+
+
+# ---------------------------------------------------------------- M8-12: the one-click hand-off reaches the existing workflow
+def test_every_handoff_sentence_reaches_its_existing_workflow_free_and_changes_nothing(chat):
+    from slim_cmo.history import metrics as mx
+
+    v1, v2 = seed(chat)
+    link(chat)
+    e = chat.env
+    importing(e, report(span(4, 0), imp=300, clk=10, orders=1), name="recent.csv")  # more impressions, lower CTR and fewer orders than before
+    d = e.client().get("/api/v1/cmo/performance/dashboard", params={"sku": SKU, "marketplace": "AMAZON"}, headers=e.headers).json()
+    actions = {i["action"]["kind"]: i["action"] for i in d["insights"] if i["action"]}
+    assert actions and all(a["draft"] and a["product"] and a["marketplace"] == "AMAZON" for a in actions.values())
+    product = next(iter(actions.values()))["product"]
+    inv = new_investigation(chat)
+    before = footprint(chat)
+    expect = {"TITLE": ("LISTING_HISTORY", "RECOMMEND"), "KEYWORDS": ("LISTING_HISTORY", "RECOMMEND"), "CONTENT": ("READINESS", None), "REVISE": ("LISTING_HISTORY", "VERSION")}
+    for kind, (card_kind, view) in expect.items():
+        draft = mx.HANDOFF[kind].format(product=product, marketplace="Amazon")
+        text, choices, status = ask(chat, inv, draft)
+        assert choices and choices["kind"] == card_kind and (view is None or choices["view"] == view), (kind, draft, choices)
+    assert footprint(chat) == before  # free: nothing generated, billed, approved or changed
+    for kind, a in actions.items():  # the hand-off sentence the page offers is the one tested above
+        assert a["draft"] == mx.HANDOFF[kind].format(product=product, marketplace="Amazon")
+
+
+def test_without_a_known_product_the_dashboard_offers_no_handoff(chat):
+    seed(chat)
+    importing(chat.env, report(span(4, 0), imp=300, clk=10, orders=1), name="recent.csv")
+    d = chat.env.client().get("/api/v1/cmo/performance/dashboard", headers=chat.env.headers).json()
+    assert all(i["action"] is None or i["action"]["draft"] is None for i in d["insights"])
+
+
+def test_typing_yes_after_any_proposal_saves_nothing_and_a_changed_statement_needs_replace(chat):
+    v1, v2 = seed(chat)
+    link(chat)
+    e = chat.env
+    inv = new_investigation(chat)
+    window_before = e.n("cmo_perf_setting")  # the seed saved 7 days through the route
+    ask(chat, inv, "Version 2 went live today")
+    ask(chat, inv, "yes")
+    ask(chat, inv, "confirm")
+    ask(chat, inv, "Compare over 14 days")
+    ask(chat, inv, "yes")
+    assert e.n("cmo_listing_golive") == 0 and e.n("cmo_perf_setting") == window_before and e.n("cmo_listing_sku_link") == 1  # only the link made through the route above
+    other = e.client().post("/api/v1/cmo/performance/golive", json={"generation_id": v2, "went_live_on": days_ago(0).isoformat()}, headers=e.headers)
+    assert other.status_code == 200
+    ask(chat, inv, "Version 2 went live yesterday")  # created today, so yesterday is refused before any card
+    text, choices, _ = ask(chat, inv, "Version 2 went live today")
+    assert choices["view"] == "CONFIRM_GOLIVE" and choices["replaces"] is None  # the same date again is a repeat, not a change
+    changed = e.client().post("/api/v1/cmo/performance/sku-link", json={"sku": SKU, "marketplace": "AMAZON", "report_sku": "OTHER-SKU"}, headers=e.headers)
+    assert changed.status_code in (409, 422) and (changed.status_code == 422 or changed.json()["detail"]["code"] == "LINK_EXISTS")

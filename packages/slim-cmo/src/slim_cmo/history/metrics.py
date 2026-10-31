@@ -179,11 +179,33 @@ def _ins(kind: str, what: str, metrics: list[str], comparison: Mapping[str, Any]
 
 
 ACTIONS = {
-    "TITLE": {"route": "M3", "label": "Review title clarity and keyword relevance", "ask": "analyse my title options"},
-    "CONTENT": {"route": "M5", "label": "Review listing content and buyer questions", "ask": "what questions will buyers ask about my product"},
-    "KEYWORDS": {"route": "M2", "label": "Review the keyword evidence", "ask": "research keywords for my product"},
-    "REVISE": {"route": "M6", "label": "Consider a listing revision (you approve it first)", "ask": "rewrite a section of my listing"},
+    "TITLE": {"kind": "TITLE", "route": "M3", "label": "Review title clarity and keyword relevance", "ask": "analyse my title options"},
+    "CONTENT": {"kind": "CONTENT", "route": "M5", "label": "Review listing content and buyer questions", "ask": "what questions will buyers ask about my product"},
+    "KEYWORDS": {"kind": "KEYWORDS", "route": "M2", "label": "Review the keyword evidence", "ask": "research keywords for my product"},
+    "REVISE": {"kind": "REVISE", "route": "M6", "label": "Consider a listing revision (you approve it first)", "ask": "rewrite a section of my listing"},
 }
+_MP_WORD = {"AMAZON": "Amazon", "FLIPKART": "Flipkart", "MEESHO": "Meesho"}
+# The sentence each hand-off puts in the chat bar. Every one is answered by CODE that already exists (free, no model, nothing generated or changed): the saved-audit and keyword advice of M7 (which cites the
+# M2 keyword evidence), the M5 buyer-question answer, and the M7 view of the latest saved version with its own audit. The seller presses send; nothing runs on arrival. The frontend mirrors these strings.
+HANDOFF = {
+    "TITLE": "What should I improve next in my {product} listing on {marketplace}?",
+    "KEYWORDS": "What should I improve next in my {product} listing on {marketplace}?",
+    "CONTENT": "What questions will buyers ask about my {product}?",
+    "REVISE": "Show my latest {product} listing on {marketplace}",
+}
+
+
+def with_handoff(items: Sequence[Mapping[str, Any]], product: str | None, marketplace: str | None) -> list[dict[str, Any]]:
+    """Each insight's action gains the chat-bar sentence for ITS product and marketplace (None when either is not known, so nothing ambiguous is offered)."""
+    out = []
+    for i in items:
+        a = i.get("action")
+        if a and product and marketplace in _MP_WORD:
+            a = {**a, "draft": HANDOFF[a["kind"]].format(product=product, marketplace=_MP_WORD[marketplace]), "product": product, "marketplace": marketplace}
+        elif a:
+            a = {**a, "draft": None}
+        out.append({**i, "action": a})
+    return out
 
 
 def insights(comparison: Mapping[str, Any], prev: Mapping[str, Any], cur: Mapping[str, Any], limits: Sequence[str] = ()) -> list[dict[str, Any]]:

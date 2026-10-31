@@ -14,7 +14,7 @@ export type Metric = { state: MetricState; value: number | null; reason: string 
 export type Summary = { periodStart: string; periodEnd: string; days: number; coveredDays: number; complete: boolean; metrics: Record<MetricKey, Metric> };
 export type Comparison = Record<MetricKey, { state: "NOT_ASSESSED"; reason: string } | { state: "AVAILABLE"; previous: number; current: number; difference: number; relativeBp: number | null; direction: "UP" | "DOWN" | "SAME" }>;
 export type Evidence = { metric: MetricKey; label: string; previous: string; current: string; previousPeriod: string; currentPeriod: string };
-export type RouteAction = { route: string; label: string; ask: string };
+export type RouteAction = { kind: "TITLE" | "CONTENT" | "KEYWORDS" | "REVISE"; route: string; label: string; ask: string; draft?: string | null; product?: string; marketplace?: string };
 export type Insight = { kind: string; what: string; evidence: Evidence[]; whyItMatters: string; nextStep: string; action: RouteAction | null; limits: string[]; measured: boolean; explanation: string };
 export type TrendPoint = { date: string } & Record<MetricKey, number | null>;
 export type ImportRow = { id: string; marketplace: string; sourceName: string; periodStart: string; periodEnd: string; rowsSaved: number; rowsSkipped: number; metrics: string[]; importedAt: string };
@@ -48,6 +48,25 @@ export type ImportResult = { imported: true; importId: string; importedAt: strin
 export type PerformanceCard = { kind: "LISTING_PERFORMANCE"; view: string; page: string; aiCredits: 0; investigationId?: string; question?: string; options?: { label: string }[]; message?: string;
   dashboard?: unknown; tiles?: { key: string; label: string; value: string; change: string }[]; notShown?: string[]; period?: { start: string; end: string; covered: number; days: number; source: string }; ranking?: unknown; analysis?: unknown; missing?: string[]; proposal?: Record<string, string | number>; replaces?: string | null; current?: number | null; product?: string; action?: RouteAction };
 export const isPerformanceCard = (c: unknown): c is PerformanceCard => !!c && typeof c === "object" && (c as { kind?: unknown }).kind === "LISTING_PERFORMANCE" && typeof (c as { view?: unknown }).view === "string";
+
+// ------------------------------------------------------------------------------------------------ one-click hand-off to the existing CMO workflows
+/** The sentence each hand-off puts in the CEO chat bar (the seller presses send; nothing runs on arrival). Mirrors `slim_cmo.history.metrics.HANDOFF`; each is answered by existing free CMO code. */
+const MP_WORD: Record<string, string> = { AMAZON: "Amazon", FLIPKART: "Flipkart", MEESHO: "Meesho" };
+const HANDOFF: Record<RouteAction["kind"], string> = {
+  TITLE: "What should I improve next in my {product} listing on {marketplace}?",
+  KEYWORDS: "What should I improve next in my {product} listing on {marketplace}?",
+  CONTENT: "What questions will buyers ask about my {product}?",
+  REVISE: "Show my latest {product} listing on {marketplace}",
+};
+export function handoffHref(a: RouteAction): string | null {
+  if (!a.draft || !a.product || !a.marketplace) return null;
+  return `/dashboard/ceo-hub?${new URLSearchParams({ ask: "cmo", kind: a.kind, about: a.product, mp: a.marketplace }).toString()}`;
+}
+/** The inverse, for the hub: only a known kind and marketplace give a draft, so a URL cannot put arbitrary text in the chat bar. */
+export function cmoDraftFromParams(ask: string | null, kind: string | null, about: string | null, mp: string | null): string | null {
+  if (ask !== "cmo" || !kind || !(kind in HANDOFF) || !about?.trim() || about.length > 120 || !mp || !(mp in MP_WORD)) return null;
+  return HANDOFF[kind as RouteAction["kind"]].replace("{product}", about.trim()).replace("{marketplace}", MP_WORD[mp]);
+}
 
 // ------------------------------------------------------------------------------------------------ formatting (whole numbers only)
 const group = (n: number): string => {

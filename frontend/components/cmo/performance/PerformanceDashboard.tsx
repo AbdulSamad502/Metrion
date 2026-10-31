@@ -7,7 +7,8 @@ import { ImportPanel } from "@/components/cmo/performance/ImportPanel";
 import { TrendCharts } from "@/components/cmo/performance/TrendChart";
 import { VersionPanel } from "@/components/cmo/performance/VersionPanel";
 import { useLoad } from "@/components/cmo/performance/useLoad";
-import { METRIC_KEYS, METRIC_LABEL, describeChange, formatMetric, type Dashboard, type Insight, type MetricKey, type PerformanceApi } from "@/lib/cmoPerformance";
+import Link from "next/link";
+import { METRIC_KEYS, METRIC_LABEL, describeChange, formatMetric, handoffHref, type Dashboard, type Insight, type MetricKey, type PerformanceApi } from "@/lib/cmoPerformance";
 
 /** Listing performance (CMO 3.0 M8). Everything on this page comes from reports the seller imported themselves; nothing is estimated, no figure is shown for a period the reports do not fully cover, and
  * no difference is called an effect of a listing change. Reading it costs no AI credit. A figure that cannot be shown says NOT ASSESSED or UNAVAILABLE and why, never zero. */
@@ -43,7 +44,8 @@ function InsightItem({ i }: { i: Insight }) {
         </ul>
       )}
       <p className="m-0 t-meta" style={{ color: "var(--text-3)" }}><strong>Why it may matter (possible, not measured):</strong> {i.whyItMatters}</p>
-      <p className="m-0 t-meta" style={{ color: "var(--text-3)" }}><strong>Next step:</strong> {i.nextStep}{i.action ? ` Ask me: “${i.action.ask}”.` : ""}</p>
+      <p className="m-0 t-meta" style={{ color: "var(--text-3)" }}><strong>Next step:</strong> {i.nextStep}{i.action && !handoffHref(i.action) ? ` Ask me: “${i.action.ask}”.` : ""}</p>
+      {i.action && handoffHref(i.action) && <Link href={handoffHref(i.action) as string} className="mt-focus self-start t-meta font-bold" style={{ color: "var(--accent)" }} data-testid="handoff">{i.action.label} → opens the CEO chat with the question ready; you press send</Link>}
       <ul className="m-0 list-none p-0 t-meta" style={{ color: "var(--text-4)" }} aria-label="Limits">{i.limits.map((l) => <li key={l}>Limit: {l}</li>)}</ul>
     </li>
   );

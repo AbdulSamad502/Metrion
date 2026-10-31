@@ -65,7 +65,7 @@ Comparable output is worded as observation ("Impressions was higher in the 7 day
 
 Suggested actions map to existing capabilities and **never edit or publish anything**: CTR down → review title clarity and keyword relevance (M3/M2); conversion down → review listing content and buyer questions (M5); impressions down → review keyword evidence (M2); a revision, if wanted, is a normal M6 request that goes through the CEO plan card, approval and audit. The suggested sentences are examples of what to ask; their routing relies on the normal CEO classifier and was not exercised by these tests.
 
-**Decision for the owner:** insights are deterministic text, so no model is involved and no credit is spent. A model-written explanation layer would add cost, a new narration surface and a required eval (CLAUDE.md "LLM evals": no number outside the cited figures, no dropped disclaimer, no narrating a non-result). It has not been added; acceptance row M8-11 is therefore PARTIAL.
+**Decision:** insights stay deterministic text, so no model is involved and no credit is spent. A model-written explanation layer would add cost, a new narration surface and a required eval (CLAUDE.md "LLM evals"); it is a future enhancement, not a current blocker.
 
 ## 7. CEO chat (`ceo/cmo_performance_chat.py`)
 
@@ -91,10 +91,10 @@ Closed set of intents recognised by code before the M7 history handler (free; no
 | M8-08 | Periods and coverage validated | PASS | uncovered day → NOT_ASSESSED; overlap → INCOMPARABLE; equal length |
 | M8-09 | Versions connected to observations | PASS (UI: performance page and chat) | `versions` view + `performance.versionAnalysis` on the M7 compare answer; the M7 compare card still shows the older sales-order block and does not render `versionAnalysis` |
 | M8-10 | Missing data stays unassessed/unavailable | PASS | every metric/period test |
-| M8-11 | AI insights grounded in stored metrics | **PARTIAL** | grounded and tested, but deterministic text; no model-written explanation (owner decision, §6) |
-| M8-12 | Recommendations connect to CMO workflows | **PARTIAL** | actions name M2/M3/M5/M6 and a sentence to ask; no one-click hand-off; routing of those sentences not exercised |
+| M8-11 | AI insights grounded in stored metrics | PASS | every insight is assembled from measured figures with both periods named; possible explanations are labelled as possible; missing or incomplete data yields one "not enough data" item and no trend; no model is used (decision: deterministic text is the default; model-written explanations are a future enhancement, not a blocker) |
+| M8-12 | Recommendations connect to CMO workflows | PASS (draft hand-off) | each insight with a known product and marketplace links to the CEO hub with the question ready (§6a); each of the four sentences is tested to reach its existing free workflow; the seller presses send |
 | M8-13 | CEO chat supports the workflow | PASS for the closed intent set | `test_ceo_cmo_m8_performance_chat.py` (10); regex intents, not a real classifier; seller phrasings outside the set go to the rest of the CEO |
-| M8-14 | Frontend and backend integrated end to end | **PARTIAL** | API ↔ UI contract and components tested separately with fakes; **no browser run** |
+| M8-14 | Frontend and backend integrated end to end | **PARTIAL** | API, chat and components tested separately (fakes on the UI side); flows reviewed (§6b); **browser verification NOT DONE** |
 | M8-15 | Tenant isolation, RLS, billing, audit intact | PASS | RLS/append-only checks, cross-tenant tests, zero-unit footprint assertions, regression files |
 | M8-16 | Focused tests pass | PASS | see `CMO_RELEASE_BLOCKERS.md` for the exact run |
 
@@ -105,3 +105,29 @@ Closed set of intents recognised by code before the M7 history handler (free; no
 * A day inside an import's declared period with no row for a SKU is treated as "report has no data", not as zero and not as missing coverage; sellers whose reports omit zero-activity days will see totals for the covered period.
 * One imported record is never changed by a later file (conflicts are refused); correcting a wrong import needs an operator action.
 * Insights have no seasonality, price or advertising context; they compare two periods only.
+
+## 6a. One-click hand-off (closure pass)
+An insight whose product and marketplace are known carries `action.draft`. The performance page and the version panel show a link to `/dashboard/ceo-hub?ask=cmo&kind=<TITLE|KEYWORDS|CONTENT|REVISE>&about=<product>&mp=<MARKETPLACE>`. The hub turns a known kind and marketplace back into a fixed sentence in the chat bar (arbitrary text cannot be injected); **the seller presses send; nothing runs on arrival.** The sentences are answered by existing free code, so no new routing, billing or approval path exists:
+
+| Insight action | Sentence | Reaches |
+|---|---|---|
+| Low CTR (title, keyword relevance), keyword evidence | "What should I improve next in my {product} listing on {marketplace}?" | M7 recommendations from the saved audit, confirmed facts and M2 keyword evidence |
+| Low conversion / content | "What questions will buyers ask about my {product}?" | M5 buyer-question and readiness card |
+| Revision | "Show my latest {product} listing on {marketplace}" | the saved version with its own audit; an M6 rewrite is then a normal plan card with approval and billing |
+
+Tested in `test_ceo_cmo_m8_performance_chat.py` (each sentence reaches the stated card; footprint of generations, units and model calls unchanged). Limit: title analysis (M3) and keyword research runs are paid/planned flows and are deliberately not started from a link; the advice view is the hand-off. Without a known product (all-products dashboard) no link is offered.
+
+## 6b. End-to-end review (closure pass)
+Reviewed: import → preview → import → dashboard; SKU link; go-live date; before/after; chat cards and Save; error handling. Findings: typing "yes" (or "confirm") after a SKU, go-live or window proposal saves nothing (tested for go-live and window; SKU tested earlier); replacing an earlier SKU link or go-live date returns 409 until `replace` is sent, and the page and card ask first (tested at API, page and card level); a repeated identical date is a repeat, not a change; all errors carry a plain `detail` the UI shows. **Browser verification: NOT DONE.** It needs a signed-in session on a database holding seller records; this pass used synthetic data only and, per the standing rule, creates no records in the shared development tenant. M8-14 stays PARTIAL until a controlled walkthrough is run.
+
+## 6c. Correcting a wrong import: deferred (design)
+Not built; kept out of this pass because it needs a new table and changes every read. Safe design for a follow-up: an append-only `cmo_perf_correction` (tenant, line id, replacement metrics or "void", reason, who, when, confirmed flag) with FORCE RLS and INSERT/SELECT only; the original `cmo_perf_line` is never updated or deleted; `daily()` reads the newest correction per line (LEFT JOIN LATERAL) so totals use the corrected view while the original stays as evidence; a correction is proposed on a card and needs an explicit Save; `ALREADY_IMPORTED`/conflict rules are unchanged. Until then a wrong import is corrected by an operator and the seller can only re-import a corrected file under a different date range or SKU.
+
+## 6d. Missing daily rows: decision
+Unchanged and conservative: a missing row is never zero. A day is covered only inside an import's declared period; a day inside it with no row for a SKU counts as "the report has no data", not zero activity; incomplete coverage keeps the metric NOT_ASSESSED. Zero-treatment is introduced only if a marketplace's own documentation confirms that an absent row means zero activity (none has been confirmed; no marketplace semantics are inferred).
+
+## 6e. Frontend timeout cause (closure pass)
+The failing tests (`ceoDecide` price-impact, `ceoAttach` first upload, `ceoInput`, `ceoSendFailure`) are each the FIRST test of a file that renders the whole CEO Hub tree in jsdom; alone that first render costs 1-2 s. With all 12 cores running 60+ files in parallel it passed the 5 s limit. The same group run on the previous commit (`8ab58ea`) also failed (`ceoDecide` at 5 s), so this is not an M8 regression and not a test-isolation bug. A first attempt (`userEvent` `delay: null`) did not remove the failures and was reverted. Fix: `maxWorkers: "50%"` in `vitest.config.mts`; no timeout was raised. Result: `components/ceo` + `components/cmo` + `lib` = 62 files, 570 tests, all passed in 106 s.
+
+## 11. Closure-pass verification
+Backend (scratch DB, port 5545): test_cmo_m8_performance.py, test_cmo_b8_performance.py, test_ceo_cmo_m8_performance_chat.py (13, including the hand-off and typing-yes tests), test_ceo_cmo_m7_history_chat.py, test_cmo_m7_history.py, test_cmo_p5_unit.py, test_ceo_architecture.py, test_request_contract_snapshot.py = 432 passed in 2m45s. slim-cmo history + purity + no-float = 314 passed. Frontend: components/ceo + components/cmo + lib = 62 files, 570 tests passed in 106 s (before the vitest worker change the same group failed 4 first-render tests at 5 s, and failed ceoDecide on 8ab58ea too); tsc --noEmit clean; eslint clean on changed files. Schema: no migration in this pass. Not run: the full backend, frontend and slim-cmo suites and the earlier six-file regression set (no code they cover changed); browser verification NOT DONE; no real data.

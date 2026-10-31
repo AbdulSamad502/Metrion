@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { SectionCard } from "@/components/cmo/showcaseUi";
 import { useLoad } from "@/components/cmo/performance/useLoad";
-import { METRIC_KEYS, METRIC_LABEL, describeChange, formatMetric, type PerformanceApi, type VersionRow } from "@/lib/cmoPerformance";
+import Link from "next/link";
+import { METRIC_KEYS, METRIC_LABEL, describeChange, formatMetric, handoffHref, type PerformanceApi, type VersionRow } from "@/lib/cmoPerformance";
 
 /** What was observed in the same number of days before and after each saved version went live, using the go-live dates the seller confirmed. Observation only: a difference between two periods is never
  * presented as the effect of a listing change, and a version without a confirmed date, a SKU link, or full report coverage is NOT ASSESSED with the reason. */
@@ -36,7 +37,7 @@ function Row({ v, days }: { v: VersionRow; days: number | null }) {
             </table>
           </div>
           <ul className="m-0 list-none p-0 t-meta" style={{ color: "var(--text-3)" }} aria-label="Observations">{v.observations?.map((o) => <li key={o}>{o}</li>)}</ul>
-          {v.insights?.filter((i) => i.measured).map((i) => <p key={i.kind} className="m-0 t-meta" style={{ color: "var(--text-3)" }}><strong>{i.what}</strong> <span style={{ color: "var(--text-4)" }}>Possible reason: {i.whyItMatters} Next step: {i.nextStep}</span></p>)}
+          {v.insights?.filter((i) => i.measured).map((i) => <p key={i.kind} className="m-0 t-meta" style={{ color: "var(--text-3)" }}><strong>{i.what}</strong> <span style={{ color: "var(--text-4)" }}>Possible reason: {i.whyItMatters} Next step: {i.nextStep}</span>{i.action && handoffHref(i.action) && <> <Link href={handoffHref(i.action) as string} className="mt-focus font-bold" style={{ color: "var(--accent)" }} data-testid="handoff">{i.action.label} →</Link></>}</p>)}
           <span className="t-meta" style={{ color: "var(--text-4)" }}>{v.note}</span>
         </>
       )}

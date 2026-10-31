@@ -7,7 +7,7 @@ import { PerformanceDashboard } from "@/components/cmo/performance/PerformanceDa
 import { VersionPanel } from "@/components/cmo/performance/VersionPanel";
 import { PerformanceCard } from "@/components/ceo/hub/PerformanceCard";
 import { ApiError } from "@/lib/api";
-import { describeChange, formatMetric, isPerformanceCard, performanceError } from "@/lib/cmoPerformance";
+import { cmoDraftFromParams, describeChange, formatMetric, handoffHref, isPerformanceCard, performanceError } from "@/lib/cmoPerformance";
 import type { Comparison, Dashboard, ImportPreview, Mappings, Metric, MetricKey, PerformanceApi, PerformanceCard as Card, Summary, VersionAnalysis } from "@/lib/cmoPerformance";
 
 const KEYS: MetricKey[] = ["impressions", "clicks", "ctr", "orders", "cvr", "units", "sales"];
@@ -25,7 +25,7 @@ const dashboard = (over: Partial<Dashboard> = {}): Dashboard => ({
   trend: [{ date: "2026-10-30", impressions: 100, clicks: 10, orders: 2, units: null, sales: 5000, ctr: 1000, cvr: 2000 }, { date: "2026-10-31", impressions: 300, clicks: 10, orders: null, units: null, sales: 5000, ctr: 333, cvr: null }],
   insights: [{ kind: "IMPRESSIONS_UP_CTR_DOWN", what: "Impressions were higher in 2026-10-25 to 2026-10-31 than in 2026-10-18 to 2026-10-24, but the click-through rate was lower.",
     evidence: [{ metric: "impressions", label: "Impressions", previous: "700", current: "1,400", previousPeriod: "2026-10-18 to 2026-10-24", currentPeriod: "2026-10-25 to 2026-10-31" }], whyItMatters: "More people saw it while a smaller share clicked.",
-    nextStep: "Review the title for clarity.", action: { route: "M3", label: "Review title clarity and keyword relevance", ask: "analyse my title options" }, limits: ["This compares two periods. It does not show that anything you changed caused the difference."], measured: true, explanation: "x" }],
+    nextStep: "Review the title for clarity.", action: { kind: "TITLE", route: "M3", label: "Review title clarity and keyword relevance", ask: "analyse my title options" }, limits: ["This compares two periods. It does not show that anything you changed caused the difference."], measured: true, explanation: "x" }],
   needs: [], limits: [], imports: [{ id: "i1", marketplace: "AMAZON", sourceName: "oct.csv", periodStart: "2026-10-01", periodEnd: "2026-10-31", rowsSaved: 31, rowsSkipped: 0, metrics: ["impressions"], importedAt: "2026-10-31T08:00:00Z" }],
   never: "This compares two periods. It does not show that anything you changed caused the difference.", ...over,
 });
@@ -343,5 +343,36 @@ describe("the chat card", () => {
   it("lists what is missing", () => {
     render(<PerformanceCard card={{ ...base, view: "MISSING", missing: ["a go-live date for version 2"] }} api={fake()} onSend={vi.fn()} />);
     expect(screen.getByLabelText("Still missing")).toHaveTextContent("a go-live date for version 2");
+  });
+});
+
+describe("the one-click hand-off", () => {
+  const action = (kind: "TITLE" | "CONTENT" | "KEYWORDS" | "REVISE") => ({ kind, route: "M3", label: "Review", ask: "x", draft: "d", product: "AquaNest bottle", marketplace: "AMAZON" });
+  it("links to the hub with a kind, product and marketplace, and only when all are known", () => {
+    expect(handoffHref(action("TITLE"))).toBe("/dashboard/ceo-hub?ask=cmo&kind=TITLE&about=AquaNest+bottle&mp=AMAZON");
+    expect(handoffHref({ ...action("TITLE"), draft: null })).toBeNull();
+    expect(handoffHref({ ...action("TITLE"), marketplace: undefined })).toBeNull();
+  });
+  it("turns a link back into the exact sentence the backend tests prove reaches the existing workflow, and nothing else", () => {
+    expect(cmoDraftFromParams("cmo", "TITLE", "AquaNest bottle", "AMAZON")).toBe("What should I improve next in my AquaNest bottle listing on Amazon?");
+    expect(cmoDraftFromParams("cmo", "KEYWORDS", "AquaNest bottle", "FLIPKART")).toBe("What should I improve next in my AquaNest bottle listing on Flipkart?");
+    expect(cmoDraftFromParams("cmo", "CONTENT", "AquaNest bottle", "AMAZON")).toBe("What questions will buyers ask about my AquaNest bottle?");
+    expect(cmoDraftFromParams("cmo", "REVISE", "AquaNest bottle", "MEESHO")).toBe("Show my latest AquaNest bottle listing on Meesho");
+    for (const bad of [["research", "TITLE", "x", "AMAZON"], ["cmo", "DELETE", "x", "AMAZON"], ["cmo", "TITLE", "", "AMAZON"], ["cmo", "TITLE", "x", "EBAY"], ["cmo", "TITLE", "x".repeat(121), "AMAZON"], ["cmo", "TITLE", "x", null]] as (string | null)[][]) {
+      expect(cmoDraftFromParams(bad[0], bad[1], bad[2], bad[3])).toBeNull();
+    }
+  });
+  it("shows the link on an insight that has a hand-off, and the plain sentence otherwise", async () => {
+    const d = dashboard();
+    d.insights[0].action = action("TITLE");
+    const { unmount } = render(<PerformanceDashboard api={fake({ dashboard: vi.fn(async () => d) })} />);
+    expect(await screen.findByTestId("handoff")).toHaveAttribute("href", expect.stringContaining("ask=cmo&kind=TITLE"));
+    expect(screen.getByTestId("handoff")).toHaveTextContent("you press send");
+    unmount();
+    d.insights[0].action = { ...action("TITLE"), draft: null };
+    render(<PerformanceDashboard api={fake({ dashboard: vi.fn(async () => d) })} />);
+    await screen.findByTestId("insight");
+    expect(screen.queryByTestId("handoff")).toBeNull();
+    expect(screen.getByTestId("insight")).toHaveTextContent("Ask me:");
   });
 });
