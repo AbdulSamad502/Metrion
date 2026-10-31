@@ -134,3 +134,6 @@ B1, B2, B6, B7 and B8 stay **open**. B8: synthetic-data verification only; real 
 
 ## Final stabilization review (2026-10-31)
 Full report: `CMO_PRODUCTION_READINESS.md`. **Decision: NOT PRODUCTION READY.** B1, B2, B6, B7, B8 are all still open. New B2 evidence (qwen3:8b, 3 products x 5 runs): 6 of 15 completed (pooled 12 of 23); every failure was safe (nothing billed, saved or stored). B7 remains BLOCKED (no test tenant for a browser walkthrough). Engineering defect found and fixed in review: M8 read a product's versions from the account-wide paged history, which could hide a quiet product's older versions behind a busy product's (now read per product). Verified this pass: backend M8 + B8 + products-stub 31 passed; earlier closure run 432 passed; RLS audit of the scratch database found no tenant-owned table without FORCE RLS.
+
+### Closure pass for B1/B6/B7/B8 (B2 excluded)
+B1 OPEN, B6 OPEN (measurement register added; previews unchanged), B7 BLOCKED (walkthrough prepared, not run), B8 PARTIAL (no gap found; real exports needed). See `CMO_PRODUCTION_READINESS.md` §5, `CMO_EVIDENCE_REQUESTS.md`, `CMO_B7_BROWSER_WALKTHROUGH.md`. B2 is tracked separately and unchanged.

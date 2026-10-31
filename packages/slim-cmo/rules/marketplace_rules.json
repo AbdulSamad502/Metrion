@@ -284,5 +284,20 @@
       "Supplier panel > Legal and Policies / Catalog quality guide: any stated length or content rule.",
       "For each: the page or template name and the date it was read."
     ]
-  }
+  },
+  "display_measurements": [],
+  "display_measurement_policy": "A dated measurement is evidence of how ONE live listing was displayed on ONE device on ONE day. It is not an official limit and is never enforced. Truncation on a marketplace is usually width-based, so characters shown vary with the title; a measurement records the characters visible before the cut-off, and a summary needs several distinct titles per marketplace, category, device and surface. A submission limit (title.max_chars) is a different field and is never used as a display value.",
+  "evidence_needed_for_display_measurement": [
+    "marketplace",
+    "category",
+    "device (mobile|desktop)",
+    "surface (search_results|product_page)",
+    "listing_ref (https URL of the authorized live test listing, or an evidence file id)",
+    "observed_on (ISO date)",
+    "method (how it was observed, e.g. 'screenshot at 390px width, Chrome, signed out')",
+    "title_chars (full title length)",
+    "visible_chars (characters visible before the ellipsis; equal to title_chars if not cut)",
+    "truncated (true/false)",
+    "authorized_by (the owner of the test listing)"
+  ]
 }

@@ -41,7 +41,7 @@ def test_no_http_verb_other_than_a_read_or_a_provider_search_exists_in_cmo_code(
 def test_cmo_code_does_arithmetic_on_money_nowhere():
     """Money is an integer paise value that is stored and echoed, never computed on. Only these modules mention paise at all."""
     mentions = sorted(str(f.relative_to(PKG)).replace("\\", "/") for f in PKG.rglob("*.py") if "paise" in code(f))
-    assert mentions == ["forbidden.py", "repositories/fact_repo.py", "service/catalog.py", "service/generate.py", "service/models.py", "trends/numeric.py"]
+    assert mentions == ["forbidden.py", "history/metrics.py", "history/report_import.py", "repositories/fact_repo.py", "service/catalog.py", "service/generate.py", "service/models.py", "trends/numeric.py"]
     for f in PKG.rglob("*.py"):
         tree = ast.parse(code(f))
         for node in ast.walk(tree):
@@ -53,7 +53,7 @@ def test_cmo_code_does_arithmetic_on_money_nowhere():
 def test_the_long_running_cmo_routes_are_sync_handlers_so_they_run_in_the_threadpool_and_never_block_the_event_loop():
     tree = ast.parse(code(BE / "api/v1/cmo.py"))
     asyncs = {n.name for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef)}
-    assert asyncs == {"post_image"}  # the upload reads the body asynchronously and immediately hands the heavy work to run_in_threadpool
+    assert asyncs == {"post_image", "_perf_file", "post_performance_import_preview", "post_performance_import"}  # the uploads (photo, M8 report) read the body asynchronously and immediately hand the heavy work to run_in_threadpool
     assert "run_in_threadpool" in code(BE / "api/v1/cmo.py")
 
 

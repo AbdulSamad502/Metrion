@@ -81,3 +81,60 @@ def promotable_row(data: dict[str, Any], marketplace: str, scope_contains: str =
         if r.get("marketplace") == marketplace and r.get("status") == OFFICIAL_VERIFIED and scope_contains in str(r.get("scope", "")):
             got[str(r["field"])] = r["value"]
     return got if all(f in got for f in need) else None
+
+
+DEVICES = frozenset({"mobile", "desktop"})
+SURFACES = frozenset({"search_results", "product_page"})
+MIN_MEASUREMENTS, MIN_DISTINCT_LISTINGS = 5, 3  # a summary needs this many observations of this many different live listings
+_MEASURE_FIELDS = ("marketplace", "category", "device", "surface", "listing_ref", "observed_on", "method", "title_chars", "visible_chars", "truncated", "authorized_by")
+
+
+def measurement_problems(data: dict[str, Any], today: date | None = None) -> list[str]:
+    """Every way a recorded display measurement is incomplete or inconsistent. A measurement without its marketplace, category, device, listing, date, method and authorisation is not evidence."""
+    out: list[str] = []
+    for i, m in enumerate(data.get("display_measurements", [])):
+        tag = f"measurement[{i}]"
+        for f in _MEASURE_FIELDS:
+            if m.get(f) in (None, ""):
+                out.append(f"{tag}: {f} is required")
+        if m.get("marketplace") not in ("AMAZON", "FLIPKART", "MEESHO"):
+            out.append(f"{tag}: unknown marketplace")
+        if m.get("device") not in DEVICES:
+            out.append(f"{tag}: device must be mobile or desktop")
+        if m.get("surface") not in SURFACES:
+            out.append(f"{tag}: surface must be search_results or product_page")
+        try:
+            seen = date.fromisoformat(str(m.get("observed_on")))
+            if seen > (today or date.today()):
+                out.append(f"{tag}: observed_on is in the future")
+        except ValueError:
+            out.append(f"{tag}: observed_on must be an ISO date")
+        ref = str(m.get("listing_ref", ""))
+        if ref.startswith("http") and urlparse(ref).scheme != "https":
+            out.append(f"{tag}: a listing URL must be https")
+        tc, vc = m.get("title_chars"), m.get("visible_chars")
+        if not (isinstance(tc, int) and isinstance(vc, int) and not isinstance(tc, bool) and not isinstance(vc, bool) and 0 < vc <= tc):
+            out.append(f"{tag}: visible_chars must be a whole number from 1 up to title_chars")
+        elif isinstance(m.get("truncated"), bool) and m["truncated"] != (vc < tc):
+            out.append(f"{tag}: truncated must be true exactly when visible_chars is below title_chars")
+        if not isinstance(m.get("truncated"), bool):
+            out.append(f"{tag}: truncated must be true or false")
+    return out
+
+
+def measured_display_summary(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """One summary per marketplace/category/device/surface: the range of visible characters over the TRUNCATED observations, or INSUFFICIENT when fewer than MIN_MEASUREMENTS observations
+    over MIN_DISTINCT_LISTINGS different listings exist. A summary is a lead for a person to review; it is never a limit, never enforced and never changes a preview by itself."""
+    groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+    for m in data.get("display_measurements", []):
+        if measurement_problems({"display_measurements": [m], "official_hosts": data.get("official_hosts", [])}):
+            continue
+        groups.setdefault((m["marketplace"], m["category"], m["device"], m["surface"]), []).append(m)
+    out: list[dict[str, Any]] = []
+    for (mk, cat, dev, surf), ms in sorted(groups.items()):
+        cut = sorted(int(m["visible_chars"]) for m in ms if m["truncated"])
+        enough = len(ms) >= MIN_MEASUREMENTS and len({m["listing_ref"] for m in ms}) >= MIN_DISTINCT_LISTINGS and bool(cut)
+        out.append({"marketplace": mk, "category": cat, "device": dev, "surface": surf, "observations": len(ms), "listings": len({m["listing_ref"] for m in ms}),
+                    "status": "CANDIDATE_FOR_REVIEW" if enough else "INSUFFICIENT", "visible_chars_min": cut[0] if enough else None, "visible_chars_max": cut[-1] if enough else None,
+                    "latest_observed_on": max(str(m["observed_on"]) for m in ms)})
+    return out

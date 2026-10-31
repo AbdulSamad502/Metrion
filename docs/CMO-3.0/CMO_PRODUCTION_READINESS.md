@@ -72,3 +72,17 @@ Provisional (unevidenced) allocation to test next: one shared 7–8B instruction
 
 ### Final blocker status
 B1 OPEN (externally blocked); B2 OPEN (poor evidence: 12/23 pooled, 6/15 latest; no new run); B6 OPEN (externally blocked); B7 BLOCKED; B8 PARTIAL. **Decision: NOT PRODUCTION READY.**
+
+## 5. Closure pass for B1, B6, B7, B8 (B2 excluded and unchanged)
+
+| Blocker | Status | Completed engineering | Official evidence | Browser | Real seller data | Remaining dependency |
+|---|---|---|---|---|---|---|
+| B1 | OPEN (externally blocked) | Register, validator and promotion gate already in place; exact per-marketplace requests written (`CMO_EVIDENCE_REQUESTS.md`); a test typo that made the Meesho promotion check vacuous was fixed | one Amazon India partial title rule (not promoted); no new pages readable | n/a | n/a | seller-account templates and style guides |
+| B6 | OPEN (externally blocked) | New measurement register, validator and candidate summary with 4 new tests; previews unchanged and still labelled illustrative | none | none | n/a | official display docs, or ≥5 observations of ≥3 authorized live listings per marketplace/category/device/surface |
+| B7 | BLOCKED | 15-workflow walkthrough prepared (`CMO_B7_BROWSER_WALKTHROUGH.md`); no new engineering defect found | n/a | **not performed** | n/a | a dedicated test tenant and the owner's permission |
+| B8 | PARTIAL | Reviewed: CSV/XLSX import, synonyms, duplicates, conflicts, overlap, coverage, equal windows, replace guard, observational wording are all covered by existing M8/B8 tests; no gap found; exact export requirements written | n/a | not performed | none used | real Amazon/Flipkart/Meesho exports, real confirmations, missing-row semantics; native support is NOT claimed |
+
+Tests this pass: slim-cmo unit suite (full) and `test_marketplace_rules.py` 11 passed. No migration changed (none needed). Decision unchanged: **NOT PRODUCTION READY**.
+
+### Correction found in this pass
+Earlier reports quoted "slim-cmo 314 passed", which was a subset. The **full** slim-cmo suite had 3 failing tests, none a product defect: two guard tests had not been updated for M8 (the money-module allowlist lacked `history/metrics.py` and `history/report_import.py`, both checked to contain no multiplication, division or modulo on a paise/price name; the async-handler list lacked the three M8 upload routes, which read the body asynchronously and hand the work to `run_in_threadpool`, the same pattern as `post_image`), and one M6-era prompt test asserted that the word "insulated" never appears anywhere in the prompt although the fixed instructions use it as an example claim (it now checks the competitor-theme list only). **Full slim-cmo suite after the fixes: 2729 passed, 237 skipped.** Other full suites (backend integration, frontend) were not re-run in this pass; their last results are the ones quoted above.

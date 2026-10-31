@@ -210,7 +210,8 @@ def test_the_model_sees_only_competitor_themes_the_confirmed_facts_support():
     svc.generate_listing_copy(ACTOR, replace(INTAKE, listing=LISTING, ci_inputs=_ci()), M.AMAZON, GroundingRequest(seller_title=TITLE))
     prompt = p.prompts[0]
     assert "market_themes_other_sellers_use" in prompt and '"steel"' in prompt
-    assert "insulated" not in prompt and "bpa" not in prompt
+    themes = prompt.split("market_themes_other_sellers_use", 1)[1].split("]", 1)[0]  # the fixed instructions name example claims; only the theme list must hold no unsupported theme
+    assert "insulated" not in themes and "bpa" not in themes
     rec = store.rows()[0]
     assert rec.input_mode == "CEO_BROKERED_CI" and rec.ci_inputs_snapshot["themes_offered"] == ["steel"]
 
