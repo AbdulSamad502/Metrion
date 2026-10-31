@@ -120,7 +120,7 @@ def test_a_typed_title_is_confirmed_by_the_seller_never_approved_automatically(c
     to_title_question(chat, inv)
     asked = say(chat, inv, "AquaNest Steel Bottle 1 L Silver")
     assert asked["clarifyFor"] == "_typed_title_ok" and "not an approved title" in asked["answer"] and "AquaNest Steel Bottle 1 L Silver" in asked["answer"], asked
-    assert chat.env.n("cmo_title_approval") == 0 and chat.env.n("cmo_generation") == 0
+    assert chat.env.n("cmo_title_approval") == 0 and chat.env.n("cmo_generation") == 0  # asking for the confirmation approves nothing
     back = click(chat, inv, asked, value="change")  # "No, let me change it": the title is asked again
     assert back["clarifyFor"] == "seller_title"
     again = say(chat, inv, "AquaNest Steel Bottle 1 L Silver")
@@ -128,9 +128,16 @@ def test_a_typed_title_is_confirmed_by_the_seller_never_approved_automatically(c
     r = skip_rest(chat, inv, ok)
     assert r["status"] == "PLANNED"
     slots = r["plan"]["plan"]["legs"][0]["slots"]
-    assert slots["seller_title"] == "AquaNest Steel Bottle 1 L Silver" and "approval_id" not in slots  # used as typed and confirmed; it is not, and is not shown as, an approved title option
-    assert chat.env.n("cmo_title_approval") == 0
-    assert "Your title: AquaNest Steel Bottle 1 L Silver" in str(r["plan"])
+    # N-05t: the seller's confirmation is recorded as THEIR approval of the typed title: its own row, no title-set generation, distinguishable from a generated-title approval
+    row = [tuple(x) for x in chat.env.q("SELECT title_source, generation_id IS NULL, option_id IS NULL, edited_by_seller, marketplace, approved_text FROM cmo_title_approval")]
+    assert row == [("SELLER_TYPED", True, True, True, "AMAZON", "AquaNest Steel Bottle 1 L Silver")]
+    approval_id = chat.env.q("SELECT id::text FROM cmo_title_approval")[0][0]
+    assert slots.get("approval_id") == approval_id and "seller_title" not in slots  # the plan is bound to that approval
+    assert chat.env.n("cmo_generation") == 0 and chat.env.n("metered_event", "agent_code = 'CMO'") == 0  # no title set was invented and nothing was charged
+    assert approve(chat, inv, r["plan"]).status_code == 200
+    card = [m for m in messages(chat, inv) if m["role"] == "CEO" and m["kind"] == "ANSWER"][-1]["choices"]
+    assert card["sections"]["title"] == "AquaNest Steel Bottle 1 L Silver" and card["strategy"] == "NOT_ASSESSED"  # used verbatim; no M3 strategy is invented for a typed title
+    assert {m["id"]: m for m in card["measures"]}["TITLE_CHECK"]["status"] == "NOT_ASSESSED"
 
 
 def test_typing_the_sentinel_as_text_is_not_a_title(chat):

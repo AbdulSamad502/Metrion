@@ -1008,7 +1008,7 @@ CMO_TRENDS: tuple[Field, ...] = (
                                 "I will save them as your confirmed niche terms, and only those terms are sent to the search providers.", _niche_terms, _niche_options,
           applies=lambda c, g: g.get("news_kind") in ("NICHE", "BOTH") and not _has_confirmed_niche(c)),
 )
-CEO_ONLY_INPUTS = frozenset({"niche", "news_kind", "image_hints", "hint_analysis_id", "listing_workflow"})  # collected by the CEO, never a slot of the CMO action
+CEO_ONLY_INPUTS = frozenset({"niche", "news_kind", "image_hints", "hint_analysis_id", "listing_workflow", "title_confirmed"})  # collected by the CEO, never a slot of the CMO action
 DR_TREND_RUN: tuple[Field, ...] = (
     Field("preview", lambda c, g: "", _text(4000)),
     Field("confirm", lambda c, g: str(g.get("preview", "")), _yes, lambda c, g: (Option("Yes, run the research", "yes", "Sends exactly these searches"),)),
@@ -1492,6 +1492,8 @@ def _to_inputs(playbook: str, c: Mapping[str, Any]) -> dict[str, Any]:
         return {"generation_id": generation_id, **({"option_id": value} if kind == "option" else {"edited_text": value})}
     if playbook in CMO_SESSIONS:
         out = {k: v for k, v in c.items() if v is not None and not k.startswith("_")}  # a skipped optional field is simply absent: nothing is defaulted
+        if c.get("_typed_title_ok") == "yes":  # N-05t: the seller confirmed the exact title they typed (CEO-only: it becomes their recorded approval, never a slot of the CMO action)
+            out["title_confirmed"] = True
         if playbook == "cmo.market_trends":
             out["sections"] = list(NEWS_SECTIONS.get(str(out.get("news_kind")), NEWS_SECTIONS["BOTH"]))
             if "niche" in c and c["niche"] is None:  # the seller was asked for a niche and skipped it: no niche searches exist, so the everyday trending news is what runs (the plan card lists the searches)

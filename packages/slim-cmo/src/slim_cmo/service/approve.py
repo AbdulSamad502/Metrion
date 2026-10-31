@@ -27,7 +27,7 @@ from slim_cmo.constraints import ConstraintUnavailable, resolve_constraint
 from slim_cmo.listing import basis as rules_basis
 from slim_cmo.service.errors import InvalidApproval, NotFound
 from slim_cmo.service.models import Actor, GenerationStore
-from slim_cmo.types import ConstraintRowKind, OutputType
+from slim_cmo.types import ConstraintRowKind, Marketplace, OutputType
 from slim_cmo.validators import check_title
 
 
@@ -45,6 +45,16 @@ class ApprovalRefused:
     code: str  # CONSTRAINT_BLOCKED | TITLE_INVALID
     detail: str
     violations: tuple[str, ...] = ()  # rule ids and counts only, e.g. 'title: TOO_LONG (62>40)'
+
+
+@dataclass(frozen=True, slots=True)
+class TypedApproved:
+    """An approval of a title the seller typed: no generation, no option; the product and marketplace are named by the approval itself."""
+
+    approval_id: UUID
+    sku: str
+    marketplace: Marketplace
+    approved_text: str
 
 
 class ApprovalService:
@@ -83,22 +93,42 @@ class ApprovalService:
         text = edited_text.strip()
         if not text:
             raise InvalidApproval("edited_text is empty")
+        checked = self._checked_text(actor, title_set.marketplace, title_set.category_hint, text, title_set.workflow)
+        if isinstance(checked, ApprovalRefused):
+            return checked
+        return self._save(actor, generation_id, None, checked, edited=True)
+
+    def approve_typed_title(self, actor: Actor, *, sku: str, marketplace: Marketplace, text: str) -> TypedApproved | ApprovalRefused:
+        """N-05t: the seller's explicit approval of a title they TYPED inside a complete-listing request. It is a separate record from any title generation (no set, no option, no unit, no model),
+        written only after the seller confirmed the exact text. The same current-rules check as an edited title applies, under the full-listing workflow (the only place a typed title is approved this
+        way), so an unverified-rules draft needs the operator flag exactly as the title steps do. Re-approving creates a NEW row; earlier rows stay."""
+        clean = text.strip()
+        if not clean or not sku.strip():
+            raise InvalidApproval("a typed title and its product are required")
+        checked = self._checked_text(actor, marketplace, None, clean, rules_basis.FULL_LISTING)
+        if isinstance(checked, ApprovalRefused):
+            return checked
+        approval_id = self._store.save_typed_approval(actor.tenant_id, sku=sku.strip(), marketplace=marketplace.value, approved_text=checked, approved_by=actor.user_id)
+        return TypedApproved(approval_id, sku.strip(), marketplace, checked)
+
+    def _checked_text(self, actor: Actor, marketplace: Marketplace, category_hint: str | None, text: str, workflow: str | None) -> str | ApprovalRefused:
+        """The title as it will be stored (normalised by the validator), or the refusal. Shared by the edited-text path and the typed-title path; behaviour of the former is unchanged."""
         values = self._store.load_config(actor.tenant_id, (FORMAT_CONSTRAINT_MAX_AGE_DAYS, rules_basis.FLAG_KEY), self._clock().date())
-        rows = self._store.load_constraints(actor.tenant_id, title_set.marketplace, self._kinds)
+        rows = self._store.load_constraints(actor.tenant_id, marketplace, self._kinds)
         max_age = values.get(FORMAT_CONSTRAINT_MAX_AGE_DAYS)
         resolved = resolve_constraint(
-            rows, marketplace=title_set.marketplace, category=title_set.category_hint, output_type=OutputType.TITLE_SET,
+            rows, marketplace=marketplace, category=category_hint, output_type=OutputType.TITLE_SET,
             now=self._clock(), max_age_days=max_age if isinstance(max_age, int) else None, accepted_row_kinds=self._kinds,
         )
         if isinstance(resolved, ConstraintUnavailable):
             # Owner decision 2026-10-30 (spec 6.18.11): a title set the SERVER generated inside a full-listing request carries that marker, and only then, with the operator flag on
             # and no usable verified row, may a seller-edited title be checked without a marketplace length. A verified row, a configuration fault or any other title set keeps C13.
-            settings = rules_basis.BasisSettings(enabled=rules_basis.parse_flag(values.get(rules_basis.FLAG_KEY)), bullet_target=None, workflow=title_set.workflow)
+            settings = rules_basis.BasisSettings(enabled=rules_basis.parse_flag(values.get(rules_basis.FLAG_KEY)), bullet_target=None, workflow=workflow)
             if not rules_basis.applies(resolved, settings):
                 off = rules_basis.disabled_reason(settings) if resolved.reason in rules_basis.ELIGIBLE_REASONS else None
                 return ApprovalRefused("CONSTRAINT_BLOCKED", f"{resolved.detail}; {off}" if off else resolved.detail)
             resolved = rules_basis.synthetic(
-                title_set.marketplace, settings=settings, title_option_count=rules_basis.DRAFT_TITLE_OPTION_COUNT, now=self._clock(), needs_bullets=False,
+                marketplace, settings=settings, title_option_count=rules_basis.DRAFT_TITLE_OPTION_COUNT, now=self._clock(), needs_bullets=False,
             )
             assert not isinstance(resolved, ConstraintUnavailable)
         check = check_title(text, resolved.row, field="title")
@@ -107,7 +137,7 @@ class ApprovalService:
                 "TITLE_INVALID", "the edited title does not meet this marketplace's current rules",
                 tuple(str(v) for v in check.violations),
             )
-        return self._save(actor, generation_id, None, check.text, edited=True)
+        return check.text
 
     def _save(self, actor: Actor, generation_id: UUID, option_id: UUID | None, text: str, *, edited: bool) -> Approved:
         approval_id = self._store.save_approval(

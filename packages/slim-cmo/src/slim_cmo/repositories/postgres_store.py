@@ -80,6 +80,10 @@ class PostgresGenerationStore:
         with tenant_scope(tenant_id) as conn:
             return generation_repo.insert_generation(conn, tenant_id, record)
 
+    def save_typed_approval(self, tenant_id: UUID, *, sku: str, marketplace: str, approved_text: str, approved_by: UUID) -> UUID:
+        with tenant_scope(tenant_id) as conn:
+            return approval_repo.insert_typed_approval(conn, tenant_id, sku=sku, marketplace=marketplace, approved_text=approved_text, approved_by=approved_by)
+
     def save_approval(
         self,
         tenant_id: UUID,

@@ -89,7 +89,7 @@ class StoredGeneration:
 class StoredApproval:
     id: UUID
     tenant_id: UUID
-    generation_id: UUID
+    generation_id: UUID | None  # None for an approval of a title the seller typed (title_source SELLER_TYPED)
     marketplace: Marketplace
     sku: str | None
     approved_text: str
@@ -154,6 +154,7 @@ class GenerationStore(Protocol):
         self, tenant_id: UUID, *, generation_id: UUID, option_id: UUID | None, approved_text: str,
         edited_by_seller: bool, approved_by: UUID,
     ) -> UUID: ...
+    def save_typed_approval(self, tenant_id: UUID, *, sku: str, marketplace: str, approved_text: str, approved_by: UUID) -> UUID: ...
 
 
 class DuplicateAnalysis(Exception):

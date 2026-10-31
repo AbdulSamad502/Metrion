@@ -119,6 +119,14 @@ def _approved_text(tenant: UUID, approval_id: UUID | None, structured: Mapping[s
     return str(t) if t else None
 
 
+def _typed_title(tenant: UUID, pack: Mapping[str, Any]) -> bool:
+    """True when the title this pack was written for was typed by the seller (no approval at all, or an approval whose source is SELLER_TYPED): it has no M3 title strategy or title check."""
+    if pack["approvalId"] is None:
+        return True
+    ref = cmo_chat_repo.approval_ref(tenant, pack["approvalId"])
+    return bool(ref and ref.get("titleSource") == "SELLER_TYPED")
+
+
 def title_status(tenant: UUID, pack: Mapping[str, Any]) -> dict[str, Any]:
     """N-15d: was this saved version written from the title the seller has approved NOW for this product and marketplace? Read-only and computed on demand, so nothing is stored, edited,
     relabelled or regenerated and every historical version is judged by the same rule. A title change that was never approved changes nothing."""
@@ -212,7 +220,7 @@ def _measures(tenant: UUID, built: Mapping[str, Any]) -> list[dict[str, Any]]:
     and the newest saved M5 readiness for the product on this marketplace. A measure that does not exist for this listing says so; it is never shown as zero."""
     pack, res = built["pack"], built["result"]
     m3 = built.get("m3") or {}
-    typed = pack["approvalId"] is None
+    typed = _typed_title(tenant, pack)
     if typed or m3.get("status") != "ASSESSED":
         title = {"status": "NOT_ASSESSED", "value": None, "note": "A title you typed yourself has no earlier title check." if typed else "The title check could not be completed for this title (not enough confirmed detail)."}
     else:
@@ -250,7 +258,7 @@ def build_card(tenant: UUID, user: UUID, rt: Any, copy_id: UUID, *, investigatio
     return {
         "version": 1, "kind": "LISTING", "notice": NOTICE, "investigationId": str(investigation_id) if investigation_id else None, "generationId": str(copy_id),
         "marketplace": mp.value, "rulesBasis": basis, "banner": banner,
-        "strategy": (built["strategy"] if built["pack"]["approvalId"] is not None else None) or "NOT_ASSESSED",  # N-05t: a title the seller typed has no M3 strategy; none is invented for it
+        "strategy": (built["strategy"] if not _typed_title(tenant, built["pack"]) else None) or "NOT_ASSESSED",  # N-05t: a title the seller typed has no M3 strategy; none is invented for it
         "sections": secs.as_dict(), "revisionOf": built["pack"]["revisionOf"], "keywordMap": built["keywordMap"],
         "audit": {"auditId": saved["auditId"], "contentHash": saved["contentHash"], "verdict": res["verdict"], "counts": res["counts"], "checks": res["checks"], "findings": res["findings"],
                   "measured": res["measured"], "limits": res["limits"], "method": res["method"], "createdAt": saved["createdAt"]},

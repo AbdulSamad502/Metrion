@@ -164,6 +164,26 @@ def matching_approval(tenant_id: UUID, product: str | None, marketplace: str | N
     return None
 
 
+def record_typed_title_approval(tenant_id: UUID, user_id: UUID, direct: Mapping[str, Any]) -> tuple[str | None, str | None]:
+    """N-05t: the seller confirmed the exact title they typed for a complete listing; this records their approval of it as its OWN row (`title_source = SELLER_TYPED`, no title-set generation, no
+    unit, no model). Returns (approval id, None), or (None, the plain refusal). An identical title already approved for this product and marketplace is reused, never duplicated."""
+    from backend.services import cmo_runtime  # noqa: PLC0415
+    from slim_cmo.service.approve import ApprovalRefused  # noqa: PLC0415
+    from slim_cmo.service.models import Actor  # noqa: PLC0415
+    from slim_cmo.types import Marketplace  # noqa: PLC0415
+
+    title, sku, name = str(direct.get("seller_title") or "").strip(), str(direct.get("sku") or product_sku(direct.get("product_name")) or ""), direct.get("product_name")
+    if not (title and sku and direct.get("marketplace")):
+        return None, None
+    existing = matching_approval(tenant_id, name, str(direct["marketplace"]), title)
+    if existing:
+        return existing, None
+    res = cmo_runtime.build_runtime().approvals.approve_typed_title(Actor(tenant_id, user_id), sku=sku, marketplace=Marketplace(str(direct["marketplace"]).upper()), text=title)
+    if isinstance(res, ApprovalRefused):
+        return None, f"I could not use that title: {res.detail}. Give me a different title, or ask me for title options first."
+    return str(res.approval_id), None
+
+
 def approved_title_text(tenant_id: UUID, product: str | None, marketplace: str | None) -> str | None:
     sku = product_sku(product)
     if not (sku and marketplace):

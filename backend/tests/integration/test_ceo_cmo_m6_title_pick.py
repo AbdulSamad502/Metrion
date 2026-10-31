@@ -45,9 +45,8 @@ def test_typing_1_picks_the_first_listed_choice_not_the_title_1_and_the_plan_and
     r = finish(chat, inv, say(chat, inv, "1"))
     assert r["status"] == "PLANNED", r
     leg = r["plan"]["plan"]["legs"][0]
-    assert leg["slots"]["seller_title"] == real and leg["slots"]["seller_title"] != "1"
-    plan_json = str(r["plan"])
-    assert f"Your title: {real}" in plan_json and "Your title: 1'" not in plan_json
+    saved = chat.env.q("SELECT approved_text FROM cmo_title_approval")  # the chosen choice was confirmed by the seller and recorded as THEIR approval of that exact text
+    assert [x[0] for x in saved] == [real] and saved[0][0] != "1" and leg["slots"].get("approval_id") and "seller_title" not in leg["slots"]
     assert approve(chat, inv, r["plan"]).status_code == 200
     card = [m for m in messages(chat, inv) if m["role"] == "CEO" and m["kind"] == "ANSWER"][-1]["choices"]
     assert card["kind"] == "LISTING" and card["sections"]["title"] == real  # the listing is built from that same title
@@ -68,7 +67,7 @@ def test_a_real_typed_title_is_still_taken_as_typed(chat):
     inv = new_investigation(chat)
     to_title_question(chat, inv)
     r = finish(chat, inv, say(chat, inv, "AquaNest Steel Bottle 1 L Silver"))
-    assert r["plan"]["plan"]["legs"][0]["slots"]["seller_title"] == "AquaNest Steel Bottle 1 L Silver"
+    assert [x[0] for x in chat.env.q("SELECT approved_text FROM cmo_title_approval")] == ["AquaNest Steel Bottle 1 L Silver"] and r["plan"]["plan"]["legs"][0]["slots"].get("approval_id")
 
 
 # ---------------------------------------------------------------- unit-level: ambiguous and stale (the engine seam, no database)

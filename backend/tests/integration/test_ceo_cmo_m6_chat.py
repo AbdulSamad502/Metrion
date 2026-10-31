@@ -62,7 +62,7 @@ def test_the_request_is_planned_on_a_card_nothing_runs_typed_yes_does_nothing_an
     assert r["status"] == "PLANNED", r
     plan = r["plan"]
     leg = plan["plan"]["legs"][0]
-    assert leg["action_key"] == "cmo.generate_full_listing" and leg["slots"]["marketplace"] == "AMAZON" and leg["slots"]["seller_title"] == TITLE and "hashtags" not in str(leg["slots"]).lower()
+    assert leg["action_key"] == "cmo.generate_full_listing" and leg["slots"]["marketplace"] == "AMAZON" and [x[0] for x in chat.env.q("SELECT approved_text FROM cmo_title_approval")] == [TITLE] and leg["slots"].get("approval_id") and "hashtags" not in str(leg["slots"]).lower()
     card = plan["plan"]["summary_text"]
     for line in ("The listing copy pack (description, bullet points, keywords): 1 CMO unit", "Amazon backend search terms: 1 CMO unit", "Total: up to 2 CMO units", "Hashtags are not included",
                  "The audit, the keyword map and the competitor notes are free", "Marketplace rules are not verified for Amazon", "lengths will be measured, not checked",

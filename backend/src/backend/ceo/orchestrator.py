@@ -799,6 +799,13 @@ def _run_admitted(
             if key in cmo_delegation.DELEGATED_ACTIONS and key != "cmo.market_trends":
                 if cmo_chat.record_image_hints(ctx, run_inputs):  # the seller confirmed a photo hint with their own answer: recorded as their statement (zero units)
                     _ACKS.set([*_ACKS.get(), "I recorded the photo details you confirmed as your own statements."])
+                if key == "cmo.generate_full_listing" and run_inputs.get("title_confirmed") is True and direct.get("seller_title") and direct.get("marketplace") and invalid_form is None:
+                    typed_id, typed_refusal = cmo_chat.record_typed_title_approval(tenant, ctx.app_user_id, direct)  # N-05t: the title the seller typed AND confirmed becomes their own recorded approval
+                    if typed_refusal:
+                        invalid_form = typed_refusal
+                    elif typed_id:
+                        direct.pop("seller_title")
+                        direct["approval_id"] = typed_id
                 if direct.get("seller_title") and direct.get("marketplace") and key in GROUNDED_CMO_KEYS:  # the title the seller approved grounds the copy as their APPROVED title
                     approval_id = cmo_chat.matching_approval(tenant, direct.get("product_name"), str(direct["marketplace"]), str(direct["seller_title"]))
                     if approval_id:

@@ -169,7 +169,7 @@ def test_downgrade_refuses_while_unverified_packs_exist_then_round_trips_and_kee
     unverified = pack(tenant, {"rules_basis": "UNVERIFIED", "n": 2})
     refused = _alembic("downgrade", "20261030_0006")
     assert refused.returncode != 0 and "unverified-basis artefacts exist" in (refused.stderr + refused.stdout)
-    assert _heads(migrate_engine) == "20261030_0007"  # nothing was half-applied
+    assert _heads(migrate_engine) == "20261031_0008"  # nothing was half-applied
     with migrate_engine.begin() as conn:  # the test (not the migration) removes its own unverified row
         conn.execute(text("SET CONSTRAINTS ALL DEFERRED"))
         conn.execute(text("SELECT set_config('app.current_tenant_id', :t, true)"), {"t": str(tenant)})
@@ -186,7 +186,7 @@ def test_downgrade_refuses_while_unverified_packs_exist_then_round_trips_and_kee
     finally:
         up = _alembic("upgrade", "head")
         assert up.returncode == 0, up.stderr
-    assert _heads(migrate_engine) == "20261030_0007"
+    assert _heads(migrate_engine) == "20261031_0008"
     assert pack(tenant, {"rules_basis": "UNVERIFIED"})  # re-upgraded: the exception works again
     with tenant_scope(tenant) as conn:
         assert conn.execute(text("SELECT count(*) FROM cmo_generation WHERE id = :i"), {"i": str(verified)}).scalar() == 1

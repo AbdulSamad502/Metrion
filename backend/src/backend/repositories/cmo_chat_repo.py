@@ -26,15 +26,16 @@ _OPTIONS = text(
 )
 _APPROVED = text(
     """
-    SELECT a.id, a.generation_id, a.option_id, a.approved_text, a.edited_by_seller, a.approved_at, g.marketplace, g.sku,
-           COALESCE((SELECT sf.fact_value FROM seller_fact sf WHERE sf.tenant_id = g.tenant_id AND sf.sku = g.sku
-                     AND sf.attribute_name = 'product_name' ORDER BY sf.provided_at DESC LIMIT 1), g.sku) AS label,
+    SELECT a.id, a.generation_id, a.option_id, a.approved_text, a.edited_by_seller, a.approved_at, a.title_source,
+           COALESCE(g.marketplace, a.marketplace) AS marketplace, COALESCE(g.sku, a.sku) AS sku,
+           COALESCE((SELECT sf.fact_value FROM seller_fact sf WHERE sf.tenant_id = a.tenant_id AND sf.sku = COALESCE(g.sku, a.sku)
+                     AND sf.attribute_name = 'product_name' ORDER BY sf.provided_at DESC LIMIT 1), COALESCE(g.sku, a.sku)) AS label,
            (SELECT count(*) FROM cmo_result_usage_event e WHERE e.tenant_id = a.tenant_id AND e.generation_id = a.generation_id
               AND e.event_kind = 'COPIED' AND (a.option_id IS NULL OR e.option_id = a.option_id)) AS copied,
            (SELECT count(*) FROM cmo_result_usage_event e WHERE e.tenant_id = a.tenant_id AND e.generation_id = a.generation_id
               AND e.event_kind = 'MARKED_USED' AND (a.option_id IS NULL OR e.option_id = a.option_id)) AS marked_used
-    FROM cmo_title_approval a JOIN cmo_generation g ON g.tenant_id = a.tenant_id AND g.id = a.generation_id
-    WHERE a.tenant_id = :t AND (CAST(:sku AS text) IS NULL OR g.sku = :sku) AND (CAST(:mp AS text) IS NULL OR g.marketplace = :mp)
+    FROM cmo_title_approval a LEFT JOIN cmo_generation g ON g.tenant_id = a.tenant_id AND g.id = a.generation_id
+    WHERE a.tenant_id = :t AND (CAST(:sku AS text) IS NULL OR COALESCE(g.sku, a.sku) = :sku) AND (CAST(:mp AS text) IS NULL OR COALESCE(g.marketplace, a.marketplace) = :mp)
     ORDER BY a.approved_at DESC, a.id LIMIT :limit
     """
 )
@@ -67,7 +68,8 @@ def recent_title_sets(tenant_id: UUID, *, limit: int = 12) -> list[dict[str, Any
 def approved_titles(tenant_id: UUID, *, sku: str | None = None, marketplace: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
     with tenant_scope(tenant_id) as conn:
         rows = conn.execute(_APPROVED, {"t": tenant_id, "sku": sku, "mp": marketplace, "limit": limit}).all()
-    return [{"approvalId": str(r.id), "generationId": str(r.generation_id), "text": str(r.approved_text), "editedBySeller": bool(r.edited_by_seller), "approvedAt": r.approved_at,
+    return [{"approvalId": str(r.id), "generationId": str(r.generation_id) if r.generation_id else None, "titleSource": str(r.title_source), "text": str(r.approved_text),
+             "editedBySeller": bool(r.edited_by_seller), "approvedAt": r.approved_at,
              "marketplace": r.marketplace, "sku": r.sku, "label": r.label, "copied": int(r.copied), "markedUsed": int(r.marked_used)} for r in rows]
 
 
@@ -261,11 +263,11 @@ def latest_listing_pack(tenant_id: UUID, *, sku: str | None = None, marketplace:
 
 
 # ------------------------------------------------------------------------------------------------ CMO 3.0 M6: is a saved listing built from the title approved NOW (N-15d)?
-_APPROVAL_REF = text("SELECT id, approved_text, approved_at FROM cmo_title_approval WHERE tenant_id = :t AND id = :a")
+_APPROVAL_REF = text("SELECT id, approved_text, approved_at, title_source FROM cmo_title_approval WHERE tenant_id = :t AND id = :a")
 _CURRENT_APPROVAL = text(
     """
-    SELECT a.id, a.approved_text, a.approved_at FROM cmo_title_approval a JOIN cmo_generation g ON g.tenant_id = a.tenant_id AND g.id = a.generation_id
-    WHERE a.tenant_id = :t AND g.sku = :sku AND g.marketplace = :mp ORDER BY a.approved_at DESC, a.id DESC LIMIT 1
+    SELECT a.id, a.approved_text, a.approved_at, a.title_source FROM cmo_title_approval a LEFT JOIN cmo_generation g ON g.tenant_id = a.tenant_id AND g.id = a.generation_id
+    WHERE a.tenant_id = :t AND COALESCE(g.sku, a.sku) = :sku AND COALESCE(g.marketplace, a.marketplace) = :mp ORDER BY a.approved_at DESC, a.id DESC LIMIT 1
     """
 )
 _PRODUCT_LABEL = text(
@@ -277,14 +279,14 @@ def approval_ref(tenant_id: UUID, approval_id: UUID) -> dict[str, Any] | None:
     """One of the seller's title approvals (id, text, when), or None. A foreign or unknown id is None."""
     with tenant_scope(tenant_id) as conn:
         r = conn.execute(_APPROVAL_REF, {"t": tenant_id, "a": approval_id}).first()
-    return {"id": str(r.id), "text": str(r.approved_text), "approvedAt": r.approved_at} if r else None
+    return {"id": str(r.id), "text": str(r.approved_text), "approvedAt": r.approved_at, "titleSource": str(r.title_source)} if r else None
 
 
 def current_approval(tenant_id: UUID, sku: str, marketplace: str) -> dict[str, Any] | None:
     """The seller's NEWEST approved title for this product and marketplace, or None. Only an approval counts: a title option nobody chose is never "current"."""
     with tenant_scope(tenant_id) as conn:
         r = conn.execute(_CURRENT_APPROVAL, {"t": tenant_id, "sku": sku, "mp": marketplace}).first()
-    return {"id": str(r.id), "text": str(r.approved_text), "approvedAt": r.approved_at} if r else None
+    return {"id": str(r.id), "text": str(r.approved_text), "approvedAt": r.approved_at, "titleSource": str(r.title_source)} if r else None
 
 
 def product_label(tenant_id: UUID, sku: str) -> str | None:
