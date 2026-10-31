@@ -27,14 +27,13 @@ def _today() -> date:
 
 
 def _products(tenant: UUID) -> dict[tuple[str, str], dict[str, Any]]:
-    """(sku, marketplace) -> {product name, versions oldest first}: the saved listings the seller can attach performance to."""
-    h = cmo_history.history(tenant, limit=cmo_history.MAX_PAGE)
-    names = {(g["sku"], g["marketplace"]): g["product"] for g in h["groups"]}
-    out: dict[tuple[str, str], dict[str, Any]] = {k: {"name": n or k[0], "versions": []} for k, n in names.items()}
-    for v in sorted(h["versions"], key=lambda x: x["number"]):
-        k = (v["sku"], v["marketplace"])
-        if k in out:
-            out[k]["versions"].append(v)
+    """(sku, marketplace) -> {product name, versions oldest first}: the saved listings the seller can attach performance to. The account-wide history list is paged (newest first), so the product groups
+    come from its summary (never truncated) and each product's versions are read on their own: a seller with many versions of other products still sees every version of this one (up to one page, 100)."""
+    top = cmo_history.history(tenant, limit=1)
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for g in top["groups"]:
+        one = cmo_history.history(tenant, sku=g["sku"], marketplace=g["marketplace"], limit=cmo_history.MAX_PAGE)
+        out[(g["sku"], g["marketplace"])] = {"name": g["product"] or g["sku"], "versions": sorted(one["versions"], key=lambda x: x["number"])}
     return out
 
 
