@@ -220,4 +220,15 @@ describe("ListingHistoryCard (CMO 3.0 M7)", () => {
     }
     expect(screen.getByRole("list", { name: "Versions, newest first" })).toBeInTheDocument();
   });
+
+  it("pages the history: Show more asks for the next page and keeps the versions already shown", async () => {
+    const first = list([ver(3), ver(2)], { hasMore: true, total: 3, limit: 2 });
+    const history = vi.fn(async () => list([ver(1)], { offset: 2, hasMore: false, total: 3, limit: 2 }));
+    render(<ListingHistoryCard card={first} api={api({ history })} onSend={() => {}} />);
+    expect(screen.getAllByTestId("history-version")).toHaveLength(2);
+    await userEvent.click(screen.getByRole("button", { name: "Show more" }));
+    await waitFor(() => expect(screen.getAllByTestId("history-version")).toHaveLength(3));
+    expect(history).toHaveBeenCalledWith(expect.objectContaining({ offset: 2 }));
+    expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
+  });
 });

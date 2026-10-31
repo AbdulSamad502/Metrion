@@ -222,3 +222,24 @@ def test_m7_66_another_tenant_asking_sees_no_history(chat):
     answer = r.json()
     ch = answer.get("choices") or {}
     assert not ch.get("versions") and "version 3" not in (answer.get("answer") or "").lower()  # the other seller's history never reaches this conversation
+
+
+def test_m7_57_two_products_with_listings_get_one_product_question_and_the_answer_continues_the_request(chat):
+    from tests.integration.test_cmo_m7_history_more import NovaProvider, second_product  # noqa: PLC0415
+
+    v1, v2, v3 = versions(chat)
+    nova = second_product(chat.env)
+    assert isinstance(chat.env.provider, NovaProvider)
+    inv = new_investigation(chat)
+    text, choices, _ = ask(chat, inv, "Show my previous listing")
+    assert card_of(choices, "CLARIFY") and "Which product" in text and {o["label"] for o in choices["options"]} == {"AquaNest 1 Litre Stainless Steel Water Bottle", "NovaFlask 500 ml Glass Water Bottle"}
+    done_text, done, _ = ask(chat, inv, "NovaFlask")
+    assert "only one saved version" in done_text and done is None  # the answer picked NovaFlask (one version), so there is no earlier version to show; it did not fall back to the other product
+    t1, c1, _ = ask(chat, new_inv := new_investigation(chat), "Show my previous listing")
+    assert card_of(c1, "CLARIFY")
+    t1b, c1b, _ = ask(chat, new_inv, "AquaNest")
+    assert card_of(c1b, "VERSION")["version"]["id"] == v2  # AquaNest has three versions: the previous one is version 2
+    t2, c2, _ = ask(chat, new_investigation(chat), "Show my latest NovaFlask listing")
+    assert card_of(c2, "VERSION")["version"]["id"] == nova and "NovaFlask" in t2
+    t3, c3, _ = ask(chat, new_investigation(chat), "Show my listing history")
+    assert len(card_of(c3, "HISTORY")["groups"]) == 2 and "NovaFlask" in t3 and "AquaNest" in t3

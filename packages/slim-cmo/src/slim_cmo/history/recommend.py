@@ -63,7 +63,7 @@ def recommend(latest: Mapping[str, Any], *, previous: Mapping[str, Any] | None =
                                  "A buyer cannot see a detail the listing does not state.", f"Mention {f['value']} in a bullet or the description.", refs={"attribute": f["name"]}))
 
     for q in unanswered_questions or []:  # R7: a buyer question the listing does not answer yet
-        recs.append(_rec("UNANSWERED_BUYER_QUESTION", "MEDIUM", latest, "WHOLE_LISTING", f"Buyers may ask: {q.get('question')}", ["Listed as likely from your product's confirmed facts (buyer questions)"],
+        recs.append(_rec("UNANSWERED_BUYER_QUESTION", "MEDIUM", latest, "WHOLE_LISTING", f"Buyers may ask: {q.get('question')}", ["A question buyers commonly ask about this kind of product (the M5 question bank; not drawn from search or review data)"],
                          "Your listing does not answer it yet.", q.get("nextStep") or "Tell me the answer if it is true for your product, then I can help you state it.", refs={"question": q.get("question")}))
 
     if comparison:  # what the last revision did

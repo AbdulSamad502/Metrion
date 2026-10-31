@@ -49,6 +49,14 @@ def _groups(tenant: UUID, sku: str | None, marketplace: str | None) -> dict[tupl
                                  "source": lineage.source_of({"revision": r["revision"], "revision_of": r["parentId"]}, has_parent=bool(r["parentId"])),
                                  "section": (r["revision"] or {}).get("section")} for r in rows])
         raw = {r["id"]: r for r in rows}
+        for m in meta:  # a parent that is not in this product + marketplace may still exist elsewhere in the account: then say what is wrong with it instead of "missing"
+            if m["lineageIssue"] == "MISSING_PARENT" and m["claimedParentId"]:
+                try:
+                    other = cmo_chat_repo.listing_pack(tenant, UUID(m["claimedParentId"]))
+                except ValueError:
+                    other = None
+                if other is not None:
+                    m["lineageIssue"] = "CROSS_PRODUCT" if other["sku"] != key[0] else "CROSS_MARKETPLACE"
         latest = max(m["number"] for m in meta)
         versions = []
         for m in meta:

@@ -53,6 +53,7 @@ def test_exactly_the_registered_cmo_actions_are_dispatchable_and_all_are_recomme
         "cmo.generate_title_sets", "cmo.approve_title", "cmo.generate_listing_copy", "cmo.generate_description", "cmo.generate_bullets",
         "cmo.generate_keywords", "cmo.generate_backend_terms", "cmo.generate_hashtags", "cmo.catalog_answer", "cmo.confirm_image_hint",
         "cmo.suggest_niche_terms", "cmo.confirm_niche_terms", "cmo.market_trends",
+        "cmo.keyword_intelligence", "cmo.analyze_titles",  # CMO 3.0 M2 / M3: the guard was never updated when these two were registered
     }
     banned = ("publish", "update_listing", "sync", "push", "write_back", "marketplace")
     assert not [a for a in CMO_DISPATCH_ACTIONS if any(b in a for b in banned)]

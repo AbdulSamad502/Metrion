@@ -119,7 +119,7 @@
 
 ## F. M6 detailed acceptance tests (Advanced Listing Generation + CI Evidence)
 
-> **Status:** designed and approved 2026-10-30 (all owner decisions Q8, Q26-Q33 recorded). **Implemented 2026-10-31; N-15d implemented in the gap-closure commit; all 50 rows traced to tests in CMO_M6_TRACEABILITY.md (41 COVERED, 9 PARTIAL, 0 MISSING); not manually verified in a browser; see CMO_IMPLEMENTATION_MAP.md section 18.** 50 tests: 47 for the approved scope plus 3 (N-16a-c) added to cover the Q32 title-step exception and its boundary. Authority: `docs/specs/slim-cmo-agent.md` §6.18 and `docs/specs/ceo-cmo-delegation.md` §6.16. Every test uses seller → CEO → CMO → CEO. Real-model quality is not tested here (blocker B2); tests use the deterministic fake `LlmProvider`, a scratch Postgres (`backend/scripts/scratch_db.sh`, never the dev DB) and `TEST_FIXTURE` format rows (production has no `VERIFIED` rows, B1).
+> **Status:** designed and approved 2026-10-30 (all owner decisions Q8, Q26-Q33 recorded). **Implemented 2026-10-31; N-15d implemented in the gap-closure commit; all 50 rows traced to tests in CMO_M6_TRACEABILITY.md (42 COVERED, 8 PARTIAL, 0 MISSING); not manually verified in a browser; see CMO_IMPLEMENTATION_MAP.md section 18.** 50 tests: 47 for the approved scope plus 3 (N-16a-c) added to cover the Q32 title-step exception and its boundary. Authority: `docs/specs/slim-cmo-agent.md` §6.18 and `docs/specs/ceo-cmo-delegation.md` §6.16. Every test uses seller → CEO → CMO → CEO. Real-model quality is not tested here (blocker B2); tests use the deterministic fake `LlmProvider`, a scratch Postgres (`backend/scripts/scratch_db.sh`, never the dev DB) and `TEST_FIXTURE` format rows (production has no `VERIFIED` rows, B1).
 > **Handoff ID → repo ID.** The IDs N-05, N-08, R-07 and R-08 already exist in this document with other meanings and are kept unchanged. The four M6 scenarios requested in the handoff map as: *complete listing generation* → **N-05a…**; *listing audit* → **N-14…** (new); *CI evidence integration* → **N-08a…**; *CI evidence safety* → **N-08c…N-08f** plus global **R-07** (no competitor text/price) and **R-08** (typed yes never approves), which M6 must keep green.
 
 **Standard fixture "F6" (unless a row says otherwise).** Tenant A (role may use `agent.cmo`; `agent.ci` and CI entitlement pass), product *AquaNest Stainless Steel Water Bottle*: confirmed brand AquaNest, material stainless steel, capacity 1 L, colour silver, "reusable"; insulated = NOT_CONFIRMED, leakproof = SELLER_UNKNOWN, dishwasher safe = NOT_CONFIRMED. Amazon title set saved, M3 analysis saved, **option 5 approved** (strategy label stored). M2 analysis saved with `RECOMMENDED` candidates ("steel water bottle", "1 litre", "silver", "reusable"), "insulated" excluded. Test `TEST_FIXTURE` Amazon/Flipkart/Meesho rows with a count rule and byte cap. One fresh saved competitor insight with derived themes `reusable`, `insulated`, `bpa`; `differentiation_opportunities` = `insulated`. Fake provider returns a valid pack unless stated. "Units" = `cmo_generation.billable_units`. **Rules basis:** unless a row says otherwise F6 includes `TEST_FIXTURE` format rows (normal, enforced mode); rows marked "RU" use the *rules-unavailable basis* of spec §6.18.11 (no usable marketplace row, flag `listing_unverified_rules_enabled = true`, `rules_unavailable_bullet_target` set). Approved configuration for RU rows: `listing_unverified_rules_enabled = true` for the test (the shipped default is `false`), `rules_unavailable_bullet_target = 5`. **State vocabulary:** generation approved · generated · audited · approved for use (`APPROVED` event) · copied · marked used; "published/live" is never set by CMO.
@@ -216,7 +216,7 @@
 ## G. M7 detailed acceptance tests (Listing History, Version Intelligence and Optimisation)
 
 > **Status:** designed and implemented 2026-10-31; **automated coverage traced row by row below; not yet signed off in a real signed-in browser except where the status line says so.** Authority: `docs/specs/slim-cmo-agent.md` §6.19 and `docs/specs/ceo-cmo-delegation.md` §6.17. 70 tests numbered **M7-01 … M7-70**, in the order of the M7 handoff brief (A history 1-10, B lineage 11-18, C comparison 19-29, D keywords 30-36, E content and audit 37-43, F recommendations 44-49, G performance 50-53, H CEO and frontend 54-65, I security and regression 66-70). The IDs are new and do not collide with N-/R- IDs. Standard fixture: the M6 "F6" product on the rules-unavailable basis (`ru_env`), with a real Postgres (scratch DB, never the dev DB) and a deterministic fake provider; every test is read-only and asserts no unit, no metered event, no model call and no new row was created by looking.
-> **Test files.** Pure engine: `packages/slim-cmo/tests/unit/history/test_history_engine.py` (U). API + Postgres: `backend/tests/integration/test_cmo_m7_history.py` (A). CEO chat: `backend/tests/integration/test_ceo_cmo_m7_history_chat.py` (C). Migration: `backend/tests/integration/test_cmo_m7_migration.py` (M). Frontend: `frontend/components/ceo/hub/listingHistoryCard.test.tsx` (F). **COVERED** = a test asserts the behaviour; **PARTIAL** = only part, or only at unit level, with the gap named.
+> **Test files.** Pure engine: `packages/slim-cmo/tests/unit/history/test_history_engine.py` (U). API + Postgres: `backend/tests/integration/test_cmo_m7_history.py` (A). CEO chat: `backend/tests/integration/test_ceo_cmo_m7_history_chat.py` (C). Second pass: `backend/tests/integration/test_cmo_m7_history_more.py` (A2). Migration: `backend/tests/integration/test_cmo_m7_migration.py` (M). Frontend: `frontend/components/ceo/hub/listingHistoryCard.test.tsx` (F). **COVERED** = a test asserts the behaviour; **PARTIAL** = only part, or only at unit level, with the gap named.
 
 | ID | Behaviour | Status | Where |
 |---|---|---|---|
@@ -225,19 +225,19 @@
 | M7-03 | All versions retrievable, newest first | COVERED | A `m7_01_to_05`; C `m7_54`; F timeline |
 | M7-04 | Latest version retrieved; not assumed approved | COVERED | A `m7_01_to_05`, `approval_state_belongs_to_one_version_only`; C `m7_55`; F |
 | M7-05 | Previous version retrieved | COVERED | C `m7_55` (previous, original, version N) |
-| M7-06 | Product-specific history | PARTIAL | A `m7_06_07` (sku filter and an unknown sku); a second real product's listings are not created in the fixture |
+| M7-06 | Product-specific history | COVERED | A2 `m7_06_18_two_products_have_separate_histories_numbers_and_are_never_compared` (two real products: filter by sku returns 3 and 1, numbering per product, other tenant sees none); A `m7_06_07` |
 | M7-07 | Marketplace-specific history, numbering per marketplace | COVERED | A `m7_06_07` |
 | M7-08 | Empty history | COVERED | A `m7_08`; C `one_version_and_no_version`; F empty |
 | M7-09 | Missing / foreign version | COVERED | A `m7_09`, `m7_66`; F missing version |
-| M7-10 | Pagination | COVERED | A `m7_10` (limit, offset, hasMore, caps); the "Show more" button is not exercised in F |
+| M7-10 | Pagination | COVERED | A `m7_10` (limit, offset, hasMore, caps); F `pages the history: Show more…` (the button asks for offset 2 and keeps the versions shown) |
 | M7-11 | Seller-written revision source | COVERED | A `m7_11_13_17`; U `source_of_reads_what_was_stored` |
 | M7-12 | AI-assisted rewrite source (billed once; viewing free) | COVERED | A `m7_12` |
 | M7-13 | Parent-child relationship from stored `revision_of` | COVERED | A `m7_11_13_17` (checks the stored rows) |
-| M7-14 | Invalid relationship handled | PARTIAL | U `lineage_rejects_missing_cross_product_cross_marketplace_and_cycles`; A cross-marketplace compare refused. A corrupted stored parent cannot be created through the application, so it is not exercised in Postgres |
-| M7-15 | Circular relationship prevented | PARTIAL | U (self-loop, backwards link); not exercised in Postgres (same reason) |
+| M7-14 | Invalid relationship handled | COVERED | A2 `m7_14_15_18_a_stored_parent_that_cannot_be_trusted_*`: owner-role writes a missing parent, a foreign-product parent and a foreign-marketplace parent; history reports MISSING_PARENT / CROSS_PRODUCT / CROSS_MARKETPLACE, parentId null, compare still 200; U lineage tests |
+| M7-15 | Circular relationship prevented | COVERED | A2 same test: `v1.revision_of = v3` is stored; history reports CYCLE/NOT_EARLIER and no parent; the honest v3→v2 link is still followed; U self-loop |
 | M7-16 | Duplicate version request is idempotent | COVERED | A `m7_16` |
 | M7-17 | Historical content preserved | COVERED | A `m7_11_13_17`, `m7_19_to_27` (older text still readable) |
-| M7-18 | Cross-product / cross-marketplace comparison refused | PARTIAL | U `validate_pair`; A cross-marketplace (422). Cross-product is not built in Postgres |
+| M7-18 | Cross-product / cross-marketplace comparison refused | COVERED | A2 `m7_06_18_*`: compare of AquaNest v1 with NovaFlask returns 422 `DIFFERENT_PRODUCT`; A `m7_18` cross-marketplace 422; U `validate_pair` |
 | M7-19 | Compare two versions | COVERED | A `m7_19_to_27`; C `m7_56` |
 | M7-20 | Added content | COVERED | U `list_diff`, `sentence_diff`, `compare_two_versions`; F |
 | M7-21 | Removed content | COVERED | U `list_diff`, `term_diff` |
@@ -254,18 +254,18 @@
 | M7-32 | Retained keywords | COVERED | U |
 | M7-33 | Keywords moved between sections (not "removed") | COVERED | U; A invariant; C `follow_ups` |
 | M7-34 | Traceable to the saved M2 candidate | COVERED | A `m7_34`; U `keyword_trace_*` |
-| M7-35 | Historical keyword no longer a candidate | PARTIAL | U `NOT_IN_CURRENT_CANDIDATES`; not exercised through the API |
+| M7-35 | Historical keyword no longer a candidate | COVERED | A2 `m7_35_*`: after the saved M2 analysis loses a candidate (owner-role edit) the compare row for that keyword is `NOT_IN_CURRENT_CANDIDATES`, no candidate id, evidence UNAVAILABLE; U |
 | M7-36 | Missing evidence shown as unavailable | COVERED | U; A `m7_30_to_36`; F "(no saved evidence)" |
 | M7-37 | Newly introduced unsupported claim (section, claim, why, fact reference, audit) | COVERED | A `m7_37_40`; U; F |
-| M7-38 | Removed confirmed attribute | PARTIAL | U `removed_and_introduced_confirmed_attributes`; A checks the report shape only |
+| M7-38 | Removed confirmed attribute | COVERED | A2 `m7_38_*`: with confirmed Opening = wide, dropping the word in a later edit puts it in `attributes.removed`, adding it shows `introduced`, and a `REVISION_REMOVED_CONFIRMED_INFO` suggestion names it; U |
 | M7-39 | Repeated content | COVERED | A `m7_38_39` (duplicate bullet); U |
 | M7-40 | New audit issue | COVERED | A `m7_37_40`; U |
-| M7-41 | Resolved audit issue | PARTIAL | U `audit_changes_*`; not constructed through the API |
-| M7-42 | Unresolved audit issue | PARTIAL | U; not constructed through the API |
+| M7-41 | Resolved audit issue | COVERED | A2 `m7_41_42_*`: bullet 2's unsupported claim fixed in the next version is in `audit.resolved`; U `audit_changes_*` |
+| M7-42 | Unresolved audit issue | COVERED | A2 `m7_41_42_*`: bullet 3's claim and the FACT_NOT_GIVEN note present in both versions are `audit.unresolved`, not new, not an introduced claim, and produce an `ISSUE_NOT_RESOLVED` suggestion |
 | M7-43 | Historical audit preserved, never replaced | COVERED | A `m7_41_42_43` (audit rows unchanged by looking again) |
 | M7-44 | Missing supported keyword | COVERED | U `recommendations_cover_*` |
 | M7-45 | Missing confirmed attribute | COVERED | U |
-| M7-46 | Unanswered buyer question | PARTIAL | U (question supplied); the live M5 source is not asserted end to end |
+| M7-46 | Unanswered buyer question | COVERED | A2 `m7_46_*`: a product with no confirmed colour gets exactly the M5 question "What colour is it?" as `UNANSWERED_BUYER_QUESTION` (evidence names the M5 question bank); after the seller confirms it the suggestion disappears; the F6 product (all essential topics confirmed) gets none |
 | M7-47 | Evidence-based audit recommendation | COVERED | A `m7_44_to_49`; U |
 | M7-48 | Unsupported recommendation prevented (weak candidate, no promise) | COVERED | U `never_use_weak_candidates_or_promise_results`; A |
 | M7-49 | No evidence available | COVERED | U `no_evidence_is_said_plainly`; A `m7_49`; F |
@@ -276,7 +276,7 @@
 | M7-54 | CEO history retrieval | COVERED | C `m7_54` |
 | M7-55 | CEO latest version retrieval | COVERED | C `m7_55` |
 | M7-56 | CEO version comparison (and what changed) | COVERED | C `m7_56` x2, `follow_ups` |
-| M7-57 | Ambiguous / unknown product | PARTIAL | C `m7_57` (a product that is not saved); two saved products with listings are not built |
+| M7-57 | Ambiguous / unknown product | COVERED | C `m7_57_two_products_*`: two products with listings get one "Which product" question with both as options, the answer "AquaNest" continues the request (version 2), "Show my latest NovaFlask listing" resolves; C `m7_57_an_unknown_product` |
 | M7-58 | Ambiguous marketplace, answer continues the request | COVERED | C `m7_58` |
 | M7-59 | Ambiguous / missing version | COVERED | C `m7_59` x2 |
 | M7-60 | CEO optimisation request | COVERED | C `m7_60` |
