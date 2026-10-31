@@ -1,5 +1,5 @@
 """CMO 3.0 M6 N-05t (migration 20261031_0008): the seller's explicit approval of a title they TYPED is its own record (`title_source = SELLER_TYPED`, no title-set generation, no option, no model, no unit),
-distinguishable from a generated-title approval, tenant-scoped, append-only, and checked against the same current rules as an edited title. WRITTEN IN THE FINAL STATIC PASS; NOT EXECUTED YET."""
+distinguishable from a generated-title approval, tenant-scoped, append-only, and checked against the same current rules as an edited title. Executed on a scratch database in the final closure pass (5 passed)."""
 
 from __future__ import annotations
 
@@ -14,15 +14,15 @@ from slim_cmo.service.approve import ApprovalRefused, TypedApproved
 from slim_cmo.service.models import Actor
 from slim_cmo.types import Marketplace
 from tests.integration.test_cmo_api import _erase_cmo_rows, ctx_engine, env, fake_clerk  # noqa: F401
-from tests.integration.test_cmo_m6_integration import SKU, ListingProvider, ru_env
+from tests.integration.test_cmo_m6_integration import NAME, SKU, ListingProvider, ru_env
 
 pytestmark = pytest.mark.skipif(not os.environ.get("DATABASE_URL_APP") or not os.environ.get("DATABASE_URL"), reason="needs a live Postgres")
 
 TYPED = "AquaNest Steel Bottle 1 L Silver"
 
 
-def approve(env, title=TYPED, mp=Marketplace.AMAZON):
-    return env.runtime.approvals.approve_typed_title(Actor(env.tenant, env.user_id), sku=SKU, marketplace=mp, text=title)
+def approve(env, title=TYPED, mp=Marketplace.AMAZON, sku=SKU):
+    return env.runtime.approvals.approve_typed_title(Actor(env.tenant, env.user_id), sku=sku, marketplace=mp, text=title)
 
 
 def test_a_typed_title_approval_is_its_own_record_with_no_generation_and_is_distinguishable(env):
@@ -39,10 +39,11 @@ def test_a_typed_title_approval_is_its_own_record_with_no_generation_and_is_dist
 
 def test_re_approving_is_append_only_and_an_identical_title_is_reused_by_the_chat_helper(env):
     ru_env(env, ListingProvider())
-    first = approve(env)
-    second = approve(env)
+    sku = cmo_chat.product_sku(NAME)  # the chat derives the product identity from the product name the same way
+    first = approve(env, sku=sku)
+    second = approve(env, sku=sku)
     assert first.approval_id != second.approval_id and env.n("cmo_title_approval") == 2  # the service appends; earlier rows stay
-    again, refusal = cmo_chat.record_typed_title_approval(env.tenant, env.user_id, {"seller_title": TYPED, "sku": SKU, "product_name": "AquaNest 1 Litre Stainless Steel Water Bottle", "marketplace": "AMAZON"})
+    again, refusal = cmo_chat.record_typed_title_approval(env.tenant, env.user_id, {"seller_title": TYPED, "sku": sku, "product_name": NAME, "marketplace": "AMAZON"})
     assert refusal is None and again in {str(first.approval_id), str(second.approval_id)} and env.n("cmo_title_approval") == 2  # the chat helper reuses an identical approved title
 
 
